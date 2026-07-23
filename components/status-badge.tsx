@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
-import type { Discipline, InspectionStatus, Priority } from "@/lib/mock-data"
+import type { Discipline, InspectionStatus, Priority, ProjectStatusKey } from "@/lib/mock-data"
 
 const toneClass: Record<string, string> = {
   danger: "bg-destructive/10 text-destructive",
