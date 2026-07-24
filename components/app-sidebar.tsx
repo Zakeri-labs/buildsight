@@ -85,10 +85,7 @@ export function AppSidebar({
 
   const moduleItems = [
     { label: t.nav.dashboard, href: "/", icon: Home },
-    { label: t.ncrs.title, href: "/ncrs", icon: TriangleAlert },
-    { label: t.nav.inspections, href: "/inspections", icon: ClipboardCheck },
-    { label: "RFI", href: "/rfi", icon: CircleHelp },
-    { label: "VO", href: "/vo", icon: FileText },
+    { label: t.projects.title, href: "/projects", icon: FolderKanban },
     { label: t.nav.documents, href: "/documents", icon: Files },
     { label: t.nav.reports, href: "/reports", icon: BarChart3 },
     { label: t.nav.calendar, href: "/calendar", icon: CalendarDays },
