@@ -1,15 +1,25 @@
 import Link from "next/link"
 import { ChevronRight, MoreHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { portfolioProjects, type ProjectRole } from "@/lib/portfolio-data"
 
-const roleBadge: Record<ProjectRole, string> = {
+export type ProjectOverviewRow = {
+  id: string
+  name: string
+  role: string
+  ncrs: number
+  inspections: number
+  rfis: number
+  vos: number
+  progress: number
+}
+
+const roleBadge: Record<string, string> = {
   Consultant: "bg-blue-50 text-blue-700",
   Contractor: "bg-emerald-50 text-emerald-700",
   Client: "bg-indigo-50 text-indigo-700",
 }
 
-export function ProjectsOverview() {
+export function ProjectsOverview({ projects }: { projects: ProjectOverviewRow[] }) {
   return (
     <div className="flex flex-col rounded-xl border border-border bg-card p-5">
       <h2 className="text-base font-semibold text-foreground">Projects Overview</h2>
@@ -29,14 +39,21 @@ export function ProjectsOverview() {
             </tr>
           </thead>
           <tbody>
-            {portfolioProjects.map((p) => (
+            {projects.length === 0 && (
+              <tr>
+                <td colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
+                  No projects yet.
+                </td>
+              </tr>
+            )}
+            {projects.map((p) => (
               <tr key={p.id} className="border-t border-border">
                 <td className="py-3 pe-3 font-medium text-foreground">{p.name}</td>
                 <td className="py-3 pe-3">
                   <span
                     className={cn(
                       "inline-flex rounded-md px-2 py-0.5 text-xs font-medium",
-                      roleBadge[p.role],
+                      roleBadge[p.role] ?? "bg-slate-100 text-slate-700",
                     )}
                   >
                     {p.role}

@@ -1,10 +1,11 @@
 import Link from "next/link"
 import { TriangleAlert, ClipboardCheck, CircleHelp, FileText, FileUp, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { portfolioActivity, type PortfolioActivity } from "@/lib/portfolio-data"
+import type { ActivityRow } from "@/lib/db/domain"
+import { timeAgo } from "@/lib/format"
 
 const typeConfig: Record<
-  PortfolioActivity["type"],
+  ActivityRow["type"],
   { icon: React.ElementType; tile: string; label: string }
 > = {
   ncr: { icon: TriangleAlert, tile: "bg-red-50 text-red-600", label: "NCR" },
@@ -14,13 +15,14 @@ const typeConfig: Record<
   document: { icon: FileUp, tile: "bg-slate-100 text-slate-600", label: "Document" },
 }
 
-export function ActivityFeed() {
+export function ActivityFeed({ items }: { items: ActivityRow[] }) {
   return (
     <div className="flex flex-col rounded-xl border border-border bg-card p-5">
       <h2 className="text-base font-semibold text-foreground">Recent Activity</h2>
 
       <ul className="mt-4 flex flex-1 flex-col gap-4">
-        {portfolioActivity.map((a) => {
+        {items.length === 0 && <li className="text-sm text-muted-foreground">No recent activity.</li>}
+        {items.map((a) => {
           const cfg = typeConfig[a.type]
           const Icon = cfg.icon
           return (
@@ -32,15 +34,15 @@ export function ActivityFeed() {
                 <p className="text-sm text-foreground">
                   {a.reference ? (
                     <>
-                      <span className="font-semibold">{`${cfg.label} #${a.reference}`}</span> {a.title}
+                      <span className="font-semibold">{`${cfg.label} #${a.reference}`}</span> {a.verb}
                     </>
                   ) : (
-                    <span className="font-semibold">{a.title}</span>
+                    <span className="font-semibold">{a.verb}</span>
                   )}
                 </p>
-                <p className="truncate text-xs text-muted-foreground">{a.project}</p>
+                <p className="truncate text-xs text-muted-foreground">{a.projectName}</p>
               </div>
-              <span className="shrink-0 text-xs text-muted-foreground">{a.time}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{timeAgo(a.createdAt)}</span>
             </li>
           )
         })}

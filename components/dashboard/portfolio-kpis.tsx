@@ -1,6 +1,18 @@
 import { FolderOpen, TriangleAlert, ClipboardCheck, CircleHelp, ArrowUp, ArrowDown } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { portfolioKpis, type PortfolioKpi } from "@/lib/portfolio-data"
+
+export type KpiTone = "blue" | "red" | "amber" | "green"
+
+export type KpiCardData = {
+  key: string
+  label: string
+  value: number
+  tone: KpiTone
+  icon: "projects" | "ncr" | "inspection" | "rfi"
+  caption?: string
+  trend?: { direction: "up" | "down"; value: number; good: boolean }
+  spark: number[]
+}
 
 const iconMap = {
   projects: FolderOpen,
@@ -9,14 +21,14 @@ const iconMap = {
   rfi: CircleHelp,
 } as const
 
-const toneTile: Record<PortfolioKpi["tone"], string> = {
+const toneTile: Record<KpiTone, string> = {
   blue: "bg-blue-50 text-blue-600",
   red: "bg-red-50 text-red-600",
   amber: "bg-amber-50 text-amber-600",
   green: "bg-emerald-50 text-emerald-600",
 }
 
-const toneSpark: Record<PortfolioKpi["tone"], string> = {
+const toneSpark: Record<KpiTone, string> = {
   blue: "text-blue-500",
   red: "text-red-500",
   amber: "text-amber-500",
@@ -46,7 +58,7 @@ function Sparkline({ data, className }: { data: number[]; className?: string }) 
   )
 }
 
-function KpiCard({ kpi }: { kpi: PortfolioKpi }) {
+function KpiCard({ kpi }: { kpi: KpiCardData }) {
   const Icon = iconMap[kpi.icon]
   const TrendIcon = kpi.trend?.direction === "up" ? ArrowUp : ArrowDown
   return (
@@ -80,10 +92,10 @@ function KpiCard({ kpi }: { kpi: PortfolioKpi }) {
   )
 }
 
-export function PortfolioKpis() {
+export function PortfolioKpis({ kpis }: { kpis: KpiCardData[] }) {
   return (
     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-      {portfolioKpis.map((kpi) => (
+      {kpis.map((kpi) => (
         <KpiCard key={kpi.key} kpi={kpi} />
       ))}
     </div>
