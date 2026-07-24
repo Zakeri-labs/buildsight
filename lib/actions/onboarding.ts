@@ -31,6 +31,20 @@ export async function createSupervisingOrganization(name: string): Promise<Resul
     .eq("status", "active")
   if ((count ?? 0) > 0) return { ok: false, error: "You already belong to an organization" }
 
+  // There can only be one supervising organization on the platform. If one
+  // already exists, this user must be invited into it rather than bootstrapping.
+  const { count: supervisingCount } = await admin
+    .from("organizations")
+    .select("id", { count: "exact", head: true })
+    .eq("type", "supervising")
+  if ((supervisingCount ?? 0) > 0) {
+    return {
+      ok: false,
+      error:
+        "A supervising consultancy already exists on this platform. Ask an administrator to invite you.",
+    }
+  }
+
   // Prevent duplicate organization (case-insensitive).
   const { data: existing } = await admin
     .from("organizations")
