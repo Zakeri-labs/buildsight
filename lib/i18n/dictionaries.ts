@@ -30,6 +30,7 @@ export const dictionaries = {
       settings: "Settings",
     },
     roles: {
+      admin: "Consultancy Admin",
       projectManager: "Project Manager",
       residentEngineer: "Resident Engineer",
       inspector: "Site Inspector",
@@ -205,15 +206,6 @@ export const dictionaries = {
       offline: "Offline",
       away: "Away",
     },
-    roles: {
-      admin: "Consultancy Admin",
-      projectManager: "Project Manager",
-      residentEngineer: "Resident Engineer",
-      inspector: "Site Inspector",
-      documentController: "Document Controller",
-      contractor: "Contractor",
-      owner: "Project Owner",
-    },
     settings: {
       title: "Settings",
       subtitle: "Manage your account and project preferences",
@@ -298,6 +290,7 @@ export const dictionaries = {
       settings: "الإعدادات",
     },
     roles: {
+      admin: "مدير الاستشارية",
       projectManager: "مدير المشروع",
       residentEngineer: "المهندس المقيم",
       inspector: "مفتش الموقع",
@@ -437,7 +430,7 @@ export const dictionaries = {
     },
     documents: {
       title: "المستندات",
-      subtitle: "المخططات والمستندات المقدمة وطلبات المعلومات",
+      subtitle: "المخططات والمستندات المقدمة وطلبا�� المعلومات",
       newDocument: "رفع",
       searchPlaceholder: "ابحث عن المستندات...",
       allTypes: "جميع الأنواع",
@@ -472,15 +465,6 @@ export const dictionaries = {
       online: "متصل",
       offline: "غير متصل",
       away: "بعيد",
-    },
-    roles: {
-      admin: "مدير الاستشارية",
-      projectManager: "مدير المشروع",
-      residentEngineer: "المهندس المقيم",
-      inspector: "مفتش الموقع",
-      documentController: "مراقب المستندات",
-      contractor: "المقاول",
-      owner: "مالك المشروع",
     },
     settings: {
       title: "الإعدادات",

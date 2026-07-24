@@ -1,81 +1,86 @@
 "use client"
 
 import Link from "next/link"
-import { Bell, Building2, ChevronDown, Lock, LogOut, Search } from "lucide-react"
-import { Input } from "@/components/ui/input"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { usePathname } from "next/navigation"
+import { Bell, ChevronDown, Lock, LogOut, Search } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useI18n } from "@/lib/i18n"
 import { LanguageSwitch } from "@/components/language-switch"
 import { useCurrentUser } from "@/components/current-user-provider"
 import { signOut } from "@/lib/actions/auth"
-import { notificationsCount, projectsList, activeProject } from "@/lib/mock-data"
+import { notificationsCount } from "@/lib/mock-data"
 import { roleLabel } from "@/lib/db/types"
 
+const titleMap: Record<string, { title: string; subtitle: string }> = {
+  "/": { title: "Dashboard", subtitle: "Overview of all projects" },
+  "/ncrs": { title: "NCR", subtitle: "Non-conformance reports" },
+  "/inspections": { title: "Inspections", subtitle: "Site inspection requests" },
+  "/rfi": { title: "RFI", subtitle: "Requests for information" },
+  "/vo": { title: "VO", subtitle: "Variation orders" },
+  "/documents": { title: "Documents", subtitle: "Project document register" },
+  "/reports": { title: "Reports", subtitle: "Site and progress reports" },
+  "/calendar": { title: "Calendar", subtitle: "Schedule and milestones" },
+  "/users": { title: "Users & Roles", subtitle: "Manage access and permissions" },
+  "/settings": { title: "Settings", subtitle: "Workspace preferences" },
+  "/projects": { title: "Projects", subtitle: "All projects" },
+  "/team": { title: "Team", subtitle: "Project team members" },
+}
+
+function resolveTitle(pathname: string) {
+  if (pathname === "/") return titleMap["/"]
+  const match = Object.keys(titleMap)
+    .filter((k) => k !== "/")
+    .find((k) => pathname.startsWith(k))
+  return match ? titleMap[match] : { title: "Dashboard", subtitle: "Overview of all projects" }
+}
+
 export function AppTopbar() {
-  const { t } = useI18n()
+  const pathname = usePathname()
   const currentUser = useCurrentUser()
-  const userRoleLabel = currentUser.role ? roleLabel(currentUser.role) : "—"
+  const userRoleLabel = currentUser.role ? roleLabel(currentUser.role) : "Organization Admin"
+  const { title, subtitle } = resolveTitle(pathname)
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-card/95 px-4 backdrop-blur md:px-6">
-      {/* Project selector */}
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <button
-              type="button"
-              className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-muted"
-            >
-              <Building2 className="size-4 text-muted-foreground" />
-              <span className="max-w-40 truncate">{activeProject.name}</span>
-              <ChevronDown className="size-4 text-muted-foreground" />
-            </button>
-          }
-        />
-        <DropdownMenuContent align="start" className="w-64">
-          <DropdownMenuLabel>{t.nav.projects}</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            {projectsList.map((p) => (
-              <DropdownMenuItem key={p.id} className="flex-col items-start gap-0.5">
-                <span className="font-medium">{p.name}</span>
-                <span className="text-xs text-muted-foreground">{p.location}</span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      {/* Search */}
-      <div className="relative hidden flex-1 md:block">
-        <Search className="pointer-events-none absolute inset-inline-start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          type="search"
-          placeholder={t.common.search}
-          className="ps-9 bg-background"
-          aria-label={t.common.search}
-        />
+    <header className="sticky top-0 z-30 flex h-20 items-center gap-4 bg-background/95 px-4 backdrop-blur md:px-8">
+      {/* Page title */}
+      <div className="min-w-0 shrink-0">
+        <h1 className="truncate text-2xl font-bold tracking-tight text-foreground">{title}</h1>
+        <p className="truncate text-sm text-muted-foreground">{subtitle}</p>
       </div>
 
-      <div className="flex flex-1 items-center justify-end gap-1 md:flex-none">
+      {/* Search */}
+      <div className="hidden flex-1 justify-center md:flex">
+        <div className="relative w-full max-w-md">
+          <Search className="pointer-events-none absolute inset-inline-start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="search"
+            placeholder="Search anything..."
+            aria-label="Search"
+            className="h-11 w-full rounded-xl border border-border bg-card ps-9 pe-14 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+          />
+          <kbd className="pointer-events-none absolute inset-inline-end-3 top-1/2 -translate-y-1/2 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+            ⌘ K
+          </kbd>
+        </div>
+      </div>
+
+      <div className="flex flex-1 items-center justify-end gap-2 md:flex-none">
         {/* Notifications */}
         <button
           type="button"
           aria-label="Notifications"
-          className="relative flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="relative flex size-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <Bell className="size-5" />
           {notificationsCount > 0 && (
-            <span className="absolute -top-0.5 inset-inline-end-0 flex size-4 items-center justify-center rounded-full bg-accent text-[10px] font-semibold text-accent-foreground">
+            <span className="absolute top-1 inset-inline-end-1 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold text-destructive-foreground">
               {notificationsCount}
             </span>
           )}
@@ -87,9 +92,10 @@ export function AppTopbar() {
             render={
               <button
                 type="button"
-                className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-muted"
+                className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-muted"
               >
-                <Avatar className="size-8">
+                <Avatar className="size-9">
+                  <AvatarImage src="/avatars/arman.png" alt="" />
                   <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
                     {currentUser.initials}
                   </AvatarFallback>
@@ -109,15 +115,19 @@ export function AppTopbar() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem render={<Link href="/users">Users &amp; Roles</Link>} />
-            <DropdownMenuItem render={<Link href="/settings">{t.nav.settings}</Link>} />
+            <DropdownMenuItem render={<Link href="/settings">Settings</Link>} />
             <DropdownMenuItem
               render={
                 <Link href="/owner">
                   <Lock className="size-4" data-icon="inline-start" />
-                  {t.owner.openPortal}
+                  Owner Portal
                 </Link>
               }
             />
+            <DropdownMenuSeparator />
+            <div className="px-2 py-1.5">
+              <LanguageSwitch />
+            </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => {
@@ -129,11 +139,6 @@ export function AppTopbar() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-
-        <div className="mx-1 h-6 w-px bg-border" />
-
-        {/* Language toggle */}
-        <LanguageSwitch />
       </div>
     </header>
   )

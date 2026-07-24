@@ -97,7 +97,7 @@ export async function createInvitation(input: {
       metadata: { email, userExists: Boolean(existing) },
     })
 
-    revalidatePath("/users-roles")
+    revalidatePath("/users")
     return { ok: true, data: { invitationId: invite.id, token, userExists: Boolean(existing) } }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not create invitation." }
@@ -126,7 +126,7 @@ export async function revokeInvitation(invitationId: string): Promise<ActionResu
       entityId: invitationId,
       organizationId: invite.organization_id,
     })
-    revalidatePath("/users-roles")
+    revalidatePath("/users")
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not revoke invitation." }
@@ -228,8 +228,8 @@ export async function acceptInvitation(token: string): Promise<ActionResult<{ re
       projectId: invite.project_id,
     })
 
-    revalidatePath("/users-roles")
-    return { ok: true, data: { redirect: invite.project_id ? "/dashboard" : "/dashboard" } }
+    revalidatePath("/users")
+    return { ok: true, data: { redirect: "/" } }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not accept invitation." }
   }
