@@ -1,12 +1,13 @@
 import { Analytics } from "@vercel/analytics/next"
 import type { Metadata, Viewport } from "next"
-import { Inter, Geist_Mono } from "next/font/google"
+import { Inter, Geist_Mono, Noto_Sans_Arabic } from "next/font/google"
 import { I18nProvider } from "@/lib/i18n"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" })
+const notoSansArabic = Noto_Sans_Arabic({ subsets: ["arabic"], variable: "--font-arabic", weight: ["400", "500", "600", "700"] })
 
 export const metadata: Metadata = {
   title: "Provision Consultancy — Construction Supervision Platform",
@@ -28,7 +29,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" dir="ltr" className={`${inter.variable} ${geistMono.variable} bg-background`}>
+    <html lang="en" dir="ltr" className={`${inter.variable} ${geistMono.variable} ${notoSansArabic.variable} bg-background`}>
       <body className="font-sans antialiased">
         <I18nProvider>
           <TooltipProvider>{children}</TooltipProvider>

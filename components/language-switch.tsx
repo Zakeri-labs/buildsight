@@ -8,7 +8,7 @@ export function LanguageSwitch({ className }: { className?: string }) {
 
   return (
     <div
-      className={cn("flex items-center gap-1 text-sm font-medium", className)}
+      className={cn("flex items-center gap-0.5 text-xs font-medium", className)}
       role="group"
       aria-label="Language"
     >
@@ -16,23 +16,27 @@ export function LanguageSwitch({ className }: { className?: string }) {
         type="button"
         onClick={() => setLocale("en")}
         className={cn(
-          "rounded px-1.5 py-0.5 transition-colors",
-          locale === "en" ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+          "rounded px-2 py-1 transition-colors leading-none",
+          locale === "en"
+            ? "bg-primary text-primary-foreground"
+            : "text-muted-foreground hover:text-foreground hover:bg-muted",
         )}
       >
         EN
       </button>
-      <span className="text-border">|</span>
       <button
         type="button"
         onClick={() => setLocale("ar")}
         className={cn(
-          "rounded px-1.5 py-0.5 transition-colors",
-          locale === "ar" ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+          "lang-ar-label rounded px-2 py-1 transition-colors",
+          locale === "ar"
+            ? "bg-primary text-primary-foreground"
+            : "text-muted-foreground hover:text-foreground hover:bg-muted",
         )}
       >
-        العربية
+        ع
       </button>
     </div>
   )
 }
+

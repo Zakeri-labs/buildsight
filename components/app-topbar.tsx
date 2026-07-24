@@ -17,34 +17,37 @@ import { useCurrentUser } from "@/components/current-user-provider"
 import { signOut } from "@/lib/actions/auth"
 import { notificationsCount } from "@/lib/mock-data"
 import { roleLabel } from "@/lib/db/types"
-
-const titleMap: Record<string, { title: string; subtitle: string }> = {
-  "/": { title: "Dashboard", subtitle: "Overview of all projects" },
-  "/ncrs": { title: "NCR", subtitle: "Non-conformance reports" },
-  "/inspections": { title: "Inspections", subtitle: "Site inspection requests" },
-  "/rfi": { title: "RFI", subtitle: "Requests for information" },
-  "/vo": { title: "VO", subtitle: "Variation orders" },
-  "/documents": { title: "Documents", subtitle: "Project document register" },
-  "/reports": { title: "Reports", subtitle: "Site and progress reports" },
-  "/calendar": { title: "Calendar", subtitle: "Schedule and milestones" },
-  "/users": { title: "Users & Roles", subtitle: "Manage access and permissions" },
-  "/settings": { title: "Settings", subtitle: "Workspace preferences" },
-  "/projects": { title: "Projects", subtitle: "All projects" },
-  "/team": { title: "Team", subtitle: "Project team members" },
-}
-
-function resolveTitle(pathname: string) {
-  if (pathname === "/") return titleMap["/"]
-  const match = Object.keys(titleMap)
-    .filter((k) => k !== "/")
-    .find((k) => pathname.startsWith(k))
-  return match ? titleMap[match] : { title: "Dashboard", subtitle: "Overview of all projects" }
-}
+import { useI18n } from "@/lib/i18n"
 
 export function AppTopbar() {
   const pathname = usePathname()
   const currentUser = useCurrentUser()
   const userRoleLabel = currentUser.role ? roleLabel(currentUser.role) : "Organization Admin"
+  const { t } = useI18n()
+
+  const titleMap: Record<string, { title: string; subtitle: string }> = {
+    "/": { title: t.nav.dashboard, subtitle: t.dashboard.overallProgress },
+    "/ncrs": { title: t.ncrs.title, subtitle: t.ncrs.subtitle },
+    "/inspections": { title: t.inspections.title, subtitle: t.inspections.subtitle },
+    "/rfi": { title: "RFI", subtitle: t.documents.typeRfi },
+    "/vo": { title: "VO", subtitle: t.documents.typeSubmittal },
+    "/documents": { title: t.documents.title, subtitle: t.documents.subtitle },
+    "/reports": { title: t.reports.title, subtitle: t.reports.subtitle },
+    "/calendar": { title: t.nav.dashboard, subtitle: t.dashboard.overallProgress },
+    "/users": { title: t.settings.tabAccess, subtitle: t.settings.accessDesc },
+    "/settings": { title: t.settings.title, subtitle: t.settings.subtitle },
+    "/projects": { title: t.projects.title, subtitle: t.projects.subtitle },
+    "/team": { title: t.team.title, subtitle: t.team.subtitle },
+  }
+
+  function resolveTitle(p: string) {
+    if (p === "/") return titleMap["/"]
+    const match = Object.keys(titleMap)
+      .filter((k) => k !== "/")
+      .find((k) => p.startsWith(k))
+    return match ? titleMap[match] : { title: t.nav.dashboard, subtitle: t.dashboard.overallProgress }
+  }
+
   const { title, subtitle } = resolveTitle(pathname)
 
   return (
@@ -61,7 +64,7 @@ export function AppTopbar() {
           <Search className="pointer-events-none absolute inset-inline-start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="search"
-            placeholder="Search anything..."
+            placeholder={t.common.search}
             aria-label="Search"
             className="h-11 w-full rounded-xl border border-border bg-card ps-9 pe-14 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
           />
@@ -117,13 +120,13 @@ export function AppTopbar() {
               <span className="text-xs font-normal text-muted-foreground">{currentUser.email}</span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem render={<Link href="/users">Users &amp; Roles</Link>} />
-            <DropdownMenuItem render={<Link href="/settings">Settings</Link>} />
+            <DropdownMenuItem render={<Link href="/users">{t.settings.tabAccess}</Link>} />
+            <DropdownMenuItem render={<Link href="/settings">{t.settings.title}</Link>} />
             <DropdownMenuItem
               render={
                 <Link href="/owner">
                   <Lock className="size-4" data-icon="inline-start" />
-                  Owner Portal
+                  {t.owner.openPortal}
                 </Link>
               }
             />
@@ -134,7 +137,7 @@ export function AppTopbar() {
               }}
             >
               <LogOut className="size-4" data-icon="inline-start" />
-              Log Out
+              {t.nav.logOut}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -142,3 +145,4 @@ export function AppTopbar() {
     </header>
   )
 }
+

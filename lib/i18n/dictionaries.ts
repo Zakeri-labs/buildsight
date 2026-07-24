@@ -28,6 +28,7 @@ export const dictionaries = {
       documents: "Documents",
       team: "Team",
       settings: "Settings",
+      logOut: "Log Out",
     },
     roles: {
       admin: "Consultancy Admin",
@@ -288,6 +289,7 @@ export const dictionaries = {
       documents: "المستندات",
       team: "الفريق",
       settings: "الإعدادات",
+      logOut: "تسجيل الخروج",
     },
     roles: {
       admin: "مدير الاستشارية",
