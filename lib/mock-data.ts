@@ -486,3 +486,326 @@ export const inspections: InspectionRecord[] = [
     ],
   },
 ]
+
+export type NcrSeverity = "critical" | "major" | "minor"
+export type NcrStatus = "open" | "in-review" | "closed"
+
+export type NcrTimelineEntry = {
+  label: string
+  date: string
+  by: string
+}
+
+export type NcrRecord = {
+  id: string
+  title: string
+  discipline: Discipline
+  project: string
+  location: string
+  severity: NcrSeverity
+  status: NcrStatus
+  raisedBy: string
+  raisedOn: string
+  assignedTo: string
+  assignedInitials: string
+  dueDate: string
+  description: string
+  rootCause: string
+  correctiveAction: string
+  linkedInspection?: string
+  timeline: NcrTimelineEntry[]
+}
+
+export const ncrs: NcrRecord[] = [
+  {
+    id: "NCR-2025-027",
+    title: "Honeycombing at Column C12",
+    discipline: "Structural",
+    project: "Al Noor Residential Tower",
+    location: "Level 11 - Column C12",
+    severity: "major",
+    status: "open",
+    raisedBy: "Fatima Ali",
+    raisedOn: "12 May 2025",
+    assignedTo: "Atlas Contracting",
+    assignedInitials: "AC",
+    dueDate: "22 May 2025",
+    description:
+      "Significant honeycombing observed on the west face of Column C12 after formwork removal, exposing aggregate and reducing effective cover.",
+    rootCause: "Inadequate vibration during concrete placement and congested reinforcement.",
+    correctiveAction:
+      "Chip out affected concrete to sound substrate, apply approved repair mortar, and re-inspect before proceeding.",
+    linkedInspection: "INSP-2025-044",
+    timeline: [
+      { label: "NCR raised", date: "12 May 2025", by: "Fatima Ali" },
+      { label: "Assigned to contractor", date: "12 May 2025", by: "Omar Hassan" },
+    ],
+  },
+  {
+    id: "NCR-2025-026",
+    title: "Incorrect rebar spacing - Slab L10",
+    discipline: "Structural",
+    project: "Al Noor Residential Tower",
+    location: "Level 10 - Slab",
+    severity: "critical",
+    status: "in-review",
+    raisedBy: "Ahmed Khalid",
+    raisedOn: "08 May 2025",
+    assignedTo: "Atlas Contracting",
+    assignedInitials: "AC",
+    dueDate: "18 May 2025",
+    description:
+      "Bottom reinforcement spacing exceeds approved drawing tolerance by 40mm across multiple bays.",
+    rootCause: "Setting-out error by steel-fixing subcontractor.",
+    correctiveAction: "Add supplementary bars to achieve design spacing; structural engineer to verify.",
+    timeline: [
+      { label: "NCR raised", date: "08 May 2025", by: "Ahmed Khalid" },
+      { label: "Corrective action submitted", date: "13 May 2025", by: "Atlas Contracting" },
+      { label: "Under consultant review", date: "14 May 2025", by: "Omar Hassan" },
+    ],
+  },
+  {
+    id: "NCR-2025-025",
+    title: "Water ingress at basement wall",
+    discipline: "Civil",
+    project: "Al Noor Residential Tower",
+    location: "Basement 2 - Wall B",
+    severity: "major",
+    status: "open",
+    raisedBy: "Sara Al Mulla",
+    raisedOn: "06 May 2025",
+    assignedTo: "Atlas Contracting",
+    assignedInitials: "AC",
+    dueDate: "20 May 2025",
+    description: "Active water ingress observed at construction joint of basement retaining wall.",
+    rootCause: "Failed waterstop at construction joint.",
+    correctiveAction: "Inject polyurethane resin and apply crystalline waterproofing coating.",
+    timeline: [{ label: "NCR raised", date: "06 May 2025", by: "Sara Al Mulla" }],
+  },
+  {
+    id: "NCR-2025-024",
+    title: "Fire-stopping missing at riser",
+    discipline: "MEP",
+    project: "Al Noor Residential Tower",
+    location: "Level 9 - Riser",
+    severity: "minor",
+    status: "closed",
+    raisedBy: "Mohammed Yusuf",
+    raisedOn: "28 Apr 2025",
+    assignedTo: "Atlas Contracting",
+    assignedInitials: "AC",
+    dueDate: "05 May 2025",
+    description: "Fire-stopping not installed at cable penetrations through rated riser wall.",
+    rootCause: "Sequencing gap between MEP and fit-out trades.",
+    correctiveAction: "Install approved fire-stopping system and provide compliance certificate.",
+    timeline: [
+      { label: "NCR raised", date: "28 Apr 2025", by: "Mohammed Yusuf" },
+      { label: "Corrective action submitted", date: "02 May 2025", by: "Atlas Contracting" },
+      { label: "Verified & closed", date: "05 May 2025", by: "Omar Hassan" },
+    ],
+  },
+  {
+    id: "NCR-2025-023",
+    title: "Blockwork alignment deviation",
+    discipline: "Architectural",
+    project: "Al Noor Residential Tower",
+    location: "Level 8 - Partition",
+    severity: "minor",
+    status: "closed",
+    raisedBy: "Fatima Ali",
+    raisedOn: "22 Apr 2025",
+    assignedTo: "Atlas Contracting",
+    assignedInitials: "AC",
+    dueDate: "29 Apr 2025",
+    description: "Partition wall out of plumb by 12mm over 3m height.",
+    rootCause: "Poor workmanship during block laying.",
+    correctiveAction: "Demolish and rebuild affected section to tolerance.",
+    timeline: [
+      { label: "NCR raised", date: "22 Apr 2025", by: "Fatima Ali" },
+      { label: "Verified & closed", date: "29 Apr 2025", by: "Omar Hassan" },
+    ],
+  },
+]
+
+export const ncrSummary = { total: 27, open: 5, inReview: 3, closed: 19 }
+
+export type ReportType = "daily" | "weekly" | "safety"
+
+export type ReportRecord = {
+  id: string
+  type: ReportType
+  title: string
+  date: string
+  author: string
+  authorInitials: string
+  weather: string
+  manpower: number
+  progress: number
+  activities: string[]
+}
+
+export const reports: ReportRecord[] = [
+  {
+    id: "SR-2025-087",
+    type: "daily",
+    title: "Daily Site Report - 15 May",
+    date: "15 May 2025",
+    author: "Mohammed Yusuf",
+    authorInitials: "MY",
+    weather: "Sunny, 38°C",
+    manpower: 142,
+    progress: 68,
+    activities: [
+      "Level 12 slab reinforcement fixing",
+      "Facade panel installation L7-L8",
+      "MEP first fix on Level 10",
+    ],
+  },
+  {
+    id: "SR-2025-086",
+    type: "daily",
+    title: "Daily Site Report - 14 May",
+    date: "14 May 2025",
+    author: "Ahmed Khalid",
+    authorInitials: "AK",
+    weather: "Clear, 36°C",
+    manpower: 138,
+    progress: 67,
+    activities: ["Level 11 slab concreting", "Blockwork Level 8", "Waterproofing podium deck"],
+  },
+  {
+    id: "WR-2025-019",
+    type: "weekly",
+    title: "Weekly Progress Report - Week 19",
+    date: "12 May 2025",
+    author: "Omar Hassan",
+    authorInitials: "OH",
+    weather: "—",
+    manpower: 140,
+    progress: 68,
+    activities: ["Structural works 2 levels advanced", "Facade 15% complete", "3 NCRs closed"],
+  },
+  {
+    id: "SFR-2025-011",
+    type: "safety",
+    title: "Weekly Safety Report - Week 19",
+    date: "12 May 2025",
+    author: "Sara Al Mulla",
+    authorInitials: "SM",
+    weather: "—",
+    manpower: 140,
+    progress: 0,
+    activities: ["3 safety observations logged", "Toolbox talk on working at height", "Zero LTI this week"],
+  },
+  {
+    id: "SR-2025-085",
+    type: "daily",
+    title: "Daily Site Report - 13 May",
+    date: "13 May 2025",
+    author: "Mohammed Yusuf",
+    authorInitials: "MY",
+    weather: "Hazy, 35°C",
+    manpower: 135,
+    progress: 66,
+    activities: ["Column formwork Level 11", "Electrical containment Level 9"],
+  },
+]
+
+export const reportsSummary = { totalReports: 12, avgManpower: 139, openIssues: 5 }
+
+export type DocumentType = "drawing" | "submittal" | "rfi" | "report" | "contract"
+export type DocumentStatus = "approved" | "pending" | "rejected" | "revise"
+
+export type DocumentRecord = {
+  id: string
+  name: string
+  type: DocumentType
+  revision: string
+  status: DocumentStatus
+  uploadedBy: string
+  date: string
+  size: string
+}
+
+export const documents: DocumentRecord[] = [
+  {
+    id: "DR-A-1201",
+    name: "Level 12 Structural Layout",
+    type: "drawing",
+    revision: "C",
+    status: "approved",
+    uploadedBy: "Ahmed Khalid",
+    date: "14 May 2025",
+    size: "4.2 MB",
+  },
+  {
+    id: "MS-2025-062",
+    name: "Concrete Mix Design - C40",
+    type: "submittal",
+    revision: "B",
+    status: "approved",
+    uploadedBy: "Atlas Contracting",
+    date: "13 May 2025",
+    size: "1.1 MB",
+  },
+  {
+    id: "RFI-2025-041",
+    name: "Curtain Wall Fixing Detail Clarification",
+    type: "rfi",
+    revision: "A",
+    status: "pending",
+    uploadedBy: "Atlas Contracting",
+    date: "13 May 2025",
+    size: "820 KB",
+  },
+  {
+    id: "MS-2025-061",
+    name: "Waterproofing Membrane Datasheet",
+    type: "submittal",
+    revision: "A",
+    status: "revise",
+    uploadedBy: "Atlas Contracting",
+    date: "11 May 2025",
+    size: "2.4 MB",
+  },
+  {
+    id: "DR-M-0910",
+    name: "Level 9 MEP Coordination",
+    type: "drawing",
+    revision: "D",
+    status: "approved",
+    uploadedBy: "Mohammed Yusuf",
+    date: "10 May 2025",
+    size: "6.8 MB",
+  },
+  {
+    id: "RFI-2025-040",
+    name: "Basement Waterstop Specification Query",
+    type: "rfi",
+    revision: "A",
+    status: "rejected",
+    uploadedBy: "Atlas Contracting",
+    date: "08 May 2025",
+    size: "540 KB",
+  },
+  {
+    id: "SR-2025-087",
+    name: "Daily Site Report - 15 May",
+    type: "report",
+    revision: "—",
+    status: "approved",
+    uploadedBy: "Mohammed Yusuf",
+    date: "15 May 2025",
+    size: "3.1 MB",
+  },
+  {
+    id: "CN-2024-001",
+    name: "Main Contract Agreement",
+    type: "contract",
+    revision: "—",
+    status: "approved",
+    uploadedBy: "Omar Hassan",
+    date: "10 Jan 2024",
+    size: "12.5 MB",
+  },
+]

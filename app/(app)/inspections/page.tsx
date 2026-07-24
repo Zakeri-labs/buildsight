@@ -1,5 +1,5 @@
-import { ModulePlaceholder } from "@/components/module-placeholder"
+import { InspectionsList } from "@/components/inspections/inspections-list"
 
 export default function InspectionsPage() {
-  return <ModulePlaceholder titleKey="inspections" />
+  return <InspectionsList />
 }

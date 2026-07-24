@@ -3,7 +3,16 @@
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
-import type { Discipline, InspectionStatus, Priority, ProjectStatusKey } from "@/lib/mock-data"
+import type {
+  Discipline,
+  InspectionStatus,
+  Priority,
+  ProjectStatusKey,
+  NcrSeverity,
+  NcrStatus,
+  DocumentType,
+  DocumentStatus,
+} from "@/lib/mock-data"
 
 const toneClass: Record<string, string> = {
   danger: "bg-destructive/10 text-destructive",
@@ -48,6 +57,90 @@ export function DisciplineBadge({ discipline }: { discipline: Discipline }) {
       {discipline}
     </Badge>
   )
+}
+
+const projectStatusTone: Record<ProjectStatusKey, string> = {
+  underConstruction: "info",
+  planning: "neutral",
+  onHold: "warning",
+  completed: "success",
+  handover: "primary",
+}
+
+export function ProjectStatusBadge({ statusKey }: { statusKey: ProjectStatusKey }) {
+  const { t } = useI18n()
+  return (
+    <Badge className={cn("border-transparent font-medium", toneClass[projectStatusTone[statusKey]])}>
+      {t.projectStatus[statusKey]}
+    </Badge>
+  )
+}
+
+const ncrSeverityTone: Record<NcrSeverity, string> = {
+  critical: "danger",
+  major: "warning",
+  minor: "neutral",
+}
+
+export function NcrSeverityBadge({ severity }: { severity: NcrSeverity }) {
+  const { t } = useI18n()
+  const label =
+    severity === "critical"
+      ? t.ncrs.severityCritical
+      : severity === "major"
+        ? t.ncrs.severityMajor
+        : t.ncrs.severityMinor
+  return <Badge className={cn("border-transparent", toneClass[ncrSeverityTone[severity]])}>{label}</Badge>
+}
+
+const ncrStatusTone: Record<NcrStatus, string> = {
+  open: "danger",
+  "in-review": "warning",
+  closed: "success",
+}
+
+export function NcrStatusBadge({ status }: { status: NcrStatus }) {
+  const { t } = useI18n()
+  const label =
+    status === "open" ? t.ncrs.statusOpen : status === "in-review" ? t.ncrs.statusInReview : t.ncrs.statusClosed
+  return <Badge className={cn("border-transparent", toneClass[ncrStatusTone[status]])}>{label}</Badge>
+}
+
+const docStatusTone: Record<DocumentStatus, string> = {
+  approved: "success",
+  pending: "warning",
+  rejected: "danger",
+  revise: "info",
+}
+
+export function DocumentStatusBadge({ status }: { status: DocumentStatus }) {
+  const { t } = useI18n()
+  const map: Record<DocumentStatus, string> = {
+    approved: t.documents.statusApproved,
+    pending: t.documents.statusPending,
+    rejected: t.documents.statusRejected,
+    revise: t.documents.statusRevise,
+  }
+  return <Badge className={cn("border-transparent", toneClass[docStatusTone[status]])}>{map[status]}</Badge>
+}
+
+export function DocumentTypeBadge({ type }: { type: DocumentType }) {
+  const { t } = useI18n()
+  const map: Record<DocumentType, string> = {
+    drawing: t.documents.typeDrawing,
+    submittal: t.documents.typeSubmittal,
+    rfi: t.documents.typeRfi,
+    report: t.documents.typeReport,
+    contract: t.documents.typeContract,
+  }
+  const tone: Record<DocumentType, string> = {
+    drawing: "info",
+    submittal: "accent",
+    rfi: "warning",
+    report: "primary",
+    contract: "neutral",
+  }
+  return <Badge className={cn("border-transparent font-medium", toneClass[tone[type]])}>{map[type]}</Badge>
 }
 
 export function ToneBadge({

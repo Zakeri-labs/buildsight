@@ -1,5 +1,5 @@
-import { ModulePlaceholder } from "@/components/module-placeholder"
+import { NcrsList } from "@/components/ncrs/ncrs-list"
 
 export default function NcrsPage() {
-  return <ModulePlaceholder titleKey="ncrs" />
+  return <NcrsList />
 }
