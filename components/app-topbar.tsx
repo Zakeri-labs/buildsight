@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Bell, ChevronDown, Lock, LogOut, Search } from "lucide-react"
+import { Bell, ChevronDown, Lock, LogOut } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -23,7 +23,7 @@ export function AppTopbar() {
   const pathname = usePathname()
   const currentUser = useCurrentUser()
   const userRoleLabel = currentUser.role ? roleLabel(currentUser.role) : "Organization Admin"
-  const { t, locale } = useI18n()
+  const { t } = useI18n()
 
   const titleMap: Record<string, { title: string; subtitle: string }> = {
     "/": { title: t.nav.dashboard, subtitle: t.dashboard.overallProgress },
@@ -33,7 +33,7 @@ export function AppTopbar() {
     "/vo": { title: "VO", subtitle: t.documents.typeSubmittal },
     "/documents": { title: t.documents.title, subtitle: t.documents.subtitle },
     "/reports": { title: t.reports.title, subtitle: t.reports.subtitle },
-    "/calendar": { title: t.nav.dashboard, subtitle: t.dashboard.overallProgress },
+    "/calendar": { title: t.nav.calendar, subtitle: "" },
     "/users": { title: t.settings.tabAccess, subtitle: t.settings.accessDesc },
     "/settings": { title: t.settings.title, subtitle: t.settings.subtitle },
     "/projects": { title: t.projects.title, subtitle: t.projects.subtitle },
@@ -45,7 +45,7 @@ export function AppTopbar() {
     const match = Object.keys(titleMap)
       .filter((k) => k !== "/")
       .find((k) => p.startsWith(k))
-    return match ? titleMap[match] : { title: t.nav.dashboard, subtitle: t.dashboard.overallProgress }
+    return match ? titleMap[match] : { title: t.nav.dashboard, subtitle: "" }
   }
 
   const { title, subtitle } = resolveTitle(pathname)
@@ -53,28 +53,17 @@ export function AppTopbar() {
   return (
     <header className="sticky top-0 z-30 flex h-20 items-center gap-4 bg-background/95 px-4 backdrop-blur md:px-8">
       {/* Page title */}
-      <div className="min-w-0 shrink-0">
+      <div className="min-w-0 flex-1">
         <h1 className="truncate text-2xl font-bold tracking-tight text-foreground">{title}</h1>
-        <p className="truncate text-sm text-muted-foreground">{subtitle}</p>
+        {subtitle && <p className="truncate text-sm text-muted-foreground">{subtitle}</p>}
       </div>
 
-      {/* Search */}
-      <div className="hidden flex-1 justify-center md:flex">
-        <div className="relative w-full max-w-md">
-          <Search className="pointer-events-none absolute inset-inline-start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="search"
-            placeholder={locale === "ar" ? "بحث..." : "Search..."}
-            aria-label="Search"
-            className="h-11 w-full rounded-xl border border-border bg-card ps-9 pe-14 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
-          />
-          <kbd className="pointer-events-none absolute inset-inline-end-3 top-1/2 -translate-y-1/2 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground whitespace-nowrap">
-            ⌘K
-          </kbd>
-        </div>
-      </div>
+      {/* Right-side actions */}
+      <div className="flex items-center gap-1.5">
 
-      <div className="flex flex-1 items-center justify-end gap-2 md:flex-none">
+        {/* Language toggle */}
+        <LanguageSwitch />
+
         {/* Notifications */}
         <button
           type="button"
@@ -88,9 +77,6 @@ export function AppTopbar() {
             </span>
           )}
         </button>
-
-        {/* Language toggle */}
-        <LanguageSwitch />
 
         {/* User menu */}
         <DropdownMenu>
@@ -145,4 +131,3 @@ export function AppTopbar() {
     </header>
   )
 }
-
