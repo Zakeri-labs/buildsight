@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
-export default function SignUpPage() {
+function SignUpCard() {
   const router = useRouter()
   const params = useSearchParams()
   const next = params.get("next") ?? "/onboarding"
@@ -106,3 +106,22 @@ export default function SignUpPage() {
     </Card>
   )
 }
+
+export default function SignUpPage() {
+  return (
+    <Suspense fallback={
+      <Card className="animate-pulse">
+        <CardHeader>
+          <div className="h-6 w-32 bg-muted rounded mb-2"></div>
+          <div className="h-4 w-56 bg-muted rounded"></div>
+        </CardHeader>
+        <CardContent className="h-[320px] flex items-center justify-center">
+          <div className="text-muted-foreground text-sm">Loading sign up...</div>
+        </CardContent>
+      </Card>
+    }>
+      <SignUpCard />
+    </Suspense>
+  )
+}
+
