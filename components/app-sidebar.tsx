@@ -12,10 +12,12 @@ import {
   Users,
   Settings,
   ChevronsLeft,
+  LogOut,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
 import { Logo } from "@/components/logo"
+import { signOut } from "@/lib/actions/auth"
 
 const navItems = [
   { key: "dashboard", href: "/", icon: LayoutGrid },
@@ -27,6 +29,8 @@ const navItems = [
   { key: "team", href: "/team", icon: Users },
   { key: "settings", href: "/settings", icon: Settings },
 ] as const
+
+const adminItems = [{ key: "users", href: "/users", icon: Users, label: "Users & Roles" }] as const
 
 export function AppSidebar({
   collapsed,
@@ -72,9 +76,51 @@ export function AppSidebar({
             </Link>
           )
         })}
+
+        {!collapsed && (
+          <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+            Administration
+          </p>
+        )}
+        {adminItems.map((item) => {
+          const active = pathname.startsWith(item.href)
+          const Icon = item.icon
+          return (
+            <Link
+              key={item.key}
+              href={item.href}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                collapsed && "justify-center px-0",
+                active
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                  : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              )}
+              title={collapsed ? item.label : undefined}
+            >
+              <Icon className="size-5 shrink-0" />
+              {!collapsed && <span>{item.label}</span>}
+            </Link>
+          )
+        })}
       </nav>
 
-      <div className="border-t border-sidebar-border p-3">
+      <div className="flex flex-col gap-1 border-t border-sidebar-border p-3">
+        <button
+          type="button"
+          onClick={() => {
+            void signOut()
+          }}
+          className={cn(
+            "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            collapsed && "justify-center px-0",
+          )}
+          title={collapsed ? "Log Out" : undefined}
+        >
+          <LogOut className="size-5 shrink-0 flip-rtl" />
+          {!collapsed && <span>Log Out</span>}
+        </button>
         <button
           type="button"
           onClick={onToggle}

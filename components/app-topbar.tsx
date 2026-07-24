@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Bell, Building2, ChevronDown, Lock, Search } from "lucide-react"
+import { Bell, Building2, ChevronDown, Lock, LogOut, Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -15,10 +15,15 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useI18n } from "@/lib/i18n"
 import { LanguageSwitch } from "@/components/language-switch"
-import { currentUser, notificationsCount, projectsList, activeProject } from "@/lib/mock-data"
+import { useCurrentUser } from "@/components/current-user-provider"
+import { signOut } from "@/lib/actions/auth"
+import { notificationsCount, projectsList, activeProject } from "@/lib/mock-data"
+import { roleLabel } from "@/lib/db/types"
 
 export function AppTopbar() {
   const { t } = useI18n()
+  const currentUser = useCurrentUser()
+  const userRoleLabel = currentUser.role ? roleLabel(currentUser.role) : "—"
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-card/95 px-4 backdrop-blur md:px-6">
@@ -91,7 +96,7 @@ export function AppTopbar() {
                 </Avatar>
                 <span className="hidden flex-col items-start leading-tight lg:flex">
                   <span className="text-sm font-semibold">{currentUser.name}</span>
-                  <span className="text-xs text-muted-foreground">{t.roles[currentUser.role]}</span>
+                  <span className="text-xs text-muted-foreground">{userRoleLabel}</span>
                 </span>
                 <ChevronDown className="hidden size-4 text-muted-foreground lg:block" />
               </button>
@@ -103,6 +108,7 @@ export function AppTopbar() {
               <span className="text-xs font-normal text-muted-foreground">{currentUser.email}</span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem render={<Link href="/users">Users &amp; Roles</Link>} />
             <DropdownMenuItem render={<Link href="/settings">{t.nav.settings}</Link>} />
             <DropdownMenuItem
               render={
@@ -112,6 +118,15 @@ export function AppTopbar() {
                 </Link>
               }
             />
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => {
+                void signOut()
+              }}
+            >
+              <LogOut className="size-4" data-icon="inline-start" />
+              Log Out
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 

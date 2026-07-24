@@ -73,3 +73,8 @@ export function isOrgAdmin(session: SessionContext, organizationId: string): boo
     (m) => m.organization?.id === organizationId && m.role === "org_admin",
   )
 }
+
+/** Display name derived from profile.full_name, falling back to the email. */
+export function displayName(session: SessionContext): string {
+  return session.profile?.full_name?.trim() || session.email
+}

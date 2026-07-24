@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -12,8 +12,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 export default function SignUpPage() {
   const router = useRouter()
+  const params = useSearchParams()
+  const next = params.get("next") ?? "/onboarding"
+  const prefillEmail = params.get("email") ?? ""
   const [fullName, setFullName] = useState("")
-  const [email, setEmail] = useState("")
+  const [email, setEmail] = useState(prefillEmail)
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -39,11 +42,11 @@ export default function SignUpPage() {
     }
     // If email confirmation is disabled, a session exists immediately.
     if (data.session) {
-      router.push("/onboarding")
+      router.push(next)
       router.refresh()
       return
     }
-    router.push("/auth/sign-up-success")
+    router.push(`/auth/sign-up-success?next=${encodeURIComponent(next)}`)
   }
 
   return (
