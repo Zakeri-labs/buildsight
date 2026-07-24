@@ -8,29 +8,33 @@ export function LanguageSwitch() {
 
   return (
     <div
-      className="flex items-center rounded-lg border border-border bg-muted p-0.5"
       role="group"
       aria-label="Language"
+      className="inline-flex h-8 items-center rounded-lg bg-muted p-0.5"
     >
+      {/* English */}
       <button
         type="button"
         onClick={() => setLocale("en")}
         className={cn(
-          "flex h-7 w-9 items-center justify-center rounded-md text-xs font-semibold transition-all duration-200",
+          "h-7 rounded-md px-3 text-xs font-semibold tracking-wide transition-all duration-150",
           locale === "en"
-            ? "bg-white text-foreground shadow-sm dark:bg-card"
+            ? "bg-background text-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground",
         )}
       >
         EN
       </button>
+
+      {/* Arabic */}
       <button
         type="button"
         onClick={() => setLocale("ar")}
+        style={{ fontFamily: "var(--font-arabic), 'Noto Sans Arabic', Arial, sans-serif" }}
         className={cn(
-          "font-arabic flex h-7 w-9 items-center justify-center rounded-md text-sm font-semibold transition-all duration-200",
+          "h-7 rounded-md px-3 text-base leading-none transition-all duration-150",
           locale === "ar"
-            ? "bg-white text-foreground shadow-sm dark:bg-card"
+            ? "bg-background text-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground",
         )}
       >
@@ -39,5 +43,3 @@ export function LanguageSwitch() {
     </div>
   )
 }
-
-
