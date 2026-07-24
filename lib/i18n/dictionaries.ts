@@ -29,6 +29,9 @@ export const dictionaries = {
       team: "Team",
       settings: "Settings",
       logOut: "Log Out",
+      calendar: "Calendar",
+      modules: "Modules",
+      administration: "Administration",
     },
     roles: {
       admin: "Consultancy Admin",
@@ -290,6 +293,9 @@ export const dictionaries = {
       team: "الفريق",
       settings: "الإعدادات",
       logOut: "تسجيل الخروج",
+      calendar: "التقويم",
+      modules: "الوحدات",
+      administration: "الإدارة",
     },
     roles: {
       admin: "مدير الاستشارية",

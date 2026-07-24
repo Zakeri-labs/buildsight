@@ -32,22 +32,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { selectProject } from "@/lib/actions/project-scope"
 import type { ProjectOption } from "@/components/app-shell"
-
-const moduleItems = [
-  { label: "Dashboard", href: "/", icon: Home },
-  { label: "NCR", href: "/ncrs", icon: TriangleAlert },
-  { label: "Inspections", href: "/inspections", icon: ClipboardCheck },
-  { label: "RFI", href: "/rfi", icon: CircleHelp },
-  { label: "VO", href: "/vo", icon: FileText },
-  { label: "Documents", href: "/documents", icon: Files },
-  { label: "Reports", href: "/reports", icon: BarChart3 },
-  { label: "Calendar", href: "/calendar", icon: CalendarDays },
-] as const
-
-const adminItems = [
-  { label: "Users & Roles", href: "/users", icon: Users },
-  { label: "Settings", href: "/settings", icon: Settings },
-] as const
+import { useI18n } from "@/lib/i18n"
 
 function NavLink({
   label,
@@ -94,11 +79,28 @@ export function AppSidebar({
 }) {
   const pathname = usePathname()
   const router = useRouter()
+  const { t } = useI18n()
   const [project, setProject] = useState(selectedProjectId)
   const [, startTransition] = useTransition()
 
+  const moduleItems = [
+    { label: t.nav.dashboard, href: "/", icon: Home },
+    { label: t.ncrs.title, href: "/ncrs", icon: TriangleAlert },
+    { label: t.nav.inspections, href: "/inspections", icon: ClipboardCheck },
+    { label: "RFI", href: "/rfi", icon: CircleHelp },
+    { label: "VO", href: "/vo", icon: FileText },
+    { label: t.nav.documents, href: "/documents", icon: Files },
+    { label: t.nav.reports, href: "/reports", icon: BarChart3 },
+    { label: t.nav.calendar, href: "/calendar", icon: CalendarDays },
+  ]
+
+  const adminItems = [
+    { label: t.settings.tabAccess, href: "/users", icon: Users },
+    { label: t.nav.settings, href: "/settings", icon: Settings },
+  ]
+
   const activeProjectLabel =
-    project === "all" ? "All Projects" : projects.find((p) => p.id === project)?.name ?? "All Projects"
+    project === "all" ? t.projects.allStatuses : projects.find((p) => p.id === project)?.name ?? t.projects.title
 
   function handleSelect(value: string) {
     if (!value || value === project) return
@@ -116,7 +118,7 @@ export function AppSidebar({
       </div>
 
       <div className="px-4 pb-2">
-        <SectionLabel>Projects</SectionLabel>
+        <SectionLabel>{t.nav.projects ?? "Projects"}</SectionLabel>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -132,7 +134,7 @@ export function AppSidebar({
           />
           <DropdownMenuContent align="start" className="w-56">
             <DropdownMenuRadioGroup value={project} onValueChange={handleSelect}>
-              <DropdownMenuRadioItem value="all">All Projects</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="all">{t.projects.allStatuses}</DropdownMenuRadioItem>
               {projects.map((p) => (
                 <DropdownMenuRadioItem key={p.id} value={p.id}>
                   {p.name}
@@ -144,7 +146,7 @@ export function AppSidebar({
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-4 py-3" aria-label="Main navigation">
-        <SectionLabel>Modules</SectionLabel>
+        <SectionLabel>{t.nav.modules}</SectionLabel>
         {moduleItems.map((item) => (
           <NavLink
             key={item.href}
@@ -156,7 +158,7 @@ export function AppSidebar({
         ))}
 
         <div className="pt-4">
-          <SectionLabel>Administration</SectionLabel>
+          <SectionLabel>{t.nav.administration}</SectionLabel>
           {adminItems.map((item) => (
             <NavLink
               key={item.href}
@@ -178,9 +180,10 @@ export function AppSidebar({
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
         >
           <LogOut className="size-5 shrink-0 flip-rtl" />
-          <span>Log Out</span>
+          <span>{t.nav.logOut}</span>
         </button>
       </div>
     </aside>
   )
 }
+
