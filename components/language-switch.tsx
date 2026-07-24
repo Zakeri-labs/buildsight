@@ -3,12 +3,12 @@
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
-export function LanguageSwitch({ className }: { className?: string }) {
+export function LanguageSwitch() {
   const { locale, setLocale } = useI18n()
 
   return (
     <div
-      className={cn("flex items-center gap-0.5 text-xs font-medium", className)}
+      className="flex items-center rounded-lg border border-border bg-muted p-0.5"
       role="group"
       aria-label="Language"
     >
@@ -16,10 +16,10 @@ export function LanguageSwitch({ className }: { className?: string }) {
         type="button"
         onClick={() => setLocale("en")}
         className={cn(
-          "rounded px-2 py-1 transition-colors leading-none",
+          "flex h-7 w-9 items-center justify-center rounded-md text-xs font-semibold transition-all duration-200",
           locale === "en"
-            ? "bg-primary text-primary-foreground"
-            : "text-muted-foreground hover:text-foreground hover:bg-muted",
+            ? "bg-white text-foreground shadow-sm dark:bg-card"
+            : "text-muted-foreground hover:text-foreground",
         )}
       >
         EN
@@ -28,10 +28,10 @@ export function LanguageSwitch({ className }: { className?: string }) {
         type="button"
         onClick={() => setLocale("ar")}
         className={cn(
-          "lang-ar-label rounded px-2 py-1 transition-colors",
+          "font-arabic flex h-7 w-9 items-center justify-center rounded-md text-sm font-semibold transition-all duration-200",
           locale === "ar"
-            ? "bg-primary text-primary-foreground"
-            : "text-muted-foreground hover:text-foreground hover:bg-muted",
+            ? "bg-white text-foreground shadow-sm dark:bg-card"
+            : "text-muted-foreground hover:text-foreground",
         )}
       >
         ع
@@ -39,4 +39,5 @@ export function LanguageSwitch({ className }: { className?: string }) {
     </div>
   )
 }
+
 

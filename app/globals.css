@@ -6,7 +6,6 @@
 
 @theme inline {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-arabic: var(--font-arabic), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
   --color-sidebar-ring: var(--sidebar-ring);
@@ -180,14 +179,12 @@
   [dir='rtl'] .flip-rtl {
     transform: scaleX(-1);
   }
-  /* Automatically switch to Arabic font when RTL direction is set */
-  [dir='rtl'] body,
-  [dir='rtl'] .font-sans {
-    font-family: var(--font-arabic), ui-sans-serif, system-ui, sans-serif;
+  /* Switch to Noto Sans Arabic when RTL is active */
+  [dir='rtl'] body {
+    font-family: var(--font-arabic), 'Noto Sans Arabic', ui-sans-serif, system-ui, sans-serif;
   }
-  /* Keep Arabic button text readable at all times */
-  .lang-ar-label {
-    font-family: var(--font-arabic), ui-sans-serif, system-ui, sans-serif;
-    line-height: 1.4;
+  /* Arabic text in language switch button always uses Arabic font */
+  .font-arabic {
+    font-family: var(--font-arabic), 'Noto Sans Arabic', ui-sans-serif, system-ui, sans-serif;
   }
 }

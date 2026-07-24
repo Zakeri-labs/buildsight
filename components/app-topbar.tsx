@@ -23,7 +23,7 @@ export function AppTopbar() {
   const pathname = usePathname()
   const currentUser = useCurrentUser()
   const userRoleLabel = currentUser.role ? roleLabel(currentUser.role) : "Organization Admin"
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
 
   const titleMap: Record<string, { title: string; subtitle: string }> = {
     "/": { title: t.nav.dashboard, subtitle: t.dashboard.overallProgress },
@@ -64,7 +64,7 @@ export function AppTopbar() {
           <Search className="pointer-events-none absolute inset-inline-start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="search"
-            placeholder={t.common.search}
+            placeholder={locale === "ar" ? "بحث..." : "Search..."}
             aria-label="Search"
             className="h-11 w-full rounded-xl border border-border bg-card ps-9 pe-14 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
           />
@@ -90,7 +90,7 @@ export function AppTopbar() {
         </button>
 
         {/* Language toggle */}
-        <LanguageSwitch className="rounded-xl border border-border bg-card px-1 py-1" />
+        <LanguageSwitch />
 
         {/* User menu */}
         <DropdownMenu>
