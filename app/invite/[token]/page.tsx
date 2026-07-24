@@ -53,9 +53,11 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {invalid ? (
-              <Button asChild variant="outline" className="w-full bg-transparent">
-                <Link href="/dashboard">Go to dashboard</Link>
-              </Button>
+              <Button
+                render={<Link href="/">Go to dashboard</Link>}
+                variant="outline"
+                className="w-full bg-transparent"
+              />
             ) : !session ? (
               <div className="flex flex-col gap-3">
                 <p className="text-sm text-muted-foreground text-pretty">
@@ -63,14 +65,19 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
                   to accept this invitation.
                 </p>
                 <div className="flex gap-2">
-                  <Button asChild className="flex-1">
-                    <Link href={`/auth/login?next=/invite/${token}`}>Sign in</Link>
-                  </Button>
-                  <Button asChild variant="outline" className="flex-1 bg-transparent">
-                    <Link href={`/auth/sign-up?next=/invite/${token}&email=${encodeURIComponent(invite!.email)}`}>
-                      Create account
-                    </Link>
-                  </Button>
+                  <Button
+                    render={<Link href={`/auth/login?next=/invite/${token}`}>Sign in</Link>}
+                    className="flex-1"
+                  />
+                  <Button
+                    render={
+                      <Link href={`/auth/sign-up?next=/invite/${token}&email=${encodeURIComponent(invite!.email)}`}>
+                        Create account
+                      </Link>
+                    }
+                    variant="outline"
+                    className="flex-1 bg-transparent"
+                  />
                 </div>
               </div>
             ) : (

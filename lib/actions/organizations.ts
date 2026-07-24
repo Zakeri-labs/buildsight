@@ -69,7 +69,7 @@ export async function createOrganization(input: {
       organizationId: created.id,
       metadata: { name },
     })
-    revalidatePath("/users-roles")
+    revalidatePath("/users")
     return { ok: true, data: { id: created.id } }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not create organization." }
@@ -120,7 +120,7 @@ export async function updateOrgMemberRole(input: {
       organizationId: input.organizationId,
       metadata: { role: input.role },
     })
-    revalidatePath("/users-roles")
+    revalidatePath("/users")
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not update role." }
@@ -167,7 +167,7 @@ export async function removeOrgMember(input: {
       entityId: input.membershipId,
       organizationId: input.organizationId,
     })
-    revalidatePath("/users-roles")
+    revalidatePath("/users")
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not remove member." }

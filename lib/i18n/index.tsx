@@ -46,7 +46,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     () => ({
       locale,
       dir: dictionaries[locale].dir as "ltr" | "rtl",
-      t: dictionaries[locale],
+      t: dictionaries[locale] as Dictionary,
       setLocale,
       toggleLocale,
     }),

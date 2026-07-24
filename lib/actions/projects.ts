@@ -72,7 +72,7 @@ export async function createProject(input: {
       projectId: created.id,
       metadata: { name },
     })
-    revalidatePath("/users-roles")
+    revalidatePath("/users")
     return { ok: true, data: { id: created.id } }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not create project." }
@@ -123,7 +123,7 @@ export async function addExistingOrganizationToProject(input: {
       projectId: input.projectId,
       metadata: { projectRole: input.projectRole },
     })
-    revalidatePath("/users-roles")
+    revalidatePath("/users")
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not add organization." }
@@ -171,7 +171,7 @@ export async function createOrgAndAddToProject(input: {
     const admin = createAdminClient()
     await admin.from("organizations").update({ status: "invited" }).eq("id", organizationId)
 
-    revalidatePath("/users-roles")
+    revalidatePath("/users")
     return {
       ok: true,
       data: {
@@ -209,7 +209,7 @@ export async function updateProjectOrgRole(input: {
       projectId: input.projectId,
       metadata: { projectRole: input.projectRole },
     })
-    revalidatePath("/users-roles")
+    revalidatePath("/users")
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not update role." }
@@ -285,7 +285,7 @@ export async function assignUserToProject(input: {
       projectId: input.projectId,
       metadata: { userId: input.userId, accessRole: input.accessRole },
     })
-    revalidatePath("/users-roles")
+    revalidatePath("/users")
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not assign user." }
@@ -313,7 +313,7 @@ export async function removeProjectUser(input: {
       entityId: input.membershipId,
       projectId: input.projectId,
     })
-    revalidatePath("/users-roles")
+    revalidatePath("/users")
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not remove user." }
