@@ -68,8 +68,8 @@ export function AppTopbar() {
             aria-label="Search"
             className="h-11 w-full rounded-xl border border-border bg-card ps-9 pe-14 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
           />
-          <kbd className="pointer-events-none absolute inset-inline-end-3 top-1/2 -translate-y-1/2 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-            ⌘ K
+          <kbd className="pointer-events-none absolute inset-inline-end-3 top-1/2 -translate-y-1/2 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground whitespace-nowrap">
+            ⌘K
           </kbd>
         </div>
       </div>

@@ -6,37 +6,29 @@ import { cn } from "@/lib/utils"
 export function LanguageSwitch() {
   const { locale, setLocale } = useI18n()
 
+  const base =
+    "h-7 rounded-md px-3 text-sm font-semibold transition-all duration-150"
+  const active = "bg-background text-foreground shadow-sm"
+  const inactive = "text-muted-foreground hover:text-foreground"
+
   return (
     <div
       role="group"
       aria-label="Language"
       className="inline-flex h-8 items-center rounded-lg bg-muted p-0.5"
     >
-      {/* English */}
       <button
         type="button"
         onClick={() => setLocale("en")}
-        className={cn(
-          "h-7 rounded-md px-3 text-xs font-semibold tracking-wide transition-all duration-150",
-          locale === "en"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground",
-        )}
+        className={cn(base, locale === "en" ? active : inactive)}
       >
         EN
       </button>
-
-      {/* Arabic */}
       <button
         type="button"
         onClick={() => setLocale("ar")}
         style={{ fontFamily: "var(--font-arabic), 'Noto Sans Arabic', Arial, sans-serif" }}
-        className={cn(
-          "h-7 rounded-md px-3 text-base leading-none transition-all duration-150",
-          locale === "ar"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground",
-        )}
+        className={cn(base, locale === "ar" ? active : inactive)}
       >
         ع
       </button>
