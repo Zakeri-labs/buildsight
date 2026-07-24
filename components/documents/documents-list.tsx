@@ -196,18 +196,6 @@ export function DocumentsList() {
 
   return (
     <div className="flex flex-col gap-6 font-sans">
-      {/* Top Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-          {locale === "ar" ? "المستندات" : "Documents"}
-        </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {locale === "ar"
-            ? "إدارة جميع سجلات المشروع وسير عمل المستندات"
-            : "Manage all project records and document workflows"}
-        </p>
-      </div>
-
       {/* 4 Metric Cards Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Card 1: Pending Approvals */}
