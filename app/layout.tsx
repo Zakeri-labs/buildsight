@@ -9,9 +9,9 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" })
 
 export const metadata: Metadata = {
-  title: "BuildSight — Construction Supervision Platform",
+  title: "Provision Consultancy — Construction Supervision Platform",
   description:
-    "Supervise and manage construction projects: inspections, NCRs, daily site reports, documents, and progress tracking for consultants, contractors, and owners.",
+    "Supervise and manage construction projects: inspections, NCRs, RFIs, variation orders, documents, and progress tracking for consultants, contractors, and owners.",
   generator: "v0.app",
 }
 

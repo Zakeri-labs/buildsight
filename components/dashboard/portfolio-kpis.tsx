@@ -51,15 +51,15 @@ function KpiCard({ kpi }: { kpi: PortfolioKpi }) {
   const TrendIcon = kpi.trend?.direction === "up" ? ArrowUp : ArrowDown
   return (
     <div className="rounded-xl border border-border bg-card p-5">
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-3">
         <span className={cn("flex size-11 shrink-0 items-center justify-center rounded-xl", toneTile[kpi.tone])}>
           <Icon className="size-5" />
         </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-muted-foreground">{kpi.label}</p>
-          <p className="mt-1 text-3xl font-bold tracking-tight text-foreground">{kpi.value}</p>
-        </div>
-        <Sparkline data={kpi.spark} className={toneSpark[kpi.tone]} />
+        <p className="text-sm font-semibold text-foreground">{kpi.label}</p>
+      </div>
+      <div className="mt-3 flex items-end justify-between gap-2">
+        <p className="text-4xl font-bold leading-none tracking-tight text-foreground">{kpi.value}</p>
+        <Sparkline data={kpi.spark} className={cn("mb-0.5", toneSpark[kpi.tone])} />
       </div>
       <div className="mt-3 text-sm">
         {kpi.caption && <span className="text-muted-foreground">{kpi.caption}</span>}
