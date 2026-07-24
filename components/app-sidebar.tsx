@@ -3,135 +3,163 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
-  LayoutGrid,
-  FolderKanban,
+  Home,
+  TriangleAlert,
   ClipboardCheck,
-  AlertCircle,
-  BarChart3,
+  CircleHelp,
   FileText,
+  Files,
+  BarChart3,
+  CalendarDays,
   Users,
   Settings,
-  ChevronsLeft,
   LogOut,
+  ChevronDown,
+  FolderKanban,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useI18n } from "@/lib/i18n"
 import { Logo } from "@/components/logo"
 import { signOut } from "@/lib/actions/auth"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { useState } from "react"
+import { portfolioProjects } from "@/lib/portfolio-data"
 
-const navItems = [
-  { key: "dashboard", href: "/", icon: LayoutGrid },
-  { key: "projects", href: "/projects", icon: FolderKanban },
-  { key: "inspections", href: "/inspections", icon: ClipboardCheck },
-  { key: "ncrs", href: "/ncrs", icon: AlertCircle },
-  { key: "reports", href: "/reports", icon: BarChart3 },
-  { key: "documents", href: "/documents", icon: FileText },
-  { key: "team", href: "/team", icon: Users },
-  { key: "settings", href: "/settings", icon: Settings },
+const moduleItems = [
+  { label: "Dashboard", href: "/", icon: Home },
+  { label: "NCR", href: "/ncrs", icon: TriangleAlert },
+  { label: "Inspections", href: "/inspections", icon: ClipboardCheck },
+  { label: "RFI", href: "/rfi", icon: CircleHelp },
+  { label: "VO", href: "/vo", icon: FileText },
+  { label: "Documents", href: "/documents", icon: Files },
+  { label: "Reports", href: "/reports", icon: BarChart3 },
+  { label: "Calendar", href: "/calendar", icon: CalendarDays },
 ] as const
 
-const adminItems = [{ key: "users", href: "/users", icon: Users, label: "Users & Roles" }] as const
+const adminItems = [
+  { label: "Users & Roles", href: "/users", icon: Users },
+  { label: "Settings", href: "/settings", icon: Settings },
+] as const
 
-export function AppSidebar({
-  collapsed,
-  onToggle,
+function NavLink({
+  label,
+  href,
+  icon: Icon,
+  active,
 }: {
-  collapsed: boolean
-  onToggle: () => void
+  label: string
+  href: string
+  icon: React.ElementType
+  active: boolean
 }) {
-  const pathname = usePathname()
-  const { t } = useI18n()
-
   return (
-    <aside
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
       className={cn(
-        "sticky top-0 flex h-dvh shrink-0 flex-col bg-sidebar text-sidebar-foreground transition-[width] duration-200",
-        collapsed ? "w-[76px]" : "w-64",
+        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+        active
+          ? "bg-sidebar-primary text-sidebar-primary-foreground"
+          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
       )}
     >
-      <div className={cn("flex h-16 items-center px-4", collapsed && "justify-center px-0")}>
-        <Logo showText={!collapsed} />
+      <Icon className="size-5 shrink-0" />
+      <span>{label}</span>
+    </Link>
+  )
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="px-3 pb-2 pt-1 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+      {children}
+    </p>
+  )
+}
+
+export function AppSidebar() {
+  const pathname = usePathname()
+  const [project, setProject] = useState("all")
+
+  const activeProjectLabel =
+    project === "all" ? "All Projects" : portfolioProjects.find((p) => p.id === project)?.name ?? "All Projects"
+
+  return (
+    <aside className="sticky top-0 flex h-dvh w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground">
+      <div className="flex h-20 items-center px-5">
+        <Logo />
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1 px-3 py-4" aria-label="Main navigation">
-        {navItems.map((item) => {
-          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)
-          const Icon = item.icon
-          return (
-            <Link
-              key={item.key}
-              href={item.href}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                collapsed && "justify-center px-0",
-                active
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                  : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-              )}
-              title={collapsed ? t.nav[item.key] : undefined}
-            >
-              <Icon className="size-5 shrink-0" />
-              {!collapsed && <span>{t.nav[item.key]}</span>}
-            </Link>
-          )
-        })}
+      <div className="px-4 pb-2">
+        <SectionLabel>Projects</SectionLabel>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/40 px-3 py-2.5 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+              >
+                <FolderKanban className="size-4 shrink-0 text-sidebar-foreground/60" />
+                <span className="flex-1 truncate text-start">{activeProjectLabel}</span>
+                <ChevronDown className="size-4 shrink-0 text-sidebar-foreground/60" />
+              </button>
+            }
+          />
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuRadioGroup value={project} onValueChange={(v) => v && setProject(v)}>
+              <DropdownMenuRadioItem value="all">All Projects</DropdownMenuRadioItem>
+              {portfolioProjects.map((p) => (
+                <DropdownMenuRadioItem key={p.id} value={p.id}>
+                  {p.name}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
-        {!collapsed && (
-          <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/40">
-            Administration
-          </p>
-        )}
-        {adminItems.map((item) => {
-          const active = pathname.startsWith(item.href)
-          const Icon = item.icon
-          return (
-            <Link
-              key={item.key}
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-4 py-3" aria-label="Main navigation">
+        <SectionLabel>Modules</SectionLabel>
+        {moduleItems.map((item) => (
+          <NavLink
+            key={item.href}
+            label={item.label}
+            href={item.href}
+            icon={item.icon}
+            active={item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)}
+          />
+        ))}
+
+        <div className="pt-4">
+          <SectionLabel>Administration</SectionLabel>
+          {adminItems.map((item) => (
+            <NavLink
+              key={item.href}
+              label={item.label}
               href={item.href}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                collapsed && "justify-center px-0",
-                active
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                  : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-              )}
-              title={collapsed ? item.label : undefined}
-            >
-              <Icon className="size-5 shrink-0" />
-              {!collapsed && <span>{item.label}</span>}
-            </Link>
-          )
-        })}
+              icon={item.icon}
+              active={pathname.startsWith(item.href)}
+            />
+          ))}
+        </div>
       </nav>
 
-      <div className="flex flex-col gap-1 border-t border-sidebar-border p-3">
+      <div className="border-t border-sidebar-border p-4">
         <button
           type="button"
           onClick={() => {
             void signOut()
           }}
-          className={cn(
-            "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-            collapsed && "justify-center px-0",
-          )}
-          title={collapsed ? "Log Out" : undefined}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
         >
           <LogOut className="size-5 shrink-0 flip-rtl" />
-          {!collapsed && <span>Log Out</span>}
-        </button>
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-label="Toggle sidebar"
-          className={cn(
-            "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-            collapsed && "justify-center px-0",
-          )}
-        >
-          <ChevronsLeft className={cn("size-5 shrink-0 flip-rtl transition-transform", collapsed && "rotate-180")} />
-          {!collapsed && <span>Collapse</span>}
+          <span>Log Out</span>
         </button>
       </div>
     </aside>

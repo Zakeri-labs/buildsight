@@ -202,7 +202,7 @@ export const sitePhotos: SitePhoto[] = [
   },
 ]
 
-export const notificationsCount = 3
+export const notificationsCount = 6
 
 export type ProjectStatusKey = "underConstruction" | "planning" | "onHold" | "completed" | "handover"
 

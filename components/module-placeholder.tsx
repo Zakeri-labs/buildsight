@@ -1,28 +1,21 @@
-"use client"
+import type { LucideIcon } from "lucide-react"
 
-import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { useI18n } from "@/lib/i18n"
-
-type NavKey = "projects" | "inspections" | "ncrs" | "reports" | "documents" | "team" | "settings"
-
-export function ModulePlaceholder({ titleKey }: { titleKey: NavKey }) {
-  const { t } = useI18n()
-
+export function ModulePlaceholder({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: LucideIcon
+  title: string
+  description: string
+}) {
   return (
-    <div className="mx-auto max-w-2xl">
-      <Card>
-        <CardContent className="flex flex-col items-center gap-4 py-16 text-center">
-          <h1 className="text-2xl font-bold text-balance">{t.nav[titleKey]}</h1>
-          <p className="max-w-md text-muted-foreground text-pretty">{t.common.comingSoon}</p>
-          <Button variant="outline" render={<Link href="/" />}>
-            <ArrowLeft data-icon="inline-start" className="flip-rtl" />
-            {t.common.backToDashboard}
-          </Button>
-        </CardContent>
-      </Card>
+    <div className="flex min-h-[60vh] flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card p-10 text-center">
+      <span className="flex size-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+        <Icon className="size-7" />
+      </span>
+      <h2 className="mt-5 text-lg font-semibold text-foreground">{title}</h2>
+      <p className="mt-2 max-w-md text-pretty text-sm text-muted-foreground">{description}</p>
     </div>
   )
 }
