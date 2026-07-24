@@ -35,7 +35,15 @@ export function ProgressChart() {
         <CardTitle>{t.dashboard.constructionProgress}</CardTitle>
         <Select value={period} onValueChange={(v) => setPeriod(v as string)}>
           <SelectTrigger size="sm" className="w-32">
-            <SelectValue />
+            <SelectValue placeholder={t.common.weekly}>
+              {(value) =>
+                value === "daily"
+                  ? t.common.daily
+                  : value === "monthly"
+                    ? t.common.monthly
+                    : t.common.weekly
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>

@@ -76,7 +76,11 @@ export function DocumentsList() {
         </div>
         <Select value={type} onValueChange={(v) => setType(v as DocumentType | "all")}>
           <SelectTrigger className="w-full sm:w-52">
-            <SelectValue />
+            <SelectValue placeholder={t.documents.allTypes}>
+              {(value) =>
+                value === "all" ? t.documents.allTypes : typeLabel[value as DocumentType]
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {typeOptions.map((opt) => (

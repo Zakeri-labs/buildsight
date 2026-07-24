@@ -65,7 +65,11 @@ export function ProjectsList() {
         </div>
         <Select value={status} onValueChange={(v) => setStatus(v as ProjectStatusKey | "all")}>
           <SelectTrigger className="w-full sm:w-52">
-            <SelectValue />
+            <SelectValue placeholder={t.projects.allStatuses}>
+              {(value) =>
+                value === "all" ? t.projects.allStatuses : t.projectStatus[value as ProjectStatusKey]
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {statusOptions.map((opt) => (

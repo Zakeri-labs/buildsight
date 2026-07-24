@@ -809,3 +809,128 @@ export const documents: DocumentRecord[] = [
     size: "12.5 MB",
   },
 ]
+
+export type RoleKey =
+  | "admin"
+  | "projectManager"
+  | "residentEngineer"
+  | "inspector"
+  | "documentController"
+  | "contractor"
+  | "owner"
+
+export type PresenceStatus = "online" | "offline" | "away"
+
+export type TeamMember = {
+  id: string
+  name: string
+  initials: string
+  email: string
+  role: RoleKey
+  company: string
+  presence: PresenceStatus
+  lastActive: string
+}
+
+export const teamMembers: TeamMember[] = [
+  {
+    id: "U-001",
+    name: "Omar Hassan",
+    initials: "OH",
+    email: "omar.hassan@buildsight.ae",
+    role: "projectManager",
+    company: "BuildSight Consulting",
+    presence: "online",
+    lastActive: "Now",
+  },
+  {
+    id: "U-002",
+    name: "Ahmed Khalid",
+    initials: "AK",
+    email: "ahmed.khalid@buildsight.ae",
+    role: "residentEngineer",
+    company: "BuildSight Consulting",
+    presence: "online",
+    lastActive: "5 min ago",
+  },
+  {
+    id: "U-003",
+    name: "Fatima Ali",
+    initials: "FA",
+    email: "fatima.ali@buildsight.ae",
+    role: "inspector",
+    company: "BuildSight Consulting",
+    presence: "away",
+    lastActive: "1 hour ago",
+  },
+  {
+    id: "U-004",
+    name: "Mohammed Yusuf",
+    initials: "MY",
+    email: "mohammed.yusuf@buildsight.ae",
+    role: "inspector",
+    company: "BuildSight Consulting",
+    presence: "online",
+    lastActive: "12 min ago",
+  },
+  {
+    id: "U-005",
+    name: "Sara Al Mulla",
+    initials: "SM",
+    email: "sara.almulla@buildsight.ae",
+    role: "documentController",
+    company: "BuildSight Consulting",
+    presence: "offline",
+    lastActive: "Yesterday",
+  },
+  {
+    id: "U-006",
+    name: "Khalid Rahman",
+    initials: "KR",
+    email: "khalid.rahman@atlas.ae",
+    role: "contractor",
+    company: "Atlas Contracting",
+    presence: "online",
+    lastActive: "20 min ago",
+  },
+  {
+    id: "U-007",
+    name: "Layla Ibrahim",
+    initials: "LI",
+    email: "layla.ibrahim@alnoor.ae",
+    role: "owner",
+    company: "Al Noor Developments",
+    presence: "offline",
+    lastActive: "2 days ago",
+  },
+  {
+    id: "U-008",
+    name: "Yousef Mansour",
+    initials: "YM",
+    email: "yousef.mansour@buildsight.ae",
+    role: "admin",
+    company: "BuildSight Consulting",
+    presence: "away",
+    lastActive: "3 hours ago",
+  },
+]
+
+export type PermissionLevel = "view" | "edit" | "approve" | "manage" | "none"
+
+export type RolePermissionRow = {
+  role: RoleKey
+  inspections: PermissionLevel
+  ncrs: PermissionLevel
+  reports: PermissionLevel
+  documents: PermissionLevel
+}
+
+export const rolePermissions: RolePermissionRow[] = [
+  { role: "admin", inspections: "manage", ncrs: "manage", reports: "manage", documents: "manage" },
+  { role: "projectManager", inspections: "approve", ncrs: "approve", reports: "approve", documents: "approve" },
+  { role: "residentEngineer", inspections: "approve", ncrs: "approve", reports: "edit", documents: "view" },
+  { role: "inspector", inspections: "edit", ncrs: "edit", reports: "edit", documents: "view" },
+  { role: "documentController", inspections: "view", ncrs: "view", reports: "view", documents: "manage" },
+  { role: "contractor", inspections: "edit", ncrs: "edit", reports: "view", documents: "edit" },
+  { role: "owner", inspections: "view", ncrs: "view", reports: "view", documents: "view" },
+]

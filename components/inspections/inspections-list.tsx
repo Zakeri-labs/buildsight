@@ -101,7 +101,9 @@ export function InspectionsList() {
         </div>
         <Select value={discipline} onValueChange={(v) => setDiscipline(v as Discipline | "all")}>
           <SelectTrigger className="w-full sm:w-52">
-            <SelectValue />
+            <SelectValue placeholder={t.inspections.allDisciplines}>
+              {(value) => (value === "all" ? t.inspections.allDisciplines : (value as string))}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {disciplines.map((d) => (
