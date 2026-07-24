@@ -1,6 +1,7 @@
 "use client"
 
-import { Bell, Building2, ChevronDown, Search } from "lucide-react"
+import Link from "next/link"
+import { Bell, Building2, ChevronDown, Lock, Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -12,12 +13,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
+import { LanguageSwitch } from "@/components/language-switch"
 import { currentUser, notificationsCount, projectsList, activeProject } from "@/lib/mock-data"
 
 export function AppTopbar() {
-  const { t, locale, setLocale } = useI18n()
+  const { t } = useI18n()
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-card/95 px-4 backdrop-blur md:px-6">
@@ -102,36 +103,22 @@ export function AppTopbar() {
               <span className="text-xs font-normal text-muted-foreground">{currentUser.email}</span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>{t.nav.settings}</DropdownMenuItem>
+            <DropdownMenuItem render={<Link href="/settings">{t.nav.settings}</Link>} />
+            <DropdownMenuItem
+              render={
+                <Link href="/owner">
+                  <Lock className="size-4" data-icon="inline-start" />
+                  {t.owner.openPortal}
+                </Link>
+              }
+            />
           </DropdownMenuContent>
         </DropdownMenu>
 
         <div className="mx-1 h-6 w-px bg-border" />
 
         {/* Language toggle */}
-        <div className="flex items-center gap-1 text-sm font-medium" role="group" aria-label="Language">
-          <button
-            type="button"
-            onClick={() => setLocale("en")}
-            className={cn(
-              "rounded px-1.5 py-0.5 transition-colors",
-              locale === "en" ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            EN
-          </button>
-          <span className="text-border">|</span>
-          <button
-            type="button"
-            onClick={() => setLocale("ar")}
-            className={cn(
-              "rounded px-1.5 py-0.5 transition-colors",
-              locale === "ar" ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            العربية
-          </button>
-        </div>
+        <LanguageSwitch />
       </div>
     </header>
   )
