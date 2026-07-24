@@ -86,6 +86,9 @@ export function AppTopbar() {
           )}
         </button>
 
+        {/* Language toggle */}
+        <LanguageSwitch className="rounded-xl border border-border bg-card px-1 py-1" />
+
         {/* User menu */}
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -124,10 +127,6 @@ export function AppTopbar() {
                 </Link>
               }
             />
-            <DropdownMenuSeparator />
-            <div className="px-2 py-1.5">
-              <LanguageSwitch />
-            </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => {

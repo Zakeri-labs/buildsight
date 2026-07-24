@@ -23,7 +23,6 @@ import {
 import { InspectionDetailSheet } from "@/components/inspections/inspection-detail-sheet"
 import { useI18n } from "@/lib/i18n"
 import {
-  inspections,
   type Discipline,
   type InspectionRecord,
   type InspectionStatus,
@@ -47,7 +46,7 @@ const statusTabs: { key: InspectionStatus | "all"; labelKey: keyof ReturnType<ty
   { key: "rejected", labelKey: "tabsRejected" },
 ]
 
-export function InspectionsList() {
+export function InspectionsList({ inspections }: { inspections: InspectionRecord[] }) {
   const { t } = useI18n()
   const [query, setQuery] = useState("")
   const [discipline, setDiscipline] = useState<Discipline | "all">("all")
@@ -64,7 +63,7 @@ export function InspectionsList() {
       const matchesStatus = statusTab === "all" || ins.status === statusTab
       return matchesQuery && matchesDiscipline && matchesStatus
     })
-  }, [query, discipline, statusTab])
+  }, [inspections, query, discipline, statusTab])
 
   return (
     <div className="flex flex-col gap-6">

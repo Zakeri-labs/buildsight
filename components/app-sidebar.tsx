@@ -28,8 +28,10 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useState } from "react"
-import { portfolioProjects } from "@/lib/portfolio-data"
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
+import { selectProject } from "@/lib/actions/project-scope"
+import type { ProjectOption } from "@/components/app-shell"
 
 const moduleItems = [
   { label: "Dashboard", href: "/", icon: Home },
@@ -83,12 +85,29 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function AppSidebar() {
+export function AppSidebar({
+  projects,
+  selectedProjectId,
+}: {
+  projects: ProjectOption[]
+  selectedProjectId: string
+}) {
   const pathname = usePathname()
-  const [project, setProject] = useState("all")
+  const router = useRouter()
+  const [project, setProject] = useState(selectedProjectId)
+  const [, startTransition] = useTransition()
 
   const activeProjectLabel =
-    project === "all" ? "All Projects" : portfolioProjects.find((p) => p.id === project)?.name ?? "All Projects"
+    project === "all" ? "All Projects" : projects.find((p) => p.id === project)?.name ?? "All Projects"
+
+  function handleSelect(value: string) {
+    if (!value || value === project) return
+    setProject(value)
+    startTransition(async () => {
+      await selectProject(value)
+      router.refresh()
+    })
+  }
 
   return (
     <aside className="sticky top-0 flex h-dvh w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground">
@@ -112,9 +131,9 @@ export function AppSidebar() {
             }
           />
           <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuRadioGroup value={project} onValueChange={(v) => v && setProject(v)}>
+            <DropdownMenuRadioGroup value={project} onValueChange={handleSelect}>
               <DropdownMenuRadioItem value="all">All Projects</DropdownMenuRadioItem>
-              {portfolioProjects.map((p) => (
+              {projects.map((p) => (
                 <DropdownMenuRadioItem key={p.id} value={p.id}>
                   {p.name}
                 </DropdownMenuRadioItem>

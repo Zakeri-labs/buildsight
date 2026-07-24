@@ -16,7 +16,7 @@ import {
 } from "@/components/status-badge"
 import { NcrDetailSheet } from "@/components/ncrs/ncr-detail-sheet"
 import { useI18n } from "@/lib/i18n"
-import { ncrs, ncrSummary, type NcrRecord, type NcrStatus } from "@/lib/mock-data"
+import { type NcrRecord, type NcrStatus } from "@/lib/mock-data"
 
 const statusTabs: { key: NcrStatus | "all"; labelKey: "tabsAll" | "tabsOpen" | "tabsInReview" | "tabsClosed" }[] = [
   { key: "all", labelKey: "tabsAll" },
@@ -25,11 +25,21 @@ const statusTabs: { key: NcrStatus | "all"; labelKey: "tabsAll" | "tabsOpen" | "
   { key: "closed", labelKey: "tabsClosed" },
 ]
 
-export function NcrsList() {
+export function NcrsList({ ncrs }: { ncrs: NcrRecord[] }) {
   const { t } = useI18n()
   const [query, setQuery] = useState("")
   const [statusTab, setStatusTab] = useState<NcrStatus | "all">("all")
   const [selected, setSelected] = useState<NcrRecord | null>(null)
+
+  const ncrSummary = useMemo(
+    () => ({
+      total: ncrs.length,
+      open: ncrs.filter((n) => n.status === "open").length,
+      inReview: ncrs.filter((n) => n.status === "in-review").length,
+      closed: ncrs.filter((n) => n.status === "closed").length,
+    }),
+    [ncrs],
+  )
 
   const filtered = useMemo(() => {
     return ncrs.filter((ncr) => {
@@ -40,7 +50,7 @@ export function NcrsList() {
       const matchesStatus = statusTab === "all" || ncr.status === statusTab
       return matchesQuery && matchesStatus
     })
-  }, [query, statusTab])
+  }, [ncrs, query, statusTab])
 
   return (
     <div className="flex flex-col gap-6">

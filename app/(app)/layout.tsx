@@ -1,6 +1,8 @@
 import { requireOnboarded } from "@/lib/auth/session"
 import { AppShell } from "@/components/app-shell"
 import { CurrentUserProvider, type CurrentUser } from "@/components/current-user-provider"
+import { getOrgProjects } from "@/lib/db/domain"
+import { getSelectedProjectId } from "@/lib/project-scope"
 
 function initials(name: string, email: string) {
   const source = name.trim() || email
@@ -14,6 +16,12 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
   const fullName = session.profile?.full_name?.trim() || session.email
 
   const primary = session.memberships[0]
+  const orgId = session.supervisingOrg?.id ?? primary?.organization?.id ?? null
+
+  const [projects, selectedProjectId] = await Promise.all([
+    orgId ? getOrgProjects(orgId) : Promise.resolve([]),
+    getSelectedProjectId(),
+  ])
 
   const user: CurrentUser = {
     id: session.userId,
@@ -24,9 +32,13 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
     organizationName: session.supervisingOrg?.name ?? primary?.organization?.name ?? null,
   }
 
+  const projectOptions = projects.map((p) => ({ id: p.id, name: p.name }))
+
   return (
     <CurrentUserProvider user={user}>
-      <AppShell>{children}</AppShell>
+      <AppShell projects={projectOptions} selectedProjectId={selectedProjectId ?? "all"}>
+        {children}
+      </AppShell>
     </CurrentUserProvider>
   )
 }

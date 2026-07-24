@@ -1,32 +1,33 @@
 import Link from "next/link"
 import { Circle, MoreVertical, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { portfolioTasks, type TaskType, type PortfolioTask } from "@/lib/portfolio-data"
+import type { TaskRow } from "@/lib/db/domain"
 
-const typeBadge: Record<TaskType, string> = {
+const typeBadge: Record<TaskRow["type"], string> = {
   NCR: "bg-red-50 text-red-700",
   Inspection: "bg-blue-50 text-blue-700",
   RFI: "bg-emerald-50 text-emerald-700",
   VO: "bg-amber-50 text-amber-700",
 }
 
-const dueTone: Record<PortfolioTask["dueTone"], string> = {
+const dueTone: Record<TaskRow["dueTone"], string> = {
   danger: "text-red-600",
   warning: "text-amber-600",
   muted: "text-muted-foreground",
 }
 
-export function MyTasks() {
+export function MyTasks({ tasks }: { tasks: TaskRow[] }) {
   return (
     <div className="flex flex-col rounded-xl border border-border bg-card p-5">
       <h2 className="text-base font-semibold text-foreground">My Tasks</h2>
 
       <ul className="mt-4 flex flex-1 flex-col divide-y divide-border">
-        {portfolioTasks.map((task) => (
+        {tasks.length === 0 && <li className="py-3 text-sm text-muted-foreground">No tasks for this scope.</li>}
+        {tasks.map((task) => (
           <li key={task.id} className="flex items-start gap-3 py-3 first:pt-0">
             <button
               type="button"
-              aria-label={`Complete ${task.action} ${task.reference}`}
+              aria-label={`Complete ${task.action} ${task.reference ?? ""}`}
               className="mt-0.5 text-muted-foreground transition-colors hover:text-emerald-600"
             >
               <Circle className="size-5" />
@@ -34,16 +35,16 @@ export function MyTasks() {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-medium text-foreground">
-                  {task.action} {`#${task.reference}`}
+                  {task.action} {task.reference ? `#${task.reference}` : ""}
                 </p>
                 <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold", typeBadge[task.type])}>
                   {task.type}
                 </span>
               </div>
-              <p className="truncate text-xs text-muted-foreground">{task.project}</p>
+              <p className="truncate text-xs text-muted-foreground">{task.projectName}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <span className={cn("text-xs font-medium", dueTone[task.dueTone])}>{task.due}</span>
+              <span className={cn("text-xs font-medium", dueTone[task.dueTone])}>{task.dueLabel}</span>
               <button
                 type="button"
                 aria-label={`Actions for ${task.reference}`}
