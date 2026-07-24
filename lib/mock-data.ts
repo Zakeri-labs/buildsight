@@ -934,3 +934,26 @@ export const rolePermissions: RolePermissionRow[] = [
   { role: "contractor", inspections: "edit", ncrs: "edit", reports: "view", documents: "edit" },
   { role: "owner", inspections: "view", ncrs: "view", reports: "view", documents: "view" },
 ]
+
+export type MilestoneKey =
+  | "milestoneStructure"
+  | "milestoneFacade"
+  | "milestoneMep"
+  | "milestoneFitout"
+  | "milestoneHandover"
+
+export type Milestone = {
+  key: MilestoneKey
+  progress: number
+}
+
+export const milestones: Milestone[] = [
+  { key: "milestoneStructure", progress: 88 },
+  { key: "milestoneFacade", progress: 42 },
+  { key: "milestoneMep", progress: 55 },
+  { key: "milestoneFitout", progress: 18 },
+  { key: "milestoneHandover", progress: 0 },
+]
+
+export type RiskLevel = "onTrack" | "atRisk" | "delayed"
+export const projectRisk: RiskLevel = "atRisk"

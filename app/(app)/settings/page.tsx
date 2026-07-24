@@ -1,5 +1,5 @@
-import { ModulePlaceholder } from "@/components/module-placeholder"
+import { SettingsView } from "@/components/settings/settings-view"
 
 export default function SettingsPage() {
-  return <ModulePlaceholder titleKey="settings" />
+  return <SettingsView />
 }
