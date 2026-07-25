@@ -179,12 +179,13 @@
   [dir='rtl'] .flip-rtl {
     transform: scaleX(-1);
   }
-  /* Switch to Noto Sans Arabic when RTL is active */
-  [dir='rtl'] body {
-    font-family: var(--font-arabic), 'Noto Sans Arabic', ui-sans-serif, system-ui, sans-serif;
+  /* Switch to Vazirmatn when RTL is active */
+  [dir='rtl'] body,
+  [dir='rtl'] .font-sans {
+    font-family: var(--font-arabic), 'Vazirmatn', ui-sans-serif, system-ui, sans-serif;
   }
-  /* Arabic text in language switch button always uses Arabic font */
+  /* Arabic text in language switch button always uses Vazirmatn font */
   .font-arabic {
-    font-family: var(--font-arabic), 'Noto Sans Arabic', ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-arabic), 'Vazirmatn', ui-sans-serif, system-ui, sans-serif;
   }
 }

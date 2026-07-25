@@ -27,7 +27,7 @@ export function LanguageSwitch() {
       <button
         type="button"
         onClick={() => setLocale("ar")}
-        style={{ fontFamily: "var(--font-arabic), 'Noto Sans Arabic', Arial, sans-serif" }}
+        style={{ fontFamily: "var(--font-arabic), 'Vazirmatn', sans-serif" }}
         className={cn(
           "flex h-8 w-8 items-center justify-center rounded-lg text-sm font-semibold transition-colors",
           locale === "ar"
