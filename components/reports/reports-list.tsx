@@ -1,14 +1,16 @@
 "use client"
 
+import Link from "next/link"
 import { useState } from "react"
 import { Plus, FileText, Users, Cloud, Download, ClipboardCheck, ShieldCheck, TrendingUp } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { ToneBadge } from "@/components/status-badge"
 import { useI18n } from "@/lib/i18n"
 import { reports, reportsSummary, type ReportType } from "@/lib/mock-data"
+import { cn } from "@/lib/utils"
 
 const typeMeta: Record<ReportType, { icon: React.ElementType; tone: "info" | "primary" | "success"; labelKey: "typeDaily" | "typeWeekly" | "typeSafety" }> = {
   daily: { icon: ClipboardCheck, tone: "info", labelKey: "typeDaily" },
@@ -26,10 +28,10 @@ export function ReportsList() {
         title={t.reports.title}
         subtitle={t.reports.subtitle}
         action={
-          <Button>
+          <Link href="/reports/new" className={cn(buttonVariants())}>
             <Plus data-icon="inline-start" />
             {t.reports.newReport}
-          </Button>
+          </Link>
         }
       />
 
