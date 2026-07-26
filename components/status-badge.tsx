@@ -3,6 +3,7 @@
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
+import { getDocumentTypeDefinition, type DocumentTypeValue } from "@/lib/documents/document-types"
 import type {
   Discipline,
   InspectionStatus,
@@ -10,7 +11,6 @@ import type {
   ProjectStatusKey,
   NcrSeverity,
   NcrStatus,
-  DocumentType,
   DocumentStatus,
 } from "@/lib/mock-data"
 
@@ -124,23 +124,13 @@ export function DocumentStatusBadge({ status }: { status: DocumentStatus }) {
   return <Badge className={cn("border-transparent", toneClass[docStatusTone[status]])}>{map[status]}</Badge>
 }
 
-export function DocumentTypeBadge({ type }: { type: DocumentType }) {
-  const { t } = useI18n()
-  const map: Record<DocumentType, string> = {
-    drawing: t.documents.typeDrawing,
-    submittal: t.documents.typeSubmittal,
-    rfi: t.documents.typeRfi,
-    report: t.documents.typeReport,
-    contract: t.documents.typeContract,
-  }
-  const tone: Record<DocumentType, string> = {
-    drawing: "info",
-    submittal: "accent",
-    rfi: "warning",
-    report: "primary",
-    contract: "neutral",
-  }
-  return <Badge className={cn("border-transparent font-medium", toneClass[tone[type]])}>{map[type]}</Badge>
+export function DocumentTypeBadge({ type }: { type: DocumentTypeValue | string }) {
+  const definition = getDocumentTypeDefinition(type)
+  return (
+    <Badge title={definition.label} className={cn("border-transparent font-medium", definition.badgeClassName)}>
+      {definition.shortLabel}
+    </Badge>
+  )
 }
 
 export function ToneBadge({

@@ -1,6 +1,7 @@
 import { DocumentsList, type DocumentListItem } from "@/components/documents/documents-list"
 import { requireOnboarded } from "@/lib/auth/session"
 import { getSelectedProjectId } from "@/lib/project-scope"
+import { normalizeDocumentType } from "@/lib/documents/document-types"
 import { createClient } from "@/lib/supabase/server"
 
 function initials(name: string) {
@@ -35,7 +36,7 @@ export default async function DocumentsPage() {
   const items: DocumentListItem[] = documents.map((row: any) => {
     const profile = profileMap.get(row.created_by)
     const creatorName = profile?.full_name?.trim() || profile?.email || (row.created_by === session.userId ? session.email : "Project member")
-    const type = ["general", "drawing", "submittal", "report", "contract"].includes(row.document_type) ? row.document_type : "general"
+    const type = normalizeDocumentType(row.document_type)
     return {
       id: row.id,
       reference: row.reference,

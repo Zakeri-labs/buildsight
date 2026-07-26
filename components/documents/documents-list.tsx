@@ -4,7 +4,9 @@ import { useMemo, useState, type ComponentType } from "react"
 import Link from "next/link"
 import {
   Archive,
+  CheckSquare2,
   ChevronDown,
+  ClipboardCheck,
   Eye,
   FileCheck2,
   FileClock,
@@ -13,10 +15,15 @@ import {
   FileSpreadsheet,
   FileText,
   Files,
+  MessageSquareText,
   MoreVertical,
+  Pencil,
   Plus,
   Search,
+  Send,
+  ShieldAlert,
 } from "lucide-react"
+import { DocumentTypeSelect } from "@/components/documents/document-type-select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -25,13 +32,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import {
+  getDocumentTypeDefinition,
+  type DocumentTypeGroup,
+  type DocumentTypeIconKey,
+  type DocumentTypeValue,
+} from "@/lib/documents/document-types"
 import { cn } from "@/lib/utils"
 
 export type DocumentListItem = {
   id: string
   reference: string
   title: string
-  documentType: "general" | "drawing" | "submittal" | "report" | "contract"
+  documentType: DocumentTypeValue
   projectName: string
   createdBy: {
     name: string
@@ -43,23 +56,35 @@ export type DocumentListItem = {
   updatedAt: string
 }
 
-type Category = "all" | DocumentListItem["documentType"]
+type Category = "all" | DocumentTypeGroup
 
-const typeLabels: Record<DocumentListItem["documentType"], string> = {
-  general: "General Document",
-  drawing: "Drawing",
-  submittal: "Submittal",
-  report: "Report",
-  contract: "Contract",
+const categoryLabels: Record<Category, string> = {
+  all: "All",
+  inspection: "Inspections",
+  quality: "Quality",
+  safety: "Safety",
+  report: "Reports",
+  drawing: "Drawings",
+  submittal: "Submittals",
+  commercial: "Commercial",
+  communication: "Communication",
+  management: "Management",
+  other: "Other",
 }
 
-const typeStyles: Record<DocumentListItem["documentType"], string> = {
-  general: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-  drawing: "bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300",
-  submittal: "bg-orange-50 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300",
-  report: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
-  contract: "bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
-}
+const categoryOrder: Category[] = [
+  "all",
+  "inspection",
+  "quality",
+  "safety",
+  "report",
+  "drawing",
+  "submittal",
+  "commercial",
+  "communication",
+  "management",
+  "other",
+]
 
 export function DocumentsList({
   documents,
@@ -71,6 +96,7 @@ export function DocumentsList({
   const [activeTab, setActiveTab] = useState<Category>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | DocumentListItem["status"]>("all")
+  const [typeFilter, setTypeFilter] = useState<DocumentTypeValue | "">("")
   const [projectFilter, setProjectFilter] = useState("all")
 
   const projects = useMemo(
@@ -78,36 +104,44 @@ export function DocumentsList({
     [documents],
   )
 
-  const counts = useMemo(() => {
-    const byType = new Map<DocumentListItem["documentType"], number>()
-    for (const document of documents) byType.set(document.documentType, (byType.get(document.documentType) ?? 0) + 1)
-    return byType
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<DocumentTypeGroup, number>()
+    for (const document of documents) {
+      const group = getDocumentTypeDefinition(document.documentType).group
+      counts.set(group, (counts.get(group) ?? 0) + 1)
+    }
+    return counts
   }, [documents])
 
   const filteredDocuments = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
     return documents.filter((document) => {
-      if (activeTab !== "all" && document.documentType !== activeTab) return false
+      const type = getDocumentTypeDefinition(document.documentType)
+      if (activeTab !== "all" && type.group !== activeTab) return false
+      if (typeFilter && document.documentType !== typeFilter) return false
       if (statusFilter !== "all" && document.status !== statusFilter) return false
       if (projectFilter !== "all" && document.projectName !== projectFilter) return false
-      if (query && !document.title.toLowerCase().includes(query) && !document.reference.toLowerCase().includes(query)) return false
+      if (
+        query &&
+        !document.title.toLowerCase().includes(query) &&
+        !document.reference.toLowerCase().includes(query) &&
+        !type.label.toLowerCase().includes(query) &&
+        !type.shortLabel.toLowerCase().includes(query)
+      ) return false
       return true
     })
-  }, [activeTab, documents, projectFilter, searchQuery, statusFilter])
+  }, [activeTab, documents, projectFilter, searchQuery, statusFilter, typeFilter])
 
   const draftCount = documents.filter((document) => document.status === "draft").length
   const publishedCount = documents.filter((document) => document.status === "published").length
   const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
   const newThisWeek = documents.filter((document) => new Date(document.createdAt).getTime() >= weekAgo).length
 
-  const tabs: { key: Category; label: string; count: number }[] = [
-    { key: "all", label: "All", count: documents.length },
-    { key: "general", label: "General Docs", count: counts.get("general") ?? 0 },
-    { key: "drawing", label: "Drawings", count: counts.get("drawing") ?? 0 },
-    { key: "submittal", label: "Submittals", count: counts.get("submittal") ?? 0 },
-    { key: "report", label: "Reports", count: counts.get("report") ?? 0 },
-    { key: "contract", label: "Contracts", count: counts.get("contract") ?? 0 },
-  ]
+  const tabs = categoryOrder.map((key) => ({
+    key,
+    label: categoryLabels[key],
+    count: key === "all" ? documents.length : categoryCounts.get(key) ?? 0,
+  }))
 
   return (
     <div className="flex flex-col gap-6">
@@ -126,7 +160,10 @@ export function DocumentsList({
               <button
                 key={tab.key}
                 type="button"
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => {
+                  setActiveTab(tab.key)
+                  setTypeFilter("")
+                }}
                 className={cn(
                   "relative flex items-center gap-2 whitespace-nowrap pb-3 text-sm transition-colors",
                   active ? "font-bold text-blue-600 dark:text-blue-400" : "font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400",
@@ -166,6 +203,17 @@ export function DocumentsList({
           <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
           <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search documents" className="h-10 rounded-xl bg-white ps-9 dark:bg-slate-900" />
         </div>
+        <DocumentTypeSelect
+          value={typeFilter}
+          onValueChange={(value) => {
+            setTypeFilter(value)
+            if (value) setActiveTab(getDocumentTypeDefinition(value).group)
+          }}
+          allowClear
+          clearLabel="All document types"
+          placeholder="Document Type"
+          className="w-full sm:w-[310px]"
+        />
         <FilterMenu
           label="Status"
           value={statusFilter}
@@ -202,42 +250,46 @@ export function DocumentsList({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-              {filteredDocuments.map((document) => (
-                <tr key={document.id} className="transition-colors hover:bg-slate-50/70 dark:hover:bg-slate-800/30">
-                  <td className="whitespace-nowrap px-5 py-4">
-                    <Link href={`/documents/${document.id}`} className="font-semibold text-blue-600 hover:underline dark:text-blue-400">{document.reference}</Link>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-3">
-                      <DocumentTypeIcon type={document.documentType} />
-                      <Link href={`/documents/${document.id}`} className="font-medium text-slate-900 hover:text-blue-600 dark:text-slate-100 dark:hover:text-blue-400">{document.title}</Link>
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-4">
-                    <span className={cn("inline-flex rounded-md px-2.5 py-1 text-xs font-medium", typeStyles[document.documentType])}>{typeLabels[document.documentType]}</span>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-4 text-xs text-slate-600 dark:text-slate-400">{document.projectName}</td>
-                  <td className="whitespace-nowrap px-4 py-4">
-                    <div className="flex items-center gap-2.5">
-                      <Avatar className="size-7 border border-slate-200 dark:border-slate-700">
-                        {document.createdBy.avatar ? <AvatarImage src={document.createdBy.avatar} alt={document.createdBy.name} /> : null}
-                        <AvatarFallback className="bg-blue-100 text-[10px] font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">{document.createdBy.initials}</AvatarFallback>
-                      </Avatar>
-                      <span className="text-xs font-medium text-slate-800 dark:text-slate-200">{document.createdBy.name}</span>
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-4"><DocumentStatus status={document.status} /></td>
-                  <td className="whitespace-nowrap px-4 py-4 text-xs text-slate-500">{formatDateTime(document.updatedAt)}</td>
-                  <td className="whitespace-nowrap px-5 py-4 text-end">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger render={<button type="button" aria-label={`Actions for ${document.title}`} className="inline-flex size-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"><MoreVertical className="size-4" /></button>} />
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem render={<Link href={`/documents/${document.id}`}><Eye className="size-4" />View document</Link>} />
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
-                </tr>
-              ))}
+              {filteredDocuments.map((document) => {
+                const type = getDocumentTypeDefinition(document.documentType)
+                return (
+                  <tr key={document.id} className="transition-colors hover:bg-slate-50/70 dark:hover:bg-slate-800/30">
+                    <td className="whitespace-nowrap px-5 py-4">
+                      <Link href={`/documents/${document.id}`} className="font-semibold text-blue-600 hover:underline dark:text-blue-400">{document.reference}</Link>
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-3">
+                        <DocumentTypeIcon icon={type.icon} />
+                        <Link href={`/documents/${document.id}`} className="font-medium text-slate-900 hover:text-blue-600 dark:text-slate-100 dark:hover:text-blue-400">{document.title}</Link>
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4">
+                      <span title={type.label} className={cn("inline-flex rounded-md px-2.5 py-1 text-xs font-medium", type.badgeClassName)}>{type.shortLabel}</span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4 text-xs text-slate-600 dark:text-slate-400">{document.projectName}</td>
+                    <td className="whitespace-nowrap px-4 py-4">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar className="size-7 border border-slate-200 dark:border-slate-700">
+                          {document.createdBy.avatar ? <AvatarImage src={document.createdBy.avatar} alt={document.createdBy.name} /> : null}
+                          <AvatarFallback className="bg-blue-100 text-[10px] font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">{document.createdBy.initials}</AvatarFallback>
+                        </Avatar>
+                        <span className="text-xs font-medium text-slate-800 dark:text-slate-200">{document.createdBy.name}</span>
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-4"><DocumentStatus status={document.status} /></td>
+                    <td className="whitespace-nowrap px-4 py-4 text-xs text-slate-500">{formatDateTime(document.updatedAt)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 text-end">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger render={<button type="button" aria-label={`Actions for ${document.title}`} className="inline-flex size-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"><MoreVertical className="size-4" /></button>} />
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem render={<Link href={`/documents/${document.id}`}><Eye className="size-4" />View document</Link>} />
+                          <DropdownMenuItem render={<Link href={`/documents/${document.id}/edit`}><Pencil className="size-4" />Edit document</Link>} />
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -280,15 +332,26 @@ function FilterMenu({ label, value, options, onChange }: { label: string; value:
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<button type="button" className="inline-flex h-10 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"><span>{value === "all" ? label : selected?.label ?? label}</span><ChevronDown className="size-3.5 text-slate-400" /></button>} />
-      <DropdownMenuContent align="start" className="min-w-44">
+      <DropdownMenuContent align="start" className="max-h-72 min-w-44 overflow-y-auto">
         {options.map((option) => <DropdownMenuItem key={option.value} onClick={() => onChange(option.value)}>{option.label}</DropdownMenuItem>)}
       </DropdownMenuContent>
     </DropdownMenu>
   )
 }
 
-function DocumentTypeIcon({ type }: { type: DocumentListItem["documentType"] }) {
-  const Icon = type === "drawing" ? FileImage : type === "report" ? FileSpreadsheet : type === "contract" ? FileCheck2 : type === "submittal" ? Archive : FileText
+function DocumentTypeIcon({ icon }: { icon: DocumentTypeIconKey }) {
+  const icons: Record<DocumentTypeIconKey, ComponentType<{ className?: string }>> = {
+    inspection: ClipboardCheck,
+    quality: CheckSquare2,
+    safety: ShieldAlert,
+    report: FileSpreadsheet,
+    drawing: FileImage,
+    submittal: Send,
+    commercial: FileCheck2,
+    communication: MessageSquareText,
+    document: FileText,
+  }
+  const Icon = icons[icon]
   return <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300"><Icon className="size-4" /></span>
 }
 

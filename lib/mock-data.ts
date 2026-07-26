@@ -1,3 +1,5 @@
+import type { DocumentTypeValue } from "@/lib/documents/document-types"
+
 export type Discipline = "Structural" | "MEP" | "Architectural" | "Civil" | "Electrical" | "Mechanical"
 export type Priority = "high" | "medium" | "low"
 export type InspectionStatus = "pending" | "approved" | "rejected" | "in-progress"
@@ -713,7 +715,7 @@ export const reports: ReportRecord[] = [
 
 export const reportsSummary = { totalReports: 12, avgManpower: 139, openIssues: 5 }
 
-export type DocumentType = "drawing" | "submittal" | "rfi" | "report" | "contract"
+export type DocumentType = DocumentTypeValue
 export type DocumentStatus = "approved" | "pending" | "rejected" | "revise"
 
 export type DocumentRecord = {
@@ -741,7 +743,7 @@ export const documents: DocumentRecord[] = [
   {
     id: "MS-2025-062",
     name: "Concrete Mix Design - C40",
-    type: "submittal",
+    type: "material_submittal",
     revision: "B",
     status: "approved",
     uploadedBy: "Atlas Contracting",
@@ -751,7 +753,7 @@ export const documents: DocumentRecord[] = [
   {
     id: "RFI-2025-041",
     name: "Curtain Wall Fixing Detail Clarification",
-    type: "rfi",
+    type: "request_for_information",
     revision: "A",
     status: "pending",
     uploadedBy: "Atlas Contracting",
@@ -761,7 +763,7 @@ export const documents: DocumentRecord[] = [
   {
     id: "MS-2025-061",
     name: "Waterproofing Membrane Datasheet",
-    type: "submittal",
+    type: "material_submittal",
     revision: "A",
     status: "revise",
     uploadedBy: "Atlas Contracting",
@@ -781,7 +783,7 @@ export const documents: DocumentRecord[] = [
   {
     id: "RFI-2025-040",
     name: "Basement Waterstop Specification Query",
-    type: "rfi",
+    type: "request_for_information",
     revision: "A",
     status: "rejected",
     uploadedBy: "Atlas Contracting",
@@ -791,7 +793,7 @@ export const documents: DocumentRecord[] = [
   {
     id: "SR-2025-087",
     name: "Daily Site Report - 15 May",
-    type: "report",
+    type: "daily_report",
     revision: "—",
     status: "approved",
     uploadedBy: "Mohammed Yusuf",
@@ -801,7 +803,7 @@ export const documents: DocumentRecord[] = [
   {
     id: "CN-2024-001",
     name: "Main Contract Agreement",
-    type: "contract",
+    type: "other",
     revision: "—",
     status: "approved",
     uploadedBy: "Omar Hassan",

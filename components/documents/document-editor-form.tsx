@@ -24,8 +24,10 @@ import {
   Underline,
   Undo2,
 } from "lucide-react"
-import { createDocumentAction } from "@/lib/actions/documents"
+import { createDocumentAction, updateDocumentAction } from "@/lib/actions/documents"
 import { createClient } from "@/lib/supabase/client"
+import { DocumentTypeSelect } from "@/components/documents/document-type-select"
+import { isDocumentTypeValue, type DocumentTypeValue } from "@/lib/documents/document-types"
 import { EMPTY_RICH_TEXT_DOCUMENT, type RichTextDocument } from "@/lib/documents/rich-text"
 import { richTextToEditorHtml, serializeRichText } from "@/lib/documents/rich-text-dom"
 import { Button } from "@/components/ui/button"
@@ -37,27 +39,34 @@ import { cn } from "@/lib/utils"
 type ProjectSummary = { id: string; name: string }
 type SaveMode = "draft" | "published"
 
+export type EditableDocument = {
+  id: string
+  reference: string
+  title: string
+  documentType: DocumentTypeValue
+  status: SaveMode
+  content: RichTextDocument
+}
+
 type UploadState = {
   fileName: string
   progress: number
 }
 
-const documentTypes = [
-  { value: "general", label: "General Document" },
-  { value: "drawing", label: "Drawing" },
-  { value: "submittal", label: "Submittal" },
-  { value: "report", label: "Report" },
-  { value: "contract", label: "Contract" },
-]
-
-export function DocumentEditorForm({ project }: { project: ProjectSummary }) {
+export function DocumentEditorForm({
+  project,
+  document: initialDocument,
+}: {
+  project: ProjectSummary
+  document?: EditableDocument
+}) {
   const router = useRouter()
   const editorRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const savedRangeRef = useRef<Range | null>(null)
-  const [title, setTitle] = useState("")
-  const [documentType, setDocumentType] = useState("general")
-  const [content, setContent] = useState<RichTextDocument>(EMPTY_RICH_TEXT_DOCUMENT)
+  const [title, setTitle] = useState(initialDocument?.title ?? "")
+  const [documentType, setDocumentType] = useState<DocumentTypeValue | "">(initialDocument?.documentType ?? "")
+  const [content, setContent] = useState<RichTextDocument>(initialDocument?.content ?? EMPTY_RICH_TEXT_DOCUMENT)
   const [saveMode, setSaveMode] = useState<SaveMode | null>(null)
   const [upload, setUpload] = useState<UploadState | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -89,7 +98,7 @@ export function DocumentEditorForm({ project }: { project: ProjectSummary }) {
   useEffect(() => {
     const root = editorRef.current
     if (!root) return
-    root.innerHTML = richTextToEditorHtml(EMPTY_RICH_TEXT_DOCUMENT)
+    root.innerHTML = richTextToEditorHtml(initialDocument?.content ?? EMPTY_RICH_TEXT_DOCUMENT)
 
     const rememberSelection = () => {
       const selection = window.getSelection()
@@ -100,7 +109,7 @@ export function DocumentEditorForm({ project }: { project: ProjectSummary }) {
 
     document.addEventListener("selectionchange", rememberSelection)
     return () => document.removeEventListener("selectionchange", rememberSelection)
-  }, [])
+  }, [initialDocument?.content])
 
   useEffect(() => {
     const root = editorRef.current
@@ -290,6 +299,10 @@ export function DocumentEditorForm({ project }: { project: ProjectSummary }) {
       setError("Document title is required.")
       return
     }
+    if (!isDocumentTypeValue(documentType)) {
+      setError("Document type is required.")
+      return
+    }
     if (upload) {
       setError("Wait for the image upload to finish before saving.")
       return
@@ -297,13 +310,16 @@ export function DocumentEditorForm({ project }: { project: ProjectSummary }) {
 
     setSaveMode(mode)
     try {
-      const result = await createDocumentAction({
+      const writeInput = {
         projectId: project.id,
         title,
         documentType,
         status: mode,
         content: currentContent,
-      })
+      }
+      const result = initialDocument
+        ? await updateDocumentAction({ ...writeInput, documentId: initialDocument.id })
+        : await createDocumentAction(writeInput)
 
       if (!result.ok) {
         setSaveMode(null)
@@ -311,8 +327,10 @@ export function DocumentEditorForm({ project }: { project: ProjectSummary }) {
         return
       }
 
-      setSuccess(mode === "published" ? "Document published successfully." : "Draft saved successfully.")
-      router.push(`/documents/${result.documentId}?created=${mode}`)
+      setSuccess(initialDocument
+        ? mode === "published" ? "Document updated and published successfully." : "Draft updated successfully."
+        : mode === "published" ? "Document published successfully." : "Draft saved successfully.")
+      router.push(`/documents/${result.documentId}?${initialDocument ? "updated" : "created"}=${mode}`)
     } catch (saveError) {
       setSaveMode(null)
       setError(saveError instanceof Error ? saveError.message : "Unable to save the document.")
@@ -329,7 +347,7 @@ export function DocumentEditorForm({ project }: { project: ProjectSummary }) {
           <div className="min-w-0">
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-blue-200">
               <FileText className="size-4" />
-              New project document
+              {initialDocument ? "Edit project document" : "New project document"}
             </div>
             <h2 className="truncate text-2xl font-bold sm:text-3xl">{project.name}</h2>
             <p className="mt-1 flex items-center gap-2 text-sm text-blue-100/90">
@@ -339,7 +357,7 @@ export function DocumentEditorForm({ project }: { project: ProjectSummary }) {
           </div>
           <div className="rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-sm backdrop-blur">
             <span className="block text-xs text-blue-200">Project context</span>
-            <span className="font-semibold">Locked</span>
+            <span className="font-semibold">{initialDocument ? initialDocument.reference : "Locked"}</span>
           </div>
         </CardContent>
       </Card>
@@ -348,7 +366,7 @@ export function DocumentEditorForm({ project }: { project: ProjectSummary }) {
         <CardHeader className="border-b px-5 py-4 sm:px-6">
           <CardTitle className="text-lg">Document details</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-5 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_240px] sm:px-6">
+        <CardContent className="grid gap-5 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)] sm:px-6">
           <div className="space-y-2">
             <Label htmlFor="document-title">Document title <span className="text-destructive">*</span></Label>
             <Input
@@ -362,16 +380,15 @@ export function DocumentEditorForm({ project }: { project: ProjectSummary }) {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="document-type">Document type</Label>
-            <select
+            <Label htmlFor="document-type">Document type <span className="text-destructive">*</span></Label>
+            <DocumentTypeSelect
               id="document-type"
               value={documentType}
-              onChange={(event) => setDocumentType(event.target.value)}
+              onValueChange={setDocumentType}
               disabled={saveMode !== null}
-              className="flex h-11 w-full rounded-lg border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus:border-ring focus:ring-3 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
-            >
-              {documentTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-            </select>
+              required
+              invalid={Boolean(error && !isDocumentTypeValue(documentType))}
+            />
           </div>
         </CardContent>
       </Card>

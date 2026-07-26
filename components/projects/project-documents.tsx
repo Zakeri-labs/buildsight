@@ -23,13 +23,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { getDocumentTypeDefinition, type DocumentTypeIconKey, type DocumentTypeValue } from "@/lib/documents/document-types"
 import { cn } from "@/lib/utils"
 
 export type ProjectDocument = {
   id: string
   reference: string
   title: string
-  type: "Contract" | "Drawing" | "Submittal" | "General Document" | "Report"
+  type: DocumentTypeValue
   uploadedBy: {
     name: string
     initials: string
@@ -37,14 +38,6 @@ export type ProjectDocument = {
   }
   lastUpdated: string
   status: "Approved" | "Current" | "Under Review" | "Updated" | "Shared"
-}
-
-const typeStyles: Record<ProjectDocument["type"], string> = {
-  Contract: "bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
-  Drawing: "bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300",
-  Submittal: "bg-orange-50 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300",
-  "General Document": "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-  Report: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
 }
 
 const statusStyles: Record<ProjectDocument["status"], string> = {
@@ -56,15 +49,19 @@ const statusStyles: Record<ProjectDocument["status"], string> = {
 }
 
 function DocumentIcon({ type }: { type: ProjectDocument["type"] }) {
-  const Icon = type === "Drawing"
-    ? FileImage
-    : type === "Report"
-      ? FileSpreadsheet
-      : type === "Contract"
-        ? FileCheck2
-        : type === "Submittal"
-          ? FileArchive
-          : FileText
+  const icon = getDocumentTypeDefinition(type).icon
+  const icons: Record<DocumentTypeIconKey, typeof FileText> = {
+    inspection: FileCheck2,
+    quality: FileCheck2,
+    safety: FileCheck2,
+    report: FileSpreadsheet,
+    drawing: FileImage,
+    submittal: FileArchive,
+    commercial: FileCheck2,
+    communication: FileText,
+    document: FileText,
+  }
+  const Icon = icons[icon]
 
   return (
     <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary" aria-hidden="true">
@@ -85,7 +82,7 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
         </CardTitle>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Link
-            href={`/documents?project=${projectQuery}&action=upload`}
+            href="/documents/new"
             className={cn(buttonVariants({ size: "lg" }), "h-9 w-full sm:w-auto")}
           >
             <Upload className="size-4" />
@@ -132,8 +129,11 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
                     </div>
                   </td>
                   <td className="px-4 py-3.5">
-                    <span className={cn("inline-flex rounded-md px-2.5 py-1 text-xs font-medium", typeStyles[document.type])}>
-                      {document.type}
+                    <span
+                      title={getDocumentTypeDefinition(document.type).label}
+                      className={cn("inline-flex rounded-md px-2.5 py-1 text-xs font-medium", getDocumentTypeDefinition(document.type).badgeClassName)}
+                    >
+                      {getDocumentTypeDefinition(document.type).shortLabel}
                     </span>
                   </td>
                   <td className="px-4 py-3.5">
