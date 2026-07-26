@@ -17,6 +17,114 @@ import { ProjectStatusBadge } from "@/components/status-badge"
 import { DonutChart } from "@/components/dashboard/donut-chart"
 import { useI18n } from "@/lib/i18n"
 import type { ProjectRecord } from "@/lib/mock-data"
+import { ProjectParticipants, type ProjectParticipant } from "@/components/projects/project-participants"
+import { ProjectDocuments, type ProjectDocument } from "@/components/projects/project-documents"
+
+
+function projectParticipants(project: ProjectRecord): ProjectParticipant[] {
+  return [
+    {
+      id: `${project.id}-consultant`,
+      organization: project.consultant,
+      organizationType: "Consultancy",
+      projectRole: "Consultant",
+      keyContact: { name: "Arman H.", initials: "AH", avatar: "/avatars/arman.png" },
+      usersWithAccess: 5,
+      status: "Active",
+      logoTone: "blue",
+    },
+    {
+      id: `${project.id}-client`,
+      organization: project.client,
+      organizationType: "Client",
+      projectRole: "Client",
+      keyContact: { name: "Leena K.", initials: "LK" },
+      usersWithAccess: 2,
+      status: "Active",
+      logoTone: "violet",
+    },
+    {
+      id: `${project.id}-contractor`,
+      organization: project.contractor,
+      organizationType: "Contractor",
+      projectRole: "Contractor",
+      keyContact: { name: "Mohammed S.", initials: "MS" },
+      usersWithAccess: 8,
+      status: "Active",
+      logoTone: "amber",
+    },
+    {
+      id: `${project.id}-third-party`,
+      organization: "Prime Inspectors",
+      organizationType: "Third Party",
+      projectRole: "Third Party",
+      keyContact: { name: "Nadine R.", initials: "NR" },
+      usersWithAccess: 3,
+      status: "Active",
+      logoTone: "cyan",
+    },
+    {
+      id: `${project.id}-government`,
+      organization: "Municipal Authority",
+      organizationType: "Government",
+      projectRole: "Government",
+      keyContact: { name: "Ibrahim M.", initials: "IM" },
+      usersWithAccess: 1,
+      status: "Limited Access",
+      logoTone: "emerald",
+    },
+  ]
+}
+
+function projectDocuments(project: ProjectRecord): ProjectDocument[] {
+  return [
+    {
+      id: `${project.id}-contract-agreement`,
+      reference: "DOC-1001",
+      title: "Contract Agreement",
+      type: "Contract",
+      uploadedBy: { name: "Arman H.", initials: "AH", avatar: "/avatars/arman.png" },
+      lastUpdated: "May 18, 2025",
+      status: "Approved",
+    },
+    {
+      id: `${project.id}-structural-drawing`,
+      reference: "DRW-0208",
+      title: "Structural Slab Drawing Revision",
+      type: "Drawing",
+      uploadedBy: { name: "Leena K.", initials: "LK" },
+      lastUpdated: "May 17, 2025",
+      status: "Current",
+    },
+    {
+      id: `${project.id}-mep-submittal`,
+      reference: "SUB-0771",
+      title: "MEP Shop Drawing Package",
+      type: "Submittal",
+      uploadedBy: { name: "Mohammed S.", initials: "MS" },
+      lastUpdated: "May 16, 2025",
+      status: "Under Review",
+    },
+    {
+      id: `${project.id}-progress-photos`,
+      reference: "DOC-1104",
+      title: "Site Progress Photos",
+      type: "General Document",
+      uploadedBy: { name: "Nadine R.", initials: "NR" },
+      lastUpdated: "May 15, 2025",
+      status: "Updated",
+    },
+    {
+      id: `${project.id}-weekly-report`,
+      reference: "REP-2005",
+      title: "Weekly Progress Report – Week 20",
+      type: "Report",
+      uploadedBy: { name: "Arman H.", initials: "AH", avatar: "/avatars/arman.png" },
+      lastUpdated: "May 14, 2025",
+      status: "Shared",
+    },
+  ]
+}
 
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
@@ -144,6 +252,10 @@ export function ProjectDetail({ project }: { project: ProjectRecord }) {
           </CardContent>
         </Card>
       </div>
+
+      <ProjectParticipants participants={projectParticipants(project)} />
+
+      <ProjectDocuments projectId={project.id} documents={projectDocuments(project)} />
     </div>
   )
 }

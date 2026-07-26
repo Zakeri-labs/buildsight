@@ -19,7 +19,7 @@ import { notificationsCount } from "@/lib/mock-data"
 import { roleLabel } from "@/lib/db/types"
 import { useI18n } from "@/lib/i18n"
 
-export function AppTopbar() {
+export function AppTopbar({ activeProjectName }: { activeProjectName?: string | null }) {
   const pathname = usePathname()
   const currentUser = useCurrentUser()
   const userRoleLabel = currentUser.role ? roleLabel(currentUser.role) : "Organization Admin"
@@ -41,6 +41,12 @@ export function AppTopbar() {
   }
 
   function resolveTitle(p: string) {
+    if (p === "/" && activeProjectName) {
+      return {
+        title: activeProjectName,
+        subtitle: "Project overview, participants, and core documents",
+      }
+    }
     if (p === "/") return titleMap["/"]
     const match = Object.keys(titleMap)
       .filter((k) => k !== "/")

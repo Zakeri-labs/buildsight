@@ -104,6 +104,7 @@ export function AppSidebar({
     setProject(value)
     startTransition(async () => {
       await selectProject(value)
+      router.push("/")
       router.refresh()
     })
   }
