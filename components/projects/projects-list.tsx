@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo, useState } from "react"
 import {
   Search,
@@ -246,13 +247,13 @@ export function ProjectsList() {
             <span>{locale === "ar" ? "تصدير" : "Export"}</span>
           </button>
 
-          <button
-            type="button"
+          <Link
+            href="/users?tab=projects&action=create-project"
             className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-950 px-4 text-xs font-semibold text-white shadow-xs hover:bg-blue-900 active:bg-blue-950 dark:bg-blue-600 dark:hover:bg-blue-700"
           >
             <Plus className="size-4" />
             <span>{locale === "ar" ? "+ مشروع جديد" : "+ New Project"}</span>
-          </button>
+          </Link>
         </div>
       </div>
 

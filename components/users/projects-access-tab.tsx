@@ -1,6 +1,7 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Plus, Loader2, Building2, UserCog } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,6 +35,7 @@ import {
 } from "@/lib/db/types"
 import {
   addExistingOrganizationToProject,
+  createProject,
   createOrgAndAddToProject,
   assignUserToProject,
   removeProjectUser,
@@ -53,6 +55,7 @@ export function ProjectsAccessTab({
   projectOrgs,
   projectUsers,
   members,
+  initialCreateOpen = false,
 }: {
   supervisingOrg: { id: string; name: string }
   projects: ProjectRow[]
@@ -60,6 +63,7 @@ export function ProjectsAccessTab({
   projectOrgs: ProjectOrgRow[]
   projectUsers: ProjectUserRow[]
   members: MemberRow[]
+  initialCreateOpen?: boolean
 }) {
   const [projectId, setProjectId] = useState<string | undefined>(projects[0]?.id)
   const [inviteResult, setInviteResult] = useState<InviteResult | null>(null)
@@ -70,38 +74,42 @@ export function ProjectsAccessTab({
   const orgIdsOnProject = new Set(orgsOnProject.map((r) => r.organizationId))
   const availableOrgs = organizations.filter((o) => !orgIdsOnProject.has(o.id))
 
-  if (projects.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-10 text-center text-sm text-muted-foreground text-pretty">
-          No projects yet. Projects supervised by {supervisingOrg.name} will appear here.
-        </CardContent>
-      </Card>
-    )
-  }
-
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <Label className="text-sm font-medium">Project</Label>
-        <Select value={projectId} onValueChange={(v) => setProjectId(v ?? undefined)}>
-          <SelectTrigger className="w-72">
-            <SelectValue placeholder="Select a project">
-              {(v) => projects.find((p) => p.id === v)?.name ?? "Select a project"}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {projects.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name}
-                {p.code ? ` (${p.code})` : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Label className="text-sm font-medium">Project</Label>
+          {projects.length > 0 ? (
+            <Select value={projectId} onValueChange={(v) => setProjectId(v ?? undefined)}>
+              <SelectTrigger className="w-72">
+                <SelectValue placeholder="Select a project">
+                  {(v) => projects.find((p) => p.id === v)?.name ?? "Select a project"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                    {p.code ? ` (${p.code})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <p className="text-sm text-muted-foreground">No projects yet.</p>
+          )}
+        </div>
+        <CreateProjectDialog supervisingOrg={supervisingOrg} initialOpen={initialCreateOpen} />
       </div>
 
-      {project && (
+      {projects.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground text-pretty">
+            No projects yet. Projects supervised by {supervisingOrg.name} will appear here.
+          </CardContent>
+        </Card>
+      ) : (
+        project && (
         <>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
@@ -184,10 +192,129 @@ export function ProjectsAccessTab({
             </CardContent>
           </Card>
         </>
+        )
       )}
 
       <InviteLinkDialog result={inviteResult} onClose={() => setInviteResult(null)} />
     </div>
+  )
+}
+
+function CreateProjectDialog({
+  supervisingOrg,
+  initialOpen = false,
+}: {
+  supervisingOrg: { id: string; name: string }
+  initialOpen?: boolean
+}) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const [open, setOpen] = useState(initialOpen)
+  const [name, setName] = useState("")
+  const [code, setCode] = useState("")
+  const [location, setLocation] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  useEffect(() => {
+    if (!initialOpen) return
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete("action")
+    const query = params.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+  }, [initialOpen, pathname, router, searchParams])
+
+  function reset() {
+    setName("")
+    setCode("")
+    setLocation("")
+    setError(null)
+  }
+
+  function submit() {
+    setError(null)
+    startTransition(async () => {
+      const res = await createProject({
+        supervisingOrgId: supervisingOrg.id,
+        name,
+        code,
+        location,
+      })
+      if (!res.ok) {
+        setError(res.error)
+        return
+      }
+      setOpen(false)
+      reset()
+    })
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen)
+        if (!nextOpen) reset()
+      }}
+    >
+      <DialogTrigger
+        render={
+          <Button>
+            <Plus data-icon="inline-start" />
+            New project
+          </Button>
+        }
+      />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create a project</DialogTitle>
+          <DialogDescription className="text-pretty">
+            Create a project under {supervisingOrg.name}. You can add participating organizations and grant access
+            after the project is created.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="project-name">Project name</Label>
+            <Input
+              id="project-name"
+              placeholder="e.g. Marina West Residences"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="project-code">Project code</Label>
+            <Input
+              id="project-code"
+              placeholder="e.g. PRJ-009"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="project-location">Location</Label>
+            <Input
+              id="project-location"
+              placeholder="e.g. Muscat, Seeb"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+            />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)} className="bg-transparent">
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={pending || name.trim().length < 2}>
+            {pending && <Loader2 className="size-4 animate-spin" data-icon="inline-start" />}
+            Create project
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

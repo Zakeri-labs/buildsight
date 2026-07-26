@@ -3,7 +3,17 @@ import { loadAdminConsole } from "@/lib/db/admin-console"
 import { UsersRolesView } from "@/components/users/users-roles-view"
 import { Card, CardContent } from "@/components/ui/card"
 
-export default async function UsersRolesPage() {
+type UsersPageSearchParams = {
+  tab?: string
+  action?: string
+}
+
+export default async function UsersRolesPage({
+  searchParams,
+}: {
+  searchParams: Promise<UsersPageSearchParams>
+}) {
+  const params = await searchParams
   const session = await requireOnboarded()
   const supervisingOrg = session.supervisingOrg
   const isAdmin =
@@ -26,11 +36,17 @@ export default async function UsersRolesPage() {
   }
 
   const data = await loadAdminConsole(supervisingOrg.id)
+  const initialTab =
+    params.tab === "projects" || params.tab === "organizations" || params.tab === "invitations"
+      ? params.tab
+      : "members"
 
   return (
     <UsersRolesView
       supervisingOrg={{ id: supervisingOrg.id, name: supervisingOrg.name }}
       data={data}
+      initialTab={initialTab}
+      openCreateProject={params.tab === "projects" && params.action === "create-project"}
     />
   )
 }

@@ -11,9 +11,13 @@ import type { AdminConsoleData } from "@/lib/db/admin-console"
 export function UsersRolesView({
   supervisingOrg,
   data,
+  initialTab = "members",
+  openCreateProject = false,
 }: {
   supervisingOrg: { id: string; name: string }
   data: AdminConsoleData
+  initialTab?: "members" | "organizations" | "projects" | "invitations"
+  openCreateProject?: boolean
 }) {
   const supervisingMembers = data.members.filter((m) => m.organizationId === supervisingOrg.id)
   const pendingCount = data.invitations.filter((i) => i.status === "pending").length
@@ -25,7 +29,7 @@ export function UsersRolesView({
         subtitle={`Manage organizations, members, and project access for ${supervisingOrg.name}.`}
       />
 
-      <Tabs defaultValue="members">
+      <Tabs defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="members">Members</TabsTrigger>
           <TabsTrigger value="organizations">Organizations</TabsTrigger>
@@ -49,6 +53,7 @@ export function UsersRolesView({
             projectOrgs={data.projectOrgs}
             projectUsers={data.projectUsers}
             members={data.members}
+            initialCreateOpen={openCreateProject}
           />
         </TabsContent>
         <TabsContent value="invitations" className="mt-5">
