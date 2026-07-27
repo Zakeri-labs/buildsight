@@ -332,3 +332,75 @@
 [dir="rtl"] .leaflet-control-attribution {
   direction: rtl;
 }
+
+/* Construction inspection rich-text surfaces */
+.inspection-editor:empty::before {
+  content: "Enter inspection notes…";
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+.inspection-editor p,
+.inspection-editor div {
+  margin-block: 0.45rem;
+  line-height: 1.7;
+}
+
+.inspection-editor ul,
+.inspection-editor ol {
+  margin-block: 0.75rem;
+  padding-inline-start: 1.5rem;
+}
+
+.inspection-editor ul { list-style: disc; }
+.inspection-editor ol { list-style: decimal; }
+
+.inspection-editor a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.inspection-editor table {
+  width: 100%;
+  margin-block: 1rem;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.inspection-editor th,
+.inspection-editor td {
+  min-width: 7rem;
+  border: 1px solid var(--border);
+  padding: 0.6rem;
+  vertical-align: top;
+}
+
+.inspection-editor th {
+  background: var(--muted);
+  font-weight: 600;
+  text-align: start;
+}
+
+.inspection-editor figure {
+  width: min(100%, 720px);
+  margin: 1rem auto;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: var(--muted);
+}
+
+.inspection-editor figure img {
+  display: block;
+  width: 100%;
+  max-height: 560px;
+  object-fit: contain;
+  background: var(--background);
+}
+
+.inspection-editor figcaption {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}

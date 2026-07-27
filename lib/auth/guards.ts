@@ -40,6 +40,43 @@ export async function assertOrgAdmin(organizationId: string): Promise<string> {
   return userId
 }
 
+/** Confirm the current user is an active project member or belongs to the supervising organization. */
+export async function assertProjectMember(projectId: string): Promise<string> {
+  const userId = await getUserIdOrThrow()
+  const admin = createAdminClient()
+
+  const { data: membership, error: membershipError } = await admin
+    .from("project_user_memberships")
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle()
+  if (membershipError) throw membershipError
+  if (membership) return userId
+
+  const { data: project, error: projectError } = await admin
+    .from("projects")
+    .select("supervising_organization_id")
+    .eq("id", projectId)
+    .maybeSingle()
+  if (projectError) throw projectError
+  if (!project) throw new AuthzError("Project not found")
+
+  const { data: orgMembership, error: orgError } = await admin
+    .from("organization_memberships")
+    .select("id")
+    .eq("organization_id", project.supervising_organization_id)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle()
+  if (orgError) throw orgError
+  if (!orgMembership) throw new AuthzError("You do not have access to this project")
+  return userId
+}
+
 /**
  * Confirm the current user can administer `projectId`: either a project_admin
  * user membership, or an org_admin of the project's supervising organization.
@@ -120,6 +157,45 @@ export async function assertStageManager(organizationId: string): Promise<string
   }
 
   throw new AuthzError("You do not have permission to manage project stages")
+}
+
+/** Confirm the current user may review project stage reports. */
+export async function assertProjectReviewer(projectId: string): Promise<string> {
+  const userId = await getUserIdOrThrow()
+  const admin = createAdminClient()
+
+  const { data: projectMembership, error: membershipError } = await admin
+    .from("project_user_memberships")
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .in("access_role", ["project_admin", "project_manager", "reviewer", "approver"])
+    .limit(1)
+    .maybeSingle()
+  if (membershipError) throw membershipError
+  if (projectMembership) return userId
+
+  const { data: project, error: projectError } = await admin
+    .from("projects")
+    .select("supervising_organization_id")
+    .eq("id", projectId)
+    .maybeSingle()
+  if (projectError) throw projectError
+  if (!project) throw new AuthzError("Project not found")
+
+  const { data: orgMembership, error: orgError } = await admin
+    .from("organization_memberships")
+    .select("id")
+    .eq("organization_id", project.supervising_organization_id)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .in("role", ["org_admin", "org_manager"])
+    .limit(1)
+    .maybeSingle()
+  if (orgError) throw orgError
+  if (!orgMembership) throw new AuthzError("You do not have permission to review this report")
+  return userId
 }
 
 /** Write an audit log entry (best-effort). */

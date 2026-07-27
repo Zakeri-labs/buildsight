@@ -82,13 +82,14 @@ export function AppSidebar({
 }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [project, setProject] = useState(selectedProjectId)
   const [, startTransition] = useTransition()
 
   const moduleItems = [
     { label: t.nav.dashboard, href: "/", icon: Home },
     { label: t.projects.title, href: "/projects", icon: FolderKanban },
+    ...(project !== "all" ? [{ label: locale === "ar" ? "المراحل" : "Stages", href: `/projects/${project}/stages`, icon: ListTree }] : []),
     { label: t.nav.documents, href: "/documents", icon: Files },
     { label: t.nav.reports, href: "/reports", icon: BarChart3 },
     { label: t.nav.calendar, href: "/calendar", icon: CalendarDays },
@@ -155,7 +156,13 @@ export function AppSidebar({
             label={item.label}
             href={item.href}
             icon={item.icon}
-            active={item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)}
+            active={
+              item.href === "/"
+                ? pathname === "/"
+                : item.href === "/projects"
+                  ? pathname === "/projects" || pathname === "/projects/new" || /^\/projects\/[^/]+$/.test(pathname)
+                  : pathname.startsWith(item.href)
+            }
           />
         ))}
 
