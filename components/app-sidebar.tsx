@@ -16,6 +16,7 @@ import {
   LogOut,
   ChevronDown,
   FolderKanban,
+  ListTree,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Logo } from "@/components/logo"
@@ -73,9 +74,11 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 export function AppSidebar({
   projects,
   selectedProjectId,
+  canManageStages,
 }: {
   projects: ProjectOption[]
   selectedProjectId: string
+  canManageStages: boolean
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -92,6 +95,7 @@ export function AppSidebar({
   ]
 
   const adminItems = [
+    ...(canManageStages ? [{ label: t.nav.addStage, href: "/stages", icon: ListTree }] : []),
     { label: t.settings.tabAccess, href: "/users", icon: Users },
     { label: t.nav.settings, href: "/settings", icon: Settings },
   ]

@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell"
 import { CurrentUserProvider, type CurrentUser } from "@/components/current-user-provider"
 import { getOrgProjects } from "@/lib/db/domain"
 import { getSelectedProjectId } from "@/lib/project-scope"
+import { resolveStageManagementOrganization } from "@/lib/db/stages"
 
 function initials(name: string, email: string) {
   const source = name.trim() || email
@@ -18,9 +19,10 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
   const primary = session.memberships[0]
   const orgId = session.supervisingOrg?.id ?? primary?.organization?.id ?? null
 
-  const [projects, selectedProjectId] = await Promise.all([
+  const [projects, selectedProjectId, stageManagementOrganization] = await Promise.all([
     orgId ? getOrgProjects(orgId) : Promise.resolve([]),
     getSelectedProjectId(),
+    resolveStageManagementOrganization(session.userId, session.supervisingOrg?.id),
   ])
 
   const user: CurrentUser = {
@@ -36,7 +38,11 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
 
   return (
     <CurrentUserProvider user={user}>
-      <AppShell projects={projectOptions} selectedProjectId={selectedProjectId ?? "all"}>
+      <AppShell
+        projects={projectOptions}
+        selectedProjectId={selectedProjectId ?? "all"}
+        canManageStages={Boolean(stageManagementOrganization)}
+      >
         {children}
       </AppShell>
     </CurrentUserProvider>

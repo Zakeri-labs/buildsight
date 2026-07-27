@@ -32,6 +32,10 @@ export const dictionaries = {
       calendar: "Calendar",
       modules: "Modules",
       administration: "Administration",
+      addStage: "Add Stage",
+    },
+    stages: {
+      subtitle: "Manage construction stages and report templates",
     },
     roles: {
       admin: "Consultancy Admin",
@@ -296,6 +300,10 @@ export const dictionaries = {
       calendar: "التقويم",
       modules: "الوحدات",
       administration: "الإدارة",
+      addStage: "إضافة مرحلة",
+    },
+    stages: {
+      subtitle: "إدارة مراحل الإنشاء وقوالب التقارير",
     },
     roles: {
       admin: "مدير الاستشارية",

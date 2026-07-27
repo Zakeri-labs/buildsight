@@ -77,6 +77,51 @@ export async function assertProjectAdmin(projectId: string): Promise<string> {
   return userId
 }
 
+
+/**
+ * Confirm the current user can manage organization-level stage templates.
+ * Organization admins/managers and project admins/managers within the
+ * supervising organization are permitted.
+ */
+export async function assertStageManager(organizationId: string): Promise<string> {
+  const userId = await getUserIdOrThrow()
+  const admin = createAdminClient()
+
+  const { data: orgManager, error: orgError } = await admin
+    .from("organization_memberships")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .in("role", ["org_admin", "org_manager"])
+    .maybeSingle()
+  if (orgError) throw orgError
+  if (orgManager) return userId
+
+  const { data: projectMemberships, error: membershipError } = await admin
+    .from("project_user_memberships")
+    .select("project_id")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .in("access_role", ["project_admin", "project_manager"])
+  if (membershipError) throw membershipError
+
+  const projectIds = (projectMemberships ?? []).map((membership: any) => membership.project_id as string)
+  if (projectIds.length > 0) {
+    const { data: managedProject, error: projectError } = await admin
+      .from("projects")
+      .select("id")
+      .in("id", projectIds)
+      .eq("supervising_organization_id", organizationId)
+      .limit(1)
+      .maybeSingle()
+    if (projectError) throw projectError
+    if (managedProject) return userId
+  }
+
+  throw new AuthzError("You do not have permission to manage project stages")
+}
+
 /** Write an audit log entry (best-effort). */
 export async function audit(entry: {
   actorId: string
