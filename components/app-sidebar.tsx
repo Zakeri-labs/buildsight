@@ -7,9 +7,7 @@ import {
   TriangleAlert,
   ClipboardCheck,
   CircleHelp,
-  FileText,
   Files,
-  BarChart3,
   CalendarDays,
   Users,
   Settings,
@@ -17,6 +15,7 @@ import {
   ChevronDown,
   FolderKanban,
   ListTree,
+  Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Logo } from "@/components/logo"
@@ -86,17 +85,36 @@ export function AppSidebar({
   const [project, setProject] = useState(selectedProjectId)
   const [, startTransition] = useTransition()
 
+  const routeProjectMatch = pathname.match(/^\/projects\/([^/]+)(?:\/|$)/)
+  const routeProjectId = routeProjectMatch?.[1] && routeProjectMatch[1] !== "new"
+    ? decodeURIComponent(routeProjectMatch[1])
+    : null
+  const contextProjectId = routeProjectId ?? (project !== "all" ? project : null)
+
+  const stageNavigationItem = contextProjectId
+    ? {
+        label: locale === "ar" ? "المراحل" : "Stages",
+        href: `/projects/${contextProjectId}/stages`,
+        icon: ListTree,
+      }
+    : canManageStages
+      ? {
+          label: t.nav.addStage,
+          href: "/stages",
+          icon: ListTree,
+        }
+      : null
+
   const moduleItems = [
     { label: t.nav.dashboard, href: "/", icon: Home },
     { label: t.projects.title, href: "/projects", icon: FolderKanban },
-    ...(project !== "all" ? [{ label: locale === "ar" ? "المراحل" : "Stages", href: `/projects/${project}/stages`, icon: ListTree }] : []),
+    ...(stageNavigationItem ? [stageNavigationItem] : []),
     { label: t.nav.documents, href: "/documents", icon: Files },
-    { label: t.nav.reports, href: "/reports", icon: BarChart3 },
+    ...(contextProjectId ? [{ label: t.nav.aiSummary, href: "/ai-summary", icon: Sparkles }] : []),
     { label: t.nav.calendar, href: "/calendar", icon: CalendarDays },
   ]
 
   const adminItems = [
-    ...(canManageStages ? [{ label: t.nav.addStage, href: "/stages", icon: ListTree }] : []),
     { label: t.settings.tabAccess, href: "/users", icon: Users },
     { label: t.nav.settings, href: "/settings", icon: Settings },
   ]

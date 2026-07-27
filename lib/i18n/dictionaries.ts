@@ -33,6 +33,7 @@ export const dictionaries = {
       modules: "Modules",
       administration: "Administration",
       addStage: "Add Stage",
+      aiSummary: "AI Summary",
     },
     stages: {
       subtitle: "Manage construction stages and report templates",
@@ -301,6 +302,7 @@ export const dictionaries = {
       modules: "الوحدات",
       administration: "الإدارة",
       addStage: "إضافة مرحلة",
+      aiSummary: "الملخص الذكي",
     },
     stages: {
       subtitle: "إدارة مراحل الإنشاء وقوالب التقارير",

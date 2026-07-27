@@ -19,6 +19,7 @@ export default async function ProjectStageTermPage({
       term={{
         id: data.term.id,
         reportName: data.term.reportName,
+        required: data.term.required,
         responsibleUser: data.term.responsibleUser,
         templateReference: data.term.templateReference,
         approvalRequired: data.term.approvalRequired,

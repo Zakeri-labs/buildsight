@@ -83,6 +83,8 @@ const COPY = {
     project: "Project",
     stage: "Stage",
     report: "Report",
+    required: "Required",
+    optional: "Optional",
     reportNo: "Report No.",
     visitNo: "Visit No.",
     date: "Date",
@@ -121,6 +123,8 @@ const COPY = {
     project: "المشروع",
     stage: "المرحلة",
     report: "التقرير",
+    required: "إلزامي",
+    optional: "اختياري",
     reportNo: "رقم التقرير",
     visitNo: "رقم الزيارة",
     date: "التاريخ",
@@ -213,6 +217,7 @@ export function InspectionReportForm({
   term: {
     id: string
     reportName: string
+    required: boolean
     responsibleUser: ProjectStagePerson | null
     templateReference: string | null
     approvalRequired: boolean
@@ -491,7 +496,20 @@ export function InspectionReportForm({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <span className="flex size-11 items-center justify-center rounded-xl bg-white/15"><ClipboardCheck className="size-6" /></span>
-              <div><p className="text-xs font-semibold uppercase tracking-wider text-white/70">Construction Inspection / Report</p><h1 className="text-xl font-semibold sm:text-2xl">{term.reportName}</h1></div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-white/70">Construction Inspection / Report</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <h1 className="text-xl font-semibold sm:text-2xl">{term.reportName}</h1>
+                  <Badge
+                    variant="outline"
+                    className={term.required
+                      ? "border-amber-200 bg-amber-50 text-amber-800"
+                      : "border-white/30 bg-white/10 text-white"}
+                  >
+                    {term.required ? copy.required : copy.optional}
+                  </Badge>
+                </div>
+              </div>
             </div>
             <Badge variant="outline" className={cn("w-fit border-white/30 bg-white/10 text-white", status !== "draft" && "border-white/40")}>{statusLabel(status, locale)}</Badge>
           </div>

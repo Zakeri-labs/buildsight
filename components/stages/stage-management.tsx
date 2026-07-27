@@ -98,7 +98,7 @@ const COPY = {
     moveUp: "Move up",
     moveDown: "Move down",
     reportName: "Term Name",
-    requirement: "Requirement",
+    requirement: "Required / Optional",
     organization: "Responsible organization",
     user: "Responsible user",
     dueDate: "Due date rule",
@@ -127,7 +127,7 @@ const COPY = {
     addReportTitle: "Add Term",
     editReportTitle: "Edit Term",
     termDialogDescription: "Configure responsibility, timing, approval, and template details for this term.",
-    requiredToggle: "This term is required",
+    requiredToggle: "Required / Optional",
     approvalToggle: "Approval is required",
     selectOrganization: "Select organization",
     selectUser: "Select user",
@@ -162,7 +162,7 @@ const COPY = {
     moveUp: "تحريك لأعلى",
     moveDown: "تحريك لأسفل",
     reportName: "اسم البند",
-    requirement: "الإلزام",
+    requirement: "إلزامي / اختياري",
     organization: "الجهة المسؤولة",
     user: "المستخدم المسؤول",
     dueDate: "قاعدة تاريخ الاستحقاق",
@@ -191,7 +191,7 @@ const COPY = {
     addReportTitle: "إضافة بند",
     editReportTitle: "تعديل البند",
     termDialogDescription: "حدّد المسؤولية والتوقيت والموافقة وتفاصيل القالب لهذا البند.",
-    requiredToggle: "هذا البند إلزامي",
+    requiredToggle: "إلزامي / اختياري",
     approvalToggle: "الموافقة مطلوبة",
     selectOrganization: "اختر الجهة",
     selectUser: "اختر المستخدم",
@@ -1044,12 +1044,17 @@ function TermEditorDialog({
               />
             </div>
 
-            <div className="flex items-center justify-between rounded-xl border p-3">
-              <div className="flex items-center gap-2">
-                <FileText className="size-4 text-muted-foreground" />
-                <Label htmlFor="term-required" className="cursor-pointer">
-                  {labels.requiredToggle}
-                </Label>
+            <div className="flex items-center justify-between gap-4 rounded-xl border p-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <FileText className="size-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <Label htmlFor="term-required" className="cursor-pointer">
+                    {labels.requiredToggle}
+                  </Label>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {required ? labels.required : labels.optional}
+                  </p>
+                </div>
               </div>
               <Switch id="term-required" checked={required} onCheckedChange={setRequired} />
             </div>
