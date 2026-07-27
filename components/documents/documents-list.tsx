@@ -40,6 +40,7 @@ import {
   type DocumentTypeIconKey,
   type DocumentTypeValue,
 } from "@/lib/documents/document-types"
+import { getSimpleUploadCategory, type SimpleUploadCategoryValue } from "@/lib/documents/simple-upload"
 import { cn } from "@/lib/utils"
 
 export type DocumentListItem = {
@@ -58,6 +59,7 @@ export type DocumentListItem = {
   updatedAt: string
   fileStoragePath: string | null
   originalFilename: string | null
+  simpleUploadCategory: SimpleUploadCategoryValue | null
 }
 
 type Category = "all" | DocumentTypeGroup
@@ -123,6 +125,7 @@ export function DocumentsList({
     const query = searchQuery.trim().toLowerCase()
     return documents.filter((document) => {
       const type = getDocumentTypeDefinition(document.documentType)
+      const simpleCategory = getSimpleUploadCategory(document.simpleUploadCategory)
       if (activeTab !== "all" && type.group !== activeTab) return false
       if (typeFilter && document.documentType !== typeFilter) return false
       if (statusFilter !== "all" && document.status !== statusFilter) return false
@@ -132,7 +135,8 @@ export function DocumentsList({
         !document.title.toLowerCase().includes(query) &&
         !document.reference.toLowerCase().includes(query) &&
         !type.label.toLowerCase().includes(query) &&
-        !type.shortLabel.toLowerCase().includes(query)
+        !type.shortLabel.toLowerCase().includes(query) &&
+        !(simpleCategory?.label.toLowerCase().includes(query) ?? false)
       ) return false
       return true
     })
@@ -265,6 +269,8 @@ export function DocumentsList({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
               {filteredDocuments.map((document) => {
                 const type = getDocumentTypeDefinition(document.documentType)
+                const simpleCategory = getSimpleUploadCategory(document.simpleUploadCategory)
+                const displayType = simpleCategory?.label ?? type.shortLabel
                 return (
                   <tr key={document.id} className="transition-colors hover:bg-slate-50/70 dark:hover:bg-slate-800/30">
                     <td className="whitespace-nowrap px-5 py-4">
@@ -277,7 +283,7 @@ export function DocumentsList({
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-4">
-                      <span title={type.label} className={cn("inline-flex rounded-md px-2.5 py-1 text-xs font-medium", type.badgeClassName)}>{type.shortLabel}</span>
+                      <span title={simpleCategory ? `${simpleCategory.label} · ${type.label}` : type.label} className={cn("inline-flex rounded-md px-2.5 py-1 text-xs font-medium", type.badgeClassName)}>{displayType}</span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-4 text-xs text-slate-600 dark:text-slate-400">{document.projectName}</td>
                     <td className="whitespace-nowrap px-4 py-4">

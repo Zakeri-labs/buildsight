@@ -11,6 +11,7 @@ import { PROJECT_ACCESS_ROLES, PROJECT_ORG_ROLES } from "@/lib/db/types"
 import type { ActionResult } from "@/lib/actions/invitations"
 import { coordinateLabel } from "@/lib/locations/types"
 import { SELECTED_PROJECT_COOKIE } from "@/lib/project-scope"
+import { isProjectTypeValue, isSupervisionTypeValue } from "@/lib/projects/project-options"
 
 function normalizeProjectCoordinates(latitude?: number | null, longitude?: number | null) {
   const hasLatitude = latitude != null
@@ -95,13 +96,53 @@ export async function createProject(input: {
   supervisingOrgId: string
   name: string
   code?: string
+  projectType?: string
+  supervisionType?: string
+  region?: string
+  description?: string
   location?: string
   latitude?: number | null
   longitude?: number | null
+  owners?: Array<{
+    name: string
+    contactName?: string
+    contactEmail?: string
+    contactPhone?: string
+  }>
+  contractor?: {
+    organizationId?: string | null
+    companyName?: string
+    registrationNumber?: string
+    address?: string
+    postalCode?: string
+    phone?: string
+  }
 }): Promise<ActionResult<{ id: string }>> {
+  let createdProjectId: string | null = null
   try {
     const name = input.name.trim()
     if (name.length < 2) return { ok: false, error: "Project name is too short." }
+    if (input.projectType && !isProjectTypeValue(input.projectType)) {
+      return { ok: false, error: "Select a valid project type." }
+    }
+    if (input.supervisionType && !isSupervisionTypeValue(input.supervisionType)) {
+      return { ok: false, error: "Select a valid supervision type." }
+    }
+
+    const owners = (input.owners ?? []).map((owner) => ({
+      name: owner.name.trim(),
+      contactName: owner.contactName?.trim() || null,
+      contactEmail: owner.contactEmail?.trim().toLowerCase() || null,
+      contactPhone: owner.contactPhone?.trim() || null,
+    }))
+    if (owners.length > 10) return { ok: false, error: "A project can have up to 10 owners during creation." }
+    if (owners.some((owner) => owner.name.length < 2)) {
+      return { ok: false, error: "Enter a valid name for every owner." }
+    }
+    if (owners.some((owner) => owner.contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(owner.contactEmail))) {
+      return { ok: false, error: "Enter a valid owner email address." }
+    }
+
     const coordinates = normalizeProjectCoordinates(input.latitude, input.longitude)
     if (!coordinates.ok) return { ok: false, error: coordinates.error }
     const location =
@@ -121,14 +162,41 @@ export async function createProject(input: {
       return { ok: false, error: "Only a supervising organization can create projects." }
     }
 
+    const contractorOrganizationId = input.contractor?.organizationId?.trim() || null
+    let contractorOrganizationName: string | null = null
+    if (contractorOrganizationId) {
+      const { data: contractorOrganization, error: contractorLookupError } = await admin
+        .from("organizations")
+        .select("id, name, type, status")
+        .eq("id", contractorOrganizationId)
+        .maybeSingle()
+      if (contractorLookupError) throw contractorLookupError
+      if (!contractorOrganization || contractorOrganization.type !== "external" || contractorOrganization.status === "suspended") {
+        return { ok: false, error: "The selected contractor organization is unavailable." }
+      }
+      contractorOrganizationName = contractorOrganization.name
+    }
+
+    const contractorName = contractorOrganizationName || input.contractor?.companyName?.trim() || null
     const { data: created, error } = await admin
       .from("projects")
       .insert({
         name,
         code: input.code?.trim() || null,
+        project_type: input.projectType || null,
+        supervision_type: input.supervisionType || null,
+        region: input.region?.trim() || null,
+        description: input.description?.trim() || null,
         location,
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,
+        contractor: contractorName,
+        client: owners[0]?.name || null,
+        contractor_organization_id: contractorOrganizationId,
+        contractor_registration_number: input.contractor?.registrationNumber?.trim() || null,
+        contractor_address: input.contractor?.address?.trim() || null,
+        contractor_postal_code: input.contractor?.postalCode?.trim() || null,
+        contractor_phone: input.contractor?.phone?.trim() || null,
         status: "active",
         supervising_organization_id: input.supervisingOrgId,
         created_by: actorId,
@@ -136,16 +204,19 @@ export async function createProject(input: {
       .select("id")
       .single()
     if (error) throw error
+    createdProjectId = created.id
 
     // The supervising org is itself a participant in every project it creates.
-    await admin.from("project_organization_memberships").insert({
+    const { error: supervisingMembershipError } = await admin.from("project_organization_memberships").insert({
       project_id: created.id,
       organization_id: input.supervisingOrgId,
       project_role: "consultant",
       status: "active",
       created_by: actorId,
     })
-    await admin.from("project_user_memberships").insert({
+    if (supervisingMembershipError) throw supervisingMembershipError
+
+    const { error: userMembershipError } = await admin.from("project_user_memberships").insert({
       project_id: created.id,
       user_id: actorId,
       organization_id: input.supervisingOrgId,
@@ -153,6 +224,32 @@ export async function createProject(input: {
       status: "active",
       created_by: actorId,
     })
+    if (userMembershipError) throw userMembershipError
+
+    if (contractorOrganizationId && contractorOrganizationId !== input.supervisingOrgId) {
+      const { error: contractorMembershipError } = await admin.from("project_organization_memberships").insert({
+        project_id: created.id,
+        organization_id: contractorOrganizationId,
+        project_role: "contractor",
+        status: "active",
+        created_by: actorId,
+      })
+      if (contractorMembershipError) throw contractorMembershipError
+    }
+
+    if (owners.length) {
+      const { error: ownersError } = await admin.from("project_owners").insert(
+        owners.map((owner, index) => ({
+          project_id: created.id,
+          owner_order: index + 1,
+          name: owner.name,
+          contact_name: owner.contactName,
+          contact_email: owner.contactEmail,
+          contact_phone: owner.contactPhone,
+        })),
+      )
+      if (ownersError) throw ownersError
+    }
 
     await audit({
       actorId,
@@ -161,7 +258,13 @@ export async function createProject(input: {
       entityId: created.id,
       organizationId: input.supervisingOrgId,
       projectId: created.id,
-      metadata: { name },
+      metadata: {
+        name,
+        projectType: input.projectType || null,
+        supervisionType: input.supervisionType || null,
+        ownerCount: owners.length,
+        contractorOrganizationId,
+      },
     })
 
     const cookieStore = await cookies()
@@ -176,6 +279,14 @@ export async function createProject(input: {
     revalidatePath("/projects")
     return { ok: true, data: { id: created.id } }
   } catch (err) {
+    if (createdProjectId) {
+      try {
+        const admin = createAdminClient()
+        await admin.from("projects").delete().eq("id", createdProjectId)
+      } catch {
+        // Preserve the original error if cleanup is unavailable.
+      }
+    }
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not create project." }
   }
 }

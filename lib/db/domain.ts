@@ -9,6 +9,7 @@ export type DomainProject = {
   latitude: number | null
   longitude: number | null
   status: string
+  projectType: string | null
   image: string | null
   ourRole: string | null
   contractor: string | null
@@ -115,7 +116,7 @@ export async function getOrgProjects(orgId: string): Promise<DomainProject[]> {
   const { data } = await admin
     .from("projects")
     .select(
-      "id, name, code, location, latitude, longitude, status, image, our_role, contractor, consultant, client, start_date, target_handover, contract_value, progress_planned, progress_actual, progress_delay",
+      "id, name, code, location, latitude, longitude, status, project_type, image, our_role, contractor, consultant, client, start_date, target_handover, contract_value, progress_planned, progress_actual, progress_delay",
     )
     .eq("supervising_organization_id", orgId)
     .order("sort_order", { ascending: true })
@@ -129,6 +130,7 @@ export async function getOrgProjects(orgId: string): Promise<DomainProject[]> {
     latitude: p.latitude,
     longitude: p.longitude,
     status: p.status,
+    projectType: p.project_type,
     image: p.image,
     ourRole: p.our_role,
     contractor: p.contractor,

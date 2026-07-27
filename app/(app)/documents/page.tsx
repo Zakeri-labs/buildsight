@@ -2,6 +2,7 @@ import { DocumentsList, type DocumentListItem } from "@/components/documents/doc
 import { requireOnboarded } from "@/lib/auth/session"
 import { getSelectedProjectId } from "@/lib/project-scope"
 import { normalizeDocumentType } from "@/lib/documents/document-types"
+import { isSimpleUploadCategory } from "@/lib/documents/simple-upload"
 import { createClient } from "@/lib/supabase/server"
 
 function initials(name: string) {
@@ -15,7 +16,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
 
   let query = supabase
     .from("documents")
-    .select("id, project_id, reference, title, document_type, status, created_by, created_at, updated_at, file_storage_path, original_filename")
+    .select("id, project_id, reference, title, document_type, status, created_by, created_at, updated_at, file_storage_path, original_filename, simple_upload_category")
     .order("updated_at", { ascending: false })
 
   if (selectedProjectId) query = query.eq("project_id", selectedProjectId)
@@ -49,6 +50,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
       updatedAt: row.updated_at,
       fileStoragePath: row.file_storage_path ?? null,
       originalFilename: row.original_filename ?? null,
+      simpleUploadCategory: isSimpleUploadCategory(row.simple_upload_category) ? row.simple_upload_category : null,
     }
   })
 

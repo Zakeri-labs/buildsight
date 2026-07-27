@@ -94,7 +94,7 @@ export default async function DocumentDetailsPage({
               <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-blue-200">
                 <span>{document.reference}</span>
                 <span aria-hidden="true">•</span>
-                <span>{documentType.label}</span>
+                <span>{simpleCategory?.label ?? documentType.label}</span>
               </div>
               <CardTitle className="text-2xl font-bold leading-tight text-white sm:text-3xl">{document.title}</CardTitle>
               <p className="mt-2 flex items-center gap-2 text-sm text-blue-100/90">
@@ -119,7 +119,7 @@ export default async function DocumentDetailsPage({
           </div>
           <div className="flex items-center gap-3">
             <FileText className="size-5 text-muted-foreground" />
-            <div><span className="block text-xs text-muted-foreground">Document type</span><span className="font-medium">{documentType.label}</span></div>
+            <div><span className="block text-xs text-muted-foreground">Category / type</span><span className="font-medium">{simpleCategory?.label ?? documentType.label}</span></div>
           </div>
           <div className="flex items-center gap-3">
             <FolderLock className="size-5 text-muted-foreground" />

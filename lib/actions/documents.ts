@@ -181,7 +181,7 @@ export async function createUploadedDocumentsAction(input: {
   const session = await requireOnboarded()
   const selectedProjectId = await getSelectedProjectId()
 
-  if (!selectedProjectId || selectedProjectId !== input.projectId) {
+  if (selectedProjectId && selectedProjectId !== input.projectId) {
     return { ok: false, error: "The selected project is no longer valid. Return to Documents and select a project." }
   }
   if (!Array.isArray(input.files) || input.files.length === 0) {

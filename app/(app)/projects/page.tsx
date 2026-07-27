@@ -1,6 +1,7 @@
 import { ProjectsList, type ProjectRow, type OrgRole, type ProjectStatus } from "@/components/projects/projects-list"
 import { requireOnboarded } from "@/lib/auth/session"
 import { getOrgProjects } from "@/lib/db/domain"
+import { PROJECT_TYPES } from "@/lib/projects/project-options"
 
 function projectStatus(status: string): ProjectStatus {
   const normalized = status.trim().toLowerCase().replaceAll("_", "-")
@@ -17,6 +18,10 @@ function organizationRole(role: string | null): OrgRole {
   if (normalized.includes("government")) return "Government"
   if (normalized.includes("third")) return "Third Party"
   return "Consultant"
+}
+
+function projectTypeLabel(value: string | null) {
+  return PROJECT_TYPES.find((type) => type.value === value)?.label ?? "—"
 }
 
 function displayDate(value: string | null) {
@@ -47,7 +52,7 @@ export default async function ProjectsPage({
     ownerClient: project.client?.trim() || "—",
     orgRole: organizationRole(project.ourRole),
     address: project.location?.trim() || "—",
-    projectType: "—",
+    projectType: projectTypeLabel(project.projectType),
     status: projectStatus(project.status),
     startDate: displayDate(project.startDate),
     progress: Math.min(100, Math.max(0, Math.round(project.progressActual))),
