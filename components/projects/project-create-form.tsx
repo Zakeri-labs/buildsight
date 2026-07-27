@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useMemo, useState, type FormEvent, type ReactNode } from "react"
+import { useMemo, useRef, useState, type ReactNode } from "react"
 import {
   ArrowLeft,
   ArrowRight,
@@ -99,6 +99,7 @@ export function ProjectCreateForm({
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadingFile, setUploadingFile] = useState<string | null>(null)
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null)
+  const submissionLockRef = useRef(false)
 
   const selectedDocumentCount = useMemo(
     () => SIMPLE_UPLOAD_CATEGORIES.reduce((total, category) => total + documents[category.value].length, 0),
@@ -202,7 +203,7 @@ export function ProjectCreateForm({
         cancel: "Cancel",
         backStep: "Back",
         next: "Next",
-        submit: "Submit Project",
+        submit: "Create Project",
         retryUpload: "Retry Document Upload",
         creating: "Creating project…",
         uploading: "Uploading documents…",
@@ -320,9 +321,8 @@ export function ProjectCreateForm({
     }
   }
 
-  async function submitProject(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (step !== 4 || pending) return
+  async function submitProject() {
+    if (step !== 4 || pending || submissionLockRef.current) return
 
     for (let currentStep = 1; currentStep <= 4; currentStep += 1) {
       const validationError = validateStep(currentStep)
@@ -333,6 +333,7 @@ export function ProjectCreateForm({
       }
     }
 
+    submissionLockRef.current = true
     setError(null)
     setSuccess(false)
     setPending(true)
@@ -366,11 +367,13 @@ export function ProjectCreateForm({
         if (!result.ok) {
           setError(result.error)
           setPending(false)
+          submissionLockRef.current = false
           return
         }
         if (!result.data) {
           setError(isArabic ? "تعذر إنشاء المشروع." : "Could not create project.")
           setPending(false)
+          submissionLockRef.current = false
           return
         }
         projectId = result.data.id
@@ -393,6 +396,7 @@ export function ProjectCreateForm({
       setPending(false)
       setUploadingFile(null)
       setUploadProgress(0)
+      submissionLockRef.current = false
     }
   }
 
@@ -449,7 +453,7 @@ export function ProjectCreateForm({
         </ol>
       </nav>
 
-      <form onSubmit={submitProject}>
+      <form onSubmit={(event) => event.preventDefault()}>
         <Card className="gap-0 py-0">
           <CardHeader className="border-b px-5 py-5 sm:px-7">
             <CardTitle className="flex items-start gap-3 text-lg">
@@ -689,7 +693,7 @@ export function ProjectCreateForm({
                   <ArrowRight className="size-4 rtl:rotate-180" />
                 </Button>
               ) : (
-                <Button type="submit" size="lg" className="w-full sm:w-auto" disabled={pending}>
+                <Button type="button" size="lg" className="w-full sm:w-auto" onClick={submitProject} disabled={pending}>
                   {pending ? <Loader2 className="size-4 animate-spin" /> : <ClipboardList className="size-4" />}
                   {pending ? (selectedDocumentCount > 0 ? copy.uploading : copy.creating) : createdProjectId ? copy.retryUpload : copy.submit}
                 </Button>
