@@ -2,11 +2,16 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+<<<<<<< HEAD
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+=======
+import { useMemo, useRef, useState, type ReactNode } from "react"
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
 import {
   ArrowLeft,
   ArrowRight,
   Building2,
+<<<<<<< HEAD
   Camera,
   Check,
   CheckCircle2,
@@ -17,6 +22,14 @@ import {
   Loader2,
   MapPin,
   Trash2,
+=======
+  Check,
+  CheckCircle2,
+  ClipboardList,
+  FileUp,
+  Loader2,
+  MapPin,
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
   UsersRound,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -36,11 +49,15 @@ import {
   createEmptyProjectDocumentSelections,
   type ProjectDocumentSelections,
 } from "@/components/projects/project-document-upload-step"
+<<<<<<< HEAD
 import {
   attachProjectOwnerIdCards,
   createProject,
   type OwnerIdCardUploadInput,
 } from "@/lib/actions/projects"
+=======
+import { createProject } from "@/lib/actions/projects"
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
 import { createUploadedDocumentsAction, type SimpleUploadedFileInput } from "@/lib/actions/documents"
 import { useI18n } from "@/lib/i18n"
 import { EMPTY_PROJECT_LOCATION, type ProjectLocationValue } from "@/lib/locations/types"
@@ -58,10 +75,13 @@ import {
   type ProjectTypeValue,
   type SupervisionTypeValue,
 } from "@/lib/projects/project-options"
+<<<<<<< HEAD
 import {
   OWNER_ID_CARD_ACCEPT,
   validateOwnerIdCardFile,
 } from "@/lib/projects/owner-id-card"
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
 import { cn } from "@/lib/utils"
 
 type OwnerDetails = {
@@ -69,6 +89,7 @@ type OwnerDetails = {
   contactName: string
   contactEmail: string
   contactPhone: string
+<<<<<<< HEAD
   idCardFile: File | null
 }
 
@@ -79,16 +100,26 @@ type UserOption = {
   email: string
   organizationRole: string
 }
+=======
+}
+
+type ContractorOrganization = { id: string; name: string }
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
 
 const MAX_OWNERS = 10
 
 function emptyOwner(): OwnerDetails {
+<<<<<<< HEAD
   return { name: "", contactName: "", contactEmail: "", contactPhone: "", idCardFile: null }
+=======
+  return { name: "", contactName: "", contactEmail: "", contactPhone: "" }
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
 }
 
 export function ProjectCreateForm({
   supervisingOrg,
   contractorOrganizations,
+<<<<<<< HEAD
   users,
   supervisors,
 }: {
@@ -96,6 +127,11 @@ export function ProjectCreateForm({
   contractorOrganizations: ContractorOrganization[]
   users: UserOption[]
   supervisors: UserOption[]
+=======
+}: {
+  supervisingOrg: { id: string; name: string }
+  contractorOrganizations: ContractorOrganization[]
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
 }) {
   const router = useRouter()
   const { locale } = useI18n()
@@ -105,9 +141,15 @@ export function ProjectCreateForm({
   const [code, setCode] = useState("")
   const [projectType, setProjectType] = useState<ProjectTypeValue | "">("")
   const [supervisionType, setSupervisionType] = useState<SupervisionTypeValue | "">("")
+<<<<<<< HEAD
   const [location, setLocation] = useState<ProjectLocationValue>(EMPTY_PROJECT_LOCATION)
   const [assignedUserId, setAssignedUserId] = useState("")
   const [assignedSupervisorId, setAssignedSupervisorId] = useState("")
+=======
+  const [region, setRegion] = useState("")
+  const [description, setDescription] = useState("")
+  const [location, setLocation] = useState<ProjectLocationValue>(EMPTY_PROJECT_LOCATION)
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
   const [owners, setOwners] = useState<OwnerDetails[]>([emptyOwner()])
   const [contractorOrganizationId, setContractorOrganizationId] = useState("")
   const [contractorCompanyName, setContractorCompanyName] = useState("")
@@ -122,19 +164,25 @@ export function ProjectCreateForm({
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadingFile, setUploadingFile] = useState<string | null>(null)
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null)
+<<<<<<< HEAD
   const [createdOwnerIds, setCreatedOwnerIds] = useState<string[]>([])
   const [ownerIdCardsUploaded, setOwnerIdCardsUploaded] = useState(false)
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
   const submissionLockRef = useRef(false)
 
   const selectedDocumentCount = useMemo(
     () => SIMPLE_UPLOAD_CATEGORIES.reduce((total, category) => total + documents[category.value].length, 0),
     [documents],
   )
+<<<<<<< HEAD
   const selectedOwnerIdCardCount = useMemo(
     () => owners.reduce((total, owner) => total + (owner.idCardFile ? 1 : 0), 0),
     [owners],
   )
   const selectedUploadCount = selectedDocumentCount + selectedOwnerIdCardCount
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
 
   const copy = isArabic
     ? {
@@ -144,7 +192,11 @@ export function ProjectCreateForm({
         org: "الجهة المشرفة",
         steps: ["تفاصيل المشروع", "تفاصيل المالك", "المقاول", "المستندات"],
         stepDescriptions: [
+<<<<<<< HEAD
           "أدخل معلومات المشروع وموقعه وعيّن المستخدم والمشرف.",
+=======
+          "أدخل المعلومات الأساسية وموقع المشروع.",
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
           "أضف بيانات المالك أو العميل.",
           "عيّن المقاول وسجّل بيانات الشركة.",
           "أرفق المستندات الأولية للمشروع.",
@@ -157,10 +209,17 @@ export function ProjectCreateForm({
         projectTypePlaceholder: "اختر نوع المشروع",
         supervisionType: "نوع الإشراف",
         supervisionTypePlaceholder: "اختر نوع الإشراف",
+<<<<<<< HEAD
         assignUser: "تعيين مستخدم",
         assignUserPlaceholder: "اختر مستخدم المشروع",
         assignSupervisor: "تعيين مشرف",
         assignSupervisorPlaceholder: "اختر مشرف المشروع",
+=======
+        region: "المنطقة",
+        regionPlaceholder: "مثال: مسقط",
+        description: "وصف المشروع",
+        descriptionPlaceholder: "ملخص نطاق المشروع وأهدافه…",
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
         ownerCount: "عدد المالكين",
         owner: "المالك",
         ownerName: "اسم المالك",
@@ -168,6 +227,7 @@ export function ProjectCreateForm({
         contactName: "اسم جهة الاتصال",
         contactEmail: "البريد الإلكتروني",
         contactPhone: "رقم الهاتف",
+<<<<<<< HEAD
         idCard: "مسح / تصوير بطاقة الهوية",
         idCardHelp: "JPG أو PNG أو WebP أو PDF، بحد أقصى 10 ميجابايت. سيتم الرفع بعد إنشاء المشروع فقط.",
         chooseIdCard: "اختيار بطاقة الهوية",
@@ -175,6 +235,8 @@ export function ProjectCreateForm({
         replaceIdCard: "استبدال الملف",
         removeIdCard: "إزالة الملف",
         noIdCard: "لم يتم اختيار بطاقة هوية",
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
         assignContractor: "تعيين مقاول مسجل",
         noContractor: "بدون تعيين جهة مسجلة",
         companyName: "اسم الشركة",
@@ -188,6 +250,7 @@ export function ProjectCreateForm({
         backStep: "السابق",
         next: "التالي",
         submit: "إنشاء المشروع",
+<<<<<<< HEAD
         retryUpload: "إعادة محاولة رفع الملفات",
         creating: "جارٍ إنشاء المشروع…",
         uploading: "جارٍ رفع الملفات…",
@@ -196,6 +259,16 @@ export function ProjectCreateForm({
         requiredOwners: "أدخل اسمًا صحيحًا لكل مالك.",
         invalidOwnerEmail: "أدخل بريدًا إلكترونيًا صحيحًا لكل مالك.",
         documentUploadFailed: "تم إنشاء المشروع، لكن تعذر رفع بعض الملفات. أعد المحاولة لإكمال الرفع.",
+=======
+        retryUpload: "إعادة محاولة رفع المستندات",
+        creating: "جارٍ إنشاء المشروع…",
+        uploading: "جارٍ رفع المستندات…",
+        created: "تم إنشاء المشروع بنجاح.",
+        requiredProject: "أدخل اسم مشروع صحيحًا واختر نوع المشروع ونوع الإشراف.",
+        requiredOwners: "أدخل اسمًا صحيحًا لكل مالك.",
+        invalidOwnerEmail: "أدخل بريدًا إلكترونيًا صحيحًا لكل مالك.",
+        documentUploadFailed: "تم إنشاء المشروع، لكن تعذر رفع المستندات. أعد المحاولة لإكمال الرفع.",
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
       }
     : {
         back: "Back to Projects",
@@ -204,7 +277,11 @@ export function ProjectCreateForm({
         org: "Supervising organization",
         steps: ["Project Details", "Owner Details", "Contractor", "Documents"],
         stepDescriptions: [
+<<<<<<< HEAD
           "Enter project details, location, assigned user, and supervisor.",
+=======
+          "Enter the project basics and working location.",
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
           "Capture owner or client contact details.",
           "Assign the contractor and company information.",
           "Attach the initial project documents.",
@@ -217,10 +294,17 @@ export function ProjectCreateForm({
         projectTypePlaceholder: "Select project type",
         supervisionType: "Supervision Type",
         supervisionTypePlaceholder: "Select supervision type",
+<<<<<<< HEAD
         assignUser: "Assign User",
         assignUserPlaceholder: "Select a project user",
         assignSupervisor: "Assign Supervisor",
         assignSupervisorPlaceholder: "Select a project supervisor",
+=======
+        region: "Region",
+        regionPlaceholder: "e.g. Muscat",
+        description: "Project Description",
+        descriptionPlaceholder: "Summarize the project scope and objectives…",
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
         ownerCount: "Number of Owners",
         owner: "Owner",
         ownerName: "Owner Name",
@@ -228,6 +312,7 @@ export function ProjectCreateForm({
         contactName: "Contact Name",
         contactEmail: "Contact Email",
         contactPhone: "Contact Phone",
+<<<<<<< HEAD
         idCard: "Scan / Capture ID Card",
         idCardHelp: "JPG, PNG, WebP, or PDF up to 10 MB. The file uploads only after the project is created.",
         chooseIdCard: "Choose ID Card",
@@ -235,6 +320,8 @@ export function ProjectCreateForm({
         replaceIdCard: "Replace File",
         removeIdCard: "Remove File",
         noIdCard: "No ID card selected",
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
         assignContractor: "Assign Registered Contractor",
         noContractor: "No registered organization assigned",
         companyName: "Company Name",
@@ -248,6 +335,7 @@ export function ProjectCreateForm({
         backStep: "Back",
         next: "Next",
         submit: "Create Project",
+<<<<<<< HEAD
         retryUpload: "Retry File Upload",
         creating: "Creating project…",
         uploading: "Uploading files…",
@@ -256,6 +344,16 @@ export function ProjectCreateForm({
         requiredOwners: "Enter a valid name for every owner.",
         invalidOwnerEmail: "Enter a valid email address for every owner.",
         documentUploadFailed: "The project was created, but some files could not be uploaded. Retry to complete the upload.",
+=======
+        retryUpload: "Retry Document Upload",
+        creating: "Creating project…",
+        uploading: "Uploading documents…",
+        created: "Project created successfully.",
+        requiredProject: "Enter a valid project name and select the project and supervision types.",
+        requiredOwners: "Enter a valid name for every owner.",
+        invalidOwnerEmail: "Enter a valid email address for every owner.",
+        documentUploadFailed: "The project was created, but its documents could not be uploaded. Retry to complete the upload.",
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
       }
 
   const stepIcons = [MapPin, UsersRound, Building2, FileUp]
@@ -270,6 +368,7 @@ export function ProjectCreateForm({
     setError(null)
   }
 
+<<<<<<< HEAD
   function updateOwner<Field extends keyof OwnerDetails>(
     index: number,
     field: Field,
@@ -279,10 +378,17 @@ export function ProjectCreateForm({
       ownerIndex === index ? { ...owner, [field]: value } : owner
     )))
     setError(null)
+=======
+  function updateOwner(index: number, field: keyof OwnerDetails, value: string) {
+    setOwners((current) => current.map((owner, ownerIndex) => (
+      ownerIndex === index ? { ...owner, [field]: value } : owner
+    )))
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
   }
 
   function validateStep(targetStep: number): string | null {
     if (targetStep === 1) {
+<<<<<<< HEAD
       if (
         name.trim().length < 2 ||
         code.trim().length < 1 ||
@@ -294,6 +400,9 @@ export function ProjectCreateForm({
       ) {
         return copy.requiredProject
       }
+=======
+      if (name.trim().length < 2 || !projectType || !supervisionType) return copy.requiredProject
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
       return null
     }
     if (targetStep === 2) {
@@ -303,11 +412,14 @@ export function ProjectCreateForm({
         return email.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
       })
       if (invalidEmail) return copy.invalidOwnerEmail
+<<<<<<< HEAD
       for (const owner of owners) {
         if (!owner.idCardFile) continue
         const validationError = validateOwnerIdCardFile(owner.idCardFile)
         if (validationError) return validationError
       }
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
       return null
     }
     if (targetStep === 4) {
@@ -338,6 +450,7 @@ export function ProjectCreateForm({
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
+<<<<<<< HEAD
   async function uploadOwnerIdCards(projectId: string, ownerIds: string[]) {
     const filesToUpload = owners.flatMap((owner, index) => {
       const ownerId = ownerIds[index]
@@ -388,6 +501,8 @@ export function ProjectCreateForm({
     }
   }
 
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
   async function uploadProjectDocuments(projectId: string) {
     const filesToUpload = SIMPLE_UPLOAD_CATEGORIES.flatMap((category) =>
       documents[category.value].map((file) => ({ category, file })),
@@ -454,7 +569,10 @@ export function ProjectCreateForm({
     setUploadProgress(0)
 
     let projectId = createdProjectId
+<<<<<<< HEAD
     let ownerIds = createdOwnerIds
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
     try {
       if (!projectId) {
         const result = await createProject({
@@ -463,6 +581,7 @@ export function ProjectCreateForm({
           code,
           projectType,
           supervisionType,
+<<<<<<< HEAD
           location: location.address,
           latitude: location.latitude,
           longitude: location.longitude,
@@ -474,6 +593,14 @@ export function ProjectCreateForm({
             contactEmail: owner.contactEmail,
             contactPhone: owner.contactPhone,
           })),
+=======
+          region,
+          description,
+          location: location.address,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          owners,
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
           contractor: {
             organizationId: contractorOrganizationId || null,
             companyName: contractorCompanyName,
@@ -497,6 +624,7 @@ export function ProjectCreateForm({
           return
         }
         projectId = result.data.id
+<<<<<<< HEAD
         ownerIds = result.data.ownerIds
         setCreatedProjectId(projectId)
         setCreatedOwnerIds(ownerIds)
@@ -510,6 +638,12 @@ export function ProjectCreateForm({
 
       if (selectedDocumentCount > 0) {
         setUploadProgress(0)
+=======
+        setCreatedProjectId(projectId)
+      }
+
+      if (selectedDocumentCount > 0) {
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
         await uploadProjectDocuments(projectId)
       }
 
@@ -616,7 +750,11 @@ export function ProjectCreateForm({
                       className="h-10"
                     />
                   </Field>
+<<<<<<< HEAD
                   <Field label={copy.code} htmlFor="new-project-code" required>
+=======
+                  <Field label={copy.code} htmlFor="new-project-code">
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
                     <Input
                       id="new-project-code"
                       value={code}
@@ -642,6 +780,19 @@ export function ProjectCreateForm({
                       </SelectContent>
                     </Select>
                   </Field>
+<<<<<<< HEAD
+=======
+                  <Field label={`${copy.region} (${copy.optional})`} htmlFor="new-project-region">
+                    <Input
+                      id="new-project-region"
+                      value={region}
+                      onChange={(event) => setRegion(event.target.value)}
+                      placeholder={copy.regionPlaceholder}
+                      disabled={pending}
+                      className="h-10"
+                    />
+                  </Field>
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
                 </div>
 
                 <div className="rounded-2xl border bg-muted/15 p-4 sm:p-5">
@@ -653,6 +804,7 @@ export function ProjectCreateForm({
                   />
                 </div>
 
+<<<<<<< HEAD
                 <div className="grid gap-5 md:grid-cols-2">
                   <Field label={copy.assignUser} required>
                     <Select
@@ -691,6 +843,19 @@ export function ProjectCreateForm({
                     </Select>
                   </Field>
                 </div>
+=======
+                <Field label={`${copy.description} (${copy.optional})`} htmlFor="new-project-description">
+                  <textarea
+                    id="new-project-description"
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    placeholder={copy.descriptionPlaceholder}
+                    disabled={pending}
+                    rows={4}
+                    className="flex w-full resize-y rounded-lg border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+                  />
+                </Field>
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
               </div>
             ) : null}
 
@@ -732,6 +897,7 @@ export function ProjectCreateForm({
                             <Input id={`owner-email-${index}`} type="email" value={owner.contactEmail} onChange={(event) => updateOwner(index, "contactEmail", event.target.value)} disabled={pending} className="h-10" />
                           </Field>
                         </div>
+<<<<<<< HEAD
                         <div className="sm:col-span-2">
                           <OwnerIdCardField
                             id={`owner-id-card-${index}`}
@@ -747,6 +913,8 @@ export function ProjectCreateForm({
                             emptyLabel={copy.noIdCard}
                           />
                         </div>
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
                       </div>
                     </section>
                   ))}
@@ -809,7 +977,11 @@ export function ProjectCreateForm({
                   disabled={pending}
                   onValidationError={setError}
                 />
+<<<<<<< HEAD
                 {pending && selectedUploadCount > 0 ? (
+=======
+                {pending && selectedDocumentCount > 0 ? (
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
                   <div className="rounded-xl border bg-muted/20 px-4 py-3" role="status" aria-live="polite">
                     <div className="mb-2 flex items-center justify-between gap-4 text-xs font-medium">
                       <span className="flex min-w-0 items-center gap-2"><Loader2 className="size-4 shrink-0 animate-spin text-primary" /><span className="truncate">{uploadingFile || copy.uploading}</span></span>
@@ -856,7 +1028,11 @@ export function ProjectCreateForm({
               ) : (
                 <Button type="button" size="lg" className="w-full sm:w-auto" onClick={submitProject} disabled={pending}>
                   {pending ? <Loader2 className="size-4 animate-spin" /> : <ClipboardList className="size-4" />}
+<<<<<<< HEAD
                   {pending ? (selectedUploadCount > 0 ? copy.uploading : copy.creating) : createdProjectId ? copy.retryUpload : copy.submit}
+=======
+                  {pending ? (selectedDocumentCount > 0 ? copy.uploading : copy.creating) : createdProjectId ? copy.retryUpload : copy.submit}
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
                 </Button>
               )}
             </div>
@@ -888,6 +1064,7 @@ function Field({
     </div>
   )
 }
+<<<<<<< HEAD
 
 function OwnerIdCardField({
   id,
@@ -1038,3 +1215,5 @@ function OwnerIdCardField({
     </div>
   )
 }
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f

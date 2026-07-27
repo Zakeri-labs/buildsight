@@ -12,7 +12,10 @@ import type { ActionResult } from "@/lib/actions/invitations"
 import { coordinateLabel } from "@/lib/locations/types"
 import { SELECTED_PROJECT_COOKIE } from "@/lib/project-scope"
 import { isProjectTypeValue, isSupervisionTypeValue } from "@/lib/projects/project-options"
+<<<<<<< HEAD
 import { validateOwnerIdCardFile } from "@/lib/projects/owner-id-card"
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
 
 function normalizeProjectCoordinates(latitude?: number | null, longitude?: number | null) {
   const hasLatitude = latitude != null
@@ -104,8 +107,11 @@ export async function createProject(input: {
   location?: string
   latitude?: number | null
   longitude?: number | null
+<<<<<<< HEAD
   assignedUserId?: string | null
   assignedSupervisorId?: string | null
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
   owners?: Array<{
     name: string
     contactName?: string
@@ -120,7 +126,11 @@ export async function createProject(input: {
     postalCode?: string
     phone?: string
   }
+<<<<<<< HEAD
 }): Promise<ActionResult<{ id: string; ownerIds: string[] }>> {
+=======
+}): Promise<ActionResult<{ id: string }>> {
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
   let createdProjectId: string | null = null
   try {
     const name = input.name.trim()
@@ -165,6 +175,7 @@ export async function createProject(input: {
       return { ok: false, error: "Only a supervising organization can create projects." }
     }
 
+<<<<<<< HEAD
     const assignedUserId = input.assignedUserId?.trim() || null
     const assignedSupervisorId = input.assignedSupervisorId?.trim() || null
     const requestedAssigneeIds = Array.from(
@@ -193,6 +204,8 @@ export async function createProject(input: {
       }
     }
 
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
     const contractorOrganizationId = input.contractor?.organizationId?.trim() || null
     let contractorOrganizationName: string | null = null
     if (contractorOrganizationId) {
@@ -228,8 +241,11 @@ export async function createProject(input: {
         contractor_address: input.contractor?.address?.trim() || null,
         contractor_postal_code: input.contractor?.postalCode?.trim() || null,
         contractor_phone: input.contractor?.phone?.trim() || null,
+<<<<<<< HEAD
         assigned_user_id: assignedUserId,
         assigned_supervisor_id: assignedSupervisorId,
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
         status: "active",
         supervising_organization_id: input.supervisingOrgId,
         created_by: actorId,
@@ -259,6 +275,7 @@ export async function createProject(input: {
     })
     if (userMembershipError) throw userMembershipError
 
+<<<<<<< HEAD
     const projectAssignments = new Map<string, "project_manager" | "contributor">()
     if (assignedUserId && assignedUserId !== actorId) {
       projectAssignments.set(assignedUserId, "contributor")
@@ -280,6 +297,8 @@ export async function createProject(input: {
       if (assignmentMembershipError) throw assignmentMembershipError
     }
 
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
     if (contractorOrganizationId && contractorOrganizationId !== input.supervisingOrgId) {
       const { error: contractorMembershipError } = await admin.from("project_organization_memberships").insert({
         project_id: created.id,
@@ -291,9 +310,14 @@ export async function createProject(input: {
       if (contractorMembershipError) throw contractorMembershipError
     }
 
+<<<<<<< HEAD
     let createdOwners: Array<{ id: string; owner_order: number }> = []
     if (owners.length) {
       const { data: ownerRows, error: ownersError } = await admin.from("project_owners").insert(
+=======
+    if (owners.length) {
+      const { error: ownersError } = await admin.from("project_owners").insert(
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
         owners.map((owner, index) => ({
           project_id: created.id,
           owner_order: index + 1,
@@ -302,9 +326,14 @@ export async function createProject(input: {
           contact_email: owner.contactEmail,
           contact_phone: owner.contactPhone,
         })),
+<<<<<<< HEAD
       ).select("id, owner_order")
       if (ownersError) throw ownersError
       createdOwners = ownerRows ?? []
+=======
+      )
+      if (ownersError) throw ownersError
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
     }
 
     await audit({
@@ -320,8 +349,11 @@ export async function createProject(input: {
         supervisionType: input.supervisionType || null,
         ownerCount: owners.length,
         contractorOrganizationId,
+<<<<<<< HEAD
         assignedUserId,
         assignedSupervisorId,
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
       },
     })
 
@@ -335,6 +367,7 @@ export async function createProject(input: {
     revalidatePath("/", "layout")
     revalidatePath("/users")
     revalidatePath("/projects")
+<<<<<<< HEAD
     return {
       ok: true,
       data: {
@@ -344,6 +377,9 @@ export async function createProject(input: {
           .map((owner) => owner.id),
       },
     }
+=======
+    return { ok: true, data: { id: created.id } }
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
   } catch (err) {
     if (createdProjectId) {
       try {

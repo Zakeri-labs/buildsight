@@ -25,15 +25,20 @@ export default async function NewProjectPage() {
   const admin = createAdminClient()
   const [{ data: projectRows }, { data: memberRows }] = await Promise.all([
     admin.from("projects").select("id").eq("supervising_organization_id", supervisingOrg.id),
+<<<<<<< HEAD
     admin
       .from("organization_memberships")
       .select("user_id, role")
       .eq("organization_id", supervisingOrg.id)
       .eq("status", "active"),
+=======
+    admin.from("organization_memberships").select("user_id").eq("organization_id", supervisingOrg.id).eq("status", "active"),
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
   ])
 
   const projectIds = (projectRows ?? []).map((project) => project.id)
   const memberIds = Array.from(new Set([session.userId, ...(memberRows ?? []).map((membership) => membership.user_id)]))
+<<<<<<< HEAD
   const [{ data: profileRows }, participantMemberships] = await Promise.all([
     memberIds.length
       ? admin.from("profiles").select("id, full_name, email").in("id", memberIds)
@@ -77,6 +82,19 @@ export default async function NewProjectPage() {
           .eq("type", "external")
           .neq("status", "suspended")
           .in("id", organizationIds)
+=======
+  const { data: participantRows } = projectIds.length
+    ? await admin.from("project_organization_memberships").select("organization_id").in("project_id", projectIds)
+    : { data: [] as Array<{ organization_id: string }> }
+
+  const organizationIds = Array.from(new Set((participantRows ?? []).map((membership) => membership.organization_id)))
+  const [createdOrganizations, participantOrganizations] = await Promise.all([
+    memberIds.length
+      ? admin.from("organizations").select("id, name, status").eq("type", "external").neq("status", "suspended").in("created_by", memberIds)
+      : Promise.resolve({ data: [] as Array<{ id: string; name: string; status: string }> }),
+    organizationIds.length
+      ? admin.from("organizations").select("id, name, status").eq("type", "external").neq("status", "suspended").in("id", organizationIds)
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
       : Promise.resolve({ data: [] as Array<{ id: string; name: string; status: string }> }),
   ])
 
@@ -91,8 +109,11 @@ export default async function NewProjectPage() {
     <ProjectCreateForm
       supervisingOrg={{ id: supervisingOrg.id, name: supervisingOrg.name }}
       contractorOrganizations={contractorOrganizations}
+<<<<<<< HEAD
       users={userOptions}
       supervisors={supervisorOptions}
+=======
+>>>>>>> 4ecace8ec62dfcd65d96436381ac0e9bc299038f
     />
   )
 }
