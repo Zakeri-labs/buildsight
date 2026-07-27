@@ -4,9 +4,11 @@ import { useMemo, useState, type ComponentType } from "react"
 import Link from "next/link"
 import {
   Archive,
+  CheckCircle2,
   CheckSquare2,
   ChevronDown,
   ClipboardCheck,
+  Download,
   Eye,
   FileCheck2,
   FileClock,
@@ -38,6 +40,7 @@ import {
   type DocumentTypeIconKey,
   type DocumentTypeValue,
 } from "@/lib/documents/document-types"
+import { getSimpleUploadCategory, type SimpleUploadCategoryValue } from "@/lib/documents/simple-upload"
 import { cn } from "@/lib/utils"
 
 export type DocumentListItem = {
@@ -54,6 +57,9 @@ export type DocumentListItem = {
   status: "draft" | "published"
   createdAt: string
   updatedAt: string
+  fileStoragePath: string | null
+  originalFilename: string | null
+  simpleUploadCategory: SimpleUploadCategoryValue | null
 }
 
 type Category = "all" | DocumentTypeGroup
@@ -89,9 +95,11 @@ const categoryOrder: Category[] = [
 export function DocumentsList({
   documents,
   selectedProjectId,
+  uploadedCount = 0,
 }: {
   documents: DocumentListItem[]
   selectedProjectId: string | null
+  uploadedCount?: number
 }) {
   const [activeTab, setActiveTab] = useState<Category>("all")
   const [searchQuery, setSearchQuery] = useState("")
@@ -117,6 +125,7 @@ export function DocumentsList({
     const query = searchQuery.trim().toLowerCase()
     return documents.filter((document) => {
       const type = getDocumentTypeDefinition(document.documentType)
+      const simpleCategory = getSimpleUploadCategory(document.simpleUploadCategory)
       if (activeTab !== "all" && type.group !== activeTab) return false
       if (typeFilter && document.documentType !== typeFilter) return false
       if (statusFilter !== "all" && document.status !== statusFilter) return false
@@ -126,7 +135,8 @@ export function DocumentsList({
         !document.title.toLowerCase().includes(query) &&
         !document.reference.toLowerCase().includes(query) &&
         !type.label.toLowerCase().includes(query) &&
-        !type.shortLabel.toLowerCase().includes(query)
+        !type.shortLabel.toLowerCase().includes(query) &&
+        !(simpleCategory?.label.toLowerCase().includes(query) ?? false)
       ) return false
       return true
     })
@@ -198,6 +208,13 @@ export function DocumentsList({
         </div>
       ) : null}
 
+      {uploadedCount > 0 ? (
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+          <CheckCircle2 className="size-5 shrink-0" />
+          {uploadedCount} document{uploadedCount === 1 ? "" : "s"} uploaded successfully.
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-[220px] flex-1 sm:max-w-sm">
           <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
@@ -252,6 +269,8 @@ export function DocumentsList({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
               {filteredDocuments.map((document) => {
                 const type = getDocumentTypeDefinition(document.documentType)
+                const simpleCategory = getSimpleUploadCategory(document.simpleUploadCategory)
+                const displayType = simpleCategory?.label ?? type.shortLabel
                 return (
                   <tr key={document.id} className="transition-colors hover:bg-slate-50/70 dark:hover:bg-slate-800/30">
                     <td className="whitespace-nowrap px-5 py-4">
@@ -264,7 +283,7 @@ export function DocumentsList({
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-4">
-                      <span title={type.label} className={cn("inline-flex rounded-md px-2.5 py-1 text-xs font-medium", type.badgeClassName)}>{type.shortLabel}</span>
+                      <span title={simpleCategory ? `${simpleCategory.label} · ${type.label}` : type.label} className={cn("inline-flex rounded-md px-2.5 py-1 text-xs font-medium", type.badgeClassName)}>{displayType}</span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-4 text-xs text-slate-600 dark:text-slate-400">{document.projectName}</td>
                     <td className="whitespace-nowrap px-4 py-4">
@@ -283,7 +302,17 @@ export function DocumentsList({
                         <DropdownMenuTrigger render={<button type="button" aria-label={`Actions for ${document.title}`} className="inline-flex size-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"><MoreVertical className="size-4" /></button>} />
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem render={<Link href={`/documents/${document.id}`}><Eye className="size-4" />View document</Link>} />
-                          <DropdownMenuItem render={<Link href={`/documents/${document.id}/edit`}><Pencil className="size-4" />Edit document</Link>} />
+                          {document.fileStoragePath ? (
+                            <DropdownMenuItem
+                              render={
+                                <a href={`/api/document-files?path=${encodeURIComponent(document.fileStoragePath)}&download=1&filename=${encodeURIComponent(document.originalFilename ?? document.title)}`}>
+                                  <Download className="size-4" />Download file
+                                </a>
+                              }
+                            />
+                          ) : (
+                            <DropdownMenuItem render={<Link href={`/documents/${document.id}/edit`}><Pencil className="size-4" />Edit document</Link>} />
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </td>

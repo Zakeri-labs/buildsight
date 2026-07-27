@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { ArrowLeft, CalendarDays, CheckCircle2, FileText, FolderLock, Pencil } from "lucide-react"
+import { ArrowLeft, CalendarDays, CheckCircle2, Download, ExternalLink, FileText, FolderLock, HardDrive, Pencil } from "lucide-react"
 import { RichTextRenderer } from "@/components/documents/rich-text-renderer"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { buttonVariants } from "@/components/ui/button"
@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { requireOnboarded } from "@/lib/auth/session"
 import { getDocumentTypeDefinition } from "@/lib/documents/document-types"
 import { isRichTextDocument, EMPTY_RICH_TEXT_DOCUMENT } from "@/lib/documents/rich-text"
+import { formatFileSize, getSimpleUploadCategory } from "@/lib/documents/simple-upload"
 import { createClient } from "@/lib/supabase/server"
 import { cn } from "@/lib/utils"
 
@@ -34,7 +35,7 @@ export default async function DocumentDetailsPage({
 
   const { data: document } = await supabase
     .from("documents")
-    .select("id, project_id, reference, title, document_type, status, content, created_by, published_at, created_at, updated_at")
+    .select("id, project_id, reference, title, document_type, status, content, created_by, published_at, created_at, updated_at, creation_mode, simple_upload_category, file_storage_path, original_filename, file_mime_type, file_size_bytes")
     .eq("id", id)
     .maybeSingle()
 
@@ -49,6 +50,12 @@ export default async function DocumentDetailsPage({
   const content = isRichTextDocument(document.content) ? document.content : EMPTY_RICH_TEXT_DOCUMENT
   const documentType = getDocumentTypeDefinition(document.document_type)
   const savedState = query.updated ?? query.created
+  const simpleCategory = getSimpleUploadCategory(document.simple_upload_category)
+  const isFileDocument = document.creation_mode === "simple" && Boolean(document.file_storage_path)
+  const fileUrl = document.file_storage_path
+    ? `/api/document-files?path=${encodeURIComponent(document.file_storage_path)}&filename=${encodeURIComponent(document.original_filename ?? document.title)}`
+    : null
+  const downloadUrl = fileUrl ? `${fileUrl}&download=1` : null
   const wasUpdated = Boolean(query.updated)
 
   return (
@@ -58,10 +65,17 @@ export default async function DocumentDetailsPage({
           <ArrowLeft className="size-4" />
           Back to Documents
         </Link>
-        <Link href={`/documents/${document.id}/edit`} className={cn(buttonVariants({ variant: "outline" }), "bg-background")}>
-          <Pencil className="size-4" />
-          Edit Document
-        </Link>
+        {isFileDocument && downloadUrl ? (
+          <a href={downloadUrl} className={cn(buttonVariants({ variant: "outline" }), "bg-background")}>
+            <Download className="size-4" />
+            Download File
+          </a>
+        ) : (
+          <Link href={`/documents/${document.id}/edit`} className={cn(buttonVariants({ variant: "outline" }), "bg-background")}>
+            <Pencil className="size-4" />
+            Edit Document
+          </Link>
+        )}
       </div>
 
       {savedState === "draft" || savedState === "published" ? (
@@ -80,7 +94,7 @@ export default async function DocumentDetailsPage({
               <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-blue-200">
                 <span>{document.reference}</span>
                 <span aria-hidden="true">•</span>
-                <span>{documentType.label}</span>
+                <span>{simpleCategory?.label ?? documentType.label}</span>
               </div>
               <CardTitle className="text-2xl font-bold leading-tight text-white sm:text-3xl">{document.title}</CardTitle>
               <p className="mt-2 flex items-center gap-2 text-sm text-blue-100/90">
@@ -105,16 +119,46 @@ export default async function DocumentDetailsPage({
           </div>
           <div className="flex items-center gap-3">
             <FileText className="size-5 text-muted-foreground" />
-            <div><span className="block text-xs text-muted-foreground">Document type</span><span className="font-medium">{documentType.label}</span></div>
+            <div><span className="block text-xs text-muted-foreground">Category / type</span><span className="font-medium">{simpleCategory?.label ?? documentType.label}</span></div>
           </div>
           <div className="flex items-center gap-3">
             <FolderLock className="size-5 text-muted-foreground" />
             <div><span className="block text-xs text-muted-foreground">Project</span><span className="font-medium">{project?.name ?? "Project"}</span></div>
           </div>
         </CardContent>
-        <CardContent className="bg-white px-6 py-10 text-slate-900 dark:bg-slate-950 dark:text-slate-100 sm:px-10 lg:px-16">
-          <RichTextRenderer document={content} />
-        </CardContent>
+        {isFileDocument && fileUrl ? (
+          <CardContent className="bg-white px-6 py-10 dark:bg-slate-950 sm:px-10">
+            <div className="mx-auto flex max-w-3xl flex-col items-center gap-5 rounded-2xl border border-dashed bg-muted/20 px-6 py-12 text-center">
+              <span className="flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <HardDrive className="size-8" />
+              </span>
+              <div>
+                <h2 className="text-xl font-semibold">{document.original_filename ?? document.title}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {simpleCategory?.label ?? "Uploaded document"}
+                  {document.file_size_bytes ? ` · ${formatFileSize(Number(document.file_size_bytes))}` : ""}
+                  {document.file_mime_type ? ` · ${document.file_mime_type}` : ""}
+                </p>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <a href={fileUrl} target="_blank" rel="noreferrer" className={cn(buttonVariants(), "min-w-36")}>
+                  <ExternalLink className="size-4" />
+                  View File
+                </a>
+                {downloadUrl ? (
+                  <a href={downloadUrl} className={cn(buttonVariants({ variant: "outline" }), "min-w-36")}>
+                    <Download className="size-4" />
+                    Download
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          </CardContent>
+        ) : (
+          <CardContent className="bg-white px-6 py-10 text-slate-900 dark:bg-slate-950 dark:text-slate-100 sm:px-10 lg:px-16">
+            <RichTextRenderer document={content} />
+          </CardContent>
+        )}
       </Card>
     </div>
   )

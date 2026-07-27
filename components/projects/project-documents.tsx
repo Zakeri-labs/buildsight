@@ -37,7 +37,9 @@ export type ProjectDocument = {
     avatar?: string
   }
   lastUpdated: string
-  status: "Approved" | "Current" | "Under Review" | "Updated" | "Shared"
+  status: "Approved" | "Current" | "Under Review" | "Updated" | "Shared" | "Published" | "Draft"
+  fileStoragePath?: string | null
+  originalFilename?: string | null
 }
 
 const statusStyles: Record<ProjectDocument["status"], string> = {
@@ -46,6 +48,8 @@ const statusStyles: Record<ProjectDocument["status"], string> = {
   "Under Review": "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
   Updated: "bg-cyan-50 text-cyan-700 dark:bg-cyan-950/50 dark:text-cyan-300",
   Shared: "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300",
+  Published: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
+  Draft: "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
 }
 
 function DocumentIcon({ type }: { type: ProjectDocument["type"] }) {
@@ -116,7 +120,7 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
                 <tr key={document.id} className="transition-colors hover:bg-muted/30">
                   <td className="px-5 py-3.5 sm:px-6">
                     <Link
-                      href={`/documents?project=${projectQuery}&document=${encodeURIComponent(document.id)}`}
+                      href={`/documents/${document.id}`}
                       className="font-medium text-primary hover:underline"
                     >
                       {document.reference}
@@ -171,24 +175,32 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
                       <DropdownMenuContent align="end" className="w-44">
                         <DropdownMenuItem
                           render={
-                            <Link href={`/documents?project=${projectQuery}&document=${encodeURIComponent(document.id)}`}>
+                            <Link href={`/documents/${document.id}`}>
                               <Eye className="size-4" />
                               View document
                             </Link>
                           }
                         />
-                        <DropdownMenuItem>
-                          <Download className="size-4" />
-                          Download
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          render={
-                            <Link href={`/documents?project=${projectQuery}&document=${encodeURIComponent(document.id)}&action=edit`}>
-                              <Pencil className="size-4" />
-                              Edit details
-                            </Link>
-                          }
-                        />
+                        {document.fileStoragePath ? (
+                          <DropdownMenuItem
+                            render={
+                              <a href={`/api/document-files?path=${encodeURIComponent(document.fileStoragePath)}&download=1&filename=${encodeURIComponent(document.originalFilename ?? document.title)}`}>
+                                <Download className="size-4" />
+                                Download
+                              </a>
+                            }
+                          />
+                        ) : null}
+                        {!document.fileStoragePath ? (
+                          <DropdownMenuItem
+                            render={
+                              <Link href={`/documents/${document.id}/edit`}>
+                                <Pencil className="size-4" />
+                                Edit details
+                              </Link>
+                            }
+                          />
+                        ) : null}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </td>

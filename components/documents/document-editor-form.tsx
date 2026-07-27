@@ -17,7 +17,6 @@ import {
   List,
   ListOrdered,
   Loader2,
-  LockKeyhole,
   Redo2,
   Save,
   Send,
@@ -26,6 +25,8 @@ import {
 } from "lucide-react"
 import { createDocumentAction, updateDocumentAction } from "@/lib/actions/documents"
 import { createClient } from "@/lib/supabase/client"
+import { uploadDocumentAsset } from "@/lib/documents/storage-upload"
+import { DocumentProjectHeader } from "@/components/documents/document-project-header"
 import { DocumentTypeSelect } from "@/components/documents/document-type-select"
 import { isDocumentTypeValue, type DocumentTypeValue } from "@/lib/documents/document-types"
 import { EMPTY_RICH_TEXT_DOCUMENT, type RichTextDocument } from "@/lib/documents/rich-text"
@@ -56,9 +57,13 @@ type UploadState = {
 export function DocumentEditorForm({
   project,
   document: initialDocument,
+  showProjectHeader = true,
+  showAdvancedModeLabel = false,
 }: {
   project: ProjectSummary
   document?: EditableDocument
+  showProjectHeader?: boolean
+  showAdvancedModeLabel?: boolean
 }) {
   const router = useRouter()
   const editorRef = useRef<HTMLDivElement | null>(null)
@@ -277,7 +282,7 @@ export function DocumentEditorForm({
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "image"
       const storagePath = `${project.id}/${session.user.id}/${crypto.randomUUID()}-${safeName}`
       setUpload({ fileName: file.name, progress: 0 })
-      await uploadStorageObject(file, storagePath, session.access_token, (progress) => {
+      await uploadDocumentAsset(file, storagePath, session.access_token, (progress) => {
         setUpload({ fileName: file.name, progress })
       })
       setUpload({ fileName: file.name, progress: 100 })
@@ -342,25 +347,20 @@ export function DocumentEditorForm({
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
-      <Card className="overflow-hidden py-0">
-        <CardContent className="flex flex-col gap-4 bg-linear-to-r from-blue-950 to-slate-900 px-6 py-6 text-white sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-blue-200">
-              <FileText className="size-4" />
-              {initialDocument ? "Edit project document" : "New project document"}
-            </div>
-            <h2 className="truncate text-2xl font-bold sm:text-3xl">{project.name}</h2>
-            <p className="mt-1 flex items-center gap-2 text-sm text-blue-100/90">
-              <LockKeyhole className="size-4 shrink-0" />
-              This document will be saved under this project. The project cannot be changed here.
-            </p>
-          </div>
-          <div className="rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-sm backdrop-blur">
-            <span className="block text-xs text-blue-200">Project context</span>
-            <span className="font-semibold">{initialDocument ? initialDocument.reference : "Locked"}</span>
-          </div>
-        </CardContent>
-      </Card>
+      {showProjectHeader ? (
+        <DocumentProjectHeader
+          projectName={project.name}
+          contextLabel={initialDocument ? initialDocument.reference : "Locked"}
+          eyebrow={initialDocument ? "Edit project document" : "New project document"}
+        />
+      ) : null}
+
+      {showAdvancedModeLabel ? (
+        <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100">
+          <FileText className="mt-0.5 size-4 shrink-0" />
+          <div><span className="font-semibold">Advanced mode</span><span className="block text-xs text-blue-700/80 dark:text-blue-200/80">Create a structured document with rich text, formatting, metadata, and inline images.</span></div>
+        </div>
+      ) : null}
 
       <Card className="gap-0 py-0">
         <CardHeader className="border-b px-5 py-4 sm:px-6">
@@ -529,46 +529,4 @@ function placeCaretAtStart(element: HTMLElement) {
   selection.removeAllRanges()
   selection.addRange(range)
   element.closest<HTMLElement>("[contenteditable='true']")?.focus()
-}
-
-async function uploadStorageObject(
-  file: File,
-  path: string,
-  accessToken: string,
-  onProgress: (progress: number) => void,
-): Promise<void> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!supabaseUrl || !anonKey) throw new Error("Supabase storage is not configured.")
-
-  const encodedPath = path.split("/").map(encodeURIComponent).join("/")
-  await new Promise<void>((resolve, reject) => {
-    const request = new XMLHttpRequest()
-    request.open("POST", `${supabaseUrl}/storage/v1/object/document-images/${encodedPath}`)
-    request.setRequestHeader("Authorization", `Bearer ${accessToken}`)
-    request.setRequestHeader("apikey", anonKey)
-    request.setRequestHeader("Content-Type", file.type)
-    request.setRequestHeader("x-upsert", "false")
-    request.upload.onprogress = (event) => {
-      if (!event.lengthComputable) return
-      onProgress(Math.max(1, Math.min(99, Math.round((event.loaded / event.total) * 100))))
-    }
-    request.onerror = () => reject(new Error("The image upload failed. Check your connection and try again."))
-    request.onload = () => {
-      if (request.status >= 200 && request.status < 300) {
-        onProgress(100)
-        resolve()
-        return
-      }
-      let message = "Unable to upload the image."
-      try {
-        const response = JSON.parse(request.responseText) as { message?: string; error?: string }
-        message = response.message || response.error || message
-      } catch {
-        // Keep the generic message when the storage response is not JSON.
-      }
-      reject(new Error(message))
-    }
-    request.send(file)
-  })
 }

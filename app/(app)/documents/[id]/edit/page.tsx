@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { DocumentEditorForm } from "@/components/documents/document-editor-form"
 import { requireOnboarded } from "@/lib/auth/session"
 import { normalizeDocumentType } from "@/lib/documents/document-types"
@@ -12,11 +12,12 @@ export default async function EditDocumentPage({ params }: { params: Promise<{ i
 
   const { data: document } = await supabase
     .from("documents")
-    .select("id, project_id, reference, title, document_type, status, content")
+    .select("id, project_id, reference, title, document_type, status, content, creation_mode, file_storage_path")
     .eq("id", id)
     .maybeSingle()
 
   if (!document) notFound()
+  if (document.creation_mode === "simple" || document.file_storage_path) redirect(`/documents/${document.id}`)
 
   const { data: project } = await supabase
     .from("projects")

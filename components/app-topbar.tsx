@@ -35,6 +35,7 @@ export function AppTopbar({ activeProjectName }: { activeProjectName?: string | 
     "/reports": { title: t.reports.title, subtitle: t.reports.subtitle },
     "/calendar": { title: t.nav.calendar, subtitle: "" },
     "/users": { title: t.settings.tabAccess, subtitle: t.settings.accessDesc },
+    "/stages": { title: t.nav.addStage, subtitle: t.stages.subtitle },
     "/settings": { title: t.settings.title, subtitle: t.settings.subtitle },
     "/projects": { title: t.projects.title, subtitle: t.projects.subtitle },
     "/team": { title: t.team.title, subtitle: t.team.subtitle },

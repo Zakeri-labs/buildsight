@@ -1,25 +1,158 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { cookies } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient } from "@/lib/supabase/server"
 import { assertOrgAdmin, assertProjectAdmin, audit, AuthzError } from "@/lib/auth/guards"
 import { createInvitation } from "@/lib/actions/invitations"
 import { createOrganization } from "@/lib/actions/organizations"
 import type { ProjectAccessRole, ProjectOrgRole } from "@/lib/db/types"
 import { PROJECT_ACCESS_ROLES, PROJECT_ORG_ROLES } from "@/lib/db/types"
 import type { ActionResult } from "@/lib/actions/invitations"
+import { coordinateLabel } from "@/lib/locations/types"
+import { SELECTED_PROJECT_COOKIE } from "@/lib/project-scope"
+import { isProjectTypeValue, isSupervisionTypeValue } from "@/lib/projects/project-options"
+import { validateOwnerIdCardFile } from "@/lib/projects/owner-id-card"
+
+function normalizeProjectCoordinates(latitude?: number | null, longitude?: number | null) {
+  const hasLatitude = latitude != null
+  const hasLongitude = longitude != null
+  if (hasLatitude !== hasLongitude) {
+    return { ok: false as const, error: "Latitude and longitude must be provided together." }
+  }
+  if (!hasLatitude || !hasLongitude) {
+    return { ok: true as const, latitude: null, longitude: null }
+  }
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return { ok: false as const, error: "Invalid project coordinates." }
+  }
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return { ok: false as const, error: "Project coordinates are outside the valid range." }
+  }
+  return { ok: true as const, latitude, longitude }
+}
+
+export async function updateProject(input: {
+  projectId: string
+  name: string
+  code?: string
+  location?: string
+  latitude?: number | null
+  longitude?: number | null
+}): Promise<ActionResult> {
+  try {
+    const name = input.name.trim()
+    if (name.length < 2) return { ok: false, error: "Project name is too short." }
+    const coordinates = normalizeProjectCoordinates(input.latitude, input.longitude)
+    if (!coordinates.ok) return { ok: false, error: coordinates.error }
+    const location =
+      input.location?.trim() ||
+      (coordinates.latitude != null && coordinates.longitude != null
+        ? coordinateLabel(coordinates.latitude, coordinates.longitude)
+        : null)
+    const actorId = await assertProjectAdmin(input.projectId)
+    const admin = createAdminClient()
+
+    const { data: project, error: lookupError } = await admin
+      .from("projects")
+      .select("supervising_organization_id")
+      .eq("id", input.projectId)
+      .maybeSingle()
+    if (lookupError) throw lookupError
+    if (!project) return { ok: false, error: "Project not found." }
+
+    const { error } = await admin
+      .from("projects")
+      .update({
+        name,
+        code: input.code?.trim() || null,
+        location,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.projectId)
+    if (error) throw error
+
+    await audit({
+      actorId,
+      action: "project.updated",
+      entityType: "project",
+      entityId: input.projectId,
+      organizationId: project.supervising_organization_id,
+      projectId: input.projectId,
+      metadata: { name },
+    })
+    revalidatePath("/users")
+    revalidatePath("/projects")
+    revalidatePath(`/projects/${input.projectId}`)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof AuthzError ? err.message : "Could not update project." }
+  }
+}
 
 /** Create a project owned (supervised) by the caller's supervising org. */
 export async function createProject(input: {
   supervisingOrgId: string
   name: string
   code?: string
+  projectType?: string
+  supervisionType?: string
+  region?: string
+  description?: string
   location?: string
-}): Promise<ActionResult<{ id: string }>> {
+  latitude?: number | null
+  longitude?: number | null
+  assignedUserId?: string | null
+  assignedSupervisorId?: string | null
+  owners?: Array<{
+    name: string
+    contactName?: string
+    contactEmail?: string
+    contactPhone?: string
+  }>
+  contractor?: {
+    organizationId?: string | null
+    companyName?: string
+    registrationNumber?: string
+    address?: string
+    postalCode?: string
+    phone?: string
+  }
+}): Promise<ActionResult<{ id: string; ownerIds: string[] }>> {
+  let createdProjectId: string | null = null
   try {
     const name = input.name.trim()
     if (name.length < 2) return { ok: false, error: "Project name is too short." }
+    if (input.projectType && !isProjectTypeValue(input.projectType)) {
+      return { ok: false, error: "Select a valid project type." }
+    }
+    if (input.supervisionType && !isSupervisionTypeValue(input.supervisionType)) {
+      return { ok: false, error: "Select a valid supervision type." }
+    }
+
+    const owners = (input.owners ?? []).map((owner) => ({
+      name: owner.name.trim(),
+      contactName: owner.contactName?.trim() || null,
+      contactEmail: owner.contactEmail?.trim().toLowerCase() || null,
+      contactPhone: owner.contactPhone?.trim() || null,
+    }))
+    if (owners.length > 10) return { ok: false, error: "A project can have up to 10 owners during creation." }
+    if (owners.some((owner) => owner.name.length < 2)) {
+      return { ok: false, error: "Enter a valid name for every owner." }
+    }
+    if (owners.some((owner) => owner.contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(owner.contactEmail))) {
+      return { ok: false, error: "Enter a valid owner email address." }
+    }
+
+    const coordinates = normalizeProjectCoordinates(input.latitude, input.longitude)
+    if (!coordinates.ok) return { ok: false, error: coordinates.error }
+    const location =
+      input.location?.trim() ||
+      (coordinates.latitude != null && coordinates.longitude != null
+        ? coordinateLabel(coordinates.latitude, coordinates.longitude)
+        : null)
     const actorId = await assertOrgAdmin(input.supervisingOrgId)
     const admin = createAdminClient()
 
@@ -32,12 +165,71 @@ export async function createProject(input: {
       return { ok: false, error: "Only a supervising organization can create projects." }
     }
 
+    const assignedUserId = input.assignedUserId?.trim() || null
+    const assignedSupervisorId = input.assignedSupervisorId?.trim() || null
+    const requestedAssigneeIds = Array.from(
+      new Set([assignedUserId, assignedSupervisorId].filter((value): value is string => Boolean(value))),
+    )
+    if (requestedAssigneeIds.length) {
+      const { data: assigneeMemberships, error: assigneeMembershipError } = await admin
+        .from("organization_memberships")
+        .select("user_id, role")
+        .eq("organization_id", input.supervisingOrgId)
+        .eq("status", "active")
+        .in("user_id", requestedAssigneeIds)
+      if (assigneeMembershipError) throw assigneeMembershipError
+
+      const membershipByUser = new Map(
+        (assigneeMemberships ?? []).map((membership) => [membership.user_id, membership.role] as const),
+      )
+      if (requestedAssigneeIds.some((userId) => !membershipByUser.has(userId))) {
+        return { ok: false, error: "One of the selected project users is no longer available." }
+      }
+      if (
+        assignedSupervisorId &&
+        !["org_admin", "org_manager"].includes(membershipByUser.get(assignedSupervisorId) ?? "")
+      ) {
+        return { ok: false, error: "Select an organization administrator or manager as supervisor." }
+      }
+    }
+
+    const contractorOrganizationId = input.contractor?.organizationId?.trim() || null
+    let contractorOrganizationName: string | null = null
+    if (contractorOrganizationId) {
+      const { data: contractorOrganization, error: contractorLookupError } = await admin
+        .from("organizations")
+        .select("id, name, type, status")
+        .eq("id", contractorOrganizationId)
+        .maybeSingle()
+      if (contractorLookupError) throw contractorLookupError
+      if (!contractorOrganization || contractorOrganization.type !== "external" || contractorOrganization.status === "suspended") {
+        return { ok: false, error: "The selected contractor organization is unavailable." }
+      }
+      contractorOrganizationName = contractorOrganization.name
+    }
+
+    const contractorName = contractorOrganizationName || input.contractor?.companyName?.trim() || null
     const { data: created, error } = await admin
       .from("projects")
       .insert({
         name,
         code: input.code?.trim() || null,
-        location: input.location?.trim() || null,
+        project_type: input.projectType || null,
+        supervision_type: input.supervisionType || null,
+        region: input.region?.trim() || null,
+        description: input.description?.trim() || null,
+        location,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        contractor: contractorName,
+        client: owners[0]?.name || null,
+        contractor_organization_id: contractorOrganizationId,
+        contractor_registration_number: input.contractor?.registrationNumber?.trim() || null,
+        contractor_address: input.contractor?.address?.trim() || null,
+        contractor_postal_code: input.contractor?.postalCode?.trim() || null,
+        contractor_phone: input.contractor?.phone?.trim() || null,
+        assigned_user_id: assignedUserId,
+        assigned_supervisor_id: assignedSupervisorId,
         status: "active",
         supervising_organization_id: input.supervisingOrgId,
         created_by: actorId,
@@ -45,16 +237,19 @@ export async function createProject(input: {
       .select("id")
       .single()
     if (error) throw error
+    createdProjectId = created.id
 
     // The supervising org is itself a participant in every project it creates.
-    await admin.from("project_organization_memberships").insert({
+    const { error: supervisingMembershipError } = await admin.from("project_organization_memberships").insert({
       project_id: created.id,
       organization_id: input.supervisingOrgId,
       project_role: "consultant",
       status: "active",
       created_by: actorId,
     })
-    await admin.from("project_user_memberships").insert({
+    if (supervisingMembershipError) throw supervisingMembershipError
+
+    const { error: userMembershipError } = await admin.from("project_user_memberships").insert({
       project_id: created.id,
       user_id: actorId,
       organization_id: input.supervisingOrgId,
@@ -62,6 +257,55 @@ export async function createProject(input: {
       status: "active",
       created_by: actorId,
     })
+    if (userMembershipError) throw userMembershipError
+
+    const projectAssignments = new Map<string, "project_manager" | "contributor">()
+    if (assignedUserId && assignedUserId !== actorId) {
+      projectAssignments.set(assignedUserId, "contributor")
+    }
+    if (assignedSupervisorId && assignedSupervisorId !== actorId) {
+      projectAssignments.set(assignedSupervisorId, "project_manager")
+    }
+    if (projectAssignments.size) {
+      const { error: assignmentMembershipError } = await admin.from("project_user_memberships").insert(
+        Array.from(projectAssignments, ([userId, accessRole]) => ({
+          project_id: created.id,
+          user_id: userId,
+          organization_id: input.supervisingOrgId,
+          access_role: accessRole,
+          status: "active",
+          created_by: actorId,
+        })),
+      )
+      if (assignmentMembershipError) throw assignmentMembershipError
+    }
+
+    if (contractorOrganizationId && contractorOrganizationId !== input.supervisingOrgId) {
+      const { error: contractorMembershipError } = await admin.from("project_organization_memberships").insert({
+        project_id: created.id,
+        organization_id: contractorOrganizationId,
+        project_role: "contractor",
+        status: "active",
+        created_by: actorId,
+      })
+      if (contractorMembershipError) throw contractorMembershipError
+    }
+
+    let createdOwners: Array<{ id: string; owner_order: number }> = []
+    if (owners.length) {
+      const { data: ownerRows, error: ownersError } = await admin.from("project_owners").insert(
+        owners.map((owner, index) => ({
+          project_id: created.id,
+          owner_order: index + 1,
+          name: owner.name,
+          contact_name: owner.contactName,
+          contact_email: owner.contactEmail,
+          contact_phone: owner.contactPhone,
+        })),
+      ).select("id, owner_order")
+      if (ownersError) throw ownersError
+      createdOwners = ownerRows ?? []
+    }
 
     await audit({
       actorId,
@@ -70,12 +314,137 @@ export async function createProject(input: {
       entityId: created.id,
       organizationId: input.supervisingOrgId,
       projectId: created.id,
-      metadata: { name },
+      metadata: {
+        name,
+        projectType: input.projectType || null,
+        supervisionType: input.supervisionType || null,
+        ownerCount: owners.length,
+        contractorOrganizationId,
+        assignedUserId,
+        assignedSupervisorId,
+      },
     })
+
+    const cookieStore = await cookies()
+    cookieStore.set(SELECTED_PROJECT_COOKIE, created.id, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+    })
+
+    revalidatePath("/", "layout")
     revalidatePath("/users")
-    return { ok: true, data: { id: created.id } }
+    revalidatePath("/projects")
+    return {
+      ok: true,
+      data: {
+        id: created.id,
+        ownerIds: createdOwners
+          .sort((a, b) => a.owner_order - b.owner_order)
+          .map((owner) => owner.id),
+      },
+    }
   } catch (err) {
+    if (createdProjectId) {
+      try {
+        const admin = createAdminClient()
+        await admin.from("projects").delete().eq("id", createdProjectId)
+      } catch {
+        // Preserve the original error if cleanup is unavailable.
+      }
+    }
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not create project." }
+  }
+}
+
+export type OwnerIdCardUploadInput = {
+  ownerId: string
+  storagePath: string
+  originalFilename: string
+  mimeType: string
+  sizeBytes: number
+}
+
+export async function attachProjectOwnerIdCards(input: {
+  projectId: string
+  files: OwnerIdCardUploadInput[]
+}): Promise<ActionResult<{ count: number }>> {
+  try {
+    if (!Array.isArray(input.files) || input.files.length === 0) {
+      return { ok: false, error: "Select at least one owner ID card to upload." }
+    }
+    if (input.files.length > 10) {
+      return { ok: false, error: "A project can have up to 10 owner ID cards during creation." }
+    }
+
+    const actorId = await assertProjectAdmin(input.projectId)
+    const admin = createAdminClient()
+    const ownerIds = Array.from(new Set(input.files.map((file) => file.ownerId.trim()).filter(Boolean)))
+    if (ownerIds.length !== input.files.length) {
+      return { ok: false, error: "Each uploaded ID card must belong to a different project owner." }
+    }
+
+    const { data: ownerRows, error: ownerLookupError } = await admin
+      .from("project_owners")
+      .select("id")
+      .eq("project_id", input.projectId)
+      .in("id", ownerIds)
+    if (ownerLookupError) throw ownerLookupError
+    if ((ownerRows ?? []).length !== ownerIds.length) {
+      return { ok: false, error: "One of the selected owners is no longer available." }
+    }
+
+    const expectedPrefix = `${input.projectId}/${actorId}/owner-id-cards/`
+    for (const file of input.files) {
+      const validationError = validateOwnerIdCardFile({
+        name: file.originalFilename,
+        size: file.sizeBytes,
+        type: file.mimeType,
+      })
+      if (validationError) return { ok: false, error: validationError }
+      if (
+        !file.storagePath.startsWith(expectedPrefix) ||
+        file.storagePath.includes("..") ||
+        !file.storagePath.includes(`/${file.ownerId}/`)
+      ) {
+        return { ok: false, error: "One of the uploaded owner ID cards does not belong to this project." }
+      }
+    }
+
+    const uploadedAt = new Date().toISOString()
+    for (const file of input.files) {
+      const { error: updateError } = await admin
+        .from("project_owners")
+        .update({
+          id_card_storage_path: file.storagePath,
+          id_card_original_filename: file.originalFilename.trim(),
+          id_card_mime_type: file.mimeType.trim() || "application/octet-stream",
+          id_card_size_bytes: file.sizeBytes,
+          id_card_uploaded_by: actorId,
+          id_card_uploaded_at: uploadedAt,
+          updated_at: uploadedAt,
+        })
+        .eq("id", file.ownerId)
+        .eq("project_id", input.projectId)
+      if (updateError) throw updateError
+    }
+
+    await audit({
+      actorId,
+      action: "project_owner.id_cards_uploaded",
+      entityType: "project",
+      entityId: input.projectId,
+      projectId: input.projectId,
+      metadata: { count: input.files.length, ownerIds },
+    })
+    revalidatePath("/projects")
+    revalidatePath(`/projects/${input.projectId}`)
+    return { ok: true, data: { count: input.files.length } }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof AuthzError ? err.message : "Could not link the owner ID card uploads.",
+    }
   }
 }
 

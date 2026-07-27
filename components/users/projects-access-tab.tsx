@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useMemo, useState, useTransition } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { Plus, Loader2, Building2, UserCog } from "lucide-react"
+import { useMemo, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
+import { Plus, Loader2, Building2, UserCog, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -27,6 +27,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { RoleSelect } from "@/components/users/role-select"
 import { ProjectOrgRoleBadge, AccessRoleBadge } from "@/components/users/role-badges"
 import { InviteLinkDialog, type InviteResult } from "@/components/users/invite-link-dialog"
+import { ProjectLocationField } from "@/components/projects/project-location-field"
+import { EMPTY_PROJECT_LOCATION, type ProjectLocationValue } from "@/lib/locations/types"
 import {
   PROJECT_ORG_ROLES,
   PROJECT_ACCESS_ROLES,
@@ -39,6 +41,7 @@ import {
   createOrgAndAddToProject,
   assignUserToProject,
   removeProjectUser,
+  updateProject,
 } from "@/lib/actions/projects"
 import type {
   OrgRow,
@@ -55,7 +58,6 @@ export function ProjectsAccessTab({
   projectOrgs,
   projectUsers,
   members,
-  initialCreateOpen = false,
 }: {
   supervisingOrg: { id: string; name: string }
   projects: ProjectRow[]
@@ -63,7 +65,6 @@ export function ProjectsAccessTab({
   projectOrgs: ProjectOrgRow[]
   projectUsers: ProjectUserRow[]
   members: MemberRow[]
-  initialCreateOpen?: boolean
 }) {
   const [projectId, setProjectId] = useState<string | undefined>(projects[0]?.id)
   const [inviteResult, setInviteResult] = useState<InviteResult | null>(null)
@@ -99,7 +100,10 @@ export function ProjectsAccessTab({
             <p className="text-sm text-muted-foreground">No projects yet.</p>
           )}
         </div>
-        <CreateProjectDialog supervisingOrg={supervisingOrg} initialOpen={initialCreateOpen} />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {project && <EditProjectDialog key={project.id} project={project} />}
+          <CreateProjectDialog supervisingOrg={supervisingOrg} />
+        </div>
       </div>
 
       {projects.length === 0 ? (
@@ -202,33 +206,21 @@ export function ProjectsAccessTab({
 
 function CreateProjectDialog({
   supervisingOrg,
-  initialOpen = false,
 }: {
   supervisingOrg: { id: string; name: string }
-  initialOpen?: boolean
 }) {
   const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-  const [open, setOpen] = useState(initialOpen)
+  const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [code, setCode] = useState("")
-  const [location, setLocation] = useState("")
+  const [location, setLocation] = useState<ProjectLocationValue>(EMPTY_PROJECT_LOCATION)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
-
-  useEffect(() => {
-    if (!initialOpen) return
-    const params = new URLSearchParams(searchParams.toString())
-    params.delete("action")
-    const query = params.toString()
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
-  }, [initialOpen, pathname, router, searchParams])
 
   function reset() {
     setName("")
     setCode("")
-    setLocation("")
+    setLocation(EMPTY_PROJECT_LOCATION)
     setError(null)
   }
 
@@ -239,7 +231,9 @@ function CreateProjectDialog({
         supervisingOrgId: supervisingOrg.id,
         name,
         code,
-        location,
+        location: location.address,
+        latitude: location.latitude,
+        longitude: location.longitude,
       })
       if (!res.ok) {
         setError(res.error)
@@ -247,6 +241,8 @@ function CreateProjectDialog({
       }
       setOpen(false)
       reset()
+      router.push("/projects")
+      router.refresh()
     })
   }
 
@@ -266,7 +262,7 @@ function CreateProjectDialog({
           </Button>
         }
       />
-      <DialogContent>
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Create a project</DialogTitle>
           <DialogDescription className="text-pretty">
@@ -293,15 +289,12 @@ function CreateProjectDialog({
               onChange={(e) => setCode(e.target.value)}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="project-location">Location</Label>
-            <Input
-              id="project-location"
-              placeholder="e.g. Muscat, Seeb"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-            />
-          </div>
+          <ProjectLocationField
+            id="project-location"
+            value={location}
+            onChange={setLocation}
+            disabled={pending}
+          />
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
         <DialogFooter>
@@ -311,6 +304,116 @@ function CreateProjectDialog({
           <Button onClick={submit} disabled={pending || name.trim().length < 2}>
             {pending && <Loader2 className="size-4 animate-spin" data-icon="inline-start" />}
             Create project
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function EditProjectDialog({ project }: { project: ProjectRow }) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState(project.name)
+  const [code, setCode] = useState(project.code ?? "")
+  const [location, setLocation] = useState<ProjectLocationValue>({
+    address: project.location ?? "",
+    latitude: project.latitude,
+    longitude: project.longitude,
+    verified: project.latitude != null && project.longitude != null,
+    source: project.latitude != null && project.longitude != null ? "map" : "manual",
+  })
+  const [error, setError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  function reset() {
+    setName(project.name)
+    setCode(project.code ?? "")
+    setLocation({
+      address: project.location ?? "",
+      latitude: project.latitude,
+      longitude: project.longitude,
+      verified: project.latitude != null && project.longitude != null,
+      source: project.latitude != null && project.longitude != null ? "map" : "manual",
+    })
+    setError(null)
+  }
+
+  function submit() {
+    setError(null)
+    startTransition(async () => {
+      const result = await updateProject({
+        projectId: project.id,
+        name,
+        code,
+        location: location.address,
+        latitude: location.latitude,
+        longitude: location.longitude,
+      })
+      if (!result.ok) {
+        setError(result.error)
+        return
+      }
+      setOpen(false)
+    })
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen)
+        if (!nextOpen) reset()
+      }}
+    >
+      <DialogTrigger
+        render={
+          <Button variant="outline" className="bg-transparent">
+            <Pencil data-icon="inline-start" />
+            Edit project
+          </Button>
+        }
+      />
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Edit project</DialogTitle>
+          <DialogDescription>
+            Update the project details and its precise map location.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor={`project-name-${project.id}`}>Project name</Label>
+            <Input
+              id={`project-name-${project.id}`}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              disabled={pending}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`project-code-${project.id}`}>Project code</Label>
+            <Input
+              id={`project-code-${project.id}`}
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              disabled={pending}
+            />
+          </div>
+          <ProjectLocationField
+            id={`project-location-${project.id}`}
+            value={location}
+            onChange={setLocation}
+            disabled={pending}
+          />
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)} className="bg-transparent">
+            Cancel
+          </Button>
+          <Button type="button" onClick={submit} disabled={pending || name.trim().length < 2}>
+            {pending && <Loader2 className="size-4 animate-spin" data-icon="inline-start" />}
+            Save changes
           </Button>
         </DialogFooter>
       </DialogContent>
