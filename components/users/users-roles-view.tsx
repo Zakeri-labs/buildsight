@@ -12,12 +12,10 @@ export function UsersRolesView({
   supervisingOrg,
   data,
   initialTab = "members",
-  openCreateProject = false,
 }: {
   supervisingOrg: { id: string; name: string }
   data: AdminConsoleData
   initialTab?: "members" | "organizations" | "projects" | "invitations"
-  openCreateProject?: boolean
 }) {
   const supervisingMembers = data.members.filter((m) => m.organizationId === supervisingOrg.id)
   const pendingCount = data.invitations.filter((i) => i.status === "pending").length
@@ -53,7 +51,6 @@ export function UsersRolesView({
             projectOrgs={data.projectOrgs}
             projectUsers={data.projectUsers}
             members={data.members}
-            initialCreateOpen={openCreateProject}
           />
         </TabsContent>
         <TabsContent value="invitations" className="mt-5">

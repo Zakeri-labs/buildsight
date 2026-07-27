@@ -21,6 +21,8 @@ export type ProjectRow = {
   name: string
   code: string | null
   location: string | null
+  latitude: number | null
+  longitude: number | null
   status: string
 }
 
@@ -91,7 +93,7 @@ export async function loadAdminConsole(supervisingOrgId: string): Promise<AdminC
     admin.from("organizations").select("id, name, type, status").order("name"),
     admin
       .from("projects")
-      .select("id, name, code, location, status")
+      .select("id, name, code, location, latitude, longitude, status")
       .eq("supervising_organization_id", supervisingOrgId)
       .order("name"),
     admin.from("profiles").select("id, full_name, email"),

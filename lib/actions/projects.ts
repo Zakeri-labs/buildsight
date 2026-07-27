@@ -1,14 +1,94 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { cookies } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient } from "@/lib/supabase/server"
 import { assertOrgAdmin, assertProjectAdmin, audit, AuthzError } from "@/lib/auth/guards"
 import { createInvitation } from "@/lib/actions/invitations"
 import { createOrganization } from "@/lib/actions/organizations"
 import type { ProjectAccessRole, ProjectOrgRole } from "@/lib/db/types"
 import { PROJECT_ACCESS_ROLES, PROJECT_ORG_ROLES } from "@/lib/db/types"
 import type { ActionResult } from "@/lib/actions/invitations"
+import { coordinateLabel } from "@/lib/locations/types"
+import { SELECTED_PROJECT_COOKIE } from "@/lib/project-scope"
+
+function normalizeProjectCoordinates(latitude?: number | null, longitude?: number | null) {
+  const hasLatitude = latitude != null
+  const hasLongitude = longitude != null
+  if (hasLatitude !== hasLongitude) {
+    return { ok: false as const, error: "Latitude and longitude must be provided together." }
+  }
+  if (!hasLatitude || !hasLongitude) {
+    return { ok: true as const, latitude: null, longitude: null }
+  }
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return { ok: false as const, error: "Invalid project coordinates." }
+  }
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return { ok: false as const, error: "Project coordinates are outside the valid range." }
+  }
+  return { ok: true as const, latitude, longitude }
+}
+
+export async function updateProject(input: {
+  projectId: string
+  name: string
+  code?: string
+  location?: string
+  latitude?: number | null
+  longitude?: number | null
+}): Promise<ActionResult> {
+  try {
+    const name = input.name.trim()
+    if (name.length < 2) return { ok: false, error: "Project name is too short." }
+    const coordinates = normalizeProjectCoordinates(input.latitude, input.longitude)
+    if (!coordinates.ok) return { ok: false, error: coordinates.error }
+    const location =
+      input.location?.trim() ||
+      (coordinates.latitude != null && coordinates.longitude != null
+        ? coordinateLabel(coordinates.latitude, coordinates.longitude)
+        : null)
+    const actorId = await assertProjectAdmin(input.projectId)
+    const admin = createAdminClient()
+
+    const { data: project, error: lookupError } = await admin
+      .from("projects")
+      .select("supervising_organization_id")
+      .eq("id", input.projectId)
+      .maybeSingle()
+    if (lookupError) throw lookupError
+    if (!project) return { ok: false, error: "Project not found." }
+
+    const { error } = await admin
+      .from("projects")
+      .update({
+        name,
+        code: input.code?.trim() || null,
+        location,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.projectId)
+    if (error) throw error
+
+    await audit({
+      actorId,
+      action: "project.updated",
+      entityType: "project",
+      entityId: input.projectId,
+      organizationId: project.supervising_organization_id,
+      projectId: input.projectId,
+      metadata: { name },
+    })
+    revalidatePath("/users")
+    revalidatePath("/projects")
+    revalidatePath(`/projects/${input.projectId}`)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof AuthzError ? err.message : "Could not update project." }
+  }
+}
 
 /** Create a project owned (supervised) by the caller's supervising org. */
 export async function createProject(input: {
@@ -16,10 +96,19 @@ export async function createProject(input: {
   name: string
   code?: string
   location?: string
+  latitude?: number | null
+  longitude?: number | null
 }): Promise<ActionResult<{ id: string }>> {
   try {
     const name = input.name.trim()
     if (name.length < 2) return { ok: false, error: "Project name is too short." }
+    const coordinates = normalizeProjectCoordinates(input.latitude, input.longitude)
+    if (!coordinates.ok) return { ok: false, error: coordinates.error }
+    const location =
+      input.location?.trim() ||
+      (coordinates.latitude != null && coordinates.longitude != null
+        ? coordinateLabel(coordinates.latitude, coordinates.longitude)
+        : null)
     const actorId = await assertOrgAdmin(input.supervisingOrgId)
     const admin = createAdminClient()
 
@@ -37,7 +126,9 @@ export async function createProject(input: {
       .insert({
         name,
         code: input.code?.trim() || null,
-        location: input.location?.trim() || null,
+        location,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
         status: "active",
         supervising_organization_id: input.supervisingOrgId,
         created_by: actorId,
@@ -72,7 +163,17 @@ export async function createProject(input: {
       projectId: created.id,
       metadata: { name },
     })
+
+    const cookieStore = await cookies()
+    cookieStore.set(SELECTED_PROJECT_COOKIE, created.id, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+    })
+
+    revalidatePath("/", "layout")
     revalidatePath("/users")
+    revalidatePath("/projects")
     return { ok: true, data: { id: created.id } }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not create project." }

@@ -29,14 +29,14 @@ export type ProjectStatus = "In Progress" | "Planning" | "On Hold" | "Completed"
 export type OrgRole = "Consultant" | "Contractor" | "Client" | "Government" | "Third Party"
 export type ProjectType = "Residential" | "Commercial" | "Hospitality" | "Infrastructure" | "Industrial"
 
-interface ProjectRow {
+export interface ProjectRow {
   id: string
   code: string
   name: string
   ownerClient: string
   orgRole: OrgRole
   address: string
-  projectType: ProjectType
+  projectType: ProjectType | "—"
   status: ProjectStatus
   startDate: string
   progress: number
@@ -150,7 +150,13 @@ const mockProjects: ProjectRow[] = [
   },
 ]
 
-export function ProjectsList() {
+export function ProjectsList({
+  projects = mockProjects,
+  createdProjectId,
+}: {
+  projects?: ProjectRow[]
+  createdProjectId?: string
+}) {
   const { locale } = useI18n()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedStatus, setSelectedStatus] = useState("all")
@@ -159,7 +165,7 @@ export function ProjectsList() {
   const [sortBy, setSortBy] = useState("default")
 
   const filteredProjects = useMemo(() => {
-    return mockProjects.filter((p) => {
+    return projects.filter((p) => {
       if (
         searchQuery &&
         !p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -173,10 +179,26 @@ export function ProjectsList() {
       if (selectedOwner !== "all" && p.ownerClient !== selectedOwner) return false
       return true
     })
-  }, [searchQuery, selectedStatus, selectedType, selectedOwner])
+  }, [projects, searchQuery, selectedStatus, selectedType, selectedOwner])
+
+  const totalProjects = projects.length
+  const activeProjects = projects.filter((project) => project.status === "In Progress").length
+  const onHoldProjects = projects.filter((project) => project.status === "On Hold").length
+  const completedProjects = projects.filter((project) => project.status === "Completed").length
+  const typeOptions = Array.from(new Set(projects.map((project) => project.projectType).filter((type) => type !== "—")))
+  const ownerOptions = Array.from(new Set(projects.map((project) => project.ownerClient).filter((owner) => owner !== "—")))
+  const createdProject = createdProjectId ? projects.find((project) => project.id === createdProjectId) : undefined
 
   return (
     <div className="flex flex-col gap-6 font-sans">
+      {createdProjectId && (
+        <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+          {locale === "ar"
+            ? `تم إنشاء المشروع ${createdProject?.name ?? ""} بنجاح.`
+            : `Project ${createdProject?.name ?? ""} was created successfully.`}
+        </div>
+      )}
+
       {/* 4 Metric Cards Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Card 1: Total Projects */}
@@ -188,7 +210,7 @@ export function ProjectsList() {
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {locale === "ar" ? "إجمالي المشاريع" : "Total Projects"}
             </span>
-            <span className="text-2xl font-extrabold text-blue-600 dark:text-blue-400">12</span>
+            <span className="text-2xl font-extrabold text-blue-600 dark:text-blue-400">{totalProjects}</span>
           </div>
         </div>
 
@@ -201,7 +223,7 @@ export function ProjectsList() {
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {locale === "ar" ? "المشاريع النشطة" : "Active Projects"}
             </span>
-            <span className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">8</span>
+            <span className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">{activeProjects}</span>
           </div>
         </div>
 
@@ -214,7 +236,7 @@ export function ProjectsList() {
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {locale === "ar" ? "المتوقفة مؤقتاً" : "On Hold"}
             </span>
-            <span className="text-2xl font-extrabold text-amber-600 dark:text-amber-400">2</span>
+            <span className="text-2xl font-extrabold text-amber-600 dark:text-amber-400">{onHoldProjects}</span>
           </div>
         </div>
 
@@ -227,7 +249,7 @@ export function ProjectsList() {
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {locale === "ar" ? "المكتملة" : "Completed"}
             </span>
-            <span className="text-2xl font-extrabold text-purple-600 dark:text-purple-400">2</span>
+            <span className="text-2xl font-extrabold text-purple-600 dark:text-purple-400">{completedProjects}</span>
           </div>
         </div>
       </div>
@@ -248,7 +270,7 @@ export function ProjectsList() {
           </button>
 
           <Link
-            href="/users?tab=projects&action=create-project"
+            href="/projects/new"
             className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-950 px-4 text-xs font-semibold text-white shadow-xs hover:bg-blue-900 active:bg-blue-950 dark:bg-blue-600 dark:hover:bg-blue-700"
           >
             <Plus className="size-4" />
@@ -291,11 +313,7 @@ export function ProjectsList() {
           onChange={setSelectedType}
           options={[
             { label: "All Types", value: "all" },
-            { label: "Residential", value: "Residential" },
-            { label: "Commercial", value: "Commercial" },
-            { label: "Hospitality", value: "Hospitality" },
-            { label: "Infrastructure", value: "Infrastructure" },
-            { label: "Industrial", value: "Industrial" },
+            ...typeOptions.map((type) => ({ label: type, value: type })),
           ]}
         />
 
@@ -306,11 +324,7 @@ export function ProjectsList() {
           onChange={setSelectedOwner}
           options={[
             { label: "All Clients", value: "all" },
-            { label: "Sunset Development", value: "Sunset Development" },
-            { label: "Greenfield LLC", value: "Greenfield LLC" },
-            { label: "Harbor Hotels", value: "Harbor Hotels" },
-            { label: "City Center Holdings", value: "City Center Holdings" },
-            { label: "Oman Transport Authority", value: "Oman Transport Authority" },
+            ...ownerOptions.map((owner) => ({ label: owner, value: owner })),
           ]}
         />
 
@@ -346,6 +360,13 @@ export function ProjectsList() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+              {filteredProjects.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="px-5 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+                    {locale === "ar" ? "لا توجد مشاريع مطابقة." : "No matching projects found."}
+                  </td>
+                </tr>
+              )}
               {filteredProjects.map((row) => (
                 <tr key={row.id} className="transition-colors hover:bg-slate-50/60 dark:hover:bg-slate-800/30">
                   {/* Project info with thumbnail */}
@@ -428,7 +449,7 @@ export function ProjectsList() {
         {/* Footer / Pagination */}
         <div className="flex flex-col gap-3 border-t border-slate-200/80 px-5 py-3.5 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            Showing 1 to {filteredProjects.length} of 12 projects
+            Showing {filteredProjects.length === 0 ? 0 : 1} to {filteredProjects.length} of {totalProjects} projects
           </span>
 
           <div className="flex items-center gap-3">

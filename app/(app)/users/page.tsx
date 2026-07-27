@@ -5,7 +5,6 @@ import { Card, CardContent } from "@/components/ui/card"
 
 type UsersPageSearchParams = {
   tab?: string
-  action?: string
 }
 
 export default async function UsersRolesPage({
@@ -46,7 +45,6 @@ export default async function UsersRolesPage({
       supervisingOrg={{ id: supervisingOrg.id, name: supervisingOrg.name }}
       data={data}
       initialTab={initialTab}
-      openCreateProject={params.tab === "projects" && params.action === "create-project"}
     />
   )
 }
