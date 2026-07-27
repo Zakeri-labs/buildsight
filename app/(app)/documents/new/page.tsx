@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { AlertCircle, ArrowLeft, FolderLock } from "lucide-react"
-import { DocumentEditorForm } from "@/components/documents/document-editor-form"
+import { DocumentCreateFlow } from "@/components/documents/document-create-flow"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { requireOnboarded } from "@/lib/auth/session"
@@ -26,7 +26,7 @@ export default async function NewDocumentPage() {
     return <InvalidProjectState message="The selected project is unavailable or you no longer have access to it." />
   }
 
-  return <DocumentEditorForm project={{ id: project.id, name: project.name }} />
+  return <DocumentCreateFlow project={{ id: project.id, name: project.name }} />
 }
 
 function InvalidProjectState({ message }: { message: string }) {

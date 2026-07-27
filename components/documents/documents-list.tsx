@@ -4,9 +4,11 @@ import { useMemo, useState, type ComponentType } from "react"
 import Link from "next/link"
 import {
   Archive,
+  CheckCircle2,
   CheckSquare2,
   ChevronDown,
   ClipboardCheck,
+  Download,
   Eye,
   FileCheck2,
   FileClock,
@@ -54,6 +56,8 @@ export type DocumentListItem = {
   status: "draft" | "published"
   createdAt: string
   updatedAt: string
+  fileStoragePath: string | null
+  originalFilename: string | null
 }
 
 type Category = "all" | DocumentTypeGroup
@@ -89,9 +93,11 @@ const categoryOrder: Category[] = [
 export function DocumentsList({
   documents,
   selectedProjectId,
+  uploadedCount = 0,
 }: {
   documents: DocumentListItem[]
   selectedProjectId: string | null
+  uploadedCount?: number
 }) {
   const [activeTab, setActiveTab] = useState<Category>("all")
   const [searchQuery, setSearchQuery] = useState("")
@@ -198,6 +204,13 @@ export function DocumentsList({
         </div>
       ) : null}
 
+      {uploadedCount > 0 ? (
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+          <CheckCircle2 className="size-5 shrink-0" />
+          {uploadedCount} document{uploadedCount === 1 ? "" : "s"} uploaded successfully.
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-[220px] flex-1 sm:max-w-sm">
           <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
@@ -283,7 +296,17 @@ export function DocumentsList({
                         <DropdownMenuTrigger render={<button type="button" aria-label={`Actions for ${document.title}`} className="inline-flex size-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"><MoreVertical className="size-4" /></button>} />
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem render={<Link href={`/documents/${document.id}`}><Eye className="size-4" />View document</Link>} />
-                          <DropdownMenuItem render={<Link href={`/documents/${document.id}/edit`}><Pencil className="size-4" />Edit document</Link>} />
+                          {document.fileStoragePath ? (
+                            <DropdownMenuItem
+                              render={
+                                <a href={`/api/document-files?path=${encodeURIComponent(document.fileStoragePath)}&download=1&filename=${encodeURIComponent(document.originalFilename ?? document.title)}`}>
+                                  <Download className="size-4" />Download file
+                                </a>
+                              }
+                            />
+                          ) : (
+                            <DropdownMenuItem render={<Link href={`/documents/${document.id}/edit`}><Pencil className="size-4" />Edit document</Link>} />
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </td>

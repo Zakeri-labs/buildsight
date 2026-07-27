@@ -138,7 +138,7 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
   )
 }
 
-export function ProjectDetail({ project }: { project: ProjectRecord }) {
+export function ProjectDetail({ project, documents }: { project: ProjectRecord; documents?: ProjectDocument[] }) {
   const { t } = useI18n()
 
   return (
@@ -255,7 +255,7 @@ export function ProjectDetail({ project }: { project: ProjectRecord }) {
 
       <ProjectParticipants participants={projectParticipants(project)} />
 
-      <ProjectDocuments projectId={project.id} documents={projectDocuments(project)} />
+      <ProjectDocuments projectId={project.id} documents={documents ?? projectDocuments(project)} />
     </div>
   )
 }

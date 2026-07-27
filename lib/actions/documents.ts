@@ -6,10 +6,17 @@ import { requireOnboarded } from "@/lib/auth/session"
 import { createClient } from "@/lib/supabase/server"
 import { isDocumentTypeValue, type DocumentTypeValue } from "@/lib/documents/document-types"
 import {
+  getSimpleUploadCategory,
+  isSimpleUploadCategory,
+  validateSimpleUploadFile,
+  type SimpleUploadCategoryValue,
+} from "@/lib/documents/simple-upload"
+import {
   getRichTextImagePaths,
   isRichTextDocument,
   richTextHasContent,
   type RichTextDocument,
+  EMPTY_RICH_TEXT_DOCUMENT,
 } from "@/lib/documents/rich-text"
 
 export type SaveDocumentResult =
@@ -155,7 +162,109 @@ export async function updateDocumentAction(
   return { ok: true, documentId: data.id, reference: data.reference }
 }
 
+export type SimpleUploadedFileInput = {
+  category: SimpleUploadCategoryValue
+  storagePath: string
+  originalFilename: string
+  mimeType: string
+  sizeBytes: number
+}
+
+export type CreateUploadedDocumentsResult =
+  | { ok: true; documentIds: string[]; count: number }
+  | { ok: false; error: string }
+
+export async function createUploadedDocumentsAction(input: {
+  projectId: string
+  files: SimpleUploadedFileInput[]
+}): Promise<CreateUploadedDocumentsResult> {
+  const session = await requireOnboarded()
+  const selectedProjectId = await getSelectedProjectId()
+
+  if (!selectedProjectId || selectedProjectId !== input.projectId) {
+    return { ok: false, error: "The selected project is no longer valid. Return to Documents and select a project." }
+  }
+  if (!Array.isArray(input.files) || input.files.length === 0) {
+    return { ok: false, error: "Select at least one file to upload." }
+  }
+  if (input.files.length > 26) {
+    return { ok: false, error: "Too many files were selected for one upload." }
+  }
+
+  const expectedPrefix = `${input.projectId}/${session.userId}/`
+  const rows = []
+  for (const file of input.files) {
+    if (!isSimpleUploadCategory(file.category)) {
+      return { ok: false, error: "One of the selected upload categories is invalid." }
+    }
+    const category = getSimpleUploadCategory(file.category)
+    if (!category) return { ok: false, error: "One of the selected upload categories is invalid." }
+
+    const validationError = validateSimpleUploadFile({
+      name: file.originalFilename,
+      size: file.sizeBytes,
+      type: file.mimeType,
+    })
+    if (validationError) return { ok: false, error: validationError }
+
+    const storagePath = file.storagePath.trim()
+    if (
+      !storagePath.startsWith(expectedPrefix)
+      || !storagePath.includes("/files/")
+      || storagePath.includes("..")
+    ) {
+      return { ok: false, error: "One or more uploaded files do not belong to the selected project." }
+    }
+
+    rows.push({
+      project_id: input.projectId,
+      reference: null,
+      title: file.originalFilename.trim().slice(0, 180),
+      document_type: category.documentType,
+      status: "published",
+      content: EMPTY_RICH_TEXT_DOCUMENT,
+      created_by: session.userId,
+      published_at: new Date().toISOString(),
+      creation_mode: "simple",
+      simple_upload_category: category.value,
+      file_storage_path: storagePath,
+      original_filename: file.originalFilename.trim(),
+      file_mime_type: file.mimeType.trim() || "application/octet-stream",
+      file_size_bytes: file.sizeBytes,
+    })
+  }
+
+  const supabase = await createClient()
+  const { data: project } = await supabase.from("projects").select("id").eq("id", input.projectId).maybeSingle()
+  if (!project) return { ok: false, error: "You do not have access to the selected project." }
+
+  const { data, error } = await supabase
+    .from("documents")
+    .insert(rows)
+    .select("id, reference, title, document_type, simple_upload_category")
+
+  if (error || !data) return { ok: false, error: error?.message ?? "Unable to create the uploaded document records." }
+
+  await supabase.from("audit_logs").insert(data.map((document: any) => ({
+    actor_id: session.userId,
+    action: "document.file_uploaded",
+    entity_type: "document",
+    entity_id: document.id,
+    project_id: input.projectId,
+    metadata: {
+      reference: document.reference,
+      title: document.title,
+      document_type: document.document_type,
+      simple_upload_category: document.simple_upload_category,
+    },
+  })))
+
+  for (const document of data) revalidateDocumentPaths(document.id, input.projectId)
+  return { ok: true, documentIds: data.map((document: any) => document.id), count: data.length }
+}
+
 function revalidateDocumentPaths(documentId: string, projectId: string) {
+  revalidatePath("/")
   revalidatePath("/documents")
   revalidatePath(`/documents/${documentId}`)
   revalidatePath(`/documents/${documentId}/edit`)

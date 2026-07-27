@@ -8,14 +8,14 @@ function initials(name: string) {
   return name.split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U"
 }
 
-export default async function DocumentsPage() {
-  const session = await requireOnboarded()
+export default async function DocumentsPage({ searchParams }: { searchParams: Promise<{ uploaded?: string }> }) {
+  const [session, queryParams] = await Promise.all([requireOnboarded(), searchParams])
   const selectedProjectId = await getSelectedProjectId()
   const supabase = await createClient()
 
   let query = supabase
     .from("documents")
-    .select("id, project_id, reference, title, document_type, status, created_by, created_at, updated_at")
+    .select("id, project_id, reference, title, document_type, status, created_by, created_at, updated_at, file_storage_path, original_filename")
     .order("updated_at", { ascending: false })
 
   if (selectedProjectId) query = query.eq("project_id", selectedProjectId)
@@ -47,8 +47,11 @@ export default async function DocumentsPage() {
       status: row.status === "published" ? "published" : "draft",
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      fileStoragePath: row.file_storage_path ?? null,
+      originalFilename: row.original_filename ?? null,
     }
   })
 
-  return <DocumentsList documents={items} selectedProjectId={selectedProjectId} />
+  const uploadedCount = Number.parseInt(queryParams.uploaded ?? "", 10)
+  return <DocumentsList documents={items} selectedProjectId={selectedProjectId} uploadedCount={Number.isFinite(uploadedCount) && uploadedCount > 0 ? uploadedCount : 0} />
 }
