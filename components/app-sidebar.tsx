@@ -4,9 +4,6 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Home,
-  TriangleAlert,
-  ClipboardCheck,
-  CircleHelp,
   Files,
   CalendarDays,
   Users,
@@ -14,7 +11,10 @@ import {
   LogOut,
   ChevronDown,
   FolderKanban,
+  Building2,
+  HardHat,
   ListTree,
+  Search,
   Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -23,12 +23,12 @@ import { signOut } from "@/lib/actions/auth"
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useState, useTransition } from "react"
+import { Input } from "@/components/ui/input"
+import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { selectProject } from "@/lib/actions/project-scope"
 import type { ProjectOption } from "@/components/app-shell"
@@ -83,6 +83,8 @@ export function AppSidebar({
   const router = useRouter()
   const { t, locale } = useI18n()
   const [project, setProject] = useState(selectedProjectId)
+  const [projectSearch, setProjectSearch] = useState("")
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false)
   const [, startTransition] = useTransition()
 
   const routeProjectMatch = pathname.match(/^\/projects\/([^/]+)(?:\/|$)/)
@@ -119,12 +121,20 @@ export function AppSidebar({
     { label: t.nav.settings, href: "/settings", icon: Settings },
   ]
 
-  const activeProjectLabel =
-    project === "all" ? t.projects.allStatuses : projects.find((p) => p.id === project)?.name ?? t.projects.title
+  const allProjectsLabel = t.projects.allProjects
+  const activeProject = projects.find((p) => p.id === project)
+  const activeProjectLabel = project === "all" ? allProjectsLabel : activeProject?.name ?? t.projects.title
+  const filteredProjects = useMemo(() => {
+    const query = projectSearch.trim().toLocaleLowerCase(locale)
+    if (!query) return projects
+    return projects.filter((item) => item.name.toLocaleLowerCase(locale).includes(query))
+  }, [locale, projectSearch, projects])
 
   function handleSelect(value: string) {
     if (!value || value === project) return
     setProject(value)
+    setProjectMenuOpen(false)
+    setProjectSearch("")
     startTransition(async () => {
       await selectProject(value)
       router.push("/")
@@ -140,28 +150,92 @@ export function AppSidebar({
 
       <div className="px-4 pb-2">
         <SectionLabel>{t.nav.projects ?? "Projects"}</SectionLabel>
-        <DropdownMenu>
+        <DropdownMenu
+          open={projectMenuOpen}
+          onOpenChange={(open) => {
+            setProjectMenuOpen(open)
+            if (!open) setProjectSearch("")
+          }}
+        >
           <DropdownMenuTrigger
             render={
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/40 px-3 py-2.5 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+                aria-label={`${t.nav.projects}: ${activeProjectLabel}`}
+                className={cn(
+                  "flex w-full min-w-0 items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-sidebar-foreground transition-colors",
+                  project === "all"
+                    ? "border-sidebar-primary/45 bg-sidebar-primary/15 shadow-sm hover:bg-sidebar-primary/20"
+                    : "border-sidebar-border bg-sidebar-accent/40 hover:bg-sidebar-accent",
+                )}
               >
-                <FolderKanban className="size-4 shrink-0 text-sidebar-foreground/60" />
+                {project === "all" ? (
+                  <Building2 className="size-4 shrink-0 text-sidebar-primary" />
+                ) : (
+                  <HardHat className="size-4 shrink-0 text-sidebar-foreground/65" />
+                )}
                 <span className="flex-1 truncate text-start">{activeProjectLabel}</span>
                 <ChevronDown className="size-4 shrink-0 text-sidebar-foreground/60" />
               </button>
             }
           />
-          <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuRadioGroup value={project} onValueChange={handleSelect}>
-              <DropdownMenuRadioItem value="all">{t.projects.allStatuses}</DropdownMenuRadioItem>
-              {projects.map((p) => (
-                <DropdownMenuRadioItem key={p.id} value={p.id}>
-                  {p.name}
+          <DropdownMenuContent
+            align="start"
+            className="flex max-h-[min(26rem,var(--available-height))] w-56 max-w-[calc(100vw-2rem)] flex-col overflow-hidden p-0"
+          >
+            <div className="sticky top-0 z-10 border-b bg-popover p-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  autoFocus
+                  value={projectSearch}
+                  onChange={(event) => setProjectSearch(event.target.value)}
+                  onKeyDown={(event) => event.stopPropagation()}
+                  placeholder={t.projects.projectSearchPlaceholder}
+                  aria-label={t.projects.projectSearchPlaceholder}
+                  className="h-9 ps-8"
+                />
+              </div>
+            </div>
+
+            <div className="min-h-0 overflow-y-auto p-1.5">
+              <DropdownMenuRadioGroup value={project} onValueChange={handleSelect}>
+                <DropdownMenuRadioItem
+                  value="all"
+                  className={cn(
+                    "min-h-10 gap-2 px-2.5 py-2 pe-8 font-medium",
+                    project === "all" && "bg-accent text-accent-foreground",
+                  )}
+                >
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <Building2 className="size-4" />
+                  </span>
+                  <span className="truncate">{allProjectsLabel}</span>
                 </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
+
+                {filteredProjects.length > 0 ? (
+                  filteredProjects.map((item) => (
+                    <DropdownMenuRadioItem
+                      key={item.id}
+                      value={item.id}
+                      className={cn(
+                        "min-h-10 gap-2 px-2.5 py-2 pe-8",
+                        project === item.id && "bg-accent text-accent-foreground",
+                      )}
+                    >
+                      <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                        <HardHat className="size-4" />
+                      </span>
+                      <span className="truncate">{item.name}</span>
+                    </DropdownMenuRadioItem>
+                  ))
+                ) : (
+                  <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                    {t.projects.noProjectsFound}
+                  </p>
+                )}
+              </DropdownMenuRadioGroup>
+            </div>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
