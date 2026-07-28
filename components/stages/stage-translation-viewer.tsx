@@ -22,6 +22,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { SourcePdfViewer } from "@/components/stages/source-pdf-viewer"
 import { extractSourcePdf } from "@/lib/stage-translations/client-source-pdf"
 import { downloadPdfBlob, exportTranslationPdf, storeTranslationPdf } from "@/lib/stage-translations/client-pdf"
+import type { ExtractedPdfImage, SourceImageSectionHint } from "@/lib/stage-translations/pdf-templates"
 import { getSourcePdfAttachment } from "@/lib/stage-translations/source-document"
 import type {
   StageTranslationPageData,
@@ -79,7 +80,7 @@ const COPY = {
     approvals: "Approval Information",
     evidence: "Images",
     attachments: "Related Documents",
-    translatedAttachments: "Translated Attachment Content",
+    translatedAttachments: "Original Document Content",
     sourceVisuals: "Original Document Images",
     noContent: "No content recorded.",
     noApprovals: "No approval decisions recorded.",
@@ -193,6 +194,7 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
   const labelsEn = COPY.en
   const labelsAr = COPY.ar
   const translated = translation?.translatedContent ?? null
+  const original = translation?.originalContent ?? data.response.content
   const sourcePdf = getSourcePdfAttachment(data)
   const translationIsStale = Boolean(
     translation?.generatedAt && new Date(data.response.updatedAt).getTime() > new Date(translation.generatedAt).getTime(),
@@ -336,19 +338,18 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
       {success ? <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"><CheckCircle2 className="mt-0.5 size-4 shrink-0" />{success}</div> : null}
 
       {translated ? (
-        <div className="space-y-5">
-          <MirroredBilingualReport
-            data={data}
-            english={data.response.content}
-            arabic={translated}
-            labelsEn={labelsEn}
-            labelsAr={labelsAr}
-            englishTitle={copy.original}
-            arabicTitle={copy.arabic}
-            generatedAt={translation?.generatedAt ?? null}
-          />
-          {sourcePdf ? <SourcePdfViewer data={data} attachment={sourcePdf} title={copy.sourcePdf} /> : null}
-        </div>
+        <MirroredBilingualReport
+          data={data}
+          english={original}
+          arabic={translated}
+          labelsEn={labelsEn}
+          labelsAr={labelsAr}
+          englishTitle={copy.original}
+          arabicTitle={copy.arabic}
+          generatedAt={translation?.generatedAt ?? null}
+          sourcePdf={sourcePdf}
+          sourcePdfTitle={copy.sourcePdf}
+        />
       ) : (
         <div className="grid items-start gap-5 lg:grid-cols-2">
           <div className="min-w-0 space-y-5">
@@ -392,6 +393,8 @@ function MirroredBilingualReport({
   englishTitle,
   arabicTitle,
   generatedAt,
+  sourcePdf,
+  sourcePdfTitle,
 }: {
   data: StageTranslationPageData
   english: TranslationReportContent
@@ -401,23 +404,40 @@ function MirroredBilingualReport({
   englishTitle: string
   arabicTitle: string
   generatedAt: string | null
+  sourcePdf: StageTranslationPageData["response"]["attachments"][number] | null
+  sourcePdfTitle: string
 }) {
   const evidence = data.response.attachments.filter((item) => item.attachmentKind === "evidence_image" || item.attachmentKind === "inline_image")
   const documents = data.response.attachments.filter((item) => item.attachmentKind === "document")
+  const sourceDocument = useSourcePdfViewerDocument(data, sourcePdf)
+  const sourceImages = sourceDocument.images
+  const englishDocument = sourcePdf && sourceDocument.contentHtml
+    ? {
+        ...english,
+        attachmentTranslations: [
+          ...english.attachmentTranslations.filter((item) => item.attachmentId !== sourcePdf.id),
+          {
+            attachmentId: sourcePdf.id,
+            filename: sourcePdf.originalFilename,
+            contentHtml: sourceDocument.contentHtml,
+          },
+        ],
+      }
+    : english
 
   return (
     <section className="stage-translation-report min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 text-slate-800 shadow-sm">
       <div className="h-2 bg-blue-700" />
       <div className="space-y-4 p-4 sm:p-5">
         <MirroredRow
-          english={<ReportHeaderCell language="en" title={englishTitle} data={data} content={english} generatedAt={generatedAt} />}
+          english={<ReportHeaderCell language="en" title={englishTitle} data={data} content={englishDocument} generatedAt={generatedAt} />}
           arabic={<ReportHeaderCell language="ar" title={arabicTitle} data={data} content={arabic} generatedAt={generatedAt} />}
         />
 
         <MirroredRow
           english={
             <MirroredSectionCard title={labelsEn.projectInformation} icon={<FileText className="size-4" />}>
-              <ProjectInformationBody data={data} content={english} labels={labelsEn} language="en" />
+              <ProjectInformationBody data={data} content={englishDocument} labels={labelsEn} language="en" />
             </MirroredSectionCard>
           }
           arabic={
@@ -430,7 +450,7 @@ function MirroredBilingualReport({
         <MirroredRow
           english={
             <MirroredSectionCard title={labelsEn.reportDetails} icon={<ClipboardCheck className="size-4" />}>
-              <ReportDetailsBody content={english} labels={labelsEn} />
+              <ReportDetailsBody content={englishDocument} labels={labelsEn} />
             </MirroredSectionCard>
           }
           arabic={
@@ -445,12 +465,22 @@ function MirroredBilingualReport({
             key={section.key}
             english={
               <MirroredSectionCard title={section.en} icon={<ClipboardCheck className="size-4" />}>
-                <RichHtml html={english.sections[section.key]} empty={labelsEn.noContent} />
+                <RichHtml html={englishDocument.sections[section.key]} empty={labelsEn.noContent} />
+                <SourcePdfImageGrid
+                  images={sourceImages.filter((image) => image.sectionHint === section.key)}
+                  content={englishDocument}
+                  language="en"
+                />
               </MirroredSectionCard>
             }
             arabic={
               <MirroredSectionCard title={section.ar} icon={<ClipboardCheck className="size-4" />}>
                 <RichHtml html={arabic.sections[section.key]} empty={labelsAr.noContent} />
+                <SourcePdfImageGrid
+                  images={sourceImages.filter((image) => image.sectionHint === section.key)}
+                  content={arabic}
+                  language="ar"
+                />
               </MirroredSectionCard>
             }
           />
@@ -459,12 +489,22 @@ function MirroredBilingualReport({
         <MirroredRow
           english={
             <MirroredSectionCard title={labelsEn.checklist} icon={<CheckCircle2 className="size-4" />}>
-              <ChecklistBody content={english} labels={labelsEn} language="en" />
+              <ChecklistBody content={englishDocument} labels={labelsEn} language="en" />
+              <SourcePdfImageGrid
+                images={sourceImages.filter((image) => image.sectionHint === "checklist")}
+                content={englishDocument}
+                language="en"
+              />
             </MirroredSectionCard>
           }
           arabic={
             <MirroredSectionCard title={labelsAr.checklist} icon={<CheckCircle2 className="size-4" />}>
               <ChecklistBody content={arabic} labels={labelsAr} language="ar" />
+              <SourcePdfImageGrid
+                images={sourceImages.filter((image) => image.sectionHint === "checklist")}
+                content={arabic}
+                language="ar"
+              />
             </MirroredSectionCard>
           }
         />
@@ -472,12 +512,22 @@ function MirroredBilingualReport({
         <MirroredRow
           english={
             <MirroredSectionCard title={labelsEn.approvals} icon={<ShieldCheck className="size-4" />}>
-              <ApprovalBody content={english} labels={{ ...labelsEn, noApprovals: labelsEn.noContent }} language="en" />
+              <ApprovalBody content={englishDocument} labels={{ ...labelsEn, noApprovals: labelsEn.noContent }} language="en" />
+              <SourcePdfImageGrid
+                images={sourceImages.filter((image) => image.sectionHint === "approvals")}
+                content={englishDocument}
+                language="en"
+              />
             </MirroredSectionCard>
           }
           arabic={
             <MirroredSectionCard title={labelsAr.approvals} icon={<ShieldCheck className="size-4" />}>
               <ApprovalBody content={arabic} labels={{ ...labelsAr, noApprovals: labelsAr.noContent }} language="ar" />
+              <SourcePdfImageGrid
+                images={sourceImages.filter((image) => image.sectionHint === "approvals")}
+                content={arabic}
+                language="ar"
+              />
             </MirroredSectionCard>
           }
         />
@@ -485,12 +535,24 @@ function MirroredBilingualReport({
         <MirroredRow
           english={
             <MirroredSectionCard title={labelsEn.attachmentsGroup} icon={<ImageIcon className="size-4" />}>
-              <AttachmentsBody documents={documents} evidence={evidence} content={english} labels={labelsEn} language="en" />
+              <AttachmentsBody documents={documents} evidence={evidence} content={englishDocument} labels={labelsEn} language="en" />
+              <SourcePdfImageGrid
+                images={sourceImages.filter(isAttachmentSourceImage)}
+                content={englishDocument}
+                language="en"
+                grouped
+              />
             </MirroredSectionCard>
           }
           arabic={
             <MirroredSectionCard title={labelsAr.attachmentsGroup} icon={<ImageIcon className="size-4" />}>
               <AttachmentsBody documents={documents} evidence={evidence} content={arabic} labels={labelsAr} language="ar" />
+              <SourcePdfImageGrid
+                images={sourceImages.filter(isAttachmentSourceImage)}
+                content={arabic}
+                language="ar"
+                grouped
+              />
             </MirroredSectionCard>
           }
         />
@@ -499,8 +561,190 @@ function MirroredBilingualReport({
           english={<ReportFooter data={data} title={englishTitle} />}
           arabic={<ReportFooter data={data} title={arabicTitle} />}
         />
+
+        {sourcePdf ? (
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            <div lang="en" dir="ltr" className="min-w-0">
+              <SourcePdfViewer data={data} attachment={sourcePdf} title={sourcePdfTitle} />
+            </div>
+            <div className="hidden lg:block" aria-hidden="true" />
+          </div>
+        ) : null}
       </div>
     </section>
+  )
+}
+
+type ViewerSourceImage = ExtractedPdfImage & { fullPageFallback?: boolean }
+
+function useSourcePdfViewerDocument(
+  data: StageTranslationPageData,
+  attachment: StageTranslationPageData["response"]["attachments"][number] | null,
+) {
+  const [documentState, setDocumentState] = useState<{
+    images: ViewerSourceImage[]
+    contentHtml: string
+  }>({ images: [], contentHtml: "" })
+
+  useEffect(() => {
+    let active = true
+    if (!attachment) {
+      setDocumentState({ images: [], contentHtml: "" })
+      return () => { active = false }
+    }
+
+    setDocumentState({ images: [], contentHtml: "" })
+    void extractSourcePdf(data, attachment, {
+      includePageImages: true,
+      imageWidth: 1_000,
+      imageMode: "visuals",
+    })
+      .then((document) => {
+        if (!active) return
+        const extracted: ViewerSourceImage[] = []
+        const pageContent: string[] = []
+
+        for (const page of document.pages) {
+          if (page.textHtml.trim()) {
+            pageContent.push(
+              `<section data-source-pdf-page="${page.pageNumber}">` +
+              `<h3>Page ${page.pageNumber}</h3>${page.textHtml}</section>`,
+            )
+          }
+          extracted.push(...(page.images ?? []))
+
+          // A rendered page is retained only when PDF.js could not decode every
+          // embedded image. Keeping it here prevents inspection evidence from
+          // disappearing while still preferring individually positioned images.
+          if (page.imageDataUrl && (page.images?.length === 0 || page.imageExtractionComplete === false)) {
+            extracted.push({
+              id: `page-${page.pageNumber}-visual-fallback`,
+              pageNumber: page.pageNumber,
+              order: 10_000,
+              dataUrl: page.imageDataUrl,
+              sourceCaption: `Original PDF page ${page.pageNumber}`,
+              contextText: "",
+              sectionHint: "evidence",
+              xRatio: 0,
+              yRatio: 0,
+              widthRatio: 1,
+              heightRatio: 1,
+              fullPageFallback: true,
+            })
+          }
+        }
+
+        extracted.sort((left, right) => left.pageNumber - right.pageNumber || left.order - right.order)
+        setDocumentState({ images: extracted, contentHtml: pageContent.join("") })
+      })
+      .catch(() => {
+        if (active) setDocumentState({ images: [], contentHtml: "" })
+      })
+
+    return () => { active = false }
+  }, [attachment, data])
+
+  return documentState
+}
+
+function isAttachmentSourceImage(image: ViewerSourceImage) {
+  return !image.sectionHint || image.sectionHint === "evidence" || image.sectionHint === "documents"
+}
+
+function textLinesFromHtml(html: string) {
+  return html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(?:p|div|h[1-6]|li|figcaption|caption|tr|td|th|section|article)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+}
+
+function normalizedFigureNumber(value: string) {
+  const arabicIndic = "٠١٢٣٤٥٦٧٨٩"
+  const easternArabic = "۰۱۲۳۴۵۶۷۸۹"
+  const normalized = value.replace(/[٠-٩۰-۹]/g, (digit) => {
+    const arabicIndex = arabicIndic.indexOf(digit)
+    if (arabicIndex >= 0) return String(arabicIndex)
+    return String(easternArabic.indexOf(digit))
+  })
+  return normalized.match(/\d+/)?.[0] ?? ""
+}
+
+function sectionHtmlForImage(content: TranslationReportContent, hint: SourceImageSectionHint | null) {
+  if (hint && hint in content.sections) {
+    return content.sections[hint as TranslationSectionKey]
+  }
+  return [
+    ...Object.values(content.sections),
+    ...content.attachmentTranslations.map((item) => item.contentHtml),
+  ].join("\n")
+}
+
+function sourceImageCaption(
+  image: ViewerSourceImage,
+  content: TranslationReportContent,
+  language: "en" | "ar",
+) {
+  if (language === "en") {
+    return image.sourceCaption.trim() || `Source PDF page ${image.pageNumber} · Image ${image.order}`
+  }
+
+  const figureNumber = normalizedFigureNumber(image.sourceCaption)
+  const lines = textLinesFromHtml(sectionHtmlForImage(content, image.sectionHint))
+  const figurePattern = /^(?:الشكل|شكل|الصورة|صورة|اللقطة|لقطة)\b/i
+  const translated = lines.find((line) => {
+    if (!figurePattern.test(line)) return false
+    return !figureNumber || normalizedFigureNumber(line) === figureNumber
+  })
+
+  if (translated) return translated
+  if (image.fullPageFallback) return `معاينة الصفحة ${image.pageNumber} من ملف PDF الأصلي`
+  return `صورة من الصفحة ${image.pageNumber} · رقم ${image.order}`
+}
+
+function SourcePdfImageGrid({
+  images,
+  content,
+  language,
+  grouped = false,
+}: {
+  images: ViewerSourceImage[]
+  content: TranslationReportContent
+  language: "en" | "ar"
+  grouped?: boolean
+}) {
+  if (!images.length) return null
+
+  return (
+    <div className={cn("border-t border-slate-200 pt-4", grouped ? "mt-7" : "mt-5")}>
+      <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">
+        {language === "ar" ? "صور من ملف PDF الأصلي" : "Images from original PDF"}
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {images.map((image) => (
+          <figure key={image.id} className="stage-translation-no-break overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+            <div className="flex min-h-40 items-center justify-center bg-white p-2">
+              <img
+                src={image.dataUrl}
+                alt={sourceImageCaption(image, content, language)}
+                className="max-h-[420px] w-full object-contain"
+              />
+            </div>
+            <figcaption className="border-t border-slate-200 px-3 py-2 text-xs leading-5 text-slate-600">
+              {sourceImageCaption(image, content, language)}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </div>
   )
 }
 
