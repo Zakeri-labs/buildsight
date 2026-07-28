@@ -1,7 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import {
   Search,
   Plus,
@@ -14,16 +15,37 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  Pencil,
+  Trash2,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import {
+  deleteProject,
+  getProjectDeletionImpact,
+  updateProject,
+  type ProjectDeletionImpact,
+} from "@/lib/actions/projects"
 
 export type ProjectStatus = "In Progress" | "Planning" | "On Hold" | "Completed"
 export type OrgRole = "Consultant" | "Contractor" | "Client" | "Government" | "Third Party"
@@ -41,6 +63,9 @@ export interface ProjectRow {
   startDate: string
   progress: number
   imageUrl: string
+  latitude?: number | null
+  longitude?: number | null
+  canEdit?: boolean
 }
 
 const mockProjects: ProjectRow[] = [
@@ -153,19 +178,40 @@ const mockProjects: ProjectRow[] = [
 export function ProjectsList({
   projects = mockProjects,
   createdProjectId,
+  canDeleteProjects = false,
 }: {
   projects?: ProjectRow[]
   createdProjectId?: string
+  canDeleteProjects?: boolean
 }) {
   const { locale } = useI18n()
+  const router = useRouter()
+  const [projectRows, setProjectRows] = useState(projects)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [selectedType, setSelectedType] = useState("all")
   const [selectedOwner, setSelectedOwner] = useState("all")
   const [sortBy, setSortBy] = useState("default")
+  const [editTarget, setEditTarget] = useState<ProjectRow | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ProjectRow | null>(null)
+  const [deletionImpact, setDeletionImpact] = useState<ProjectDeletionImpact | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [impactPending, startImpactTransition] = useTransition()
+  const [deletePending, startDeleteTransition] = useTransition()
+
+  useEffect(() => {
+    setProjectRows(projects)
+  }, [projects])
+
+  useEffect(() => {
+    if (!notice) return
+    const timeout = window.setTimeout(() => setNotice(null), 4500)
+    return () => window.clearTimeout(timeout)
+  }, [notice])
 
   const filteredProjects = useMemo(() => {
-    return projects.filter((p) => {
+    return projectRows.filter((p) => {
       if (
         searchQuery &&
         !p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -179,18 +225,57 @@ export function ProjectsList({
       if (selectedOwner !== "all" && p.ownerClient !== selectedOwner) return false
       return true
     })
-  }, [projects, searchQuery, selectedStatus, selectedType, selectedOwner])
+  }, [projectRows, searchQuery, selectedStatus, selectedType, selectedOwner])
 
-  const totalProjects = projects.length
-  const activeProjects = projects.filter((project) => project.status === "In Progress").length
-  const onHoldProjects = projects.filter((project) => project.status === "On Hold").length
-  const completedProjects = projects.filter((project) => project.status === "Completed").length
-  const typeOptions = Array.from(new Set(projects.map((project) => project.projectType).filter((type) => type !== "—")))
-  const ownerOptions = Array.from(new Set(projects.map((project) => project.ownerClient).filter((owner) => owner !== "—")))
-  const createdProject = createdProjectId ? projects.find((project) => project.id === createdProjectId) : undefined
+  const totalProjects = projectRows.length
+  const activeProjects = projectRows.filter((project) => project.status === "In Progress").length
+  const onHoldProjects = projectRows.filter((project) => project.status === "On Hold").length
+  const completedProjects = projectRows.filter((project) => project.status === "Completed").length
+  const typeOptions = Array.from(new Set(projectRows.map((project) => project.projectType).filter((type) => type !== "—")))
+  const ownerOptions = Array.from(new Set(projectRows.map((project) => project.ownerClient).filter((owner) => owner !== "—")))
+  const createdProject = createdProjectId ? projectRows.find((project) => project.id === createdProjectId) : undefined
+
+  function openDeleteDialog(project: ProjectRow) {
+    setDeleteTarget(project)
+    setDeletionImpact(null)
+    setDeleteError(null)
+    startImpactTransition(async () => {
+      const result = await getProjectDeletionImpact({ projectId: project.id })
+      if (!result.ok) {
+        setDeleteError(result.error)
+        return
+      }
+      setDeletionImpact(result.data ?? null)
+    })
+  }
+
+  function confirmDelete() {
+    if (!deleteTarget) return
+    setDeleteError(null)
+    startDeleteTransition(async () => {
+      const result = await deleteProject({ projectId: deleteTarget.id })
+      if (!result.ok) {
+        setDeleteError(result.error)
+        return
+      }
+      setProjectRows((current) => current.filter((project) => project.id !== deleteTarget.id))
+      setDeleteTarget(null)
+      setDeletionImpact(null)
+      setNotice(locale === "ar" ? "تم حذف المشروع بنجاح." : "Project deleted successfully.")
+      router.refresh()
+    })
+  }
 
   return (
     <div className="flex flex-col gap-6 font-sans">
+      {notice ? (
+        <div
+          role="status"
+          className="fixed end-5 top-5 z-[70] rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm font-semibold text-emerald-700 shadow-lg dark:border-emerald-900 dark:bg-slate-900 dark:text-emerald-300"
+        >
+          {notice}
+        </div>
+      ) : null}
       {createdProjectId && (
         <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
           {locale === "ar"
@@ -433,12 +518,41 @@ export function ProjectsList({
 
                   {/* Actions */}
                   <td className="whitespace-nowrap px-4 py-4 text-end">
-                    <button
-                      type="button"
-                      className="inline-flex size-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-                    >
-                      <MoreVertical className="size-4" />
-                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <button
+                            type="button"
+                            aria-label={`Actions for ${row.name}`}
+                            className="inline-flex size-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                          >
+                            <MoreVertical className="size-4" />
+                          </button>
+                        }
+                      />
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuItem
+                          render={
+                            <Link href={`/projects/${row.id}`}>
+                              <Eye className="size-4" />
+                              {locale === "ar" ? "عرض المشروع" : "View Project"}
+                            </Link>
+                          }
+                        />
+                        {row.canEdit ? (
+                          <DropdownMenuItem onClick={() => setEditTarget(row)}>
+                            <Pencil className="size-4" />
+                            {locale === "ar" ? "تعديل المشروع" : "Edit Project"}
+                          </DropdownMenuItem>
+                        ) : null}
+                        {canDeleteProjects ? (
+                          <DropdownMenuItem variant="destructive" onClick={() => openDeleteDialog(row)}>
+                            <Trash2 className="size-4" />
+                            {locale === "ar" ? "حذف المشروع" : "Delete Project"}
+                          </DropdownMenuItem>
+                        ) : null}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </td>
                 </tr>
               ))}
@@ -504,7 +618,205 @@ export function ProjectsList({
           </div>
         </div>
       </div>
+
+      {editTarget ? (
+        <ProjectEditDialog
+          key={editTarget.id}
+          project={editTarget}
+          locale={locale}
+          onClose={() => setEditTarget(null)}
+          onSaved={(updated) => {
+            setProjectRows((current) => current.map((project) => (project.id === updated.id ? updated : project)))
+            setEditTarget(null)
+            setNotice(locale === "ar" ? "تم تحديث المشروع بنجاح." : "Project updated successfully.")
+            router.refresh()
+          }}
+        />
+      ) : null}
+
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open && !deletePending) {
+            setDeleteTarget(null)
+            setDeletionImpact(null)
+            setDeleteError(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md" showCloseButton={!deletePending}>
+          <DialogHeader>
+            <div className="flex size-11 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400">
+              <AlertTriangle className="size-5" />
+            </div>
+            <DialogTitle>
+              {locale === "ar" ? "حذف المشروع" : "Delete Project"}
+            </DialogTitle>
+            <DialogDescription className="text-pretty">
+              {locale === "ar"
+                ? `هل أنت متأكد من رغبتك في حذف مشروع ${deleteTarget?.name ?? ""}؟ لا يمكن التراجع عن هذا الإجراء.`
+                : `Are you sure you want to delete ${deleteTarget?.name ?? "this project"}? This action cannot be undone.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+            {impactPending ? (
+              <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                <Loader2 className="size-4 animate-spin" />
+                {locale === "ar" ? "جارٍ فحص البيانات المرتبطة..." : "Checking related project data..."}
+              </div>
+            ) : deletionImpact ? (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  {locale === "ar" ? "البيانات التي سيتم حذفها" : "Related records to be deleted"}
+                </p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs text-slate-700 dark:text-slate-300">
+                  <ImpactRow label={locale === "ar" ? "المراحل" : "Stages"} value={deletionImpact.stages} />
+                  <ImpactRow label={locale === "ar" ? "البنود" : "Terms"} value={deletionImpact.terms} />
+                  <ImpactRow label={locale === "ar" ? "الفحوصات" : "Inspections"} value={deletionImpact.inspections} />
+                  <ImpactRow label={locale === "ar" ? "المستندات" : "Documents"} value={deletionImpact.documents} />
+                  <ImpactRow label={locale === "ar" ? "الترجمات" : "Translations"} value={deletionImpact.translations} />
+                  <ImpactRow label={locale === "ar" ? "المشاركون" : "Participants"} value={deletionImpact.participants} />
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {locale === "ar"
+                  ? "تعذر تحميل ملخص البيانات المرتبطة. لن يتم الحذف دون تحقق الخادم مرة أخرى."
+                  : "The related-data summary could not be loaded. The server will verify it again before deletion."}
+              </p>
+            )}
+          </div>
+
+          {deleteError ? <p className="text-sm text-red-600 dark:text-red-400">{deleteError}</p> : null}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="bg-transparent"
+              disabled={deletePending}
+              onClick={() => {
+                setDeleteTarget(null)
+                setDeletionImpact(null)
+                setDeleteError(null)
+              }}
+            >
+              {locale === "ar" ? "إلغاء" : "Cancel"}
+            </Button>
+            <Button type="button" variant="destructive" disabled={deletePending || impactPending} onClick={confirmDelete}>
+              {deletePending ? <Loader2 className="size-4 animate-spin" data-icon="inline-start" /> : <Trash2 className="size-4" data-icon="inline-start" />}
+              {locale === "ar" ? "حذف المشروع" : "Delete Project"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+  )
+}
+
+function ImpactRow({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span>{label}</span>
+      <span className="font-semibold tabular-nums">{value}</span>
+    </div>
+  )
+}
+
+function ProjectEditDialog({
+  project,
+  locale,
+  onClose,
+  onSaved,
+}: {
+  project: ProjectRow
+  locale: string
+  onClose: () => void
+  onSaved: (project: ProjectRow) => void
+}) {
+  const [name, setName] = useState(project.name)
+  const [code, setCode] = useState(project.code === "—" ? "" : project.code)
+  const [address, setAddress] = useState(project.address === "—" ? "" : project.address)
+  const [error, setError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  function save() {
+    setError(null)
+    startTransition(async () => {
+      const result = await updateProject({
+        projectId: project.id,
+        name,
+        code,
+        location: address,
+        latitude: project.latitude ?? null,
+        longitude: project.longitude ?? null,
+      })
+      if (!result.ok) {
+        setError(result.error)
+        return
+      }
+      onSaved({
+        ...project,
+        name: name.trim(),
+        code: code.trim() || "—",
+        address: address.trim() || "—",
+      })
+    })
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && !pending && onClose()}>
+      <DialogContent className="sm:max-w-lg" showCloseButton={!pending}>
+        <DialogHeader>
+          <DialogTitle>{locale === "ar" ? "تعديل المشروع" : "Edit Project"}</DialogTitle>
+          <DialogDescription>
+            {locale === "ar"
+              ? "حدّث معلومات المشروع الأساسية."
+              : "Update the project's core information."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor={`project-list-name-${project.id}`}>{locale === "ar" ? "اسم المشروع" : "Project name"}</Label>
+            <Input
+              id={`project-list-name-${project.id}`}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              disabled={pending}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`project-list-code-${project.id}`}>{locale === "ar" ? "رمز المشروع" : "Project code"}</Label>
+            <Input
+              id={`project-list-code-${project.id}`}
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              disabled={pending}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`project-list-address-${project.id}`}>{locale === "ar" ? "العنوان" : "Address"}</Label>
+            <Input
+              id={`project-list-address-${project.id}`}
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+              disabled={pending}
+            />
+          </div>
+          {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" className="bg-transparent" disabled={pending} onClick={onClose}>
+            {locale === "ar" ? "إلغاء" : "Cancel"}
+          </Button>
+          <Button type="button" disabled={pending || name.trim().length < 2} onClick={save}>
+            {pending ? <Loader2 className="size-4 animate-spin" data-icon="inline-start" /> : null}
+            {locale === "ar" ? "حفظ التغييرات" : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

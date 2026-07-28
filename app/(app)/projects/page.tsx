@@ -1,5 +1,6 @@
 import { ProjectsList, type ProjectRow, type OrgRole, type ProjectStatus } from "@/components/projects/projects-list"
-import { requireOnboarded } from "@/lib/auth/session"
+import { requireOnboarded, isOrgAdmin } from "@/lib/auth/session"
+import { canAdministerProject } from "@/lib/auth/guards"
 import { getOrgProjects } from "@/lib/db/domain"
 import { PROJECT_TYPES } from "@/lib/projects/project-options"
 
@@ -44,8 +45,12 @@ export default async function ProjectsPage({
   const primaryMembership = session.memberships[0]
   const organizationId = session.supervisingOrg?.id ?? primaryMembership?.organization?.id
   const projects = organizationId ? await getOrgProjects(organizationId) : []
+  const canDeleteProjects = Boolean(
+    session.supervisingOrg && isOrgAdmin(session, session.supervisingOrg.id),
+  )
+  const editPermissions = await Promise.all(projects.map((project) => canAdministerProject(project.id)))
 
-  const rows: ProjectRow[] = projects.map((project) => ({
+  const rows: ProjectRow[] = projects.map((project, index) => ({
     id: project.id,
     code: project.code ?? "—",
     name: project.name,
@@ -57,7 +62,16 @@ export default async function ProjectsPage({
     startDate: displayDate(project.startDate),
     progress: Math.min(100, Math.max(0, Math.round(project.progressActual))),
     imageUrl: project.image?.trim() || "/placeholder.svg",
+    latitude: project.latitude,
+    longitude: project.longitude,
+    canEdit: editPermissions[index] ?? false,
   }))
 
-  return <ProjectsList projects={rows} createdProjectId={params.created} />
+  return (
+    <ProjectsList
+      projects={rows}
+      createdProjectId={params.created}
+      canDeleteProjects={canDeleteProjects}
+    />
+  )
 }

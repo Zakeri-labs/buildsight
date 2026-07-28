@@ -15,6 +15,138 @@ import { isProjectTypeValue, isSupervisionTypeValue } from "@/lib/projects/proje
 import { validateOwnerIdCardFile } from "@/lib/projects/owner-id-card"
 import { validateProjectImageFile } from "@/lib/projects/project-image"
 
+export type ProjectDeletionImpact = {
+  stages: number
+  terms: number
+  inspections: number
+  documents: number
+  translations: number
+  participants: number
+  attachments: number
+  totalRelatedRecords: number
+}
+
+const PROJECT_STORAGE_BUCKETS = [
+  "project-images",
+  "document-images",
+  "project-stage-evidence",
+  "project-stage-translations",
+] as const
+
+async function countProjectRows(admin: ReturnType<typeof createAdminClient>, table: string, projectId: string) {
+  const { count, error } = await admin
+    .from(table)
+    .select("id", { count: "exact", head: true })
+    .eq("project_id", projectId)
+  if (error) throw error
+  return count ?? 0
+}
+
+async function getProjectDeletionImpactWithAdmin(
+  admin: ReturnType<typeof createAdminClient>,
+  projectId: string,
+): Promise<ProjectDeletionImpact> {
+  const { data: stageRows, error: stageError } = await admin
+    .from("project_stages")
+    .select("id")
+    .eq("project_id", projectId)
+  if (stageError) throw stageError
+
+  const stageIds = (stageRows ?? []).map((stage: { id: string }) => stage.id)
+  let terms = 0
+  if (stageIds.length > 0) {
+    const { count, error } = await admin
+      .from("project_stage_terms")
+      .select("id", { count: "exact", head: true })
+      .in("project_stage_id", stageIds)
+    if (error) throw error
+    terms = count ?? 0
+  }
+
+  const [legacyInspections, termResponses, documents, translations, projectParticipants, userMemberships, orgMemberships, attachments] =
+    await Promise.all([
+      countProjectRows(admin, "inspections", projectId),
+      countProjectRows(admin, "term_responses", projectId),
+      countProjectRows(admin, "documents", projectId),
+      countProjectRows(admin, "translation_documents", projectId),
+      countProjectRows(admin, "project_participants", projectId),
+      countProjectRows(admin, "project_user_memberships", projectId),
+      countProjectRows(admin, "project_organization_memberships", projectId),
+      countProjectRows(admin, "response_attachments", projectId),
+    ])
+
+  const impact: ProjectDeletionImpact = {
+    stages: stageIds.length,
+    terms,
+    inspections: legacyInspections + termResponses,
+    documents,
+    translations,
+    participants: projectParticipants + userMemberships + orgMemberships,
+    attachments,
+    totalRelatedRecords: 0,
+  }
+  impact.totalRelatedRecords =
+    impact.stages +
+    impact.terms +
+    impact.inspections +
+    impact.documents +
+    impact.translations +
+    impact.participants +
+    impact.attachments
+  return impact
+}
+
+async function listStorageObjectsRecursively(
+  admin: ReturnType<typeof createAdminClient>,
+  bucketName: string,
+  prefix: string,
+) {
+  const bucket = admin.storage.from(bucketName)
+  const pendingFolders = [prefix.replace(/^\/+|\/+$/g, "")]
+  const objectPaths: string[] = []
+
+  while (pendingFolders.length > 0) {
+    const folder = pendingFolders.shift()!
+    let offset = 0
+    while (true) {
+      const { data, error } = await bucket.list(folder, {
+        limit: 1000,
+        offset,
+        sortBy: { column: "name", order: "asc" },
+      })
+      if (error) throw error
+      const entries = data ?? []
+      for (const entry of entries) {
+        const path = folder ? `${folder}/${entry.name}` : entry.name
+        if (entry.id || entry.metadata) objectPaths.push(path)
+        else pendingFolders.push(path)
+      }
+      if (entries.length < 1000) break
+      offset += entries.length
+    }
+  }
+
+  return objectPaths
+}
+
+async function removeProjectStorageObjects(admin: ReturnType<typeof createAdminClient>, projectId: string) {
+  const failedBuckets: string[] = []
+  for (const bucketName of PROJECT_STORAGE_BUCKETS) {
+    try {
+      const objectPaths = await listStorageObjectsRecursively(admin, bucketName, projectId)
+      for (let index = 0; index < objectPaths.length; index += 100) {
+        const { error } = await admin.storage.from(bucketName).remove(objectPaths.slice(index, index + 100))
+        if (error) throw error
+      }
+    } catch {
+      // The database deletion is authoritative. Storage cleanup is best-effort
+      // and a failed bucket is reported so an administrator can retry safely.
+      failedBuckets.push(bucketName)
+    }
+  }
+  return failedBuckets
+}
+
 function normalizeProjectCoordinates(latitude?: number | null, longitude?: number | null) {
   const hasLatitude = latitude != null
   const hasLongitude = longitude != null
@@ -31,6 +163,99 @@ function normalizeProjectCoordinates(latitude?: number | null, longitude?: numbe
     return { ok: false as const, error: "Project coordinates are outside the valid range." }
   }
   return { ok: true as const, latitude, longitude }
+}
+
+export async function getProjectDeletionImpact(input: {
+  projectId: string
+}): Promise<ActionResult<ProjectDeletionImpact & { projectName: string }>> {
+  try {
+    const admin = createAdminClient()
+    const { data: project, error } = await admin
+      .from("projects")
+      .select("id, name, supervising_organization_id")
+      .eq("id", input.projectId)
+      .maybeSingle()
+    if (error) throw error
+    if (!project) return { ok: false, error: "Project not found." }
+
+    await assertOrgAdmin(project.supervising_organization_id)
+    const impact = await getProjectDeletionImpactWithAdmin(admin, input.projectId)
+    return { ok: true, data: { projectName: project.name, ...impact } }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof AuthzError ? err.message : "Could not inspect the project before deletion.",
+    }
+  }
+}
+
+export async function deleteProject(input: {
+  projectId: string
+}): Promise<ActionResult<{ impact: ProjectDeletionImpact; storageCleanupIncomplete: boolean }>> {
+  try {
+    const admin = createAdminClient()
+    const { data: project, error: projectError } = await admin
+      .from("projects")
+      .select("id, name, supervising_organization_id")
+      .eq("id", input.projectId)
+      .maybeSingle()
+    if (projectError) throw projectError
+    if (!project) return { ok: false, error: "Project not found." }
+
+    const actorId = await assertOrgAdmin(project.supervising_organization_id)
+    const impact = await getProjectDeletionImpactWithAdmin(admin, input.projectId)
+
+    await audit({
+      actorId,
+      action: "project.deleted",
+      entityType: "project",
+      entityId: input.projectId,
+      organizationId: project.supervising_organization_id,
+      projectId: input.projectId,
+      metadata: {
+        projectName: project.name,
+        relatedRecords: impact,
+      },
+    })
+
+    const { data: deleted, error: deleteError } = await admin
+      .from("projects")
+      .delete()
+      .eq("id", input.projectId)
+      .select("id")
+      .maybeSingle()
+    if (deleteError) throw deleteError
+    if (!deleted) return { ok: false, error: "Project not found or already deleted." }
+
+    const failedBuckets = await removeProjectStorageObjects(admin, input.projectId)
+
+    const cookieStore = await cookies()
+    if (cookieStore.get(SELECTED_PROJECT_COOKIE)?.value === input.projectId) {
+      cookieStore.set(SELECTED_PROJECT_COOKIE, "all", {
+        path: "/",
+        maxAge: 60 * 60 * 24 * 365,
+        sameSite: "lax",
+      })
+    }
+
+    revalidatePath("/", "layout")
+    revalidatePath("/projects")
+    revalidatePath("/documents")
+    revalidatePath("/users")
+
+    return {
+      ok: true,
+      data: {
+        impact,
+        storageCleanupIncomplete: failedBuckets.length > 0,
+      },
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof AuthzError ? err.message : "Could not delete the project.",
+    }
+  }
 }
 
 export async function updateProject(input: {
