@@ -43,6 +43,18 @@ type JsPdfDocument = any
 type JsPdfConstructor = new (options?: Record<string, unknown>) => JsPdfDocument
 type JsPdfWindow = Window & { jspdf?: { jsPDF?: JsPdfConstructor } }
 
+const ARABIC_TEXT_OPTIONS = {
+  // jsPDF's global setR2L flag performs a raw character reversal. That breaks
+  // numbers, punctuation and mixed Arabic/Latin construction references.
+  // These options use the bundled Unicode BiDi engine instead.
+  R2L: false,
+  isInputVisual: false,
+  isOutputVisual: true,
+  isInputRtl: true,
+  isOutputRtl: false,
+  isSymmetricSwapping: true,
+} as const
+
 type PdfBlock =
   | { type: "heading"; level: number; text: string }
   | { type: "paragraph"; text: string }
@@ -168,6 +180,16 @@ async function installArabicFont(doc: JsPdfDocument) {
     doc.addFont(ARABIC_FONT_FILENAME, ARABIC_FONT_FAMILY, "normal")
   }
   doc.setFont(ARABIC_FONT_FAMILY, "normal")
+  doc.setLanguage?.("ar-SA")
+  doc.setR2L?.(false)
+
+  if (typeof doc.processArabic !== "function") {
+    throw new Error("The PDF library does not include Arabic glyph shaping support.")
+  }
+  const shapingProbe = String(doc.processArabic("مرحبا"))
+  if (!/[\uFB50-\uFDFF\uFE70-\uFEFF]/.test(shapingProbe)) {
+    throw new Error("The PDF library could not initialize Arabic glyph shaping.")
+  }
 }
 
 export function safePdfFilename(value: string) {
@@ -249,6 +271,10 @@ export async function storeTranslationPdf(input: {
 
 function normalizeText(value: string) {
   return value.replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim()
+}
+
+function containsArabic(value: string) {
+  return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(value)
 }
 
 function directChildElements(element: Element, selector: string) {
@@ -392,9 +418,30 @@ function loadImage(src: string) {
 }
 
 function setLanguage(doc: JsPdfDocument, rtl: boolean, fontSize = 10, bold = false) {
-  doc.setR2L?.(rtl)
+  // Never enable jsPDF's global R2L character reversal. Arabic is shaped by
+  // the Arabic parser and reordered by the BiDi text options per text run.
+  doc.setR2L?.(false)
+  doc.setLanguage?.(rtl ? "ar-SA" : "en-GB")
   doc.setFont(rtl ? ARABIC_FONT_FAMILY : "helvetica", rtl ? "normal" : bold ? "bold" : "normal")
   doc.setFontSize(fontSize)
+  doc.setCharSpace?.(0)
+}
+
+function shapeArabicText(doc: JsPdfDocument, text: string | string[]) {
+  const shape = (value: string) => String(doc.processArabic(value.normalize("NFC")))
+  return Array.isArray(text) ? text.map(shape) : shape(text)
+}
+
+function writePdfText(
+  doc: JsPdfDocument,
+  text: string | string[],
+  x: number,
+  y: number,
+  options: Record<string, unknown> = {},
+  rtl = false,
+) {
+  const preparedText = rtl ? shapeArabicText(doc, text) : text
+  doc.text(preparedText, x, y, rtl ? { ...options, ...ARABIC_TEXT_OPTIONS } : options)
 }
 
 function textLines(doc: JsPdfDocument, text: string, width: number) {
@@ -409,10 +456,17 @@ function drawContinuationHeader(flow: Flow) {
   doc.rect(0, 0, pageWidth, 3, "F")
   setLanguage(doc, rtl, 10, true)
   doc.setTextColor(15, 23, 42)
-  doc.text(template.projectName, rtl ? pageWidth - PAGE.margin : PAGE.margin, 10, { align: rtl ? "right" : "left" })
+  writePdfText(doc, template.projectName, rtl ? pageWidth - PAGE.margin : PAGE.margin, 10, { align: rtl ? "right" : "left" }, rtl)
   setLanguage(doc, rtl, 8, false)
   doc.setTextColor(100, 116, 139)
-  doc.text(`${template.reportNumber} · ${template.title}`, rtl ? PAGE.margin : pageWidth - PAGE.margin, 10, { align: rtl ? "left" : "right" })
+  writePdfText(
+    doc,
+    `${template.reportNumber} · ${template.title}`,
+    rtl ? PAGE.margin : pageWidth - PAGE.margin,
+    10,
+    { align: rtl ? "left" : "right" },
+    rtl,
+  )
   flow.y = 17
 }
 
@@ -434,11 +488,18 @@ function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: st
   doc.roundedRect(x, y, width, 15, 1.5, 1.5, "FD")
   setLanguage(doc, rtl, 7, true)
   doc.setTextColor(100, 116, 139)
-  doc.text(label, rtl ? x + width - 3 : x + 3, y + 4.5, { align: rtl ? "right" : "left" })
+  writePdfText(doc, label, rtl ? x + width - 3 : x + 3, y + 4.5, { align: rtl ? "right" : "left" }, rtl)
   setLanguage(doc, rtl, 9, false)
   doc.setTextColor(15, 23, 42)
   const lines = textLines(doc, value, width - 6).slice(0, 2)
-  doc.text(lines, rtl ? x + width - 3 : x + 3, y + 9, { align: rtl ? "right" : "left", lineHeightFactor: 1.1 })
+  writePdfText(
+    doc,
+    lines,
+    rtl ? x + width - 3 : x + 3,
+    y + 9,
+    { align: rtl ? "right" : "left", lineHeightFactor: 1.1 },
+    rtl,
+  )
 }
 
 function drawFirstPageHeader(flow: Flow) {
@@ -450,13 +511,27 @@ function drawFirstPageHeader(flow: Flow) {
 
   setLanguage(doc, rtl, 9, true)
   doc.setTextColor(29, 78, 216)
-  doc.text(rtl ? "ترجمة مستندات الإنشاء" : "AI DOCUMENT TRANSLATION", rtl ? pageWidth - PAGE.margin : PAGE.margin, 13, { align: rtl ? "right" : "left" })
+  writePdfText(
+    doc,
+    rtl ? "ترجمة مستندات الإنشاء" : "AI DOCUMENT TRANSLATION",
+    rtl ? pageWidth - PAGE.margin : PAGE.margin,
+    13,
+    { align: rtl ? "right" : "left" },
+    rtl,
+  )
   setLanguage(doc, rtl, 19, true)
   doc.setTextColor(15, 23, 42)
-  doc.text(template.title, rtl ? pageWidth - PAGE.margin : PAGE.margin, 23, { align: rtl ? "right" : "left" })
+  writePdfText(doc, template.title, rtl ? pageWidth - PAGE.margin : PAGE.margin, 23, { align: rtl ? "right" : "left" }, rtl)
   setLanguage(doc, rtl, 10, false)
   doc.setTextColor(71, 85, 105)
-  doc.text(`${template.projectName} · ${template.termName}`, rtl ? pageWidth - PAGE.margin : PAGE.margin, 29, { align: rtl ? "right" : "left" })
+  writePdfText(
+    doc,
+    `${template.projectName} · ${template.termName}`,
+    rtl ? pageWidth - PAGE.margin : PAGE.margin,
+    29,
+    { align: rtl ? "right" : "left" },
+    rtl,
+  )
 
   const labels = rtl
     ? ["المشروع", "مرجع المشروع", "المرحلة", "البند", "رقم المستند", "رقم الزيارة", "النوع", "الموضوع"]
@@ -475,8 +550,16 @@ function drawFirstPageHeader(flow: Flow) {
   const cellWidth = (pageWidth - PAGE.margin * 2 - gap * 3) / 4
   for (let index = 0; index < values.length; index += 1) {
     const row = Math.floor(index / 4)
-    const column = index % 4
-    drawMetaCell(flow, PAGE.margin + column * (cellWidth + gap), 34 + row * 18, cellWidth, labels[index], values[index])
+    const logicalColumn = index % 4
+    const physicalColumn = rtl ? 3 - logicalColumn : logicalColumn
+    drawMetaCell(
+      flow,
+      PAGE.margin + physicalColumn * (cellWidth + gap),
+      34 + row * 18,
+      cellWidth,
+      labels[index],
+      values[index],
+    )
   }
   flow.y = 74
 }
@@ -488,10 +571,10 @@ function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>
   const height = lines.length * (size * 0.42 + 1.4) + 3
   ensureSpace(flow, height)
   flow.doc.setTextColor(15, 23, 42)
-  flow.doc.text(lines, flow.rtl ? flow.x + flow.width : flow.x, flow.y, {
+  writePdfText(flow.doc, lines, flow.rtl ? flow.x + flow.width : flow.x, flow.y, {
     align: flow.rtl ? "right" : "left",
     lineHeightFactor: 1.25,
-  })
+  }, flow.rtl)
   flow.y += height
 }
 
@@ -507,18 +590,189 @@ function renderParagraph(flow: Flow, text: string, options: { indent?: number; b
   flow.doc.setTextColor(51, 65, 85)
   if (options.bullet) {
     const bulletX = flow.rtl ? flow.x + flow.width - indent : flow.x + indent
-    flow.doc.text(options.bullet, bulletX, flow.y, { align: flow.rtl ? "right" : "left" })
+    const bulletRtl = flow.rtl && containsArabic(options.bullet)
+    setLanguage(flow.doc, bulletRtl, 10, false)
+    writePdfText(
+      flow.doc,
+      options.bullet,
+      bulletX,
+      flow.y,
+      { align: flow.rtl ? "right" : "left" },
+      bulletRtl,
+    )
+    setLanguage(flow.doc, flow.rtl, 10, false)
   }
   const textX = flow.rtl
     ? flow.x + flow.width - indent - bulletWidth
     : flow.x + indent + bulletWidth
-  flow.doc.text(lines, textX, flow.y, { align: flow.rtl ? "right" : "left", lineHeightFactor: 1.25 })
+  writePdfText(
+    flow.doc,
+    lines,
+    textX,
+    flow.y,
+    { align: flow.rtl ? "right" : "left", lineHeightFactor: 1.25 },
+    flow.rtl,
+  )
   flow.y += height
+}
+
+function isNumericCell(value: string) {
+  // Arabic-Indic digits must continue using the embedded Arabic font.
+  return /^[\s\d.,:;+/\-–—()%#]+$/.test(value)
+}
+
+function calculateTableColumnWidths(headers: string[], rows: string[][], totalWidth: number) {
+  const count = Math.max(headers.length, ...rows.map((row) => row.length), 1)
+  const lengths = Array.from({ length: count }, (_, index) => {
+    const values = [headers[index] || "", ...rows.map((row) => row[index] || "")]
+    return Math.max(4, ...values.map((value) => normalizeText(value).length))
+  })
+  const weights = lengths.map((length, index) => {
+    const values = [headers[index] || "", ...rows.map((row) => row[index] || "")]
+    const numeric = values.every((value) => !normalizeText(value) || isNumericCell(normalizeText(value)))
+    return numeric ? 0.72 : Math.min(3.4, Math.max(1, Math.sqrt(Math.min(length, 120) / 12)))
+  })
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0)
+  const minimum = Math.min(20, totalWidth / count)
+  let widths = weights.map((weight) => Math.max(minimum, totalWidth * weight / totalWeight))
+  const widthSum = widths.reduce((sum, value) => sum + value, 0)
+  widths = widths.map((width) => width * totalWidth / widthSum)
+  return widths
+}
+
+function tableCellLines(doc: JsPdfDocument, value: string, width: number) {
+  return textLines(doc, value || "—", Math.max(8, width - 4))
+}
+
+function drawRtlTableCells(input: {
+  flow: Flow
+  sourceIndexes: number[]
+  widths: number[]
+  cells: string[][]
+  y: number
+  height: number
+  fill: [number, number, number] | null
+  textColor: [number, number, number]
+  fontSize: number
+}) {
+  const { flow, sourceIndexes, widths, cells, y, height, fill, textColor, fontSize } = input
+  let x = flow.x
+  for (let physicalIndex = 0; physicalIndex < sourceIndexes.length; physicalIndex += 1) {
+    const sourceIndex = sourceIndexes[physicalIndex]
+    const width = widths[sourceIndex]
+    flow.doc.setDrawColor(148, 163, 184)
+    if (fill) {
+      flow.doc.setFillColor(...fill)
+      flow.doc.rect(x, y, width, height, "FD")
+    } else {
+      flow.doc.rect(x, y, width, height)
+    }
+
+    const logicalValue = cells[sourceIndex]?.join("\n") || "—"
+    const numeric = isNumericCell(logicalValue)
+    setLanguage(flow.doc, !numeric, fontSize, false)
+    flow.doc.setTextColor(...textColor)
+    const lines = cells[sourceIndex]?.length ? cells[sourceIndex] : ["—"]
+    writePdfText(
+      flow.doc,
+      lines,
+      numeric ? x + width / 2 : x + width - 2,
+      y + 4.3,
+      {
+        align: numeric ? "center" : "right",
+        lineHeightFactor: 1.2,
+      },
+      !numeric,
+    )
+    x += width
+  }
+}
+
+function renderRtlTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
+  const rows = block.rows.length ? block.rows : []
+  if (!block.headers.length && !rows.length) return
+
+  const columnCount = Math.max(block.headers.length, ...rows.map((row) => row.length), 1)
+  const headers = Array.from({ length: columnCount }, (_, index) => block.headers[index] || "")
+  const normalizedRows = rows.map((row) => Array.from({ length: columnCount }, (_, index) => row[index] || ""))
+  const widths = calculateTableColumnWidths(headers, normalizedRows, flow.width)
+  // Physical drawing is left-to-right, therefore reverse source columns so
+  // the first logical Arabic column is the rightmost column in the PDF.
+  const sourceIndexes = Array.from({ length: columnCount }, (_, index) => columnCount - index - 1)
+  const lineHeight = 4.15
+  const hasHeader = block.headers.length > 0
+  const headerLines = headers.map((value, index) => tableCellLines(flow.doc, value, widths[index]))
+  const headerHeight = hasHeader
+    ? Math.max(9, Math.max(...headerLines.map((lines) => lines.length)) * lineHeight + 4)
+    : 0
+
+  const drawHeader = () => {
+    if (!hasHeader) return
+    ensureSpace(flow, headerHeight + 1)
+    drawRtlTableCells({
+      flow,
+      sourceIndexes,
+      widths,
+      cells: headerLines,
+      y: flow.y,
+      height: headerHeight,
+      fill: [226, 232, 240],
+      textColor: [15, 23, 42],
+      fontSize: 8.5,
+    })
+    flow.y += headerHeight
+  }
+
+  drawHeader()
+
+  for (const row of normalizedRows) {
+    let remaining = row.map((value, index) => tableCellLines(flow.doc, value, widths[index]))
+    let continued = false
+
+    while (remaining.some((lines) => lines.length > 0)) {
+      const availableHeight = flow.bottom - flow.y
+      const availableLines = Math.floor((availableHeight - 4) / lineHeight)
+      if (availableLines < 1) {
+        addFlowPage(flow)
+        drawHeader()
+        continue
+      }
+
+      const maximumLines = Math.max(...remaining.map((lines) => lines.length))
+      const chunkLineCount = Math.max(1, Math.min(maximumLines, availableLines))
+      const chunk = remaining.map((lines) => lines.slice(0, chunkLineCount))
+      remaining = remaining.map((lines) => lines.slice(chunkLineCount))
+      const rowHeight = Math.max(9, Math.max(...chunk.map((lines) => Math.max(1, lines.length))) * lineHeight + 4)
+
+      drawRtlTableCells({
+        flow,
+        sourceIndexes,
+        widths,
+        cells: chunk,
+        y: flow.y,
+        height: rowHeight,
+        fill: continued ? [248, 250, 252] : null,
+        textColor: [51, 65, 85],
+        fontSize: 8.5,
+      })
+      flow.y += rowHeight
+      continued = remaining.some((lines) => lines.length > 0)
+      if (continued) {
+        addFlowPage(flow)
+        drawHeader()
+      }
+    }
+  }
+  flow.y += 5
 }
 
 function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
   const rows = block.rows.length ? block.rows : []
   if (!block.headers.length && !rows.length) return
+  if (flow.rtl) {
+    renderRtlTable(flow, block)
+    return
+  }
   ensureSpace(flow, 18)
   setLanguage(flow.doc, flow.rtl, 8.5, false)
   const options: Record<string, unknown> = {
@@ -583,10 +837,10 @@ async function renderImageBlock(flow: Flow, block: Extract<PdfBlock, { type: "im
   if (block.caption) {
     setLanguage(flow.doc, flow.rtl, 7.5, false)
     flow.doc.setTextColor(100, 116, 139)
-    flow.doc.text(textLines(flow.doc, block.caption, width), flow.rtl ? x + width : x, flow.y, {
+    writePdfText(flow.doc, textLines(flow.doc, block.caption, width), flow.rtl ? x + width : x, flow.y, {
       align: flow.rtl ? "right" : "left",
       lineHeightFactor: 1.1,
-    })
+    }, flow.rtl)
     flow.y += captionHeight
   }
   flow.y += 3
@@ -610,7 +864,14 @@ function renderSectionTitle(flow: Flow, title: string) {
   ensureSpace(flow, 14)
   setLanguage(flow.doc, flow.rtl, 13, true)
   flow.doc.setTextColor(15, 23, 42)
-  flow.doc.text(title, flow.rtl ? flow.x + flow.width : flow.x, flow.y, { align: flow.rtl ? "right" : "left" })
+  writePdfText(
+    flow.doc,
+    title,
+    flow.rtl ? flow.x + flow.width : flow.x,
+    flow.y,
+    { align: flow.rtl ? "right" : "left" },
+    flow.rtl,
+  )
   flow.doc.setDrawColor(203, 213, 225)
   flow.doc.line(flow.x, flow.y + 3, flow.x + flow.width, flow.y + 3)
   flow.y += 9
@@ -630,10 +891,12 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
   const pages = doc.internal.getNumberOfPages()
   for (let page = 1; page <= pages; page += 1) {
     doc.setPage(page)
-    setLanguage(doc, rtl, 8, false)
+    // Page numbers are neutral numeric content and must never be reversed.
+    setLanguage(doc, false, 8, false)
     doc.setTextColor(100, 116, 139)
     doc.text(`${page} / ${pages}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() - 5, { align: "center" })
   }
+  if (rtl) setLanguage(doc, true, 8, false)
 }
 
 async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
@@ -645,7 +908,10 @@ async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
     compress: true,
     putOnlyUsedFonts: true,
   })
-  if (template.language === "ar") await installArabicFont(doc)
+  if (template.language === "ar") {
+    await installArabicFont(doc)
+    doc.viewerPreferences?.({ Direction: "R2L", DisplayDocTitle: true })
+  }
   const flow: Flow = {
     doc,
     template,
@@ -781,14 +1047,17 @@ async function buildBilingualPdfBlob(input: {
 
       doc.setFillColor(29, 78, 216)
       doc.rect(0, 0, PAGE.landscapeWidth, 4, "F")
-      doc.setFont("helvetica", "bold")
-      doc.setFontSize(13)
+      const projectNameIsArabic = containsArabic(input.data.project.name)
+      setLanguage(doc, projectNameIsArabic, 13, true)
       doc.setTextColor(15, 23, 42)
-      doc.text(input.data.project.name, margin, 12)
-      doc.setFont("helvetica", "normal")
-      doc.setFontSize(8)
+      writePdfText(doc, input.data.project.name, projectNameIsArabic ? PAGE.landscapeWidth - margin : margin, 12, {
+        align: projectNameIsArabic ? "right" : "left",
+      }, projectNameIsArabic)
+      const reportHeader = `${input.data.response.reportNumber} · ${input.data.term.name}`
+      const reportHeaderIsArabic = containsArabic(reportHeader)
+      setLanguage(doc, reportHeaderIsArabic, 8, false)
       doc.setTextColor(100, 116, 139)
-      doc.text(`${input.data.response.reportNumber} · ${input.data.term.name}`, PAGE.landscapeWidth - margin, 12, { align: "right" })
+      writePdfText(doc, reportHeader, PAGE.landscapeWidth - margin, 12, { align: "right" }, reportHeaderIsArabic)
 
       doc.setFillColor(226, 232, 240)
       doc.rect(margin, 15, columnWidth, 6, "F")
@@ -798,9 +1067,9 @@ async function buildBilingualPdfBlob(input: {
       doc.setTextColor(15, 23, 42)
       doc.text("English Original", margin + 3, 19.2)
       doc.setFont(ARABIC_FONT_FAMILY, "normal")
-      doc.setR2L?.(true)
-      doc.text("الترجمة العربية", PAGE.landscapeWidth - margin - 3, 19.2, { align: "right" })
+      doc.setLanguage?.("ar-SA")
       doc.setR2L?.(false)
+      writePdfText(doc, "الترجمة العربية", PAGE.landscapeWidth - margin - 3, 19.2, { align: "right" }, true)
 
       drawPageImage(doc, englishPage, margin, top, columnWidth, contentHeight, "No English page")
       drawPageImage(doc, arabicPage, margin + columnWidth + gap, top, columnWidth, contentHeight, "No Arabic page")

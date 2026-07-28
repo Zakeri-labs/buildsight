@@ -54,17 +54,22 @@ const COPY = {
     downloadArabic: "Download Arabic PDF",
     downloadBilingual: "Download Bilingual PDF",
     original: "English Original Document",
+    sourcePdf: "Original Uploaded PDF",
     arabic: "Arabic Translation",
     pendingTitle: "Arabic translation has not been generated yet",
     pendingHint: "Generate a complete English-to-Arabic translation. The original report remains unchanged.",
     generated: "Translation generated",
     stored: "PDF downloaded and stored with this translation.",
-    project: "Project",
+    projectInformation: "Project Information",
+    reportDetails: "Report Details",
+    inspectionContent: "Inspection Content",
+    attachmentsGroup: "Attachments",
+    project: "Project Name",
     projectReference: "Project Reference",
     stage: "Stage",
-    term: "Term",
+    term: "Term Name",
     document: "Document",
-    documentNumber: "Document Number",
+    documentNumber: "Report Number",
     visitNumber: "Visit Number",
     date: "Date",
     status: "Status",
@@ -72,7 +77,7 @@ const COPY = {
     type: "Type",
     checklist: "Inspection Checklist",
     approvals: "Approval Information",
-    evidence: "Image Evidence",
+    evidence: "Images",
     attachments: "Related Documents",
     translatedAttachments: "Translated Attachment Content",
     sourceVisuals: "Original Document Images",
@@ -96,17 +101,22 @@ const COPY = {
     downloadArabic: "تنزيل ملف PDF العربي",
     downloadBilingual: "تنزيل ملف PDF ثنائي اللغة",
     original: "المستند الإنجليزي الأصلي",
+    sourcePdf: "ملف PDF الإنجليزي الأصلي",
     arabic: "الترجمة العربية",
     pendingTitle: "لم يتم إنشاء الترجمة العربية بعد",
     pendingHint: "أنشئ ترجمة كاملة من الإنجليزية إلى العربية مع بقاء التقرير الأصلي دون تغيير.",
     generated: "تم إنشاء الترجمة",
     stored: "تم تنزيل ملف PDF وحفظه مع هذه الترجمة.",
-    project: "المشروع",
+    projectInformation: "معلومات المشروع",
+    reportDetails: "تفاصيل التقرير",
+    inspectionContent: "محتوى التفتيش",
+    attachmentsGroup: "المرفقات والصور",
+    project: "اسم المشروع",
     projectReference: "مرجع المشروع",
     stage: "المرحلة",
-    term: "البند",
+    term: "اسم البند",
     document: "المستند",
-    documentNumber: "رقم المستند",
+    documentNumber: "رقم التقرير",
     visitNumber: "رقم الزيارة",
     date: "التاريخ",
     status: "الحالة",
@@ -114,7 +124,7 @@ const COPY = {
     type: "النوع",
     checklist: "قائمة فحص التفتيش",
     approvals: "معلومات الاعتماد",
-    evidence: "صور الإثبات",
+    evidence: "الصور",
     attachments: "المستندات المرتبطة",
     translatedAttachments: "محتوى المرفقات المترجم",
     sourceVisuals: "صور المستند الأصلي",
@@ -131,6 +141,10 @@ const COPY = {
 type TranslationRecordState = StageTranslationRecord | null
 
 type ReportLabels = {
+  projectInformation: string
+  reportDetails: string
+  inspectionContent: string
+  attachmentsGroup: string
   project: string
   projectReference: string
   stage: string
@@ -322,9 +336,7 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
       {success ? <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"><CheckCircle2 className="mt-0.5 size-4 shrink-0" />{success}</div> : null}
 
       <div className="grid items-start gap-5 lg:grid-cols-2">
-        {sourcePdf ? (
-          <SourcePdfViewer data={data} attachment={sourcePdf} title={copy.original} />
-        ) : (
+        <div className="min-w-0 space-y-5">
           <LanguageReport
             language="en"
             title={copy.original}
@@ -333,7 +345,8 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
             labels={labelsEn}
             generatedAt={translation?.generatedAt ?? null}
           />
-        )}
+          {sourcePdf ? <SourcePdfViewer data={data} attachment={sourcePdf} title={copy.sourcePdf} /> : null}
+        </div>
         {translated ? (
           <LanguageReport
             language="ar"
@@ -391,30 +404,48 @@ const LanguageReport = forwardRef<HTMLElement, {
           </div>
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">{isArabic ? "AR" : "EN"}</div>
         </div>
-        <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-          <ReportMeta label={labels.project} value={data.project.name} />
-          <ReportMeta label={labels.projectReference} value={data.project.code || "—"} />
-          <ReportMeta label={labels.stage} value={content.stageName || data.stage.name} />
-          <ReportMeta label={labels.term} value={content.termName || data.term.name} />
-          <ReportMeta label={labels.documentNumber} value={data.response.reportNumber} />
-          <ReportMeta label={labels.visitNumber} value={String(data.response.visitNumber)} />
-          <ReportMeta label={labels.date} value={formatDate(data.response.createdAt, language)} />
-          <ReportMeta label={labels.status} value={statusLabel(data.response.status as any, language)} />
-          <ReportMeta label={labels.type} value={content.reportType || "—"} />
-          <ReportMeta label={labels.subject} value={content.subject || "—"} />
-        </dl>
         {generatedAt ? <p className="mt-3 text-[11px] text-slate-500">{isArabic ? "تاريخ إنشاء الترجمة" : "Translation generated"}: {formatDate(generatedAt, language, true)}</p> : null}
       </header>
 
-      <div className="space-y-7 px-5 py-6 sm:px-7 sm:py-8">
-        {SECTION_LABELS.map((section) => (
-          <ReportSection key={section.key} title={isArabic ? section.ar : section.en} html={content.sections[section.key]} empty={labels.noContent} />
-        ))}
+      <div className="space-y-8 px-5 py-6 sm:px-7 sm:py-8">
+        <ReportGroup title={labels.projectInformation}>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            <ReportMeta label={labels.project} value={data.project.name} />
+            <ReportMeta label={labels.projectReference} value={data.project.code || "—"} />
+            <ReportMeta label={labels.stage} value={content.stageName || data.stage.name} />
+            <ReportMeta label={labels.term} value={content.termName || data.term.name} />
+            <ReportMeta label={labels.documentNumber} value={data.response.reportNumber} />
+            <ReportMeta label={labels.visitNumber} value={String(data.response.visitNumber)} />
+            <ReportMeta label={labels.date} value={formatDate(data.response.createdAt, language)} />
+            <ReportMeta label={labels.status} value={statusLabel(data.response.status as any, language)} />
+          </dl>
+        </ReportGroup>
+
+        <ReportGroup title={labels.reportDetails}>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            <ReportMeta label={labels.subject} value={content.subject || "—"} />
+            <ReportMeta label={labels.type} value={content.reportType || "—"} />
+          </dl>
+        </ReportGroup>
+
+        <ReportGroup title={labels.inspectionContent}>
+          <div className="space-y-7">
+            {SECTION_LABELS.map((section) => (
+              <ReportSection key={section.key} title={isArabic ? section.ar : section.en} html={content.sections[section.key]} empty={labels.noContent} />
+            ))}
+          </div>
+        </ReportGroup>
+
         <ChecklistSection content={content} labels={labels} language={language} />
         <ApprovalSection content={content} labels={labels} language={language} />
-        <EvidenceSection attachments={evidence} title={labels.evidence} empty={labels.noAttachments} />
-        <DocumentsSection documents={documents} content={content} labels={labels} language={language} />
-        {isArabic && sourcePdf ? <SourceDocumentVisuals data={data} attachment={sourcePdf} title={labels.sourceVisuals} /> : null}
+
+        <ReportGroup title={labels.attachmentsGroup}>
+          <div className="space-y-7">
+            <EvidenceSection attachments={evidence} title={labels.evidence} empty={labels.noAttachments} />
+            <DocumentsSection documents={documents} content={content} labels={labels} language={language} />
+            {isArabic && sourcePdf ? <SourceDocumentVisuals data={data} attachment={sourcePdf} title={labels.sourceVisuals} /> : null}
+          </div>
+        </ReportGroup>
       </div>
 
       <footer className="stage-translation-no-break border-t border-slate-200 bg-slate-50 px-5 py-3 text-center text-[11px] text-slate-500 sm:px-7">
@@ -461,6 +492,15 @@ function SourceDocumentVisuals({
           </figure>
         ))}
       </div>
+    </section>
+  )
+}
+
+function ReportGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="stage-translation-no-break rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
+      <h3 className="mb-4 border-b border-slate-200 pb-3 text-lg font-bold text-slate-950">{title}</h3>
+      {children}
     </section>
   )
 }
