@@ -3,6 +3,7 @@
 import type { ProjectStageAttachment } from "@/lib/db/project-stages"
 import type {
   ExtractedPdfImage,
+  ExtractedPdfLayoutBlock,
   ExtractedPdfPage,
   ExtractedSourceDocument,
   SourceImageSectionHint,
@@ -335,6 +336,160 @@ function inferImageSection(lines: PositionedTextLine[], box: ImageBox, viewport:
   return classifySection(pageText)
 }
 
+
+function layoutBlockBounds(lines: PositionedTextLine[], viewport: any) {
+  const minX = Math.min(...lines.map((line) => line.minX))
+  const maxX = Math.max(...lines.map((line) => line.maxX))
+  const minY = Math.min(...lines.map((line) => line.viewportY - line.fontSize * 0.9))
+  const maxY = Math.max(...lines.map((line) => line.viewportY + line.fontSize * 0.35))
+  return {
+    xRatio: Math.max(0, Math.min(1, minX / Math.max(1, viewport.width))),
+    yRatio: Math.max(0, Math.min(1, minY / Math.max(1, viewport.height))),
+    widthRatio: Math.max(0.04, Math.min(1, (maxX - minX) / Math.max(1, viewport.width))),
+    heightRatio: Math.max(0.01, Math.min(1, (maxY - minY) / Math.max(1, viewport.height))),
+  }
+}
+
+function textLinesToLayoutBlocks(
+  lines: PositionedTextLine[],
+  viewport: any,
+  pageNumber: number,
+): ExtractedPdfLayoutBlock[] {
+  if (!lines.length) return []
+  const baseSize = median(lines.map((line) => line.fontSize))
+  const blocks: ExtractedPdfLayoutBlock[] = []
+  let currentSection: SourceImageSectionHint | null = null
+  let index = 0
+
+  while (index < lines.length) {
+    const line = lines[index]
+    const cells = lineCells(line)
+    if (cells.length >= 2) {
+      const tableLines: PositionedTextLine[] = [line]
+      const tableRows: string[][] = [cells]
+      let cursor = index + 1
+      while (cursor < lines.length) {
+        const nextCells = lineCells(lines[cursor])
+        const verticalGap = lines[cursor].viewportY - tableLines[tableLines.length - 1].viewportY
+        if (nextCells.length !== cells.length || nextCells.length < 2 || verticalGap > Math.max(30, baseSize * 2.8)) break
+        tableLines.push(lines[cursor])
+        tableRows.push(nextCells)
+        cursor += 1
+      }
+      if (tableRows.length >= 2) {
+        const bounds = layoutBlockBounds(tableLines, viewport)
+        blocks.push({
+          id: `page-${pageNumber}-table-${blocks.length + 1}`,
+          pageNumber,
+          order: blocks.length + 1,
+          type: "table",
+          text: tableRows.flat().join(" "),
+          headers: tableRows[0],
+          rows: tableRows.slice(1),
+          sectionHint: currentSection,
+          ...bounds,
+          fontSize: Math.max(...tableLines.map((item) => item.fontSize)),
+        })
+        index = cursor
+        continue
+      }
+    }
+
+    const ratio = line.fontSize / Math.max(1, baseSize)
+    const headingLevel = ratio >= 1.6 ? 2 : ratio >= 1.25 ? 3 : 0
+    if (headingLevel) {
+      const section = classifySection(line.text)
+      if (section) currentSection = section
+      const bounds = layoutBlockBounds([line], viewport)
+      blocks.push({
+        id: `page-${pageNumber}-heading-${blocks.length + 1}`,
+        pageNumber,
+        order: blocks.length + 1,
+        type: "heading",
+        text: line.text,
+        level: headingLevel,
+        sectionHint: currentSection,
+        ...bounds,
+        fontSize: line.fontSize,
+      })
+      index += 1
+      continue
+    }
+
+    const paragraphLines: PositionedTextLine[] = [line]
+    let cursor = index + 1
+    while (cursor < lines.length) {
+      const next = lines[cursor]
+      const nextCells = lineCells(next)
+      const nextRatio = next.fontSize / Math.max(1, baseSize)
+      const verticalGap = next.viewportY - paragraphLines[paragraphLines.length - 1].viewportY
+      const aligned = Math.abs(next.minX - paragraphLines[0].minX) <= Math.max(22, baseSize * 2)
+      if (nextCells.length >= 2 || nextRatio >= 1.25 || verticalGap > Math.max(22, baseSize * 1.9) || !aligned) break
+      paragraphLines.push(next)
+      cursor += 1
+    }
+    const text = paragraphLines.map((item) => item.text).join(" ").replace(/\s+/g, " ").trim()
+    const section = classifySection(text)
+    if (section && paragraphLines.length === 1) currentSection = section
+    const bounds = layoutBlockBounds(paragraphLines, viewport)
+    blocks.push({
+      id: `page-${pageNumber}-paragraph-${blocks.length + 1}`,
+      pageNumber,
+      order: blocks.length + 1,
+      type: "paragraph",
+      text,
+      sectionHint: currentSection,
+      ...bounds,
+      fontSize: Math.max(...paragraphLines.map((item) => item.fontSize)),
+    })
+    index = cursor
+  }
+
+  return blocks
+}
+
+function imageFingerprint(dataUrl: string) {
+  let hash = 2166136261
+  for (let index = 0; index < dataUrl.length; index += Math.max(1, Math.floor(dataUrl.length / 12_000))) {
+    hash ^= dataUrl.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+function markRepeatedDecorativeImages(pages: ExtractedPdfPage[]) {
+  const groups = new Map<string, ExtractedPdfImage[]>()
+  for (const image of pages.flatMap((page) => page.images ?? [])) {
+    if (!image.fingerprint) continue
+    const positionKey = [
+      image.fingerprint,
+      Math.round(image.xRatio * 100),
+      Math.round(image.yRatio * 100),
+      Math.round(image.widthRatio * 100),
+      Math.round(image.heightRatio * 100),
+    ].join(":")
+    const group = groups.get(positionKey) ?? []
+    group.push(image)
+    groups.set(positionKey, group)
+  }
+
+  for (const group of groups.values()) {
+    const pageCount = new Set(group.map((image) => image.pageNumber)).size
+    if (pageCount < 3) continue
+    const sample = group[0]
+    const area = sample.widthRatio * sample.heightRatio
+    const atHeader = sample.yRatio <= 0.12
+    const atFooter = sample.yRatio + sample.heightRatio >= 0.88
+    const headerOrFooterBranding = (atHeader || atFooter) && area <= 0.12
+    // Only exact-byte repeats with the same size and position in a header or
+    // footer are considered decorative. Similar-looking photos, body stamps,
+    // signatures and repeated inspection evidence are deliberately retained.
+    if (headerOrFooterBranding) {
+      for (const image of group) image.decorative = true
+    }
+  }
+}
+
 function getObjectFromStore(store: any, key: string) {
   return new Promise<unknown | null>((resolve) => {
     if (!store || !key) {
@@ -562,13 +717,11 @@ async function extractPageImages(input: {
   const placementResult = collectImagePlacements(input.pdfjs, input.page, input.operatorList, input.viewport)
   if (!placementResult.hasImageOperations) return { images: [] as ExtractedPdfImage[], hasImages: false, preview: null as RenderedPagePreview | null, complete: true }
 
+  // Keep every paint operation. Construction reports often contain repeated
+  // or visually similar evidence photos, and geometry similarity is not a safe
+  // deduplication signal. Decorative repeats are classified conservatively
+  // only after all pages have been inspected.
   const sortedPlacements = placementResult.placements
-    .filter((placement, index, values) => values.findIndex((candidate) =>
-      Math.abs(candidate.box.xRatio - placement.box.xRatio) < 0.002 &&
-      Math.abs(candidate.box.yRatio - placement.box.yRatio) < 0.002 &&
-      Math.abs(candidate.box.widthRatio - placement.box.widthRatio) < 0.002 &&
-      Math.abs(candidate.box.heightRatio - placement.box.heightRatio) < 0.002
-    ) === index)
     .sort((left, right) => left.box.yRatio - right.box.yRatio || left.box.xRatio - right.box.xRatio || left.operationIndex - right.operationIndex)
 
   let preview: RenderedPagePreview | null = null
@@ -595,6 +748,8 @@ async function extractPageImages(input: {
       yRatio: placement.box.yRatio,
       widthRatio: placement.box.widthRatio,
       heightRatio: placement.box.heightRatio,
+      fingerprint: imageFingerprint(dataUrl),
+      decorative: false,
     })
   }
 
@@ -627,6 +782,8 @@ export async function extractSourcePdf(
       const textHtml = textContentToHtml(textContent)
       const pageText = sourceLines.map((line) => line.items.map((item) => item.text).join(" ")).join("\n")
       const viewport = page.getViewport({ scale: 1 })
+      const positionedLines = positionedTextLines(sourceLines, viewport)
+      const layoutBlocks = textLinesToLayoutBlocks(positionedLines, viewport, pageNumber)
       let images: ExtractedPdfImage[] = []
       let hasImages = false
       let preview: RenderedPagePreview | null = null
@@ -640,7 +797,7 @@ export async function extractSourcePdf(
             page,
             pageNumber,
             operatorList,
-            textLines: positionedTextLines(sourceLines, viewport),
+            textLines: positionedLines,
             pageText,
             viewport,
             targetWidth: options.imageWidth ?? 900,
@@ -669,6 +826,7 @@ export async function extractSourcePdf(
         imageDataUrl: shouldKeepFullPagePreview ? preview?.dataUrl ?? null : null,
         hasImages,
         images,
+        layoutBlocks,
         imageExtractionComplete,
       })
       page.cleanup?.()
@@ -677,6 +835,7 @@ export async function extractSourcePdf(
     await documentProxy.destroy?.()
     loadingTask.destroy?.()
   }
+  markRepeatedDecorativeImages(pages)
   return {
     filename: attachment.originalFilename,
     pageCount: pages.length,

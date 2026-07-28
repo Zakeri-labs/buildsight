@@ -26,6 +26,25 @@ export type ExtractedPdfImage = {
   yRatio: number
   widthRatio: number
   heightRatio: number
+  fingerprint?: string
+  decorative?: boolean
+}
+
+export type ExtractedPdfLayoutBlock = {
+  id: string
+  pageNumber: number
+  order: number
+  type: "heading" | "paragraph" | "table"
+  text: string
+  level?: number
+  headers?: string[]
+  rows?: string[][]
+  sectionHint: SourceImageSectionHint | null
+  xRatio: number
+  yRatio: number
+  widthRatio: number
+  heightRatio: number
+  fontSize: number
 }
 
 export type ExtractedPdfPage = {
@@ -34,6 +53,7 @@ export type ExtractedPdfPage = {
   imageDataUrl?: string | null
   hasImages?: boolean
   images?: ExtractedPdfImage[]
+  layoutBlocks?: ExtractedPdfLayoutBlock[]
   imageExtractionComplete?: boolean
 }
 
@@ -63,6 +83,12 @@ export type PdfSectionTemplate = {
   images?: PdfImageTemplate[]
 }
 
+export type PreservedSourceLayout = {
+  filename: string
+  contentHtml: string
+  pages: ExtractedPdfPage[]
+}
+
 export type LanguagePdfTemplate = {
   language: "en" | "ar"
   direction: "ltr" | "rtl"
@@ -80,6 +106,7 @@ export type LanguagePdfTemplate = {
   subject: string
   generatedAt: string | null
   sections: PdfSectionTemplate[]
+  sourceLayout?: PreservedSourceLayout | null
 }
 
 export type BilingualSourceImage = {
@@ -195,8 +222,11 @@ function documentsSection(
   data: StageTranslationPageData,
   content: TranslationReportContent,
   language: "en" | "ar",
+  skipAttachmentId?: string | null,
 ): PdfSectionTemplate[] {
-  const documents = data.response.attachments.filter((item) => item.attachmentKind === "document")
+  const documents = data.response.attachments.filter((item) =>
+    item.attachmentKind === "document" && item.id !== skipAttachmentId,
+  )
   if (!documents.length) return [{ key: "documents", title: LABELS[language].documents, html: "" }]
   return documents.map((document, index) => {
     const translated = content.attachmentTranslations.find((item) => item.attachmentId === document.id)
@@ -249,6 +279,45 @@ function sourcePdfTranslationHtml(data: StageTranslationPageData, translation: S
   return translation.translatedContent.attachmentTranslations.find((item) => item.attachmentId === source.id)?.contentHtml ?? ""
 }
 
+function sourcePdfAttachment(data: StageTranslationPageData) {
+  return data.response.attachments
+    .filter((item) => item.attachmentKind === "document" && isPdfDocument(item.originalFilename, item.mimeType))
+    .sort((left, right) => left.sortOrder - right.sortOrder)[0] ?? null
+}
+
+function sourcePdfEnglishHtml(sourceDocument: ExtractedSourceDocument | null | undefined) {
+  return (sourceDocument?.pages ?? [])
+    .map((page) => `<section data-source-page="${page.pageNumber}">${page.textHtml}</section>`)
+    .join("")
+}
+
+function escapeSourceHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;")
+}
+
+function structuredSourceHtml(content: TranslationReportContent, language: "en" | "ar") {
+  const labels = LABELS[language]
+  const sections = SECTION_LABELS.map((section) =>
+    `<h2>${language === "ar" ? section.ar : section.en}</h2>${content.sections[section.key] || ""}`,
+  ).join("")
+  const checklistRows = content.checklist.map((item, index) =>
+    `<tr><td>${index + 1}</td><td>${escapeSourceHtml(item.label)}</td><td>${escapeSourceHtml(item.checked ? labels.checked : labels.unchecked)}</td></tr>`,
+  ).join("")
+  const approvalRows = content.approvals.map((item) =>
+    `<tr><td>${escapeSourceHtml(item.reviewerName)}</td><td>${escapeSourceHtml(item.decision)}</td><td>${escapeSourceHtml(item.comments)}</td><td>${escapeSourceHtml(item.decidedAt)}</td></tr>`,
+  ).join("")
+  return [
+    sections,
+    `<h2>${labels.checklist}</h2><table><thead><tr><th>#</th><th>${labels.item}</th><th>${labels.state}</th></tr></thead><tbody>${checklistRows}</tbody></table>`,
+    `<h2>${labels.approvals}</h2><table><thead><tr><th>${labels.reviewer}</th><th>${labels.decision}</th><th>${labels.comments}</th><th>${labels.date}</th></tr></thead><tbody>${approvalRows}</tbody></table>`,
+  ].join("")
+}
+
 function sectionTitles(key: SourceImageSectionHint | "source-visuals") {
   const section = SECTION_LABELS.find((item) => item.key === key)
   if (section) return { en: section.en, ar: section.ar }
@@ -263,6 +332,7 @@ function flattenSourceImages(sourceDocument: ExtractedSourceDocument | null | un
   if (!sourceDocument) return []
   return sourceDocument.pages
     .flatMap((page) => page.images ?? [])
+    .filter((image) => image.decorative !== true)
     .sort((left, right) => left.pageNumber - right.pageNumber || left.order - right.order)
 }
 
@@ -348,6 +418,14 @@ export function buildLanguagePdfTemplate(input: {
   const content = language === "ar" ? translation?.translatedContent : data.response.content
   if (!content) throw new Error("Generate the Arabic translation before exporting the Arabic PDF.")
 
+  const sourcePdf = sourcePdfAttachment(data)
+  const sourceLayoutHtml = language === "ar"
+    ? sourcePdfTranslationHtml(data, translation) || structuredSourceHtml(content, language)
+    : sourcePdfEnglishHtml(sourceDocument)
+  const sourceLayout = sourceDocument && sourcePdf && sourceLayoutHtml.trim()
+    ? { filename: sourcePdf.originalFilename, contentHtml: sourceLayoutHtml, pages: sourceDocument.pages }
+    : null
+
   const sections: PdfSectionTemplate[] = SECTION_LABELS.map((section) => ({
     key: section.key,
     title: language === "ar" ? section.ar : section.en,
@@ -356,9 +434,9 @@ export function buildLanguagePdfTemplate(input: {
   sections.push(checklistSection(content, language))
   sections.push(approvalSection(content, language))
   sections.push(evidenceSection(data, language))
-  sections.push(...documentsSection(data, content, language))
+  sections.push(...documentsSection(data, content, language, sourceLayout ? sourcePdf?.id : null))
 
-  if (sourceDocument) {
+  if (sourceDocument && !sourceLayout) {
     addSourcePdfImages({ data, translation, sourceDocument, language, sections })
   }
 
@@ -379,5 +457,6 @@ export function buildLanguagePdfTemplate(input: {
     subject: content.subject || data.response.subject || "—",
     generatedAt: language === "ar" ? translation?.generatedAt ?? null : null,
     sections,
+    sourceLayout,
   }
 }

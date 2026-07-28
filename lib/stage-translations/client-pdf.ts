@@ -2,8 +2,9 @@
 
 import { extractSourcePdf, loadPdfJs } from "@/lib/stage-translations/client-source-pdf"
 import {
-  buildBilingualSourceImages,
   buildLanguagePdfTemplate,
+  type ExtractedPdfImage,
+  type ExtractedPdfLayoutBlock,
   type ExtractedSourceDocument,
   type LanguagePdfTemplate,
   type PdfKind,
@@ -62,7 +63,7 @@ type PdfBlock =
   | { type: "paragraph"; text: string }
   | { type: "list"; ordered: boolean; items: string[] }
   | { type: "table"; headers: string[]; rows: string[][] }
-  | { type: "image"; src: string; caption: string; preferredWidthRatio?: number; alignment?: "left" | "center" | "right" }
+  | { type: "image"; src: string; caption: string; preferredWidthRatio?: number; preferredHeightRatio?: number; alignment?: "left" | "center" | "right" }
   | { type: "spacer"; height: number }
 
 type LoadedImage = { dataUrl: string; width: number; height: number }
@@ -826,7 +827,10 @@ async function renderImageBlock(flow: Flow, block: Extract<PdfBlock, { type: "im
   }
   const widthFromRatio = block.preferredWidthRatio ? flow.width * Math.max(0.2, Math.min(1, block.preferredWidthRatio)) : undefined
   const maxWidth = Math.min(flow.width, preferredWidth ?? widthFromRatio ?? flow.width)
-  const maxHeight = 115
+  const heightFromRatio = block.preferredHeightRatio
+    ? Math.max(20, Math.min(230, (flow.bottom - 18) * block.preferredHeightRatio))
+    : undefined
+  const maxHeight = Math.min(230, heightFromRatio ?? 115)
   const ratio = Math.min(maxWidth / image.width, maxHeight / image.height)
   const width = image.width * ratio
   const height = image.height * ratio
@@ -895,6 +899,220 @@ async function renderImageGrid(flow: Flow, images: NonNullable<PdfSectionTemplat
   }
 }
 
+
+type SourceLayoutContentBlock = Extract<PdfBlock, { type: "heading" | "paragraph" | "table" }>
+
+type SourceLayoutItem =
+  | { kind: "content"; top: number; left: number; width: number; source: ExtractedPdfLayoutBlock }
+  | { kind: "image"; top: number; left: number; width: number; source: ExtractedPdfImage }
+  | { kind: "fallback"; top: number; left: number; width: number; src: string; pageNumber: number }
+
+function translatedSourceBlocks(html: string) {
+  const result: SourceLayoutContentBlock[] = []
+  for (const block of htmlToBlocks(html)) {
+    if (block.type === "heading" || block.type === "paragraph" || block.type === "table") {
+      result.push(block)
+    } else if (block.type === "list") {
+      for (let index = 0; index < block.items.length; index += 1) {
+        result.push({
+          type: "paragraph",
+          text: `${block.ordered ? `${index + 1}.` : "•"} ${block.items[index]}`,
+        })
+      }
+    }
+  }
+  return result
+}
+
+function sourceBlockQueues(html: string) {
+  const queues = {
+    heading: [] as Array<Extract<PdfBlock, { type: "heading" }>>,
+    paragraph: [] as Array<Extract<PdfBlock, { type: "paragraph" }>>,
+    table: [] as Array<Extract<PdfBlock, { type: "table" }>>,
+  }
+  for (const block of translatedSourceBlocks(html)) queues[block.type].push(block as any)
+  const indexes = { heading: 0, paragraph: 0, table: 0 }
+  return {
+    take(source: ExtractedPdfLayoutBlock): SourceLayoutContentBlock | null {
+      const type = source.type
+      const queue = queues[type]
+      const index = indexes[type]
+      indexes[type] += 1
+      return queue[index] ?? null
+    },
+  }
+}
+
+function sourceBlockToPdfBlock(source: ExtractedPdfLayoutBlock): SourceLayoutContentBlock {
+  if (source.type === "table") {
+    return {
+      type: "table",
+      headers: source.headers ?? [],
+      rows: source.rows ?? [],
+    }
+  }
+  if (source.type === "heading") {
+    return { type: "heading", level: source.level ?? 3, text: source.text }
+  }
+  return { type: "paragraph", text: source.text }
+}
+
+function sourceLayoutItems(page: NonNullable<LanguagePdfTemplate["sourceLayout"]>["pages"][number]) {
+  const contentItems: SourceLayoutItem[] = (page.layoutBlocks ?? []).map((block) => ({
+    kind: "content",
+    top: block.yRatio,
+    left: block.xRatio,
+    width: block.widthRatio,
+    source: block,
+  }))
+  const imageItems: SourceLayoutItem[] = (page.images ?? [])
+    .filter((image) => image.decorative !== true)
+    .map((image) => ({
+      kind: "image",
+      top: image.yRatio,
+      left: image.xRatio,
+      width: image.widthRatio,
+      source: image,
+    }))
+  const fallback: SourceLayoutItem[] = page.imageDataUrl && page.imageExtractionComplete === false
+    ? [{ kind: "fallback", top: 1.02, left: 0, width: 1, src: page.imageDataUrl, pageNumber: page.pageNumber }]
+    : []
+  return [...contentItems, ...imageItems, ...fallback].sort((left, right) =>
+    left.top - right.top || left.left - right.left || (left.kind === "image" ? 1 : -1),
+  )
+}
+
+function captionLinesFromHtml(html: string) {
+  const explicit = Array.from(html.matchAll(/<figcaption\b[^>]*>([\s\S]*?)<\/figcaption>/gi))
+    .map((match) => normalizeText(match[1].replace(/<[^>]+>/g, " ")))
+    .filter(Boolean)
+  const patterned = htmlToBlocks(html)
+    .flatMap((block) => block.type === "paragraph" || block.type === "heading" ? [block.text] : [])
+    .filter((line) => /^(?:figure|fig\.?|photo|image|plate|photograph|الشكل|شكل|الصورة|صورة|اللقطة|لقطة)\b/i.test(line))
+  return [...explicit, ...patterned].filter((value, index, values) => values.indexOf(value) === index)
+}
+
+function drawPreservedSourcePageHeader(flow: Flow, sourcePage: number, totalPages: number) {
+  const { doc, template, rtl, pageWidth } = flow
+  doc.setFillColor(29, 78, 216)
+  doc.rect(0, 0, pageWidth, 3, "F")
+  setLanguage(doc, rtl, 9.5, true)
+  doc.setTextColor(15, 23, 42)
+  writePdfText(doc, template.projectName, rtl ? pageWidth - PAGE.margin : PAGE.margin, 10, {
+    align: rtl ? "right" : "left",
+  }, rtl)
+  const pageLabel = rtl
+    ? `صفحة المصدر ${sourcePage} من ${totalPages}`
+    : `Source page ${sourcePage} of ${totalPages}`
+  setLanguage(doc, rtl, 8, false)
+  doc.setTextColor(100, 116, 139)
+  writePdfText(doc, `${template.reportNumber} · ${pageLabel}`, rtl ? PAGE.margin : pageWidth - PAGE.margin, 10, {
+    align: rtl ? "left" : "right",
+  }, rtl)
+  doc.setDrawColor(203, 213, 225)
+  doc.line(PAGE.margin, 14, pageWidth - PAGE.margin, 14)
+  flow.x = PAGE.margin
+  flow.width = pageWidth - PAGE.margin * 2
+  flow.y = 18
+  flow.bottom = flow.pageHeight - PAGE.footer - 5
+}
+
+function positionedSubFlow(flow: Flow, leftRatio: number, widthRatio: number, desiredY: number, minimumWidth = 45) {
+  const availableWidth = flow.pageWidth - PAGE.margin * 2
+  const width = Math.max(minimumWidth, Math.min(availableWidth, availableWidth * Math.max(0.08, widthRatio)))
+  const maximumX = flow.pageWidth - PAGE.margin - width
+  const x = Math.max(PAGE.margin, Math.min(maximumX, PAGE.margin + availableWidth * Math.max(0, leftRatio)))
+  return { ...flow, x, width, y: Math.max(flow.y, desiredY) }
+}
+
+async function renderPreservedSourceLayout(flow: Flow, layout: NonNullable<LanguagePdfTemplate["sourceLayout"]>) {
+  const translatedQueues = flow.rtl ? sourceBlockQueues(layout.contentHtml) : null
+  const translatedCaptions = flow.rtl ? captionLinesFromHtml(layout.contentHtml) : []
+  let imageCaptionIndex = 0
+  const pageTop = 18
+  const pageContentHeight = flow.pageHeight - pageTop - PAGE.footer - 5
+
+  for (let pageIndex = 0; pageIndex < layout.pages.length; pageIndex += 1) {
+    if (pageIndex > 0) {
+      flow.doc.addPage("a4", "portrait")
+      flow.pageNumber += 1
+    }
+    const page = layout.pages[pageIndex]
+    drawPreservedSourcePageHeader(flow, page.pageNumber, layout.pages.length)
+
+    const rows: SourceLayoutItem[][] = []
+    for (const item of sourceLayoutItems(page)) {
+      const previous = rows[rows.length - 1]
+      if (previous && Math.abs(previous[0].top - item.top) <= 0.022) previous.push(item)
+      else rows.push([item])
+    }
+
+    for (const row of rows) {
+      const desiredY = pageTop + Math.min(0.98, Math.max(0, row[0].top)) * pageContentHeight
+      const rowY = Math.max(flow.y, desiredY)
+      let rowBottom = rowY
+
+      for (const item of row) {
+        if (item.kind === "content") {
+          const sourceBlock = sourceBlockToPdfBlock(item.source)
+          const block = translatedQueues?.take(item.source) ?? sourceBlock
+          const minimumWidth = block.type === "table" ? 85 : 45
+          const subFlow = positionedSubFlow({ ...flow, y: rowY }, item.left, item.width, rowY, minimumWidth)
+          if (block.type === "heading") renderHeading(subFlow, block)
+          else if (block.type === "paragraph") renderParagraph(subFlow, block.text)
+          else renderTable(subFlow, block)
+          flow.pageNumber = Math.max(flow.pageNumber, subFlow.pageNumber)
+          rowBottom = Math.max(rowBottom, subFlow.y)
+          continue
+        }
+
+        if (item.kind === "image") {
+          const source = item.source
+          const caption = flow.rtl
+            ? translatedCaptions[imageCaptionIndex] || `صورة من الصفحة ${source.pageNumber} · رقم ${source.order}`
+            : source.sourceCaption || `Source page ${source.pageNumber} · Image ${source.order}`
+          imageCaptionIndex += 1
+          const subFlow = positionedSubFlow({ ...flow, y: rowY }, item.left, item.width, rowY, 12)
+          await renderImageBlock(subFlow, {
+            type: "image",
+            src: source.dataUrl,
+            caption,
+            preferredWidthRatio: 1,
+            preferredHeightRatio: source.heightRatio,
+            alignment: source.xRatio + source.widthRatio / 2 < 0.4
+              ? "left"
+              : source.xRatio + source.widthRatio / 2 > 0.6
+                ? "right"
+                : "center",
+          }, subFlow.width)
+          flow.pageNumber = Math.max(flow.pageNumber, subFlow.pageNumber)
+          rowBottom = Math.max(rowBottom, subFlow.y)
+          continue
+        }
+
+        // Loss-resistant fallback for rare PDF image operators that PDF.js cannot
+        // decode individually. It stays adjacent to its source page instead of
+        // being collected into a document-end image appendix.
+        const subFlow = positionedSubFlow({ ...flow, y: rowY }, 0, 1, rowY, 120)
+        await renderImageBlock(subFlow, {
+          type: "image",
+          src: item.src,
+          caption: flow.rtl
+            ? `نسخة مرئية احتياطية للصفحة ${item.pageNumber} للحفاظ على جميع عناصر الإثبات.`
+            : `Visual fallback for source page ${item.pageNumber}, preserving undecodable evidence.`,
+          preferredWidthRatio: 1,
+          preferredHeightRatio: 0.9,
+          alignment: "center",
+        }, subFlow.width)
+        flow.pageNumber = Math.max(flow.pageNumber, subFlow.pageNumber)
+        rowBottom = Math.max(rowBottom, subFlow.y)
+      }
+
+      flow.y = Math.max(flow.y, rowBottom + 1.5)
+    }
+  }
+}
+
 function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
   const pages = doc.internal.getNumberOfPages()
   for (let page = 1; page <= pages; page += 1) {
@@ -932,18 +1150,21 @@ async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
     bottom: PAGE.portraitHeight - PAGE.footer - 5,
     pageNumber: 1,
   }
-  drawFirstPageHeader(flow)
-
-  for (const section of template.sections) {
-    renderSectionTitle(flow, section.title)
-    if (section.html !== undefined) {
-      const blocks = htmlToBlocks(section.html)
-      if (blocks.length) await renderBlocks(flow, blocks)
-      else renderParagraph(flow, flow.rtl ? "لا يوجد محتوى مسجل." : "No content recorded.")
+  if (template.sourceLayout) {
+    await renderPreservedSourceLayout(flow, template.sourceLayout)
+  } else {
+    drawFirstPageHeader(flow)
+    for (const section of template.sections) {
+      renderSectionTitle(flow, section.title)
+      if (section.html !== undefined) {
+        const blocks = htmlToBlocks(section.html)
+        if (blocks.length) await renderBlocks(flow, blocks)
+        else renderParagraph(flow, flow.rtl ? "لا يوجد محتوى مسجل." : "No content recorded.")
+      }
+      if (section.table) renderTable(flow, { type: "table", ...section.table })
+      if (section.images) await renderImageGrid(flow, section.images, section.key === "source-visuals")
+      flow.y += 4
     }
-    if (section.table) renderTable(flow, { type: "table", ...section.table })
-    if (section.images) await renderImageGrid(flow, section.images, section.key === "source-visuals")
-    flow.y += 4
   }
 
   addPageNumbers(doc, flow.rtl)
@@ -1148,50 +1369,6 @@ async function buildBilingualPdfBlob(input: {
       drawPageImage(doc, arabicPage, margin + columnWidth + gap, top, columnWidth, contentHeight, "No Arabic page")
     }
 
-    const evidenceImages = buildBilingualSourceImages({
-      data: input.data,
-      translation: input.translation,
-      sourceDocument: input.sourceDocument,
-    })
-    for (const evidence of evidenceImages) {
-      const image = await loadImage(evidence.src)
-      if (!image) continue
-      doc.addPage("a4", "landscape")
-      drawBilingualHeader({
-        doc,
-        data: input.data,
-        margin,
-        columnWidth,
-        gap,
-        englishLabel: evidence.englishSectionTitle,
-        arabicLabel: evidence.arabicSectionTitle,
-      })
-      const captionTop = PAGE.landscapeHeight - bottom - 18
-      const imageHeight = captionTop - top - 3
-      drawEvidenceImageInBox(doc, image, margin, top, columnWidth, imageHeight)
-      drawEvidenceImageInBox(doc, image, margin + columnWidth + gap, top, columnWidth, imageHeight)
-      drawBilingualCaption({
-        doc,
-        text: evidence.englishCaption,
-        x: margin,
-        y: captionTop + 4,
-        width: columnWidth,
-        rtl: false,
-      })
-      drawBilingualCaption({
-        doc,
-        text: evidence.arabicCaption,
-        x: margin + columnWidth + gap,
-        y: captionTop + 4,
-        width: columnWidth,
-        rtl: true,
-      })
-      setLanguage(doc, false, 7.5, false)
-      doc.setTextColor(100, 116, 139)
-      doc.text(`Source PDF page ${evidence.pageNumber}`, margin, PAGE.landscapeHeight - 8)
-      setLanguage(doc, true, 7.5, false)
-      writePdfText(doc, `صفحة المصدر ${evidence.pageNumber}`, PAGE.landscapeWidth - margin, PAGE.landscapeHeight - 8, { align: "right" }, true)
-    }
   } finally {
     await englishSource.documentProxy.destroy?.()
     englishSource.loadingTask.destroy?.()
