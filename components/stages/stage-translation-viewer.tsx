@@ -335,29 +335,33 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
       {translationIsStale ? <div role="status" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"><AlertCircle className="mt-0.5 size-4 shrink-0" />{copy.stale}</div> : null}
       {success ? <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"><CheckCircle2 className="mt-0.5 size-4 shrink-0" />{success}</div> : null}
 
-      <div className="grid items-start gap-5 lg:grid-cols-2">
-        <div className="min-w-0 space-y-5">
-          <LanguageReport
-            language="en"
-            title={copy.original}
+      {translated ? (
+        <div className="space-y-5">
+          <MirroredBilingualReport
             data={data}
-            content={data.response.content}
-            labels={labelsEn}
+            english={data.response.content}
+            arabic={translated}
+            labelsEn={labelsEn}
+            labelsAr={labelsAr}
+            englishTitle={copy.original}
+            arabicTitle={copy.arabic}
             generatedAt={translation?.generatedAt ?? null}
           />
           {sourcePdf ? <SourcePdfViewer data={data} attachment={sourcePdf} title={copy.sourcePdf} /> : null}
         </div>
-        {translated ? (
-          <LanguageReport
-            language="ar"
-            title={copy.arabic}
-            data={data}
-            content={translated}
-            labels={labelsAr}
-            generatedAt={translation?.generatedAt ?? null}
-            sourcePdf={sourcePdf}
-          />
-        ) : (
+      ) : (
+        <div className="grid items-start gap-5 lg:grid-cols-2">
+          <div className="min-w-0 space-y-5">
+            <LanguageReport
+              language="en"
+              title={copy.original}
+              data={data}
+              content={data.response.content}
+              labels={labelsEn}
+              generatedAt={translation?.generatedAt ?? null}
+            />
+            {sourcePdf ? <SourcePdfViewer data={data} attachment={sourcePdf} title={copy.sourcePdf} /> : null}
+          </div>
           <Card className="min-h-[560px] py-0">
             <CardContent className="flex min-h-[560px] flex-col items-center justify-center px-6 text-center">
               <span className="mb-5 flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Languages className="size-8" /></span>
@@ -368,8 +372,8 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
               </Button>
             </CardContent>
           </Card>
-        )}
-      </div>
+        </div>
+      )}
 
     </div>
   )
@@ -377,6 +381,237 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
 
 function HeaderMeta({ label, value }: { label: string; value: string }) {
   return <div className="min-h-20 bg-card px-4 py-4"><p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p><p className="mt-2 line-clamp-2 text-sm font-semibold">{value || "—"}</p></div>
+}
+
+function MirroredBilingualReport({
+  data,
+  english,
+  arabic,
+  labelsEn,
+  labelsAr,
+  englishTitle,
+  arabicTitle,
+  generatedAt,
+}: {
+  data: StageTranslationPageData
+  english: TranslationReportContent
+  arabic: TranslationReportContent
+  labelsEn: ReportLabels
+  labelsAr: ReportLabels
+  englishTitle: string
+  arabicTitle: string
+  generatedAt: string | null
+}) {
+  const evidence = data.response.attachments.filter((item) => item.attachmentKind === "evidence_image" || item.attachmentKind === "inline_image")
+  const documents = data.response.attachments.filter((item) => item.attachmentKind === "document")
+
+  return (
+    <section className="stage-translation-report min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 text-slate-800 shadow-sm">
+      <div className="h-2 bg-blue-700" />
+      <div className="space-y-4 p-4 sm:p-5">
+        <MirroredRow
+          english={<ReportHeaderCell language="en" title={englishTitle} data={data} content={english} generatedAt={generatedAt} />}
+          arabic={<ReportHeaderCell language="ar" title={arabicTitle} data={data} content={arabic} generatedAt={generatedAt} />}
+        />
+
+        <MirroredRow
+          english={
+            <MirroredSectionCard title={labelsEn.projectInformation} icon={<FileText className="size-4" />}>
+              <ProjectInformationBody data={data} content={english} labels={labelsEn} language="en" />
+            </MirroredSectionCard>
+          }
+          arabic={
+            <MirroredSectionCard title={labelsAr.projectInformation} icon={<FileText className="size-4" />}>
+              <ProjectInformationBody data={data} content={arabic} labels={labelsAr} language="ar" />
+            </MirroredSectionCard>
+          }
+        />
+
+        <MirroredRow
+          english={
+            <MirroredSectionCard title={labelsEn.reportDetails} icon={<ClipboardCheck className="size-4" />}>
+              <ReportDetailsBody content={english} labels={labelsEn} />
+            </MirroredSectionCard>
+          }
+          arabic={
+            <MirroredSectionCard title={labelsAr.reportDetails} icon={<ClipboardCheck className="size-4" />}>
+              <ReportDetailsBody content={arabic} labels={labelsAr} />
+            </MirroredSectionCard>
+          }
+        />
+
+        {SECTION_LABELS.map((section) => (
+          <MirroredRow
+            key={section.key}
+            english={
+              <MirroredSectionCard title={section.en} icon={<ClipboardCheck className="size-4" />}>
+                <RichHtml html={english.sections[section.key]} empty={labelsEn.noContent} />
+              </MirroredSectionCard>
+            }
+            arabic={
+              <MirroredSectionCard title={section.ar} icon={<ClipboardCheck className="size-4" />}>
+                <RichHtml html={arabic.sections[section.key]} empty={labelsAr.noContent} />
+              </MirroredSectionCard>
+            }
+          />
+        ))}
+
+        <MirroredRow
+          english={
+            <MirroredSectionCard title={labelsEn.checklist} icon={<CheckCircle2 className="size-4" />}>
+              <ChecklistBody content={english} labels={labelsEn} language="en" />
+            </MirroredSectionCard>
+          }
+          arabic={
+            <MirroredSectionCard title={labelsAr.checklist} icon={<CheckCircle2 className="size-4" />}>
+              <ChecklistBody content={arabic} labels={labelsAr} language="ar" />
+            </MirroredSectionCard>
+          }
+        />
+
+        <MirroredRow
+          english={
+            <MirroredSectionCard title={labelsEn.approvals} icon={<ShieldCheck className="size-4" />}>
+              <ApprovalBody content={english} labels={{ ...labelsEn, noApprovals: labelsEn.noContent }} language="en" />
+            </MirroredSectionCard>
+          }
+          arabic={
+            <MirroredSectionCard title={labelsAr.approvals} icon={<ShieldCheck className="size-4" />}>
+              <ApprovalBody content={arabic} labels={{ ...labelsAr, noApprovals: labelsAr.noContent }} language="ar" />
+            </MirroredSectionCard>
+          }
+        />
+
+        <MirroredRow
+          english={
+            <MirroredSectionCard title={labelsEn.attachmentsGroup} icon={<ImageIcon className="size-4" />}>
+              <AttachmentsBody documents={documents} evidence={evidence} content={english} labels={labelsEn} language="en" />
+            </MirroredSectionCard>
+          }
+          arabic={
+            <MirroredSectionCard title={labelsAr.attachmentsGroup} icon={<ImageIcon className="size-4" />}>
+              <AttachmentsBody documents={documents} evidence={evidence} content={arabic} labels={labelsAr} language="ar" />
+            </MirroredSectionCard>
+          }
+        />
+
+        <MirroredRow
+          english={<ReportFooter data={data} title={englishTitle} />}
+          arabic={<ReportFooter data={data} title={arabicTitle} />}
+        />
+      </div>
+    </section>
+  )
+}
+
+function MirroredRow({ english, arabic }: { english: ReactNode; arabic: ReactNode }) {
+  return (
+    <div className="grid items-stretch gap-4 lg:grid-cols-2">
+      <div lang="en" dir="ltr" className="h-full min-w-0">{english}</div>
+      <div lang="ar" dir="rtl" className="h-full min-w-0 font-arabic">{arabic}</div>
+    </div>
+  )
+}
+
+function ReportHeaderCell({
+  language,
+  title,
+  data,
+  content,
+  generatedAt,
+}: {
+  language: "en" | "ar"
+  title: string
+  data: StageTranslationPageData
+  content: TranslationReportContent
+  generatedAt: string | null
+}) {
+  const isArabic = language === "ar"
+  return (
+    <header className="stage-translation-no-break h-full rounded-2xl border border-slate-200 bg-white px-5 py-5 sm:px-7">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-blue-700"><Languages className="size-4" />{title}</div>
+          <h2 className="break-words text-2xl font-bold tracking-tight text-slate-950">{content.reportTitle || data.response.reportTitle}</h2>
+          <p className="mt-1 text-sm text-slate-600">{content.termName || data.term.name}</p>
+        </div>
+        <div className="shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">{isArabic ? "AR" : "EN"}</div>
+      </div>
+      {generatedAt ? <p className="mt-3 text-[11px] text-slate-500">{isArabic ? "تاريخ إنشاء الترجمة" : "Translation generated"}: {formatDate(generatedAt, language, true)}</p> : null}
+    </header>
+  )
+}
+
+function MirroredSectionCard({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
+  return (
+    <section className="stage-translation-no-break h-full rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+      <SectionHeading icon={icon} title={title} />
+      {children}
+    </section>
+  )
+}
+
+function ProjectInformationBody({
+  data,
+  content,
+  labels,
+  language,
+}: {
+  data: StageTranslationPageData
+  content: TranslationReportContent
+  labels: ReportLabels
+  language: "en" | "ar"
+}) {
+  return (
+    <dl className="grid gap-3 text-sm sm:grid-cols-2">
+      <ReportMeta label={labels.project} value={data.project.name} empty={labels.noContent} />
+      <ReportMeta label={labels.projectReference} value={data.project.code} empty={labels.noContent} />
+      <ReportMeta label={labels.stage} value={content.stageName || data.stage.name} empty={labels.noContent} />
+      <ReportMeta label={labels.term} value={content.termName || data.term.name} empty={labels.noContent} />
+      <ReportMeta label={labels.documentNumber} value={data.response.reportNumber} empty={labels.noContent} />
+      <ReportMeta label={labels.visitNumber} value={String(data.response.visitNumber || "")} empty={labels.noContent} />
+      <ReportMeta label={labels.date} value={formatDate(data.response.createdAt, language)} empty={labels.noContent} />
+      <ReportMeta label={labels.status} value={statusLabel(data.response.status as any, language)} empty={labels.noContent} />
+    </dl>
+  )
+}
+
+function ReportDetailsBody({ content, labels }: { content: TranslationReportContent; labels: ReportLabels }) {
+  return (
+    <dl className="grid gap-3 text-sm sm:grid-cols-2">
+      <ReportMeta label={labels.subject} value={content.subject} empty={labels.noContent} />
+      <ReportMeta label={labels.type} value={content.reportType} empty={labels.noContent} />
+    </dl>
+  )
+}
+
+function AttachmentsBody({
+  documents,
+  evidence,
+  content,
+  labels,
+  language,
+}: {
+  documents: StageTranslationPageData["response"]["attachments"]
+  evidence: StageTranslationPageData["response"]["attachments"]
+  content: TranslationReportContent
+  labels: ReportLabels
+  language: "en" | "ar"
+}) {
+  return (
+    <div className="space-y-7">
+      <EvidenceSection attachments={evidence} title={labels.evidence} empty={labels.noAttachments} />
+      <DocumentsSection documents={documents} content={content} labels={labels} language={language} />
+    </div>
+  )
+}
+
+function ReportFooter({ data, title }: { data: StageTranslationPageData; title: string }) {
+  return (
+    <footer className="stage-translation-no-break h-full rounded-xl border border-slate-200 bg-white px-5 py-3 text-center text-[11px] text-slate-500 sm:px-7">
+      {data.project.name} · {data.response.reportNumber} · {title}
+    </footer>
+  )
 }
 
 const LanguageReport = forwardRef<HTMLElement, {
@@ -505,8 +740,9 @@ function ReportGroup({ title, children }: { title: string; children: ReactNode }
   )
 }
 
-function ReportMeta({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3"><dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-1 break-words font-semibold text-slate-900">{value || "—"}</dd></div>
+function ReportMeta({ label, value, empty = "—" }: { label: string; value?: string | null; empty?: string }) {
+  const displayValue = value?.trim() ? value : empty
+  return <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3"><dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-1 break-words font-semibold text-slate-900">{displayValue}</dd></div>
 }
 
 function ReportSection({ title, html, empty }: { title: string; html: string; empty: string }) {
