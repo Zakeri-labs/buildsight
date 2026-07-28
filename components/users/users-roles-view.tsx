@@ -21,21 +21,23 @@ export function UsersRolesView({
   const pendingCount = data.invitations.filter((i) => i.status === "pending").length
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6">
       <PageHeader
         title="Users & Roles"
         subtitle={`Manage organizations, members, and project access for ${supervisingOrg.name}.`}
       />
 
       <Tabs defaultValue={initialTab}>
-        <TabsList>
-          <TabsTrigger value="members">Members</TabsTrigger>
-          <TabsTrigger value="organizations">Organizations</TabsTrigger>
-          <TabsTrigger value="projects">Projects &amp; Access</TabsTrigger>
-          <TabsTrigger value="invitations">
-            Invitations{pendingCount > 0 ? ` (${pendingCount})` : ""}
-          </TabsTrigger>
-        </TabsList>
+        <div className="max-w-full overflow-x-auto pb-1">
+          <TabsList className="w-max min-w-full sm:min-w-0">
+            <TabsTrigger value="members">Members</TabsTrigger>
+            <TabsTrigger value="organizations">Organizations</TabsTrigger>
+            <TabsTrigger value="projects">Projects &amp; Access</TabsTrigger>
+            <TabsTrigger value="invitations">
+              Invitations{pendingCount > 0 ? ` (${pendingCount})` : ""}
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="members" className="mt-5">
           <MembersTab supervisingOrg={supervisingOrg} members={supervisingMembers} />
