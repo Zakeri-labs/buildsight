@@ -8,14 +8,14 @@ import { toProjectRecord } from "@/lib/projects/project-record"
 export default async function ProjectDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }>
+  params: Promise<{ projectId: string }>
 }) {
-  const [{ id }, session] = await Promise.all([params, requireOnboarded()])
+  const [{ projectId }, session] = await Promise.all([params, requireOnboarded()])
   const organizationId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id
   if (!organizationId) notFound()
 
   const projects = await getOrgProjects(organizationId)
-  const project = projects.find((item) => item.id === id)
+  const project = projects.find((item) => item.id === projectId)
   if (!project) notFound()
 
   const participants = await getProjectParticipants(project.id)

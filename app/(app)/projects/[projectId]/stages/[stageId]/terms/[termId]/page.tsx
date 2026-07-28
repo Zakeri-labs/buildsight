@@ -6,11 +6,11 @@ import { loadProjectStageTerm } from "@/lib/db/project-stages"
 export default async function ProjectStageTermPage({
   params,
 }: {
-  params: Promise<{ id: string; termId: string }>
+  params: Promise<{ projectId: string; stageId: string; termId: string }>
 }) {
-  const [{ id, termId }, session] = await Promise.all([params, requireOnboarded()])
-  const data = await loadProjectStageTerm(id, termId, session.userId)
-  if (!data) notFound()
+  const [{ projectId, stageId, termId }, session] = await Promise.all([params, requireOnboarded()])
+  const data = await loadProjectStageTerm(projectId, termId, session.userId)
+  if (!data || data.stage.id !== stageId) notFound()
 
   return (
     <InspectionReportForm

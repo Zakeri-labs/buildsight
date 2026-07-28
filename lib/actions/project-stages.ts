@@ -150,7 +150,7 @@ export async function saveTermResponseAction(input: {
       metadata: { termId: input.termId, reportNumber, reportName: term.report_name },
     })
     revalidatePath(`/projects/${input.projectId}/stages`)
-    revalidatePath(`/projects/${input.projectId}/stages/${input.termId}`)
+    revalidatePath(`/projects/${input.projectId}/stages/${term.project_stage_id}/terms/${input.termId}`)
     return { ok: true, data: { responseId, reportNumber, status: nextStatus } }
   } catch (error) {
     return actionError(error, "Could not save the inspection report.")
@@ -302,8 +302,9 @@ export async function decideTermResponseAction(input: {
       projectId: input.projectId,
       metadata: { comments },
     })
+    const term = await termScope(input.projectId, response.project_stage_term_id)
     revalidatePath(`/projects/${input.projectId}/stages`)
-    revalidatePath(`/projects/${input.projectId}/stages/${response.project_stage_term_id}`)
+    revalidatePath(`/projects/${input.projectId}/stages/${term.project_stage_id}/terms/${response.project_stage_term_id}`)
     return { ok: true }
   } catch (error) {
     return actionError(error, "Could not save the review decision.")

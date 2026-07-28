@@ -15,6 +15,7 @@ import {
   ImagePlus,
   Italic,
   Link2,
+  Languages,
   List,
   ListOrdered,
   Loader2,
@@ -61,7 +62,7 @@ import { uploadStageEvidence } from "@/lib/stages/evidence-upload"
 import { createClient } from "@/lib/supabase/client"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -117,6 +118,8 @@ const COPY = {
     noHistory: "No approval decisions recorded.",
     remove: "Remove",
     selected: "selected",
+    translate: "Translate",
+    translateHint: "Save the report before translating it.",
   },
   ar: {
     back: "العودة إلى مراحل المشروع",
@@ -157,6 +160,8 @@ const COPY = {
     noHistory: "لا توجد قرارات اعتماد مسجلة.",
     remove: "حذف",
     selected: "محدد",
+    translate: "ترجمة",
+    translateHint: "احفظ التقرير قبل ترجمته.",
   },
 } as const
 
@@ -511,7 +516,21 @@ export function InspectionReportForm({
                 </div>
               </div>
             </div>
-            <Badge variant="outline" className={cn("w-fit border-white/30 bg-white/10 text-white", status !== "draft" && "border-white/40")}>{statusLabel(status, locale)}</Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              {responseId ? (
+                <Link
+                  href={`/projects/${project.id}/stages/${stage.id}/terms/${term.id}/translate`}
+                  className={buttonVariants({ size: "sm", variant: "secondary", className: "bg-white text-primary hover:bg-white/90" })}
+                >
+                  <Languages className="size-4" />{copy.translate}
+                </Link>
+              ) : (
+                <Button type="button" size="sm" variant="secondary" className="bg-white/70 text-primary" disabled title={copy.translateHint}>
+                  <Languages className="size-4" />{copy.translate}
+                </Button>
+              )}
+              <Badge variant="outline" className={cn("w-fit border-white/30 bg-white/10 text-white", status !== "draft" && "border-white/40")}>{statusLabel(status, locale)}</Badge>
+            </div>
           </div>
         </div>
         <CardContent className="grid gap-px bg-border p-0 sm:grid-cols-2 lg:grid-cols-4">

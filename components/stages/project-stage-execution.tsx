@@ -169,7 +169,7 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
                   <CardContent className="p-0">
                     <div className="divide-y">
                       {stage.terms.map((term) => (
-                        <TermRow key={term.id} projectId={data.project.id} term={term} copy={copy} locale={locale} />
+                        <TermRow key={term.id} projectId={data.project.id} stageId={stage.id} term={term} copy={copy} locale={locale} />
                       ))}
                     </div>
                   </CardContent>
@@ -194,11 +194,13 @@ function Metric({ value, label }: { value: number; label: string }) {
 
 function TermRow({
   projectId,
+  stageId,
   term,
   copy,
   locale,
 }: {
   projectId: string
+  stageId: string
   term: ProjectStageTermExecution
   copy: (typeof COPY)["en"] | (typeof COPY)["ar"]
   locale: "en" | "ar"
@@ -207,7 +209,7 @@ function TermRow({
   const complete = isComplete(term)
   return (
     <Link
-      href={`/projects/${projectId}/stages/${term.id}`}
+      href={`/projects/${projectId}/stages/${stageId}/terms/${term.id}`}
       className="group grid gap-4 px-4 py-4 transition-colors hover:bg-muted/35 sm:px-5 lg:grid-cols-[minmax(260px,1.4fr)_minmax(180px,0.8fr)_minmax(150px,0.65fr)_auto] lg:items-center"
       aria-label={`${copy.openReport}: ${term.reportName}`}
     >

@@ -425,3 +425,119 @@
   break-inside: avoid;
   page-break-inside: avoid;
 }
+
+/* Project stage AI document translation viewer and PDF export */
+.stage-translation-report,
+.stage-translation-pdf-export {
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.stage-translation-pdf-export {
+  background: #fff !important;
+  color: #1e293b !important;
+  box-shadow: none !important;
+}
+
+.stage-translation-richtext p,
+.stage-translation-richtext div {
+  margin: 0 0 0.75rem;
+  line-height: 1.8;
+}
+
+.stage-translation-richtext h1,
+.stage-translation-richtext h2,
+.stage-translation-richtext h3,
+.stage-translation-richtext h4 {
+  margin: 1.1rem 0 0.55rem;
+  break-after: avoid;
+  page-break-after: avoid;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #0f172a;
+}
+
+.stage-translation-richtext h1 { font-size: 1.45rem; }
+.stage-translation-richtext h2 { font-size: 1.25rem; }
+.stage-translation-richtext h3 { font-size: 1.1rem; }
+.stage-translation-richtext h4 { font-size: 1rem; }
+
+.stage-translation-richtext ul,
+.stage-translation-richtext ol {
+  margin: 0.6rem 0 1rem;
+  padding-inline-start: 1.5rem;
+}
+
+.stage-translation-richtext ul { list-style: disc; }
+.stage-translation-richtext ol { list-style: decimal; }
+.stage-translation-richtext li { margin: 0.3rem 0; line-height: 1.75; }
+
+.stage-translation-richtext a {
+  color: #1d4ed8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.stage-translation-richtext table {
+  width: 100%;
+  margin: 1rem 0;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.stage-translation-richtext th,
+.stage-translation-richtext td {
+  border: 1px solid #cbd5e1;
+  padding: 0.55rem 0.65rem;
+  text-align: start;
+  vertical-align: top;
+}
+
+.stage-translation-richtext th {
+  background: #f1f5f9;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.stage-translation-richtext figure {
+  margin: 1rem 0;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: #f8fafc;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.stage-translation-richtext figure img,
+.stage-translation-richtext > img {
+  display: block;
+  width: 100%;
+  max-height: 460px;
+  object-fit: contain;
+  background: #f8fafc;
+}
+
+.stage-translation-richtext figcaption {
+  padding: 0.5rem 0.75rem;
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.stage-translation-pdf-export .stage-translation-no-break,
+.stage-translation-pdf-export table,
+.stage-translation-pdf-export tr,
+.stage-translation-pdf-export figure,
+.stage-translation-pdf-export img {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.stage-translation-pdf-export .stage-translation-richtext {
+  overflow-wrap: anywhere;
+}
+
+.stage-translation-bilingual .stage-translation-richtext {
+  font-size: 12px;
+  line-height: 1.65;
+}
