@@ -21,61 +21,6 @@ import { ProjectParticipants, type ProjectParticipant } from "@/components/proje
 import { ProjectDocuments, type ProjectDocument } from "@/components/projects/project-documents"
 
 
-function projectParticipants(project: ProjectRecord): ProjectParticipant[] {
-  return [
-    {
-      id: `${project.id}-consultant`,
-      organization: project.consultant,
-      organizationType: "Consultancy",
-      projectRole: "Consultant",
-      keyContact: { name: "Arman H.", initials: "AH", avatar: "/avatars/arman.png" },
-      usersWithAccess: 5,
-      status: "Active",
-      logoTone: "blue",
-    },
-    {
-      id: `${project.id}-client`,
-      organization: project.client,
-      organizationType: "Client",
-      projectRole: "Client",
-      keyContact: { name: "Leena K.", initials: "LK" },
-      usersWithAccess: 2,
-      status: "Active",
-      logoTone: "violet",
-    },
-    {
-      id: `${project.id}-contractor`,
-      organization: project.contractor,
-      organizationType: "Contractor",
-      projectRole: "Contractor",
-      keyContact: { name: "Mohammed S.", initials: "MS" },
-      usersWithAccess: 8,
-      status: "Active",
-      logoTone: "amber",
-    },
-    {
-      id: `${project.id}-third-party`,
-      organization: "Prime Inspectors",
-      organizationType: "Third Party",
-      projectRole: "Third Party",
-      keyContact: { name: "Nadine R.", initials: "NR" },
-      usersWithAccess: 3,
-      status: "Active",
-      logoTone: "cyan",
-    },
-    {
-      id: `${project.id}-government`,
-      organization: "Municipal Authority",
-      organizationType: "Government",
-      projectRole: "Government",
-      keyContact: { name: "Ibrahim M.", initials: "IM" },
-      usersWithAccess: 1,
-      status: "Limited Access",
-      logoTone: "emerald",
-    },
-  ]
-}
-
 function projectDocuments(project: ProjectRecord): ProjectDocument[] {
   return [
     {
@@ -138,7 +83,15 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
   )
 }
 
-export function ProjectDetail({ project, documents }: { project: ProjectRecord; documents?: ProjectDocument[] }) {
+export function ProjectDetail({
+  project,
+  documents,
+  participants,
+}: {
+  project: ProjectRecord
+  documents?: ProjectDocument[]
+  participants: ProjectParticipant[]
+}) {
   const { t } = useI18n()
 
   return (
@@ -253,7 +206,7 @@ export function ProjectDetail({ project, documents }: { project: ProjectRecord; 
         </Card>
       </div>
 
-      <ProjectParticipants participants={projectParticipants(project)} />
+      <ProjectParticipants participants={participants} />
 
       <ProjectDocuments projectId={project.id} documents={documents ?? projectDocuments(project)} />
     </div>

@@ -9,8 +9,9 @@ import type { ProjectDocument } from "@/components/projects/project-documents"
 import { requireOnboarded } from "@/lib/auth/session"
 import { getSelectedProjectId } from "@/lib/project-scope"
 import { getDashboardData, getOrgProjects, type DashboardData, type DomainProject } from "@/lib/db/domain"
-import type { ProjectRecord, ProjectStatusKey } from "@/lib/mock-data"
+import { getProjectParticipants } from "@/lib/db/project-participants"
 import { normalizeDocumentType } from "@/lib/documents/document-types"
+import { toProjectRecord } from "@/lib/projects/project-record"
 import { createClient } from "@/lib/supabase/server"
 
 // Deterministic upward sparkline that lands on `value`.
@@ -18,52 +19,6 @@ function spark(value: number): number[] {
   const n = 12
   const start = Math.max(0, Math.round(value * 0.4))
   return Array.from({ length: n }, (_, i) => Math.round(start + ((value - start) * i) / (n - 1)))
-}
-
-function projectStatusKey(status: string): ProjectStatusKey {
-  const normalized = status.trim().toLowerCase().replaceAll("_", "-").replaceAll(" ", "-")
-  if (normalized === "planning") return "planning"
-  if (normalized === "on-hold" || normalized === "paused") return "onHold"
-  if (normalized === "completed") return "completed"
-  if (normalized === "handover") return "handover"
-  return "underConstruction"
-}
-
-function displayDate(value: string | null): string {
-  if (!value) return "Not set"
-  const date = new Date(`${value}T00:00:00`)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(date)
-}
-
-function toProjectRecord(
-  project: DomainProject,
-  counts: { ncrs: number; inspections: number } | undefined,
-): ProjectRecord {
-  return {
-    id: project.id,
-    name: project.name,
-    location: project.location ?? "Location not set",
-    image: project.image ?? "/placeholder.svg",
-    statusKey: projectStatusKey(project.status),
-    contractor: project.contractor ?? "Not assigned",
-    consultant: project.consultant ?? "Not assigned",
-    client: project.client ?? "Not assigned",
-    startDate: displayDate(project.startDate),
-    targetHandover: displayDate(project.targetHandover),
-    contractValue: project.contractValue ?? "Not set",
-    progress: {
-      planned: project.progressPlanned,
-      actual: project.progressActual,
-      delay: project.progressDelay,
-    },
-    openNcrs: counts?.ncrs ?? 0,
-    openInspections: counts?.inspections ?? 0,
-  }
 }
 
 type DashboardDocumentRow = {
@@ -158,8 +113,17 @@ export default async function DashboardPage() {
     const selectedProject = orgProjects.find((project) => project.id === projectId)
     if (selectedProject) {
       const projectCounts = data.projects.find((project) => project.id === projectId)
-      const documents = await getProjectDocuments(projectId, session.userId, session.email)
-      return <ProjectDetail project={toProjectRecord(selectedProject, projectCounts)} documents={documents} />
+      const [documents, participants] = await Promise.all([
+        getProjectDocuments(projectId, session.userId, session.email),
+        getProjectParticipants(projectId),
+      ])
+      return (
+        <ProjectDetail
+          project={toProjectRecord(selectedProject, projectCounts)}
+          documents={documents}
+          participants={participants}
+        />
+      )
     }
   }
 

@@ -18,22 +18,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import type { ProjectParticipantView as ProjectParticipant } from "@/lib/projects/project-participant-types"
 import { cn } from "@/lib/utils"
 
-export type ProjectParticipant = {
-  id: string
-  organization: string
-  organizationType: string
-  projectRole: "Consultant" | "Client" | "Contractor" | "Third Party" | "Government"
-  keyContact: {
-    name: string
-    initials: string
-    avatar?: string
-  }
-  usersWithAccess: number
-  status: "Active" | "Limited Access"
-  logoTone?: "blue" | "amber" | "emerald" | "cyan" | "violet"
-}
+export type { ProjectParticipantView as ProjectParticipant } from "@/lib/projects/project-participant-types"
 
 const roleStyles: Record<ProjectParticipant["projectRole"], string> = {
   Consultant: "bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
@@ -95,6 +83,13 @@ export function ProjectParticipants({ participants }: { participants: ProjectPar
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
+              {participants.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-5 py-10 text-center text-sm text-muted-foreground sm:px-6">
+                    No project participants have been added.
+                  </td>
+                </tr>
+              ) : null}
               {participants.map((participant) => (
                 <tr key={participant.id} className="transition-colors hover:bg-muted/30">
                   <td className="px-5 py-3.5 sm:px-6">
@@ -119,7 +114,12 @@ export function ProjectParticipants({ participants }: { participants: ProjectPar
                           {participant.keyContact.initials}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="font-medium">{participant.keyContact.name}</span>
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{participant.keyContact.name}</span>
+                        {participant.keyContact.detail ? (
+                          <span className="block truncate text-xs text-muted-foreground">{participant.keyContact.detail}</span>
+                        ) : null}
+                      </span>
                     </div>
                   </td>
                   <td className="px-4 py-3.5 text-muted-foreground">

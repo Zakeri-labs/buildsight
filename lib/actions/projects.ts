@@ -158,7 +158,7 @@ export async function createProject(input: {
 
     const { data: org } = await admin
       .from("organizations")
-      .select("type")
+      .select("id, name, type")
       .eq("id", input.supervisingOrgId)
       .maybeSingle()
     if (org?.type !== "supervising") {
@@ -222,6 +222,7 @@ export async function createProject(input: {
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,
         contractor: contractorName,
+        consultant: org.name,
         client: owners[0]?.name || null,
         contractor_organization_id: contractorOrganizationId,
         contractor_registration_number: input.contractor?.registrationNumber?.trim() || null,
@@ -306,6 +307,75 @@ export async function createProject(input: {
       if (ownersError) throw ownersError
       createdOwners = ownerRows ?? []
     }
+
+    const supervisorProfile = assignedSupervisorId
+      ? await admin
+          .from("profiles")
+          .select("id, full_name, email")
+          .eq("id", assignedSupervisorId)
+          .maybeSingle()
+      : { data: null, error: null }
+    if (supervisorProfile.error) throw supervisorProfile.error
+
+    const ownerIdsByOrder = new Map(createdOwners.map((owner) => [owner.owner_order, owner.id] as const))
+    const participantRows = [
+      {
+        project_id: created.id,
+        organization_id: input.supervisingOrgId,
+        organization_name: org.name,
+        participant_type: "consultancy",
+        project_role: "consultant",
+        key_contact_user_id: assignedSupervisorId,
+        key_contact_name:
+          supervisorProfile.data?.full_name?.trim() || supervisorProfile.data?.email?.trim() || null,
+        key_contact_email: supervisorProfile.data?.email?.trim() || null,
+        key_contact_phone: null,
+        status: "active",
+        source_key: "consultant",
+        sort_order: 10,
+        created_by: actorId,
+      },
+      ...owners.flatMap((owner, index) => {
+        const ownerId = ownerIdsByOrder.get(index + 1)
+        return ownerId
+          ? [{
+              project_id: created.id,
+              organization_id: null,
+              organization_name: owner.name,
+              participant_type: "client",
+              project_role: "client",
+              key_contact_user_id: null,
+              key_contact_name: owner.contactName,
+              key_contact_email: owner.contactEmail,
+              key_contact_phone: owner.contactPhone,
+              status: "active",
+              source_key: `owner:${ownerId}`,
+              sort_order: 21 + index,
+              created_by: actorId,
+            }]
+          : []
+      }),
+      ...(contractorName
+        ? [{
+            project_id: created.id,
+            organization_id: contractorOrganizationId,
+            organization_name: contractorName,
+            participant_type: "contractor",
+            project_role: "contractor",
+            key_contact_user_id: null,
+            key_contact_name: null,
+            key_contact_email: null,
+            key_contact_phone: input.contractor?.phone?.trim() || null,
+            status: "active",
+            source_key: "contractor",
+            sort_order: 40,
+            created_by: actorId,
+          }]
+        : []),
+    ]
+
+    const { error: participantError } = await admin.from("project_participants").insert(participantRows)
+    if (participantError) throw participantError
 
     await audit({
       actorId,
