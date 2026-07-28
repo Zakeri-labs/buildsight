@@ -4,6 +4,7 @@ import type {
   TranslationReportContent,
   TranslationSectionKey,
 } from "@/lib/stage-translations/types"
+import { statusLabel } from "@/lib/stages/execution"
 
 export type PdfKind = "original" | "arabic" | "bilingual"
 
@@ -81,6 +82,9 @@ export type PdfSectionTemplate = {
     rows: string[][]
   }
   images?: PdfImageTemplate[]
+  imageTitle?: string
+  documentsHtml?: string
+  documentsTitle?: string
 }
 
 export type PreservedSourceLayout = {
@@ -131,11 +135,28 @@ const SECTION_LABELS: Array<{ key: TranslationSectionKey; en: string; ar: string
 const LABELS = {
   en: {
     title: "English Original Document",
+    projectInformation: "Project Information",
+    reportDetails: "Report Details",
+    attachments: "Attachments",
     checklist: "Inspection Checklist",
     approvals: "Approval Information",
-    evidence: "Image Evidence",
+    evidence: "Images",
     documents: "Related Documents",
     sourceVisuals: "Original PDF Image Evidence",
+    field: "Field",
+    value: "Value",
+    project: "Project Name",
+    projectReference: "Project Reference",
+    stage: "Stage",
+    term: "Term Name",
+    reportNumber: "Report Number",
+    visitNumber: "Visit Number",
+    reportDate: "Date",
+    reportStatus: "Status",
+    reportType: "Type",
+    subject: "Subject",
+    noContent: "No content recorded.",
+    noAttachments: "No related attachments.",
     item: "Item",
     state: "Status",
     checked: "Completed",
@@ -147,11 +168,28 @@ const LABELS = {
   },
   ar: {
     title: "الترجمة العربية",
+    projectInformation: "معلومات المشروع",
+    reportDetails: "تفاصيل التقرير",
+    attachments: "المرفقات والصور",
     checklist: "قائمة فحص التفتيش",
     approvals: "معلومات الاعتماد",
-    evidence: "صور الإثبات",
+    evidence: "الصور",
     documents: "المستندات المرتبطة",
     sourceVisuals: "صور الإثبات من ملف PDF الأصلي",
+    field: "الحقل",
+    value: "القيمة",
+    project: "اسم المشروع",
+    projectReference: "مرجع المشروع",
+    stage: "المرحلة",
+    term: "اسم البند",
+    reportNumber: "رقم التقرير",
+    visitNumber: "رقم الزيارة",
+    reportDate: "التاريخ",
+    reportStatus: "الحالة",
+    reportType: "النوع",
+    subject: "الموضوع",
+    noContent: "لا يوجد محتوى مسجل.",
+    noAttachments: "لا توجد مرفقات مرتبطة.",
     item: "البند",
     state: "الحالة",
     checked: "مكتمل",
@@ -177,8 +215,55 @@ function attachmentImageUrl(data: StageTranslationPageData, path: string, filena
   return `/api/stage-translations/source?${params.toString()}`
 }
 
+function projectInformationSection(
+  data: StageTranslationPageData,
+  content: TranslationReportContent,
+  language: "en" | "ar",
+): PdfSectionTemplate {
+  const labels = LABELS[language]
+  return {
+    key: "projectInformation",
+    title: labels.projectInformation,
+    table: {
+      headers: [labels.field, labels.value],
+      rows: [
+        [labels.project, data.project.name],
+        [labels.projectReference, data.project.code || "—"],
+        [labels.stage, content.stageName || data.stage.name],
+        [labels.term, content.termName || data.term.name],
+        [labels.reportNumber, data.response.reportNumber],
+        [labels.visitNumber, String(data.response.visitNumber)],
+        [labels.reportDate, data.response.createdAt],
+        [labels.reportStatus, statusLabel(data.response.status as any, language)],
+      ],
+    },
+  }
+}
+
+function reportDetailsSection(
+  data: StageTranslationPageData,
+  content: TranslationReportContent,
+  language: "en" | "ar",
+): PdfSectionTemplate {
+  const labels = LABELS[language]
+  return {
+    key: "reportDetails",
+    title: labels.reportDetails,
+    table: {
+      headers: [labels.field, labels.value],
+      rows: [
+        [labels.reportType, content.reportType || data.response.reportType || "—"],
+        [labels.subject, content.subject || data.response.subject || labels.noContent],
+      ],
+    },
+  }
+}
+
 function checklistSection(content: TranslationReportContent, language: "en" | "ar"): PdfSectionTemplate {
   const labels = LABELS[language]
+  if (!content.checklist.length) {
+    return { key: "checklist", title: labels.checklist, html: "" }
+  }
   return {
     key: "checklist",
     title: labels.checklist,
@@ -195,6 +280,9 @@ function checklistSection(content: TranslationReportContent, language: "en" | "a
 
 function approvalSection(content: TranslationReportContent, language: "en" | "ar"): PdfSectionTemplate {
   const labels = LABELS[language]
+  if (!content.approvals.length) {
+    return { key: "approvals", title: labels.approvals, html: "" }
+  }
   return {
     key: "approvals",
     title: labels.approvals,
@@ -205,38 +293,54 @@ function approvalSection(content: TranslationReportContent, language: "en" | "ar
   }
 }
 
-function evidenceSection(data: StageTranslationPageData, language: "en" | "ar"): PdfSectionTemplate {
-  const images = data.response.attachments
+function evidenceImages(data: StageTranslationPageData): PdfImageTemplate[] {
+  return data.response.attachments
     .filter((item) => item.attachmentKind === "evidence_image" || item.attachmentKind === "inline_image")
     .map((item) => ({
       src: attachmentImageUrl(data, item.storagePath, item.originalFilename),
       caption: item.originalFilename,
-      sectionKey: "evidence",
+      sectionKey: "attachments",
       preferredWidthRatio: 0.72,
       alignment: "center" as const,
     }))
-  return { key: "evidence", title: LABELS[language].evidence, images }
 }
 
-function documentsSection(
+function sourceDocumentHtmlForLanguage(input: {
   data: StageTranslationPageData,
   content: TranslationReportContent,
   language: "en" | "ar",
-  skipAttachmentId?: string | null,
-): PdfSectionTemplate[] {
-  const documents = data.response.attachments.filter((item) =>
-    item.attachmentKind === "document" && item.id !== skipAttachmentId,
-  )
-  if (!documents.length) return [{ key: "documents", title: LABELS[language].documents, html: "" }]
-  return documents.map((document, index) => {
-    const translated = content.attachmentTranslations.find((item) => item.attachmentId === document.id)
-    const html = translated?.contentHtml || `<p>${document.originalFilename}</p>`
-    return {
-      key: index === 0 ? "documents" : `document-${index + 1}`,
-      title: index === 0 ? LABELS[language].documents : document.originalFilename,
-      html,
-    }
-  })
+  sourceDocument?: ExtractedSourceDocument | null,
+}) {
+  const sourcePdf = sourcePdfAttachment(input.data)
+  const extractedEnglish = input.language === "en" ? sourcePdfEnglishHtml(input.sourceDocument) : ""
+  return input.data.response.attachments
+    .filter((item) => item.attachmentKind === "document")
+    .map((document) => {
+      const stored = input.content.attachmentTranslations.find((item) => item.attachmentId === document.id)
+      const html = document.id === sourcePdf?.id && extractedEnglish.trim()
+        ? extractedEnglish
+        : stored?.contentHtml || ""
+      const body = html.trim() || `<p>${escapeSourceHtml(document.originalFilename)}</p>`
+      return `<section data-attachment-id="${escapeSourceHtml(document.id)}"><h3>${escapeSourceHtml(document.originalFilename)}</h3>${body}</section>`
+    })
+    .join("")
+}
+
+function attachmentsSection(input: {
+  data: StageTranslationPageData
+  content: TranslationReportContent
+  language: "en" | "ar"
+  sourceDocument?: ExtractedSourceDocument | null
+}): PdfSectionTemplate {
+  const labels = LABELS[input.language]
+  return {
+    key: "attachments",
+    title: labels.attachments,
+    imageTitle: labels.evidence,
+    images: evidenceImages(input.data),
+    documentsTitle: labels.documents,
+    documentsHtml: sourceDocumentHtmlForLanguage(input),
+  }
 }
 
 function stripHtmlToLines(html: string) {
@@ -384,7 +488,9 @@ function addSourcePdfImages(input: {
 }) {
   const pairedImages = buildBilingualSourceImages(input)
   for (const image of pairedImages) {
-    const sectionKey = image.sectionKey
+    const sectionKey = image.sectionKey === "evidence" || image.sectionKey === "documents" || image.sectionKey === "source-visuals"
+      ? "attachments"
+      : image.sectionKey
     const existing = input.sections.find((section) => section.key === sectionKey)
     const item: PdfImageTemplate = {
       src: image.src,
@@ -402,10 +508,38 @@ function addSourcePdfImages(input: {
     if (existing) {
       existing.images = [...(existing.images ?? []), item]
     } else {
-      const title = input.language === "ar" ? image.arabicSectionTitle : image.englishSectionTitle
-      input.sections.push({ key: sectionKey, title, images: [item] })
+      const labels = LABELS[input.language]
+      input.sections.push({ key: "attachments", title: labels.attachments, imageTitle: labels.evidence, images: [item] })
     }
   }
+}
+
+export const PDF_UI_SECTION_KEYS = [
+  "projectInformation",
+  "reportDetails",
+  "feedback",
+  "observation",
+  "findings",
+  "recommendations",
+  "correctiveActions",
+  "checklist",
+  "approvals",
+  "attachments",
+] as const
+
+export function validateLanguagePdfTemplate(template: LanguagePdfTemplate) {
+  const keys = template.sections.map((section) => section.key)
+  const missing = PDF_UI_SECTION_KEYS.filter((key) => !keys.includes(key))
+  if (missing.length) {
+    throw new Error(`PDF document model is incomplete. Missing sections: ${missing.join(", ")}.`)
+  }
+  if (keys.length !== PDF_UI_SECTION_KEYS.length) {
+    throw new Error("PDF document model contains an unexpected number of sections.")
+  }
+  const hasStructuredContent = template.sections.some((section) =>
+    Boolean(section.html?.trim()) || Boolean(section.table?.rows.length) || Boolean(section.images?.length) || Boolean(section.documentsHtml?.trim()),
+  )
+  if (!hasStructuredContent) throw new Error("The structured report contains no exportable content.")
 }
 
 export function buildLanguagePdfTemplate(input: {
@@ -415,30 +549,28 @@ export function buildLanguagePdfTemplate(input: {
   sourceDocument?: ExtractedSourceDocument | null
 }): LanguagePdfTemplate {
   const { data, translation, language, sourceDocument } = input
-  const content = language === "ar" ? translation?.translatedContent : data.response.content
+  const content = language === "ar"
+    ? translation?.translatedContent
+    : translation?.originalContent ?? data.response.content
   if (!content) throw new Error("Generate the Arabic translation before exporting the Arabic PDF.")
 
-  const sourcePdf = sourcePdfAttachment(data)
-  const sourceLayoutHtml = language === "ar"
-    ? sourcePdfTranslationHtml(data, translation) || structuredSourceHtml(content, language)
-    : sourcePdfEnglishHtml(sourceDocument)
-  const sourceLayout = sourceDocument && sourcePdf && sourceLayoutHtml.trim()
-    ? { filename: sourcePdf.originalFilename, contentHtml: sourceLayoutHtml, pages: sourceDocument.pages }
-    : null
-
-  const sections: PdfSectionTemplate[] = SECTION_LABELS.map((section) => ({
-    key: section.key,
-    title: language === "ar" ? section.ar : section.en,
-    html: content.sections[section.key],
-  }))
+  // The UI and PDF both consume the complete structured TranslationReportContent
+  // object. Source-PDF extraction enriches that model with tables and images; it
+  // never replaces the report with a partial coordinate-only reconstruction.
+  const sections: PdfSectionTemplate[] = [
+    projectInformationSection(data, content, language),
+    reportDetailsSection(data, content, language),
+    ...SECTION_LABELS.map((section) => ({
+      key: section.key,
+      title: language === "ar" ? section.ar : section.en,
+      html: content.sections[section.key],
+    })),
+  ]
   sections.push(checklistSection(content, language))
   sections.push(approvalSection(content, language))
-  sections.push(evidenceSection(data, language))
-  sections.push(...documentsSection(data, content, language, sourceLayout ? sourcePdf?.id : null))
+  sections.push(attachmentsSection({ data, content, language, sourceDocument }))
 
-  if (sourceDocument && !sourceLayout) {
-    addSourcePdfImages({ data, translation, sourceDocument, language, sections })
-  }
+  if (sourceDocument) addSourcePdfImages({ data, translation, sourceDocument, language, sections })
 
   return {
     language,
@@ -457,6 +589,6 @@ export function buildLanguagePdfTemplate(input: {
     subject: content.subject || data.response.subject || "—",
     generatedAt: language === "ar" ? translation?.generatedAt ?? null : null,
     sections,
-    sourceLayout,
+    sourceLayout: null,
   }
 }

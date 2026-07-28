@@ -3,6 +3,7 @@
 import { extractSourcePdf, loadPdfJs } from "@/lib/stage-translations/client-source-pdf"
 import {
   buildLanguagePdfTemplate,
+  validateLanguagePdfTemplate,
   type ExtractedPdfImage,
   type ExtractedPdfLayoutBlock,
   type ExtractedSourceDocument,
@@ -10,7 +11,7 @@ import {
   type PdfKind,
   type PdfSectionTemplate,
 } from "@/lib/stage-translations/pdf-templates"
-import { getSourcePdfAttachment, stageSourceDocumentUrl } from "@/lib/stage-translations/source-document"
+import { getSourcePdfAttachment } from "@/lib/stage-translations/source-document"
 import type { StageTranslationPageData, StageTranslationRecord } from "@/lib/stage-translations/types"
 import { createClient as createSupabaseClient } from "@/lib/supabase/client"
 
@@ -873,7 +874,10 @@ async function renderBlocks(flow: Flow, blocks: PdfBlock[]) {
 }
 
 function renderSectionTitle(flow: Flow, title: string) {
-  ensureSpace(flow, 14)
+  // Keep a section heading with at least the first paragraph or table header.
+  // This prevents orphan headings and the large blank-page artefacts that the
+  // previous source-coordinate renderer produced.
+  ensureSpace(flow, 28)
   setLanguage(flow.doc, flow.rtl, 13, true)
   flow.doc.setTextColor(15, 23, 42)
   writePdfText(
@@ -1125,7 +1129,62 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
   if (rtl) setLanguage(doc, true, 8, false)
 }
 
+function countHtmlTables(html: string | undefined) {
+  return html ? (html.match(/<table\b/gi) ?? []).length : 0
+}
+
+function textLengthFromHtml(html: string | undefined) {
+  return html ? normalizeText(html.replace(/<[^>]+>/g, " ")).length : 0
+}
+
+function templateInventory(template: LanguagePdfTemplate) {
+  return template.sections.reduce((inventory, section) => {
+    inventory.tables += section.table ? 1 : 0
+    inventory.tables += countHtmlTables(section.html) + countHtmlTables(section.documentsHtml)
+    inventory.images += section.images?.length ?? 0
+    inventory.text += section.title.length
+    inventory.text += textLengthFromHtml(section.html) + textLengthFromHtml(section.documentsHtml)
+    inventory.text += section.table?.rows.flat().join(" ").length ?? 0
+    return inventory
+  }, { sections: template.sections.length, tables: 0, images: 0, text: 0 })
+}
+
+function expectedSourceImageCount(sourceDocument: ExtractedSourceDocument | null) {
+  if (!sourceDocument) return 0
+  const extracted = sourceDocument.pages
+    .flatMap((page) => page.images ?? [])
+    .filter((image) => image.decorative !== true).length
+  const fallbackPages = sourceDocument.pages.filter((page) => page.imageDataUrl && page.imageExtractionComplete === false).length
+  return extracted + fallbackPages
+}
+
+function validateTemplateAssets(template: LanguagePdfTemplate, sourceDocument: ExtractedSourceDocument | null) {
+  const inventory = templateInventory(template)
+  if (inventory.text < 20) throw new Error("The PDF report model contains no meaningful text content.")
+  const expectedImages = expectedSourceImageCount(sourceDocument)
+  if (expectedImages > 0 && inventory.images < expectedImages) {
+    throw new Error(`The PDF report model is missing source images (${inventory.images}/${expectedImages}).`)
+  }
+}
+
+function validateMirroredTemplates(english: LanguagePdfTemplate, arabic: LanguagePdfTemplate) {
+  const englishKeys = english.sections.map((section) => section.key)
+  const arabicKeys = arabic.sections.map((section) => section.key)
+  if (englishKeys.join("|") !== arabicKeys.join("|")) {
+    throw new Error("English and Arabic PDF sections are not synchronized.")
+  }
+  const englishInventory = templateInventory(english)
+  const arabicInventory = templateInventory(arabic)
+  if (englishInventory.images !== arabicInventory.images) {
+    throw new Error("English and Arabic PDF image counts are not synchronized.")
+  }
+  if (englishInventory.tables !== arabicInventory.tables) {
+    throw new Error("English and Arabic PDF table structures are not synchronized.")
+  }
+}
+
 async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
+  validateLanguagePdfTemplate(template)
   const JsPdf = await loadPdfTools()
   const doc = new JsPdf({
     unit: "mm",
@@ -1150,21 +1209,28 @@ async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
     bottom: PAGE.portraitHeight - PAGE.footer - 5,
     pageNumber: 1,
   }
-  if (template.sourceLayout) {
-    await renderPreservedSourceLayout(flow, template.sourceLayout)
-  } else {
-    drawFirstPageHeader(flow)
-    for (const section of template.sections) {
-      renderSectionTitle(flow, section.title)
-      if (section.html !== undefined) {
-        const blocks = htmlToBlocks(section.html)
-        if (blocks.length) await renderBlocks(flow, blocks)
-        else renderParagraph(flow, flow.rtl ? "لا يوجد محتوى مسجل." : "No content recorded.")
-      }
-      if (section.table) renderTable(flow, { type: "table", ...section.table })
-      if (section.images) await renderImageGrid(flow, section.images, section.key === "source-visuals")
-      flow.y += 4
+  drawFirstPageHeader(flow)
+  for (const section of template.sections) {
+    renderSectionTitle(flow, section.title)
+    if (section.html !== undefined) {
+      const blocks = htmlToBlocks(section.html)
+      if (blocks.length) await renderBlocks(flow, blocks)
+      else renderParagraph(flow, flow.rtl ? "لا يوجد محتوى مسجل." : "No content recorded.")
     }
+    if (section.table) renderTable(flow, { type: "table", ...section.table })
+    if (section.imageTitle) {
+      renderHeading(flow, { type: "heading", level: 3, text: section.imageTitle })
+      await renderImageGrid(flow, section.images ?? [], false)
+    } else if (section.images) {
+      await renderImageGrid(flow, section.images, section.key === "source-visuals")
+    }
+    if (section.documentsTitle) {
+      renderHeading(flow, { type: "heading", level: 3, text: section.documentsTitle })
+      const documentBlocks = htmlToBlocks(section.documentsHtml ?? "")
+      if (documentBlocks.length) await renderBlocks(flow, documentBlocks)
+      else renderParagraph(flow, flow.rtl ? "لا توجد مرفقات مرتبطة." : "No related attachments.")
+    }
+    flow.y += 4
   }
 
   addPageNumbers(doc, flow.rtl)
@@ -1175,23 +1241,6 @@ async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
     creator: "BuildSight AI Document Translation",
   })
   return doc.output("blob") as Blob
-}
-
-async function fetchOriginalPdf(data: StageTranslationPageData) {
-  const sourcePdf = getSourcePdfAttachment(data)
-  if (!sourcePdf) return null
-  const response = await fetch(stageSourceDocumentUrl(data, sourcePdf), { cache: "no-store" })
-  if (!response.ok) throw new Error("Unable to load the original uploaded PDF.")
-  const blob = await response.blob()
-  if (!blob.type.includes("pdf") && !sourcePdf.originalFilename.toLowerCase().endsWith(".pdf")) {
-    throw new Error("The uploaded source document is not a PDF.")
-  }
-  return {
-    blob,
-    filename: sourcePdf.originalFilename.toLowerCase().endsWith(".pdf")
-      ? sourcePdf.originalFilename
-      : `${safePdfFilename(sourcePdf.originalFilename)}.pdf`,
-  }
 }
 
 async function openPdfBlob(blob: Blob) {
@@ -1397,17 +1446,8 @@ export async function exportTranslationPdf({
 }) {
   const base = safePdfFilename(data.project.code || data.project.name)
   const report = safePdfFilename(data.response.reportNumber)
-
-  if (kind === "original") {
-    const source = await fetchOriginalPdf(data)
-    if (source) return source
-    const template = buildLanguagePdfTemplate({ data, translation, language: "en" })
-    return { blob: await buildLanguagePdfBlob(template), filename: `${base}-${report}-english-original.pdf` }
-  }
-
-  if (!translation?.translatedContent) throw new Error("Generate the Arabic translation before exporting PDFs.")
   const sourcePdf = getSourcePdfAttachment(data)
-  let sourceDocument = null
+  let sourceDocument: ExtractedSourceDocument | null = null
   if (sourcePdf) {
     try {
       sourceDocument = await extractSourcePdf(data, sourcePdf, {
@@ -1420,14 +1460,28 @@ export async function exportTranslationPdf({
       throw new Error(`Unable to preserve images from the original PDF: ${details}`)
     }
   }
+
+  if (kind === "original") {
+    const englishTemplate = buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument })
+    validateTemplateAssets(englishTemplate, sourceDocument)
+    return {
+      blob: await buildLanguagePdfBlob(englishTemplate),
+      filename: `${base}-${report}-english-structured.pdf`,
+    }
+  }
+
+  if (!translation?.translatedContent) throw new Error("Generate the Arabic translation before exporting PDFs.")
   const arabicTemplate = buildLanguagePdfTemplate({ data, translation, language: "ar", sourceDocument })
+  const englishTemplate = buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument })
+  validateTemplateAssets(arabicTemplate, sourceDocument)
+  validateTemplateAssets(englishTemplate, sourceDocument)
+  validateMirroredTemplates(englishTemplate, arabicTemplate)
   const arabicBlob = await buildLanguagePdfBlob(arabicTemplate)
   if (kind === "arabic") {
     return { blob: arabicBlob, filename: `${base}-${report}-arabic-translation.pdf` }
   }
 
-  const source = await fetchOriginalPdf(data)
-  const englishBlob = source?.blob ?? await buildLanguagePdfBlob(buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument }))
+  const englishBlob = await buildLanguagePdfBlob(englishTemplate)
   const bilingualBlob = await buildBilingualPdfBlob({ data, translation, englishBlob, arabicBlob, sourceDocument })
   return { blob: bilingualBlob, filename: `${base}-${report}-bilingual.pdf` }
 }
