@@ -36,6 +36,7 @@ export default async function AppGroupLayout({
     initials: initials(fullName, session.email).toUpperCase(),
     role: primary?.role ?? null,
     organizationName: session.supervisingOrg?.name ?? primary?.organization?.name ?? null,
+    avatarUrl: session.profile?.avatar_url ?? null,
   }
 
   const projectOptions = projects.map((p) => ({ id: p.id, name: p.name }))

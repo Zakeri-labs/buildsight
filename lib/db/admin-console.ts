@@ -43,6 +43,7 @@ export type ProjectUserRow = {
   userId: string
   userName: string
   userEmail: string
+  avatarUrl: string | null
   accessRole: ProjectAccessRole
   status: MembershipStatus
 }
@@ -53,6 +54,8 @@ export type MemberRow = {
   userId: string
   userName: string
   userEmail: string
+  avatarUrl: string | null
+  organizationName: string
   role: OrganizationRole
   status: MembershipStatus
 }
@@ -96,13 +99,16 @@ export async function loadAdminConsole(supervisingOrgId: string): Promise<AdminC
       .select("id, name, code, location, latitude, longitude, status")
       .eq("supervising_organization_id", supervisingOrgId)
       .order("name"),
-    admin.from("profiles").select("id, full_name, email"),
+    admin.from("profiles").select("id, full_name, email, avatar_url"),
   ])
 
   const orgName = new Map((orgs ?? []).map((o) => [o.id, o.name]))
   const projectName = new Map((projects ?? []).map((p) => [p.id, p.name]))
   const profileMap = new Map(
-    (profiles ?? []).map((p) => [p.id, { name: p.full_name ?? p.email ?? "Unknown", email: p.email ?? "" }]),
+    (profiles ?? []).map((p) => [
+      p.id,
+      { name: p.full_name ?? p.email ?? "Unknown", email: p.email ?? "", avatarUrl: p.avatar_url ?? null },
+    ]),
   )
   const projectIds = (projects ?? []).map((p) => p.id)
 
@@ -149,6 +155,8 @@ export async function loadAdminConsole(supervisingOrgId: string): Promise<AdminC
       userId: m.user_id,
       userName: profileMap.get(m.user_id)?.name ?? "Unknown",
       userEmail: profileMap.get(m.user_id)?.email ?? "",
+      avatarUrl: profileMap.get(m.user_id)?.avatarUrl ?? null,
+      organizationName: orgName.get(m.organization_id) ?? "Unknown",
       role: m.role,
       status: m.status,
     }))
@@ -174,6 +182,7 @@ export async function loadAdminConsole(supervisingOrgId: string): Promise<AdminC
       userId: r.user_id,
       userName: profileMap.get(r.user_id)?.name ?? "Unknown",
       userEmail: profileMap.get(r.user_id)?.email ?? "",
+      avatarUrl: profileMap.get(r.user_id)?.avatarUrl ?? null,
       accessRole: r.access_role,
       status: r.status,
     }))

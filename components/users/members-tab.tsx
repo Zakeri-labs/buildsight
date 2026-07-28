@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
+import { ProfileAvatar } from "@/components/profile/profile-avatar"
+import { AvatarManagementDialog } from "@/components/profile/avatar-management-dialog"
+import { useCurrentUser } from "@/components/current-user-provider"
 import {
   Dialog,
   DialogContent,
@@ -124,13 +127,14 @@ export function MembersTab({
                 <TableHead>Member</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Role</TableHead>
+                <TableHead>Organization</TableHead>
                 <TableHead className="w-px text-end">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {members.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
                     No members yet. Invite your first teammate.
                   </TableCell>
                 </TableRow>
@@ -149,9 +153,11 @@ export function MembersTab({
 }
 
 function MemberRowItem({ member, organizationId }: { member: MemberRow; organizationId: string }) {
+  const currentUser = useCurrentUser()
   const [pending, startTransition] = useTransition()
   const [editing, setEditing] = useState(false)
   const [role, setRole] = useState<OrganizationRole>(member.role)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(member.avatarUrl)
   const [error, setError] = useState<string | null>(null)
 
   function changeRole(next: OrganizationRole) {
@@ -178,7 +184,17 @@ function MemberRowItem({ member, organizationId }: { member: MemberRow; organiza
 
   return (
     <TableRow>
-      <TableCell className="font-medium">{member.userName}</TableCell>
+      <TableCell>
+        <div className="flex items-center gap-3">
+          <ProfileAvatar
+            name={member.userName}
+            email={member.userEmail}
+            avatarUrl={avatarUrl}
+            size="md"
+          />
+          <span className="font-medium">{member.userName}</span>
+        </div>
+      </TableCell>
       <TableCell className="text-muted-foreground">{member.userEmail}</TableCell>
       <TableCell>
         {editing ? (
@@ -194,8 +210,22 @@ function MemberRowItem({ member, organizationId }: { member: MemberRow; organiza
         )}
         {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
       </TableCell>
+      <TableCell className="text-muted-foreground">{member.organizationName}</TableCell>
       <TableCell className="text-end">
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
+          <AvatarManagementDialog
+            targetUser={{
+              id: member.userId,
+              name: member.userName,
+              email: member.userEmail,
+              avatarUrl,
+            }}
+            organizationId={organizationId}
+            onSaved={(nextAvatarUrl) => {
+              setAvatarUrl(nextAvatarUrl)
+              if (member.userId === currentUser.id) currentUser.setAvatarUrl(nextAvatarUrl)
+            }}
+          />
           <Button variant="ghost" size="sm" onClick={() => setEditing((v) => !v)} disabled={pending}>
             {editing ? "Done" : "Change role"}
           </Button>

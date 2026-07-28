@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ProfileAvatar } from "@/components/profile/profile-avatar"
 import {
   Select,
   SelectContent,
@@ -746,8 +747,18 @@ function ProjectUserRowItem({ row, projectId }: { row: ProjectUserRow; projectId
   return (
     <TableRow>
       <TableCell>
-        <div className="font-medium">{row.userName}</div>
-        <div className="text-xs text-muted-foreground">{row.userEmail}</div>
+        <div className="flex items-center gap-3">
+          <ProfileAvatar
+            name={row.userName}
+            email={row.userEmail}
+            avatarUrl={row.avatarUrl}
+            size="md"
+          />
+          <div>
+            <div className="font-medium">{row.userName}</div>
+            <div className="text-xs text-muted-foreground">{row.userEmail}</div>
+          </div>
+        </div>
       </TableCell>
       <TableCell className="text-muted-foreground">{row.organizationName}</TableCell>
       <TableCell>

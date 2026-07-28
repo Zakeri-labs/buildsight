@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext } from "react"
+import { createContext, useContext, useEffect, useMemo, useState } from "react"
 import type { OrganizationRole } from "@/lib/db/types"
 
 export type CurrentUser = {
@@ -10,9 +10,14 @@ export type CurrentUser = {
   initials: string
   role: OrganizationRole | null
   organizationName: string | null
+  avatarUrl: string | null
 }
 
-const CurrentUserContext = createContext<CurrentUser | null>(null)
+type CurrentUserContextValue = CurrentUser & {
+  setAvatarUrl: (avatarUrl: string | null) => void
+}
+
+const CurrentUserContext = createContext<CurrentUserContextValue | null>(null)
 
 export function CurrentUserProvider({
   user,
@@ -21,10 +26,19 @@ export function CurrentUserProvider({
   user: CurrentUser
   children: React.ReactNode
 }) {
-  return <CurrentUserContext.Provider value={user}>{children}</CurrentUserContext.Provider>
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(user.avatarUrl)
+
+  useEffect(() => setAvatarUrl(user.avatarUrl), [user.avatarUrl])
+
+  const value = useMemo<CurrentUserContextValue>(
+    () => ({ ...user, avatarUrl, setAvatarUrl }),
+    [user, avatarUrl],
+  )
+
+  return <CurrentUserContext.Provider value={value}>{children}</CurrentUserContext.Provider>
 }
 
-export function useCurrentUser(): CurrentUser {
+export function useCurrentUser(): CurrentUserContextValue {
   const ctx = useContext(CurrentUserContext)
   if (!ctx) throw new Error("useCurrentUser must be used within CurrentUserProvider")
   return ctx

@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Bell, ChevronDown, Lock, LogOut } from "lucide-react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { ProfileAvatar } from "@/components/profile/profile-avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -93,12 +93,13 @@ export function AppTopbar({ activeProjectName }: { activeProjectName?: string | 
                 type="button"
                 className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-muted"
               >
-                <Avatar className="size-9">
-                  <AvatarImage src="/avatars/arman.png" alt="" />
-                  <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
-                    {currentUser.initials}
-                  </AvatarFallback>
-                </Avatar>
+                <ProfileAvatar
+                  name={currentUser.name}
+                  email={currentUser.email}
+                  avatarUrl={currentUser.avatarUrl}
+                  size="md"
+                  fallbackClassName="bg-primary text-primary-foreground"
+                />
                 <span className="hidden flex-col items-start leading-tight lg:flex">
                   <span className="text-sm font-semibold">{currentUser.name}</span>
                   <span className="text-xs text-muted-foreground">{userRoleLabel}</span>
