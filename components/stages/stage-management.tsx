@@ -76,6 +76,7 @@ import type {
 } from "@/lib/db/stages"
 import { DUE_DATE_RULES, dueDateRuleLabel, type StageTermStatus } from "@/lib/stages/config"
 import { useI18n } from "@/lib/i18n"
+import { profileAvatarDisplayUrl } from "@/lib/profile-avatar"
 
 const COPY = {
   en: {
@@ -247,7 +248,7 @@ function ResponsibleUser({ user, fallback }: { user: StageUserOption | undefined
   return (
     <div className="flex items-center gap-2">
       <Avatar size="sm">
-        {user.avatarUrl ? <AvatarImage src={user.avatarUrl} alt="" /> : null}
+        {user.avatarUrl ? <AvatarImage src={profileAvatarDisplayUrl(user.avatarUrl)} alt="" /> : null}
         <AvatarFallback>{initials(user.name)}</AvatarFallback>
       </Avatar>
       <div className="min-w-0">

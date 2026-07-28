@@ -2,6 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
+import { useState } from "react"
 import {
   MapPin,
   ArrowLeft,
@@ -22,6 +23,8 @@ import { useI18n } from "@/lib/i18n"
 import type { ProjectRecord } from "@/lib/mock-data"
 import { ProjectParticipants, type ProjectParticipant } from "@/components/projects/project-participants"
 import { ProjectDocuments, type ProjectDocument } from "@/components/projects/project-documents"
+import { ProjectImageManagementDialog } from "@/components/projects/project-image-management-dialog"
+import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 
 function projectDocuments(project: ProjectRecord): ProjectDocument[] {
   return [
@@ -71,12 +74,15 @@ export function ProjectDetail({
   project,
   documents,
   participants,
+  canManageImages = false,
 }: {
   project: ProjectRecord
   documents?: ProjectDocument[]
   participants: ProjectParticipant[]
+  canManageImages?: boolean
 }) {
   const { t, locale } = useI18n()
+  const [projectImage, setProjectImage] = useState<string | null>(projectImageDisplayUrl(project.image))
   const isArabic = locale === "ar"
   const labels = isArabic
     ? {
@@ -122,13 +128,24 @@ export function ProjectDetail({
             <div className="grid gap-5 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)]">
               <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border bg-muted md:aspect-[5/4]">
                 <Image
-                  src={project.image || "/placeholder.svg"}
+                  src={projectImage || "/placeholder.svg"}
                   alt={project.name}
                   fill
                   className="object-cover"
                   sizes="(max-width: 768px) 100vw, 240px"
                   priority
+                  unoptimized={Boolean(projectImage?.startsWith("/api/project-images?"))}
                 />
+                {canManageImages ? (
+                  <div className="absolute bottom-3 end-3">
+                    <ProjectImageManagementDialog
+                      projectId={project.id}
+                      projectName={project.name}
+                      currentImage={projectImage}
+                      onSaved={setProjectImage}
+                    />
+                  </div>
+                ) : null}
               </div>
 
               <div className="min-w-0 space-y-4">
@@ -213,7 +230,7 @@ export function ProjectDetail({
         </Card>
       </div>
 
-      <ProjectParticipants participants={participants} />
+      <ProjectParticipants projectId={project.id} participants={participants} canManageAvatars={canManageImages} />
       <ProjectDocuments projectId={project.id} documents={documents ?? projectDocuments(project)} />
     </div>
   )

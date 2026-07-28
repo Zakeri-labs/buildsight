@@ -24,6 +24,7 @@ import type { ProjectStageExecutionData, ProjectStageTermExecution } from "@/lib
 import { statusLabel, statusTone } from "@/lib/stages/execution"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
+import { profileAvatarDisplayUrl } from "@/lib/profile-avatar"
 
 const COPY = {
   en: {
@@ -241,7 +242,7 @@ function TermRow({
             {term.responsibleUser ? (
               <>
                 <Avatar size="sm">
-                  {term.responsibleUser.avatarUrl ? <AvatarImage src={term.responsibleUser.avatarUrl} alt="" /> : null}
+                  {term.responsibleUser.avatarUrl ? <AvatarImage src={profileAvatarDisplayUrl(term.responsibleUser.avatarUrl)} alt="" /> : null}
                   <AvatarFallback>{initials(term.responsibleUser.name)}</AvatarFallback>
                 </Avatar>
                 <div className="min-w-0">

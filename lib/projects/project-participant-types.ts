@@ -8,10 +8,13 @@ export type ProjectParticipantRole =
 export type ProjectParticipantView = {
   id: string
   organization: string
+  organizationId?: string
   organizationType: string
   projectRole: ProjectParticipantRole
   keyContact: {
+    userId?: string
     name: string
+    email?: string
     initials: string
     avatar?: string
     detail?: string

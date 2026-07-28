@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { assertOrgAdmin, audit, AuthzError, getUserIdOrThrow } from "@/lib/auth/guards"
+import { assertOrgAdmin, assertProjectAdmin, audit, AuthzError, getUserIdOrThrow } from "@/lib/auth/guards"
 import {
   isAllowedProfileAvatarType,
   isStoredProfileAvatar,
@@ -20,6 +20,8 @@ type AvatarRequest = {
   action?: AvatarAction
   targetUserId?: string
   organizationId?: string | null
+  projectId?: string | null
+  participantId?: string | null
   filename?: string
   contentType?: string
   size?: number
@@ -36,9 +38,46 @@ function safeExtension(contentType: string) {
   return "jpg"
 }
 
-async function authorizeTarget(targetUserId: string, organizationId?: string | null) {
+async function authorizeTarget(
+  targetUserId: string,
+  organizationId?: string | null,
+  projectId?: string | null,
+  participantId?: string | null,
+) {
   const actorId = await getUserIdOrThrow()
-  if (actorId === targetUserId) return { actorId, organizationId: null as string | null }
+  if (actorId === targetUserId) {
+    return { actorId, organizationId: null as string | null, projectId: null as string | null }
+  }
+
+  if (isUuid(projectId) && isUuid(participantId)) {
+    await assertProjectAdmin(projectId)
+    const admin = createAdminClient()
+    const [{ data: participant, error: participantError }, { data: project, error: projectError }] = await Promise.all([
+      admin
+        .from("project_participants")
+        .select("id, key_contact_user_id")
+        .eq("id", participantId)
+        .eq("project_id", projectId)
+        .maybeSingle(),
+      admin
+        .from("projects")
+        .select("supervising_organization_id")
+        .eq("id", projectId)
+        .maybeSingle(),
+    ])
+    if (participantError) throw participantError
+    if (projectError) throw projectError
+    if (!participant || participant.key_contact_user_id !== targetUserId) {
+      throw new AuthzError("The selected user is not the linked contact for this project participant.")
+    }
+    if (!project) throw new AuthzError("Project not found.")
+
+    return {
+      actorId,
+      organizationId: project.supervising_organization_id as string,
+      projectId,
+    }
+  }
 
   if (!isUuid(organizationId)) throw new AuthzError("An organization administrator is required to edit this avatar.")
   await assertOrgAdmin(organizationId)
@@ -54,7 +93,7 @@ async function authorizeTarget(targetUserId: string, organizationId?: string | n
   if (error) throw error
   if (!data) throw new AuthzError("The selected user is not an active member of this organization.")
 
-  return { actorId, organizationId }
+  return { actorId, organizationId, projectId: null as string | null }
 }
 
 async function getProfile(admin: ReturnType<typeof createAdminClient>, targetUserId: string) {
@@ -81,19 +120,41 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Not authenticated." }, { status: 401 })
 
-    // This RLS-scoped lookup proves the caller may see the profile before the
-    // service-role client creates a short-lived Storage URL.
-    const { data: profile, error: profileError } = await supabase
+    // Prefer the standard profile visibility policy. A linked project key
+    // contact is also visible when the caller can read that participant row.
+    const { data: visibleProfile, error: profileError } = await supabase
       .from("profiles")
       .select("id, avatar_url")
       .eq("avatar_url", path)
       .limit(1)
       .maybeSingle()
-    if (profileError || !profile) {
+    if (profileError) {
       return NextResponse.json({ error: "Avatar not found." }, { status: 404 })
     }
 
     const admin = createAdminClient()
+    if (!visibleProfile) {
+      const { data: storedProfile, error: storedProfileError } = await admin
+        .from("profiles")
+        .select("id")
+        .eq("avatar_url", path)
+        .limit(1)
+        .maybeSingle()
+      if (storedProfileError || !storedProfile) {
+        return NextResponse.json({ error: "Avatar not found." }, { status: 404 })
+      }
+
+      const { data: visibleParticipant, error: participantError } = await supabase
+        .from("project_participants")
+        .select("id")
+        .eq("key_contact_user_id", storedProfile.id)
+        .limit(1)
+        .maybeSingle()
+      if (participantError || !visibleParticipant) {
+        return NextResponse.json({ error: "Avatar not found." }, { status: 404 })
+      }
+    }
+
     const { data, error } = await admin.storage.from(PROFILE_AVATAR_BUCKET).createSignedUrl(path, 60 * 60)
     if (error || !data?.signedUrl) {
       return NextResponse.json({ error: "Avatar image is unavailable." }, { status: 404 })
@@ -119,7 +180,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid avatar request." }, { status: 400 })
     }
 
-    const { actorId, organizationId } = await authorizeTarget(body.targetUserId, body.organizationId)
+    const { actorId, organizationId, projectId } = await authorizeTarget(
+      body.targetUserId,
+      body.organizationId,
+      body.projectId,
+      body.participantId,
+    )
     const admin = createAdminClient()
     const profile = await getProfile(admin, body.targetUserId)
 
@@ -180,12 +246,14 @@ export async function POST(request: NextRequest) {
         entityType: "profile",
         entityId: body.targetUserId,
         organizationId,
+        projectId,
         metadata: { storagePath, size, contentType },
       })
 
       revalidatePath("/")
       revalidatePath("/settings")
       revalidatePath("/users")
+      if (projectId) revalidatePath(`/projects/${projectId}`)
       return NextResponse.json({ avatarUrl: storagePath }, { headers: { "Cache-Control": "no-store" } })
     }
 
@@ -206,11 +274,13 @@ export async function POST(request: NextRequest) {
       entityType: "profile",
       entityId: body.targetUserId,
       organizationId,
+      projectId,
     })
 
     revalidatePath("/")
     revalidatePath("/settings")
     revalidatePath("/users")
+    if (projectId) revalidatePath(`/projects/${projectId}`)
     return NextResponse.json({ avatarUrl: null }, { headers: { "Cache-Control": "no-store" } })
   } catch (error) {
     const status = error instanceof AuthzError ? 403 : 400

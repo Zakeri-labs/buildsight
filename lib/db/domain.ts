@@ -184,6 +184,7 @@ export type DashboardData = {
   projects: {
     id: string
     name: string
+    image: string | null
     role: string
     ncrs: number
     inspections: number
@@ -242,6 +243,7 @@ export async function getDashboardData(orgId: string, projectId: string | null):
   const projectRows = scoped.map((p) => ({
     id: p.id,
     name: p.name,
+    image: p.image,
     role: p.ourRole ?? "Consultant",
     ncrs: ncrPer.get(p.id) ?? 0,
     inspections: inspPer.get(p.id) ?? 0,

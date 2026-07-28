@@ -219,3 +219,14 @@ export async function audit(entry: {
     metadata: entry.metadata ?? {},
   })
 }
+
+/** Read-only permission check for rendering project administration controls. */
+export async function canAdministerProject(projectId: string): Promise<boolean> {
+  try {
+    await assertProjectAdmin(projectId)
+    return true
+  } catch (error) {
+    if (error instanceof AuthzError) return false
+    throw error
+  }
+}

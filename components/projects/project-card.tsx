@@ -21,6 +21,7 @@ export function ProjectCard({ project }: { project: ProjectRecord }) {
             fill
             className="object-cover transition-transform duration-300 group-hover:scale-105"
             sizes="(max-width: 768px) 100vw, 33vw"
+            unoptimized={Boolean(project.image?.startsWith("/api/project-images?"))}
           />
           <div className="absolute top-3 inline-start-3 start-3">
             <ProjectStatusBadge statusKey={project.statusKey} />

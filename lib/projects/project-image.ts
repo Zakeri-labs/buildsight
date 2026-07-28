@@ -19,3 +19,23 @@ export function validateProjectImageFile(file: ProjectImageLike): string | null 
   }
   return null
 }
+
+export function isAllowedProjectImageType(value: string): boolean {
+  return ALLOWED_PROJECT_IMAGE_TYPES.has(value.toLowerCase())
+}
+
+export function projectImageStoragePath(value: string | null | undefined): string | null {
+  if (!value) return null
+  if (!value.startsWith("/api/project-images?")) return null
+  try {
+    return new URL(value, "https://buildsight.local").searchParams.get("path")
+  } catch {
+    return null
+  }
+}
+
+export function projectImageDisplayUrl(value: string | null | undefined): string | null {
+  const trimmed = value?.trim()
+  if (!trimmed || trimmed === "/placeholder.svg" || trimmed === "/placeholder.jpg") return null
+  return trimmed
+}

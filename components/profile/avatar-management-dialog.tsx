@@ -28,6 +28,12 @@ export function AvatarManagementDialog({
   onSaved,
   triggerVariant = "ghost",
   triggerSize = "sm",
+  projectId,
+  participantId,
+  open: controlledOpen,
+  onOpenChange,
+  hideTrigger = false,
+  initialRemove = false,
 }: {
   targetUser: { id: string; name: string; email: string; avatarUrl: string | null }
   organizationId?: string
@@ -35,9 +41,20 @@ export function AvatarManagementDialog({
   onSaved?: (avatarUrl: string | null) => void
   triggerVariant?: "default" | "outline" | "ghost"
   triggerSize?: "default" | "sm" | "lg" | "icon"
+  projectId?: string
+  participantId?: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  hideTrigger?: boolean
+  initialRemove?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const [open, setOpen] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const open = controlledOpen ?? uncontrolledOpen
+  const setOpen = (next: boolean) => {
+    if (controlledOpen === undefined) setUncontrolledOpen(next)
+    onOpenChange?.(next)
+  }
   const [currentAvatar, setCurrentAvatar] = useState<string | null>(targetUser.avatarUrl)
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -45,7 +62,19 @@ export function AvatarManagementDialog({
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => setCurrentAvatar(targetUser.avatarUrl), [targetUser.avatarUrl])
+  useEffect(() => {
+    setCurrentAvatar(targetUser.avatarUrl)
+    setFile(null)
+    setRemoveRequested(false)
+    setError(null)
+  }, [targetUser.id, targetUser.avatarUrl])
+
+  useEffect(() => {
+    if (open && initialRemove && currentAvatar) {
+      setFile(null)
+      setRemoveRequested(true)
+    }
+  }, [open, initialRemove, currentAvatar])
 
   useEffect(() => {
     if (!file) {
@@ -83,7 +112,13 @@ export function AvatarManagementDialog({
     const response = await fetch("/api/profile-avatar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...body, targetUserId: targetUser.id, organizationId }),
+      body: JSON.stringify({
+        ...body,
+        targetUserId: targetUser.id,
+        organizationId,
+        projectId,
+        participantId,
+      }),
     })
     const payload = (await response.json().catch(() => ({}))) as { error?: string; avatarUrl?: string | null; storagePath?: string; token?: string }
     if (!response.ok) throw new Error(payload.error || "Unable to update profile image.")
@@ -145,14 +180,16 @@ export function AvatarManagementDialog({
         if (!next && !pending) resetDraft()
       }}
     >
-      <DialogTrigger
-        render={
-          <Button variant={triggerVariant} size={triggerSize}>
-            <ImagePlus className="size-4" data-icon="inline-start" />
-            {triggerLabel}
-          </Button>
-        }
-      />
+      {!hideTrigger ? (
+        <DialogTrigger
+          render={
+            <Button variant={triggerVariant} size={triggerSize}>
+              <ImagePlus className="size-4" data-icon="inline-start" />
+              {triggerLabel}
+            </Button>
+          }
+        />
+      ) : null}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit profile image</DialogTitle>

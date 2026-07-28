@@ -1,3 +1,4 @@
+import Image from "next/image"
 import Link from "next/link"
 import { ChevronRight, MoreHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -5,6 +6,7 @@ import { cn } from "@/lib/utils"
 export type ProjectOverviewRow = {
   id: string
   name: string
+  image: string | null
   role: string
   ncrs: number
   inspections: number
@@ -48,7 +50,21 @@ export function ProjectsOverview({ projects }: { projects: ProjectOverviewRow[] 
             )}
             {projects.map((p) => (
               <tr key={p.id} className="border-t border-border">
-                <td className="py-3 pe-3 font-medium text-foreground">{p.name}</td>
+                <td className="py-3 pe-3 font-medium text-foreground">
+                  <Link href={`/projects/${p.id}`} className="flex items-center gap-3 hover:text-primary">
+                    <span className="relative size-9 shrink-0 overflow-hidden rounded-lg border bg-muted">
+                      <Image
+                        src={p.image || "/placeholder.svg"}
+                        alt=""
+                        fill
+                        className="object-cover"
+                        sizes="36px"
+                        unoptimized={Boolean(p.image?.startsWith("/api/project-images?"))}
+                      />
+                    </span>
+                    <span className="min-w-0 truncate">{p.name}</span>
+                  </Link>
+                </td>
                 <td className="py-3 pe-3">
                   <span
                     className={cn(

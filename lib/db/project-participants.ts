@@ -158,10 +158,13 @@ export async function getProjectParticipants(projectId: string): Promise<Project
     return {
       id: row.id,
       organization: row.organization_name,
+      organizationId: row.organization_id ?? undefined,
       organizationType: organizationType(row.participant_type),
       projectRole: role,
       keyContact: {
+        userId: row.key_contact_user_id ?? undefined,
         name: contactName,
+        email: profile?.email?.trim() || row.key_contact_email?.trim() || undefined,
         initials: initials(contactName),
         avatar: profile?.avatar_url ?? undefined,
         detail: contactDetail || undefined,

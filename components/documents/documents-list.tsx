@@ -42,6 +42,7 @@ import {
 } from "@/lib/documents/document-types"
 import { getSimpleUploadCategory, type SimpleUploadCategoryValue } from "@/lib/documents/simple-upload"
 import { cn } from "@/lib/utils"
+import { profileAvatarDisplayUrl } from "@/lib/profile-avatar"
 
 export type DocumentListItem = {
   id: string
@@ -289,7 +290,7 @@ export function DocumentsList({
                     <td className="whitespace-nowrap px-4 py-4">
                       <div className="flex items-center gap-2.5">
                         <Avatar className="size-7 border border-slate-200 dark:border-slate-700">
-                          {document.createdBy.avatar ? <AvatarImage src={document.createdBy.avatar} alt={document.createdBy.name} /> : null}
+                          {document.createdBy.avatar ? <AvatarImage src={profileAvatarDisplayUrl(document.createdBy.avatar)} alt={document.createdBy.name} /> : null}
                           <AvatarFallback className="bg-blue-100 text-[10px] font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">{document.createdBy.initials}</AvatarFallback>
                         </Avatar>
                         <span className="text-xs font-medium text-slate-800 dark:text-slate-200">{document.createdBy.name}</span>

@@ -7,6 +7,7 @@ import { MyTasks } from "@/components/dashboard/my-tasks"
 import { ProjectDetail } from "@/components/projects/project-detail"
 import type { ProjectDocument } from "@/components/projects/project-documents"
 import { requireOnboarded } from "@/lib/auth/session"
+import { canAdministerProject } from "@/lib/auth/guards"
 import { getSelectedProjectId } from "@/lib/project-scope"
 import { getDashboardData, getOrgProjects, type DashboardData, type DomainProject } from "@/lib/db/domain"
 import { getProjectParticipants } from "@/lib/db/project-participants"
@@ -113,15 +114,17 @@ export default async function DashboardPage() {
     const selectedProject = orgProjects.find((project) => project.id === projectId)
     if (selectedProject) {
       const projectCounts = data.projects.find((project) => project.id === projectId)
-      const [documents, participants] = await Promise.all([
+      const [documents, participants, canManageImages] = await Promise.all([
         getProjectDocuments(projectId, session.userId, session.email),
         getProjectParticipants(projectId),
+        canAdministerProject(projectId),
       ])
       return (
         <ProjectDetail
           project={toProjectRecord(selectedProject, projectCounts)}
           documents={documents}
           participants={participants}
+          canManageImages={canManageImages}
         />
       )
     }

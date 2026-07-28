@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { getDocumentTypeDefinition, type DocumentTypeIconKey, type DocumentTypeValue } from "@/lib/documents/document-types"
 import { cn } from "@/lib/utils"
+import { profileAvatarDisplayUrl } from "@/lib/profile-avatar"
 
 export type ProjectDocument = {
   id: string
@@ -144,7 +145,7 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
                     <div className="flex items-center gap-2.5">
                       <Avatar size="sm">
                         {document.uploadedBy.avatar ? (
-                          <AvatarImage src={document.uploadedBy.avatar} alt={document.uploadedBy.name} />
+                          <AvatarImage src={profileAvatarDisplayUrl(document.uploadedBy.avatar)} alt={document.uploadedBy.name} />
                         ) : null}
                         <AvatarFallback className="bg-primary/10 text-[10px] font-semibold text-primary">
                           {document.uploadedBy.initials}
