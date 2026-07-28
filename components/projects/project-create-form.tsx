@@ -726,7 +726,15 @@ export function ProjectCreateForm({
                   </Field>
                   <Field label={copy.projectType} required>
                     <Select value={projectType || null} onValueChange={(value) => setProjectType((value as ProjectTypeValue | null) ?? "")} disabled={pending}>
-                      <SelectTrigger className="h-10 w-full"><SelectValue placeholder={copy.projectTypePlaceholder} /></SelectTrigger>
+                      <SelectTrigger className="h-10 w-full">
+                        <SelectValue placeholder={copy.projectTypePlaceholder}>
+                          {(value) => {
+                            if (!value) return copy.projectTypePlaceholder
+                            const option = PROJECT_TYPES.find((item) => item.value === String(value))
+                            return option ? (isArabic ? option.labelAr : option.label) : humanizeMachineValue(String(value))
+                          }}
+                        </SelectValue>
+                      </SelectTrigger>
                       <SelectContent>
                         {PROJECT_TYPES.map((option) => <SelectItem key={option.value} value={option.value}>{isArabic ? option.labelAr : option.label}</SelectItem>)}
                       </SelectContent>
@@ -734,7 +742,15 @@ export function ProjectCreateForm({
                   </Field>
                   <Field label={copy.supervisionType} required>
                     <Select value={supervisionType || null} onValueChange={(value) => setSupervisionType((value as SupervisionTypeValue | null) ?? "")} disabled={pending}>
-                      <SelectTrigger className="h-10 w-full"><SelectValue placeholder={copy.supervisionTypePlaceholder} /></SelectTrigger>
+                      <SelectTrigger className="h-10 w-full">
+                        <SelectValue placeholder={copy.supervisionTypePlaceholder}>
+                          {(value) => {
+                            if (!value) return copy.supervisionTypePlaceholder
+                            const option = SUPERVISION_TYPES.find((item) => item.value === String(value))
+                            return option ? (isArabic ? option.labelAr : option.label) : humanizeMachineValue(String(value))
+                          }}
+                        </SelectValue>
+                      </SelectTrigger>
                       <SelectContent>
                         {SUPERVISION_TYPES.map((option) => <SelectItem key={option.value} value={option.value}>{isArabic ? option.labelAr : option.label}</SelectItem>)}
                       </SelectContent>
@@ -784,7 +800,13 @@ export function ProjectCreateForm({
                       disabled={pending}
                     >
                       <SelectTrigger className="h-10 w-full">
-                        <SelectValue placeholder={copy.assignUserPlaceholder} />
+                        <SelectValue placeholder={copy.assignUserPlaceholder}>
+                          {(value) => {
+                            if (!value) return copy.assignUserPlaceholder
+                            const user = users.find((item) => item.id === String(value))
+                            return user ? userOptionLabel(user) : (isArabic ? "مستخدم محدد" : "Selected user")
+                          }}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {users.map((user) => (
@@ -802,7 +824,13 @@ export function ProjectCreateForm({
                       disabled={pending}
                     >
                       <SelectTrigger className="h-10 w-full">
-                        <SelectValue placeholder={copy.assignSupervisorPlaceholder} />
+                        <SelectValue placeholder={copy.assignSupervisorPlaceholder}>
+                          {(value) => {
+                            if (!value) return copy.assignSupervisorPlaceholder
+                            const user = supervisors.find((item) => item.id === String(value))
+                            return user ? userOptionLabel(user) : (isArabic ? "مشرف محدد" : "Selected supervisor")
+                          }}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {supervisors.map((user) => (
@@ -822,7 +850,9 @@ export function ProjectCreateForm({
                 <div className="max-w-xs space-y-2">
                   <Label htmlFor="owner-count">{copy.ownerCount}</Label>
                   <Select value={String(owners.length)} onValueChange={(value) => setOwnerCount(Number(value ?? 1))} disabled={pending}>
-                    <SelectTrigger id="owner-count" className="h-10 w-full"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="owner-count" className="h-10 w-full">
+                      <SelectValue>{(value) => String(value ?? owners.length)}</SelectValue>
+                    </SelectTrigger>
                     <SelectContent>
                       {Array.from({ length: MAX_OWNERS }, (_, index) => index + 1).map((count) => (
                         <SelectItem key={count} value={String(count)}>{count}</SelectItem>
@@ -890,7 +920,15 @@ export function ProjectCreateForm({
                     }}
                     disabled={pending}
                   >
-                    <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-10 w-full">
+                      <SelectValue>
+                        {(value) => {
+                          if (!value || value === "none") return copy.noContractor
+                          return contractorOrganizations.find((organization) => organization.id === String(value))?.name
+                            ?? (isArabic ? "مقاول محدد" : "Selected contractor")
+                        }}
+                      </SelectValue>
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">{copy.noContractor}</SelectItem>
                       {contractorOrganizations.map((organization) => (
@@ -993,6 +1031,17 @@ export function ProjectCreateForm({
       </form>
     </div>
   )
+}
+
+function humanizeMachineValue(value: string) {
+  return value
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase())
+}
+
+function userOptionLabel(user: UserOption) {
+  return `${user.name}${user.email && user.email !== user.name ? ` — ${user.email}` : ""}`
 }
 
 function Field({
