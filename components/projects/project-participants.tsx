@@ -14,7 +14,7 @@ import {
   UsersRound,
 } from "lucide-react"
 import { ProfileAvatar } from "@/components/profile/profile-avatar"
-import { AvatarManagementDialog } from "@/components/profile/avatar-management-dialog"
+import { ParticipantAvatarManagementDialog } from "@/components/projects/participant-avatar-management-dialog"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   DropdownMenu,
@@ -119,7 +119,6 @@ export function ProjectParticipants({
                 ) : null}
                 {participants.map((participant) => {
                   const avatar = participantAvatar(participant)
-                  const hasLinkedUser = Boolean(participant.keyContact.userId)
                   return (
                     <tr key={participant.id} className="transition-colors hover:bg-muted/30">
                       <td className="px-5 py-3.5 sm:px-6">
@@ -196,28 +195,21 @@ export function ProjectParticipants({
                               }
                             />
                             {canManageAvatars ? (
-                              hasLinkedUser ? (
-                                <>
-                                  <DropdownMenuItem onClick={() => setAvatarDialog({ participant, remove: false })}>
-                                    <ImagePlus className="size-4" />
-                                    {avatar ? "Change Avatar" : "Upload Avatar"}
-                                  </DropdownMenuItem>
-                                  {avatar ? (
-                                    <DropdownMenuItem
-                                      variant="destructive"
-                                      onClick={() => setAvatarDialog({ participant, remove: true })}
-                                    >
-                                      <Trash2 className="size-4" />
-                                      Remove Avatar
-                                    </DropdownMenuItem>
-                                  ) : null}
-                                </>
-                              ) : (
-                                <DropdownMenuItem disabled>
+                              <>
+                                <DropdownMenuItem onClick={() => setAvatarDialog({ participant, remove: false })}>
                                   <ImagePlus className="size-4" />
-                                  No linked user profile
+                                  {avatar ? "Change Avatar" : "Upload Avatar"}
                                 </DropdownMenuItem>
-                              )
+                                {avatar ? (
+                                  <DropdownMenuItem
+                                    variant="destructive"
+                                    onClick={() => setAvatarDialog({ participant, remove: true })}
+                                  >
+                                    <Trash2 className="size-4" />
+                                    Remove Avatar
+                                  </DropdownMenuItem>
+                                ) : null}
+                              </>
                             ) : null}
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -231,9 +223,8 @@ export function ProjectParticipants({
         </CardContent>
       </Card>
 
-      {avatarDialog?.participant.keyContact.userId ? (
-        <AvatarManagementDialog
-          hideTrigger
+      {avatarDialog ? (
+        <ParticipantAvatarManagementDialog
           open
           onOpenChange={(next) => {
             if (!next) setAvatarDialog(null)
@@ -241,12 +232,9 @@ export function ProjectParticipants({
           initialRemove={avatarDialog.remove}
           projectId={projectId}
           participantId={avatarDialog.participant.id}
-          targetUser={{
-            id: avatarDialog.participant.keyContact.userId,
-            name: avatarDialog.participant.keyContact.name,
-            email: avatarDialog.participant.keyContact.email ?? "",
-            avatarUrl: participantAvatar(avatarDialog.participant),
-          }}
+          participantName={avatarDialog.participant.keyContact.name}
+          participantEmail={avatarDialog.participant.keyContact.email}
+          currentAvatar={participantAvatar(avatarDialog.participant)}
           onSaved={(avatarUrl) => {
             setAvatarOverrides((current) => ({
               ...current,

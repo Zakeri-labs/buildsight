@@ -22,6 +22,7 @@ import {
   AlertTriangle,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { ProjectImageDisplay } from "@/components/projects/project-image-display"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import {
@@ -457,10 +458,11 @@ export function ProjectsList({
                   {/* Project info with thumbnail */}
                   <td className="whitespace-nowrap px-5 py-4">
                     <div className="flex items-center gap-3">
-                      <img
+                      <ProjectImageDisplay
                         src={row.imageUrl}
                         alt={row.name}
-                        className="size-10 rounded-lg object-cover border border-slate-200 dark:border-slate-700"
+                        className="size-10 shrink-0 rounded-lg border border-slate-200 dark:border-slate-700"
+                        iconClassName="size-4"
                       />
                       <div className="flex flex-col">
                         <span className="font-bold text-slate-900 dark:text-white text-sm hover:text-blue-600 cursor-pointer">

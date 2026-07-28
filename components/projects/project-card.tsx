@@ -1,10 +1,10 @@
 "use client"
 
-import Image from "next/image"
 import Link from "next/link"
 import { MapPin, ClipboardList, AlertTriangle } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { ProjectStatusBadge } from "@/components/status-badge"
+import { ProjectImageDisplay } from "@/components/projects/project-image-display"
 import { useI18n } from "@/lib/i18n"
 import type { ProjectRecord } from "@/lib/mock-data"
 
@@ -14,19 +14,16 @@ export function ProjectCard({ project }: { project: ProjectRecord }) {
   return (
     <Link href={`/projects/${project.id}`} className="group block focus:outline-none">
       <Card className="overflow-hidden py-0 gap-0 transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring">
-        <div className="relative aspect-[16/9] overflow-hidden bg-muted">
-          <Image
-            src={project.image || "/placeholder.svg"}
-            alt={project.name}
-            fill
-            className="object-cover transition-transform duration-300 group-hover:scale-105"
-            sizes="(max-width: 768px) 100vw, 33vw"
-            unoptimized={Boolean(project.image?.startsWith("/api/project-images?"))}
-          />
+        <ProjectImageDisplay
+          src={project.image}
+          alt={project.name}
+          className="aspect-[16/9]"
+          imageClassName="transition-transform duration-300 group-hover:scale-105"
+        >
           <div className="absolute top-3 inline-start-3 start-3">
             <ProjectStatusBadge statusKey={project.statusKey} />
           </div>
-        </div>
+        </ProjectImageDisplay>
         <CardContent className="flex flex-col gap-3 p-4">
           <div className="flex flex-col gap-1">
             <h3 className="text-base font-semibold leading-tight text-balance">{project.name}</h3>

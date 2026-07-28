@@ -13,7 +13,14 @@ import { coordinateLabel } from "@/lib/locations/types"
 import { SELECTED_PROJECT_COOKIE } from "@/lib/project-scope"
 import { isProjectTypeValue, isSupervisionTypeValue } from "@/lib/projects/project-options"
 import { validateOwnerIdCardFile } from "@/lib/projects/owner-id-card"
-import { validateProjectImageFile } from "@/lib/projects/project-image"
+import {
+  detectProjectImageMimeType,
+  isAllowedProjectImageType,
+  PROJECT_IMAGE_BUCKET,
+  PROJECT_IMAGE_MAX_SIZE_BYTES,
+  projectImageDisplayUrl,
+  validateProjectImageFile,
+} from "@/lib/projects/project-image"
 
 export type ProjectDeletionImpact = {
   stages: number
@@ -31,6 +38,7 @@ const PROJECT_STORAGE_BUCKETS = [
   "document-images",
   "project-stage-evidence",
   "project-stage-translations",
+  "participant-avatars",
 ] as const
 
 async function countProjectRows(admin: ReturnType<typeof createAdminClient>, table: string, projectId: string) {
@@ -340,7 +348,26 @@ export async function attachProjectImage(input: {
     }
 
     const admin = createAdminClient()
-    const imageUrl = `/api/project-images?path=${encodeURIComponent(input.storagePath)}`
+    const { data: uploadedFile, error: downloadError } = await admin.storage
+      .from(PROJECT_IMAGE_BUCKET)
+      .download(input.storagePath)
+    if (downloadError || !uploadedFile) {
+      return { ok: false, error: downloadError?.message || "The uploaded project image could not be found in Storage." }
+    }
+
+    const actualSize = uploadedFile.size
+    const detectedType = detectProjectImageMimeType(new Uint8Array(await uploadedFile.arrayBuffer()))
+    if (
+      actualSize <= 0 ||
+      actualSize > PROJECT_IMAGE_MAX_SIZE_BYTES ||
+      !detectedType ||
+      !isAllowedProjectImageType(detectedType)
+    ) {
+      await admin.storage.from(PROJECT_IMAGE_BUCKET).remove([input.storagePath]).catch(() => undefined)
+      return { ok: false, error: "The uploaded file is not a valid JPG, PNG, or WEBP project image." }
+    }
+
+    const imageUrl = projectImageDisplayUrl(input.storagePath) ?? "/placeholder.svg"
     const { data: project, error: lookupError } = await admin
       .from("projects")
       .select("supervising_organization_id")
@@ -351,7 +378,7 @@ export async function attachProjectImage(input: {
 
     const { error } = await admin
       .from("projects")
-      .update({ image: imageUrl, updated_at: new Date().toISOString() })
+      .update({ image: input.storagePath, updated_at: new Date().toISOString() })
       .eq("id", input.projectId)
     if (error) throw error
 

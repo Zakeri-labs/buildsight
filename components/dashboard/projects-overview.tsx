@@ -1,7 +1,7 @@
-import Image from "next/image"
 import Link from "next/link"
 import { ChevronRight, MoreHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { ProjectImageDisplay } from "@/components/projects/project-image-display"
 
 export type ProjectOverviewRow = {
   id: string
@@ -52,16 +52,12 @@ export function ProjectsOverview({ projects }: { projects: ProjectOverviewRow[] 
               <tr key={p.id} className="border-t border-border">
                 <td className="py-3 pe-3 font-medium text-foreground">
                   <Link href={`/projects/${p.id}`} className="flex items-center gap-3 hover:text-primary">
-                    <span className="relative size-9 shrink-0 overflow-hidden rounded-lg border bg-muted">
-                      <Image
-                        src={p.image || "/placeholder.svg"}
-                        alt=""
-                        fill
-                        className="object-cover"
-                        sizes="36px"
-                        unoptimized={Boolean(p.image?.startsWith("/api/project-images?"))}
-                      />
-                    </span>
+                    <ProjectImageDisplay
+                      src={p.image}
+                      alt={p.name}
+                      className="size-9 shrink-0 rounded-lg border"
+                      iconClassName="size-4"
+                    />
                     <span className="min-w-0 truncate">{p.name}</span>
                   </Link>
                 </td>

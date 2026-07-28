@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { assertProjectAdmin, audit, AuthzError } from "@/lib/auth/guards"
 import {
+  detectProjectImageMimeType,
   isAllowedProjectImageType,
   PROJECT_IMAGE_BUCKET,
   PROJECT_IMAGE_MAX_SIZE_BYTES,
@@ -116,28 +117,32 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Invalid uploaded project image path." }, { status: 400 })
       }
 
-      const bucket = admin.storage.from(PROJECT_IMAGE_BUCKET) as any
-      const { data: info, error: infoError } = await bucket.info(storagePath)
-      const size = Number(info?.size ?? info?.metadata?.size ?? 0)
-      const contentType = String(
-        info?.contentType ?? info?.metadata?.mimetype ?? info?.metadata?.contentType ?? "",
-      ).toLowerCase()
+      const { data: uploadedFile, error: downloadError } = await admin.storage
+        .from(PROJECT_IMAGE_BUCKET)
+        .download(storagePath)
+      if (downloadError || !uploadedFile) {
+        await admin.storage.from(PROJECT_IMAGE_BUCKET).remove([storagePath]).catch(() => undefined)
+        throw new Error(downloadError?.message || "The uploaded project image could not be found in Storage.")
+      }
 
+      const size = uploadedFile.size
+      const bytes = new Uint8Array(await uploadedFile.arrayBuffer())
+      const contentType = detectProjectImageMimeType(bytes)
       if (
-        infoError ||
-        !info ||
+        !Number.isFinite(size) ||
         size <= 0 ||
         size > PROJECT_IMAGE_MAX_SIZE_BYTES ||
+        !contentType ||
         !isAllowedProjectImageType(contentType)
       ) {
         await admin.storage.from(PROJECT_IMAGE_BUCKET).remove([storagePath]).catch(() => undefined)
-        throw new Error(infoError?.message || "Supabase Storage did not confirm a valid project image.")
+        throw new Error("The uploaded file is not a valid JPG, PNG, or WEBP project image.")
       }
 
       const imageUrl = `/api/project-images?path=${encodeURIComponent(storagePath)}`
       const { error: updateError } = await admin
         .from("projects")
-        .update({ image: imageUrl, updated_at: new Date().toISOString() })
+        .update({ image: storagePath, updated_at: new Date().toISOString() })
         .eq("id", body.projectId)
       if (updateError) {
         await admin.storage.from(PROJECT_IMAGE_BUCKET).remove([storagePath]).catch(() => undefined)

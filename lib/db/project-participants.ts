@@ -1,5 +1,6 @@
 import "server-only"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { participantAvatarDisplayUrl } from "@/lib/projects/participant-avatar"
 import type {
   ProjectParticipantRole,
   ProjectParticipantView,
@@ -15,6 +16,7 @@ type ParticipantRow = {
   key_contact_name: string | null
   key_contact_email: string | null
   key_contact_phone: string | null
+  avatar_url: string | null
   status: string
 }
 
@@ -22,7 +24,6 @@ type ProfileRow = {
   id: string
   full_name: string | null
   email: string | null
-  avatar_url: string | null
 }
 
 function initials(value: string): string {
@@ -91,7 +92,7 @@ export async function getProjectParticipants(projectId: string): Promise<Project
   const { data, error } = await admin
     .from("project_participants")
     .select(
-      "id, organization_id, organization_name, participant_type, project_role, key_contact_user_id, key_contact_name, key_contact_email, key_contact_phone, status",
+      "id, organization_id, organization_name, participant_type, project_role, key_contact_user_id, key_contact_name, key_contact_email, key_contact_phone, avatar_url, status",
     )
     .eq("project_id", projectId)
     .eq("status", "active")
@@ -113,7 +114,7 @@ export async function getProjectParticipants(projectId: string): Promise<Project
   if (contactUserIds.length) {
     const { data: profiles, error: profileError } = await admin
       .from("profiles")
-      .select("id, full_name, email, avatar_url")
+      .select("id, full_name, email")
       .in("id", contactUserIds)
     if (profileError) throw profileError
     profileRows = (profiles ?? []) as ProfileRow[]
@@ -166,7 +167,7 @@ export async function getProjectParticipants(projectId: string): Promise<Project
         name: contactName,
         email: profile?.email?.trim() || row.key_contact_email?.trim() || undefined,
         initials: initials(contactName),
-        avatar: profile?.avatar_url ?? undefined,
+        avatar: participantAvatarDisplayUrl(row.avatar_url),
         detail: contactDetail || undefined,
       },
       usersWithAccess: row.organization_id

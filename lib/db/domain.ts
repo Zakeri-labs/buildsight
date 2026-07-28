@@ -1,5 +1,6 @@
 import "server-only"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 
 export type DomainProject = {
   id: string
@@ -243,7 +244,7 @@ export async function getDashboardData(orgId: string, projectId: string | null):
   const projectRows = scoped.map((p) => ({
     id: p.id,
     name: p.name,
-    image: p.image,
+    image: projectImageDisplayUrl(p.image),
     role: p.ourRole ?? "Consultant",
     ncrs: ncrPer.get(p.id) ?? 0,
     inspections: inspPer.get(p.id) ?? 0,

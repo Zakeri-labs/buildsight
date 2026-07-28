@@ -1,6 +1,5 @@
 "use client"
 
-import Image from "next/image"
 import Link from "next/link"
 import { useState } from "react"
 import {
@@ -24,6 +23,7 @@ import type { ProjectRecord } from "@/lib/mock-data"
 import { ProjectParticipants, type ProjectParticipant } from "@/components/projects/project-participants"
 import { ProjectDocuments, type ProjectDocument } from "@/components/projects/project-documents"
 import { ProjectImageManagementDialog } from "@/components/projects/project-image-management-dialog"
+import { ProjectImageDisplay } from "@/components/projects/project-image-display"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 
 function projectDocuments(project: ProjectRecord): ProjectDocument[] {
@@ -126,16 +126,11 @@ export function ProjectDetail({
           </CardHeader>
           <CardContent className="p-5 sm:p-6">
             <div className="grid gap-5 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)]">
-              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border bg-muted md:aspect-[5/4]">
-                <Image
-                  src={projectImage || "/placeholder.svg"}
-                  alt={project.name}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 768px) 100vw, 240px"
-                  priority
-                  unoptimized={Boolean(projectImage?.startsWith("/api/project-images?"))}
-                />
+              <ProjectImageDisplay
+                src={projectImage}
+                alt={project.name}
+                className="aspect-[4/3] w-full rounded-xl border md:aspect-[5/4]"
+              >
                 {canManageImages ? (
                   <div className="absolute bottom-3 end-3">
                     <ProjectImageManagementDialog
@@ -146,7 +141,7 @@ export function ProjectDetail({
                     />
                   </div>
                 ) : null}
-              </div>
+              </ProjectImageDisplay>
 
               <div className="min-w-0 space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

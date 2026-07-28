@@ -1,6 +1,7 @@
 import type { DomainProject } from "@/lib/db/domain"
 import type { ProjectRecord, ProjectStatusKey } from "@/lib/mock-data"
 import { PROJECT_TYPES } from "@/lib/projects/project-options"
+import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 
 function projectStatusKey(status: string): ProjectStatusKey {
   const normalized = status.trim().toLowerCase().replaceAll("_", "-").replaceAll(" ", "-")
@@ -35,7 +36,7 @@ export function toProjectRecord(
     name: project.name,
     code: project.code?.trim() || "Not set",
     location: project.location ?? "Location not set",
-    image: project.image ?? "/placeholder.svg",
+    image: projectImageDisplayUrl(project.image) ?? "/placeholder.svg",
     statusKey: projectStatusKey(project.status),
     projectType: projectTypeLabel(project.projectType),
     organizationRole: project.ourRole?.trim() || "Consultant",

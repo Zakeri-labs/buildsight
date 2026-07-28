@@ -3,6 +3,7 @@ import { requireOnboarded, isOrgAdmin } from "@/lib/auth/session"
 import { canAdministerProject } from "@/lib/auth/guards"
 import { getOrgProjects } from "@/lib/db/domain"
 import { PROJECT_TYPES } from "@/lib/projects/project-options"
+import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 
 function projectStatus(status: string): ProjectStatus {
   const normalized = status.trim().toLowerCase().replaceAll("_", "-")
@@ -61,7 +62,7 @@ export default async function ProjectsPage({
     status: projectStatus(project.status),
     startDate: displayDate(project.startDate),
     progress: Math.min(100, Math.max(0, Math.round(project.progressActual))),
-    imageUrl: project.image?.trim() || "/placeholder.svg",
+    imageUrl: projectImageDisplayUrl(project.image) ?? "/placeholder.svg",
     latitude: project.latitude,
     longitude: project.longitude,
     canEdit: editPermissions[index] ?? false,
