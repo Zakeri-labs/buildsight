@@ -13,6 +13,7 @@ import { coordinateLabel } from "@/lib/locations/types"
 import { SELECTED_PROJECT_COOKIE } from "@/lib/project-scope"
 import { isProjectTypeValue, isSupervisionTypeValue } from "@/lib/projects/project-options"
 import { validateOwnerIdCardFile } from "@/lib/projects/owner-id-card"
+import { validateProjectImageFile } from "@/lib/projects/project-image"
 
 function normalizeProjectCoordinates(latitude?: number | null, longitude?: number | null) {
   const hasLatitude = latitude != null
@@ -89,6 +90,63 @@ export async function updateProject(input: {
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not update project." }
+  }
+}
+
+export async function attachProjectImage(input: {
+  projectId: string
+  storagePath: string
+  originalFilename: string
+  mimeType: string
+  sizeBytes: number
+}): Promise<ActionResult<{ imageUrl: string }>> {
+  try {
+    const validationError = validateProjectImageFile({
+      name: input.originalFilename,
+      size: input.sizeBytes,
+      type: input.mimeType,
+    })
+    if (validationError) return { ok: false, error: validationError }
+
+    const actorId = await assertProjectAdmin(input.projectId)
+    const expectedPrefix = `${input.projectId}/${actorId}/cover/`
+    if (!input.storagePath.startsWith(expectedPrefix) || input.storagePath.includes("..")) {
+      return { ok: false, error: "The uploaded project image does not belong to this project." }
+    }
+
+    const admin = createAdminClient()
+    const imageUrl = `/api/project-images?path=${encodeURIComponent(input.storagePath)}`
+    const { data: project, error: lookupError } = await admin
+      .from("projects")
+      .select("supervising_organization_id")
+      .eq("id", input.projectId)
+      .maybeSingle()
+    if (lookupError) throw lookupError
+    if (!project) return { ok: false, error: "Project not found." }
+
+    const { error } = await admin
+      .from("projects")
+      .update({ image: imageUrl, updated_at: new Date().toISOString() })
+      .eq("id", input.projectId)
+    if (error) throw error
+
+    await audit({
+      actorId,
+      action: "project.image_uploaded",
+      entityType: "project",
+      entityId: input.projectId,
+      organizationId: project.supervising_organization_id,
+      projectId: input.projectId,
+      metadata: { storagePath: input.storagePath, originalFilename: input.originalFilename },
+    })
+    revalidatePath("/projects")
+    revalidatePath(`/projects/${input.projectId}`)
+    return { ok: true, data: { imageUrl } }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof AuthzError ? err.message : "Could not save the project image.",
+    }
   }
 }
 
@@ -223,6 +281,7 @@ export async function createProject(input: {
         longitude: coordinates.longitude,
         contractor: contractorName,
         consultant: org.name,
+        our_role: "Consultant",
         client: owners[0]?.name || null,
         contractor_organization_id: contractorOrganizationId,
         contractor_registration_number: input.contractor?.registrationNumber?.trim() || null,

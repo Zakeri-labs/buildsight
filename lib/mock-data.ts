@@ -211,9 +211,13 @@ export type ProjectStatusKey = "underConstruction" | "planning" | "onHold" | "co
 export type ProjectRecord = {
   id: string
   name: string
+  code: string
   location: string
   image: string
   statusKey: ProjectStatusKey
+  projectType: string
+  organizationRole: string
+  description: string
   contractor: string
   consultant: string
   client: string
@@ -229,9 +233,13 @@ export const projects: ProjectRecord[] = [
   {
     id: "PRJ-001",
     name: "Al Noor Residential Tower",
+    code: "—",
     location: "Dubai, UAE",
     image: "/projects/al-noor-tower.png",
     statusKey: "underConstruction",
+    projectType: "—",
+    organizationRole: "Consultant",
+    description: "No project description has been added.",
     contractor: "Atlas Contracting",
     consultant: "BuildSight Consulting",
     client: "Al Noor Developments",
@@ -245,9 +253,13 @@ export const projects: ProjectRecord[] = [
   {
     id: "PRJ-002",
     name: "Marina Bay Offices",
+    code: "—",
     location: "Abu Dhabi, UAE",
     image: "/site/facade-installation.png",
     statusKey: "underConstruction",
+    projectType: "—",
+    organizationRole: "Consultant",
+    description: "No project description has been added.",
     contractor: "Gulf Builders",
     consultant: "BuildSight Consulting",
     client: "Marina Holdings",
@@ -261,9 +273,13 @@ export const projects: ProjectRecord[] = [
   {
     id: "PRJ-003",
     name: "Green Valley Villas",
+    code: "—",
     location: "Sharjah, UAE",
     image: "/site/structural-works.png",
     statusKey: "underConstruction",
+    projectType: "—",
+    organizationRole: "Consultant",
+    description: "No project description has been added.",
     contractor: "Emirates Construct",
     consultant: "BuildSight Consulting",
     client: "Green Valley LLC",
@@ -277,9 +293,13 @@ export const projects: ProjectRecord[] = [
   {
     id: "PRJ-004",
     name: "Corniche Retail Plaza",
+    code: "—",
     location: "Dubai, UAE",
     image: "/site/mep-works.png",
     statusKey: "planning",
+    projectType: "—",
+    organizationRole: "Consultant",
+    description: "No project description has been added.",
     contractor: "Skyline Contracting",
     consultant: "BuildSight Consulting",
     client: "Corniche Retail Group",
@@ -293,9 +313,13 @@ export const projects: ProjectRecord[] = [
   {
     id: "PRJ-005",
     name: "Palm Heights Hotel",
+    code: "—",
     location: "Ras Al Khaimah, UAE",
     image: "/projects/al-noor-tower.png",
     statusKey: "onHold",
+    projectType: "—",
+    organizationRole: "Consultant",
+    description: "No project description has been added.",
     contractor: "Coastal Developers",
     consultant: "BuildSight Consulting",
     client: "Palm Hospitality",
@@ -309,9 +333,13 @@ export const projects: ProjectRecord[] = [
   {
     id: "PRJ-006",
     name: "Downtown Metro Station",
+    code: "—",
     location: "Dubai, UAE",
     image: "/site/structural-works.png",
     statusKey: "completed",
+    projectType: "—",
+    organizationRole: "Consultant",
+    description: "No project description has been added.",
     contractor: "Atlas Contracting",
     consultant: "BuildSight Consulting",
     client: "Roads & Transport Authority",

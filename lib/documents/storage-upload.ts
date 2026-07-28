@@ -18,11 +18,12 @@ function storageErrorMessage(request: XMLHttpRequest): string {
   return message
 }
 
-export async function uploadDocumentAsset(
+export async function uploadStorageAsset(
   file: File,
   path: string,
   accessToken: string,
   onProgress: (progress: number) => void,
+  bucket = DOCUMENT_ASSET_BUCKET,
   timeoutMs = DEFAULT_UPLOAD_TIMEOUT_MS,
 ): Promise<void> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -32,7 +33,7 @@ export async function uploadDocumentAsset(
   if (!file || file.size <= 0) throw new Error("The selected file is empty.")
 
   const encodedPath = path.split("/").map(encodeURIComponent).join("/")
-  const uploadUrl = `${supabaseUrl.replace(/\/$/, "")}/storage/v1/object/${DOCUMENT_ASSET_BUCKET}/${encodedPath}`
+  const uploadUrl = `${supabaseUrl.replace(/\/$/, "")}/storage/v1/object/${bucket}/${encodedPath}`
 
   await new Promise<void>((resolve, reject) => {
     const request = new XMLHttpRequest()
@@ -77,4 +78,15 @@ export async function uploadDocumentAsset(
       finish(() => reject(error instanceof Error ? error : new Error("Unable to start the file upload.")))
     }
   })
+}
+
+
+export async function uploadDocumentAsset(
+  file: File,
+  path: string,
+  accessToken: string,
+  onProgress: (progress: number) => void,
+  timeoutMs = DEFAULT_UPLOAD_TIMEOUT_MS,
+): Promise<void> {
+  return uploadStorageAsset(file, path, accessToken, onProgress, DOCUMENT_ASSET_BUCKET, timeoutMs)
 }

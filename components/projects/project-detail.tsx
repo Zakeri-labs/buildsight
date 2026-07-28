@@ -5,12 +5,15 @@ import Link from "next/link"
 import {
   MapPin,
   ArrowLeft,
-  HardHat,
   Building2,
   CalendarDays,
-  Wallet,
   ClipboardList,
   AlertTriangle,
+  Hash,
+  Layers3,
+  UserRound,
+  BriefcaseBusiness,
+  FileText,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ProjectStatusBadge } from "@/components/status-badge"
@@ -19,7 +22,6 @@ import { useI18n } from "@/lib/i18n"
 import type { ProjectRecord } from "@/lib/mock-data"
 import { ProjectParticipants, type ProjectParticipant } from "@/components/projects/project-participants"
 import { ProjectDocuments, type ProjectDocument } from "@/components/projects/project-documents"
-
 
 function projectDocuments(project: ProjectRecord): ProjectDocument[] {
   return [
@@ -50,34 +52,16 @@ function projectDocuments(project: ProjectRecord): ProjectDocument[] {
       lastUpdated: "May 16, 2025",
       status: "Under Review",
     },
-    {
-      id: `${project.id}-progress-photos`,
-      reference: "DOC-1104",
-      title: "Site Progress Photos",
-      type: "other",
-      uploadedBy: { name: "Nadine R.", initials: "NR" },
-      lastUpdated: "May 15, 2025",
-      status: "Updated",
-    },
-    {
-      id: `${project.id}-weekly-report`,
-      reference: "REP-2005",
-      title: "Weekly Progress Report – Week 20",
-      type: "weekly_report",
-      uploadedBy: { name: "Arman H.", initials: "AH", avatar: "/avatars/arman.png" },
-      lastUpdated: "May 14, 2025",
-      status: "Shared",
-    },
   ]
 }
 
-function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-3">
-      <span className="mt-0.5 text-muted-foreground">{icon}</span>
-      <div className="flex flex-col">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        <span className="text-sm font-medium">{value}</span>
+    <div className="flex min-w-0 items-start gap-3 rounded-lg border bg-muted/10 px-3 py-2.5">
+      <span className="mt-0.5 shrink-0 text-muted-foreground">{icon}</span>
+      <div className="min-w-0">
+        <span className="block text-xs text-muted-foreground">{label}</span>
+        <span className="mt-0.5 block truncate text-sm font-medium">{value}</span>
       </div>
     </div>
   )
@@ -92,49 +76,93 @@ export function ProjectDetail({
   documents?: ProjectDocument[]
   participants: ProjectParticipant[]
 }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
+  const isArabic = locale === "ar"
+  const labels = isArabic
+    ? {
+        details: "تفاصيل المشروع",
+        code: "رقم / رمز المشروع",
+        owner: "المالك / العميل",
+        role: "دور الجهة",
+        location: "الموقع / العنوان",
+        type: "نوع المشروع",
+        status: "الحالة",
+        start: "تاريخ البدء",
+        completion: "الإنجاز المتوقع",
+        progress: "التقدم",
+        description: "وصف المشروع",
+      }
+    : {
+        details: "Project Details",
+        code: "Project Code / Number",
+        owner: "Owner / Client",
+        role: "Organization Role",
+        location: "Location / Address",
+        type: "Project Type",
+        status: "Status",
+        start: "Start Date",
+        completion: "Expected Completion",
+        progress: "Progress",
+        description: "Project Description",
+      }
 
   return (
     <div className="flex flex-col gap-6">
-      <Link
-        href="/projects"
-        className="inline-flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-      >
+      <Link href="/projects" className="inline-flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4 rtl:rotate-180" />
         {t.projects.title}
       </Link>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2 overflow-hidden py-0 gap-0">
-          <div className="relative aspect-[21/9] w-full bg-muted">
-            <Image
-              src={project.image || "/placeholder.svg"}
-              alt={project.name}
-              fill
-              className="object-cover"
-              sizes="(max-width: 1024px) 100vw, 66vw"
-              priority
-            />
-          </div>
-          <CardContent className="flex flex-col gap-4 p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-col gap-1">
-                <h1 className="text-xl font-semibold">{project.name}</h1>
-                <p className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <MapPin className="size-4" />
-                  {project.location}
-                </p>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <Card className="gap-0 overflow-hidden py-0">
+          <CardHeader className="border-b px-5 py-4 sm:px-6">
+            <CardTitle className="text-base">{labels.details}</CardTitle>
+          </CardHeader>
+          <CardContent className="p-5 sm:p-6">
+            <div className="grid gap-5 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)]">
+              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border bg-muted md:aspect-[5/4]">
+                <Image
+                  src={project.image || "/placeholder.svg"}
+                  alt={project.name}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 100vw, 240px"
+                  priority
+                />
               </div>
-              <ProjectStatusBadge statusKey={project.statusKey} />
-            </div>
 
-            <div className="grid grid-cols-2 gap-4 border-t border-border pt-4 sm:grid-cols-3">
-              <InfoRow icon={<HardHat className="size-4" />} label={t.dashboard.contractor} value={project.contractor} />
-              <InfoRow icon={<Building2 className="size-4" />} label={t.dashboard.consultant} value={project.consultant} />
-              <InfoRow icon={<Building2 className="size-4" />} label={t.projects.client} value={project.client} />
-              <InfoRow icon={<CalendarDays className="size-4" />} label={t.projects.startDate} value={project.startDate} />
-              <InfoRow icon={<CalendarDays className="size-4" />} label={t.dashboard.targetHandover} value={project.targetHandover} />
-              <InfoRow icon={<Wallet className="size-4" />} label={t.projects.contractValue} value={project.contractValue} />
+              <div className="min-w-0 space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <h1 className="truncate text-xl font-semibold tracking-tight">{project.name}</h1>
+                    <p className="mt-1 flex items-start gap-1.5 text-sm text-muted-foreground">
+                      <MapPin className="mt-0.5 size-4 shrink-0" />
+                      <span>{project.location}</span>
+                    </p>
+                  </div>
+                  <ProjectStatusBadge statusKey={project.statusKey} />
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  <InfoRow icon={<Hash className="size-4" />} label={labels.code} value={project.code} />
+                  <InfoRow icon={<UserRound className="size-4" />} label={labels.owner} value={project.client} />
+                  <InfoRow icon={<BriefcaseBusiness className="size-4" />} label={labels.role} value={project.organizationRole} />
+                  <InfoRow icon={<MapPin className="size-4" />} label={labels.location} value={project.location} />
+                  <InfoRow icon={<Layers3 className="size-4" />} label={labels.type} value={project.projectType} />
+                  <InfoRow icon={<Building2 className="size-4" />} label={labels.status} value={<ProjectStatusBadge statusKey={project.statusKey} />} />
+                  <InfoRow icon={<CalendarDays className="size-4" />} label={labels.start} value={project.startDate} />
+                  <InfoRow icon={<CalendarDays className="size-4" />} label={labels.completion} value={project.targetHandover} />
+                  <InfoRow icon={<ClipboardList className="size-4" />} label={labels.progress} value={`${project.progress.actual}%`} />
+                </div>
+
+                <div className="rounded-xl border bg-muted/10 px-4 py-3">
+                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <FileText className="size-4" />
+                    {labels.description}
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground/90">{project.description}</p>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -150,30 +178,19 @@ export function ProjectDetail({
                 { value: Math.max(0, 100 - project.progress.actual), color: "var(--muted)" },
               ]}
               total={100}
-              centerTop={
-                <span className="text-3xl font-semibold tabular-nums">{project.progress.actual}%</span>
-              }
+              centerTop={<span className="text-3xl font-semibold tabular-nums">{project.progress.actual}%</span>}
             />
             <div className="flex w-full flex-col gap-3">
               <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2">
-                  <span className="size-2.5 rounded-full bg-info" />
-                  {t.dashboard.planned}
-                </span>
+                <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-info" />{t.dashboard.planned}</span>
                 <span className="font-semibold tabular-nums">{project.progress.planned}%</span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2">
-                  <span className="size-2.5 rounded-full bg-success" />
-                  {t.dashboard.actual}
-                </span>
+                <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-success" />{t.dashboard.actual}</span>
                 <span className="font-semibold tabular-nums">{project.progress.actual}%</span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2">
-                  <span className="size-2.5 rounded-full bg-destructive" />
-                  {t.dashboard.delay}
-                </span>
+                <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-destructive" />{t.dashboard.delay}</span>
                 <span className="font-semibold tabular-nums">{project.progress.delay}%</span>
               </div>
             </div>
@@ -184,30 +201,19 @@ export function ProjectDetail({
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
         <Card>
           <CardContent className="flex items-center gap-4 p-5">
-            <span className="flex size-12 items-center justify-center rounded-xl bg-info/12 text-info">
-              <ClipboardList className="size-6" />
-            </span>
-            <div className="flex flex-col">
-              <span className="text-2xl font-semibold tabular-nums">{project.openInspections}</span>
-              <span className="text-sm text-muted-foreground">{t.projects.openInspections}</span>
-            </div>
+            <span className="flex size-12 items-center justify-center rounded-xl bg-info/12 text-info"><ClipboardList className="size-6" /></span>
+            <div className="flex flex-col"><span className="text-2xl font-semibold tabular-nums">{project.openInspections}</span><span className="text-sm text-muted-foreground">{t.projects.openInspections}</span></div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="flex items-center gap-4 p-5">
-            <span className="flex size-12 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
-              <AlertTriangle className="size-6" />
-            </span>
-            <div className="flex flex-col">
-              <span className="text-2xl font-semibold tabular-nums">{project.openNcrs}</span>
-              <span className="text-sm text-muted-foreground">{t.projects.openNcrs}</span>
-            </div>
+            <span className="flex size-12 items-center justify-center rounded-xl bg-destructive/10 text-destructive"><AlertTriangle className="size-6" /></span>
+            <div className="flex flex-col"><span className="text-2xl font-semibold tabular-nums">{project.openNcrs}</span><span className="text-sm text-muted-foreground">{t.projects.openNcrs}</span></div>
           </CardContent>
         </Card>
       </div>
 
       <ProjectParticipants participants={participants} />
-
       <ProjectDocuments projectId={project.id} documents={documents ?? projectDocuments(project)} />
     </div>
   )

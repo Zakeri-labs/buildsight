@@ -1,12 +1,13 @@
 "use client"
 
-import { useMemo, useState, type ChangeEvent, type Dispatch, type ReactNode, type SetStateAction } from "react"
+import { useMemo, useRef, useState, type ChangeEvent, type Dispatch, type ReactNode, type SetStateAction } from "react"
 import {
   AlertCircle,
   Bot,
   Check,
   ClipboardCheck,
   Copy,
+  Download,
   FileText,
   FolderKanban,
   ImageIcon,
@@ -18,6 +19,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { AiSummarySourceData } from "@/lib/ai-summary/sources"
+import { SummaryReport } from "@/components/ai-summary/summary-markdown"
+import { exportSummaryPdf } from "@/lib/ai-summary/client-pdf"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
 
@@ -45,9 +48,16 @@ const COPY = {
     instructionsPlaceholder: "Example: Focus on overdue corrective actions, rejected items, and handover risks.",
     generate: "Generate Summary",
     generating: "Reviewing selected records and their evidence...",
-    result: "Generated project summary",
-    copy: "Copy",
+    result: "Bilingual project summary",
+    englishSummary: "English Summary",
+    arabicSummary: "Arabic Summary",
+    downloadEnglish: "Download English PDF",
+    downloadArabic: "Download Arabic PDF",
+    preparingPdf: "Preparing PDF...",
+    copyEnglish: "Copy English",
+    copyArabic: "Copy Arabic",
     copied: "Copied",
+    pdfError: "Unable to export the PDF. Please try again.",
     selectSource: "Select at least one inspection report or project document.",
     unavailable: "No source records are available yet.",
   },
@@ -74,9 +84,16 @@ const COPY = {
     instructionsPlaceholder: "مثال: ركّز على الإجراءات التصحيحية المتأخرة والعناصر المرفوضة ومخاطر التسليم.",
     generate: "إنشاء الملخص",
     generating: "جارٍ مراجعة السجلات المحددة والأدلة المرتبطة...",
-    result: "ملخص المشروع الناتج",
-    copy: "نسخ",
+    result: "ملخص المشروع باللغتين",
+    englishSummary: "الملخص الإنجليزي",
+    arabicSummary: "الملخص العربي",
+    downloadEnglish: "تنزيل PDF الإنجليزي",
+    downloadArabic: "تنزيل PDF العربي",
+    preparingPdf: "جارٍ إعداد ملف PDF...",
+    copyEnglish: "نسخ الإنجليزية",
+    copyArabic: "نسخ العربية",
     copied: "تم النسخ",
+    pdfError: "تعذر تصدير ملف PDF. يرجى المحاولة مرة أخرى.",
     selectSource: "اختر تقرير تفتيش أو مستند مشروع واحداً على الأقل.",
     unavailable: "لا توجد سجلات مصدرية متاحة بعد.",
   },
@@ -98,10 +115,14 @@ export function AiSummaryBuilder({ data }: { data: AiSummarySourceData | null })
   const [selectedResponses, setSelectedResponses] = useState<Set<string>>(new Set())
   const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set())
   const [instructions, setInstructions] = useState("")
-  const [summary, setSummary] = useState("")
+  const [summaries, setSummaries] = useState<{ en: string; ar: string } | null>(null)
+  const [generatedAt, setGeneratedAt] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<"en" | "ar" | null>(null)
+  const [exporting, setExporting] = useState<"en" | "ar" | null>(null)
+  const englishReportRef = useRef<HTMLElement>(null)
+  const arabicReportRef = useRef<HTMLElement>(null)
 
   const selectedCount = selectedResponses.size + selectedDocuments.size
   const totalSources = (data?.inspections.length ?? 0) + (data?.documents.length ?? 0)
@@ -133,22 +154,29 @@ export function AiSummaryBuilder({ data }: { data: AiSummarySourceData | null })
     }
     setBusy(true)
     setError(null)
-    setSummary("")
+    setSummaries(null)
     try {
-      const response = await fetch("/api/ai-summary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: data.project.id,
-          responseIds: Array.from(selectedResponses),
-          documentIds: Array.from(selectedDocuments),
-          instructions,
-          locale,
-        }),
-      })
-      const payload = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(payload?.error || "Unable to generate the AI summary.")
-      setSummary(payload.summary)
+      const requestSummary = async (summaryLocale: "en" | "ar") => {
+        const response = await fetch("/api/ai-summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId: data.project.id,
+            responseIds: Array.from(selectedResponses),
+            documentIds: Array.from(selectedDocuments),
+            instructions,
+            locale: summaryLocale,
+          }),
+        })
+        const payload = await response.json().catch(() => null)
+        if (!response.ok) throw new Error(payload?.error || "Unable to generate the AI summary.")
+        if (typeof payload?.summary !== "string" || !payload.summary.trim()) throw new Error("The AI service returned an empty summary.")
+        return payload.summary.trim()
+      }
+
+      const [english, arabic] = await Promise.all([requestSummary("en"), requestSummary("ar")])
+      setSummaries({ en: english, ar: arabic })
+      setGeneratedAt(new Date().toISOString())
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : "Unable to generate the AI summary.")
     } finally {
@@ -156,11 +184,32 @@ export function AiSummaryBuilder({ data }: { data: AiSummarySourceData | null })
     }
   }
 
-  async function copySummary() {
+  async function copySummary(language: "en" | "ar") {
+    const summary = summaries?.[language]
     if (!summary) return
     await navigator.clipboard.writeText(summary)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1800)
+    setCopied(language)
+    window.setTimeout(() => setCopied(null), 1800)
+  }
+
+  async function downloadPdf(language: "en" | "ar") {
+    if (!data || !summaries) return
+    const source = language === "en" ? englishReportRef.current : arabicReportRef.current
+    if (!source) return
+    setExporting(language)
+    setError(null)
+    try {
+      await exportSummaryPdf({
+        source,
+        projectName: data.project.name,
+        projectReference: data.project.code,
+        language,
+      })
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : copy.pdfError)
+    } finally {
+      setExporting(null)
+    }
   }
 
   if (!data) {
@@ -285,19 +334,63 @@ export function AiSummaryBuilder({ data }: { data: AiSummarySourceData | null })
         </CardContent>
       </Card>
 
-      {summary ? (
-        <Card>
-          <CardHeader className="flex-row items-center justify-between gap-3">
-            <CardTitle>{copy.result}</CardTitle>
-            <Button type="button" variant="outline" size="sm" onClick={copySummary}>
-              {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-              {copied ? copy.copied : copy.copy}
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="whitespace-pre-wrap rounded-2xl border bg-muted/20 p-5 text-sm leading-7 sm:p-6">{summary}</div>
-          </CardContent>
-        </Card>
+      {summaries ? (
+        <section className="space-y-4" aria-labelledby="ai-summary-result-title">
+          <div className="flex flex-col gap-3 rounded-2xl border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-5">
+            <div>
+              <h2 id="ai-summary-result-title" className="text-xl font-semibold tracking-tight">{copy.result}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{data.project.name}{data.project.code ? ` · ${data.project.code}` : ""}</p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button type="button" variant="outline" onClick={() => downloadPdf("en")} disabled={exporting !== null}>
+                {exporting === "en" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                {exporting === "en" ? copy.preparingPdf : copy.downloadEnglish}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => downloadPdf("ar")} disabled={exporting !== null}>
+                {exporting === "ar" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                {exporting === "ar" ? copy.preparingPdf : copy.downloadArabic}
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid items-start gap-5 lg:grid-cols-2" dir="ltr">
+            <div className="min-w-0 space-y-3" dir="ltr">
+              <div className="flex items-center justify-between gap-3 px-1">
+                <h3 className="font-semibold">{copy.englishSummary}</h3>
+                <Button type="button" variant="ghost" size="sm" onClick={() => copySummary("en")}>
+                  {copied === "en" ? <Check className="size-4" /> : <Copy className="size-4" />}
+                  {copied === "en" ? copy.copied : copy.copyEnglish}
+                </Button>
+              </div>
+              <SummaryReport
+                ref={englishReportRef}
+                language="en"
+                markdown={summaries.en}
+                projectName={data.project.name}
+                projectReference={data.project.code}
+                generatedAt={generatedAt}
+              />
+            </div>
+
+            <div className="min-w-0 space-y-3 font-arabic" dir="rtl">
+              <div className="flex items-center justify-between gap-3 px-1">
+                <h3 className="font-semibold">{copy.arabicSummary}</h3>
+                <Button type="button" variant="ghost" size="sm" onClick={() => copySummary("ar")}>
+                  {copied === "ar" ? <Check className="size-4" /> : <Copy className="size-4" />}
+                  {copied === "ar" ? copy.copied : copy.copyArabic}
+                </Button>
+              </div>
+              <SummaryReport
+                ref={arabicReportRef}
+                language="ar"
+                markdown={summaries.ar}
+                projectName={data.project.name}
+                projectReference={data.project.code}
+                generatedAt={generatedAt}
+              />
+            </div>
+          </div>
+        </section>
       ) : null}
     </div>
   )

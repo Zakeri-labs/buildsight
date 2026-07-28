@@ -37,6 +37,7 @@ import {
   type ProjectDocumentSelections,
 } from "@/components/projects/project-document-upload-step"
 import {
+  attachProjectImage,
   attachProjectOwnerIdCards,
   createProject,
   type OwnerIdCardUploadInput,
@@ -50,7 +51,7 @@ import {
   sanitizeStorageFileName,
   validateSimpleUploadFile,
 } from "@/lib/documents/simple-upload"
-import { uploadDocumentAsset } from "@/lib/documents/storage-upload"
+import { uploadDocumentAsset, uploadStorageAsset } from "@/lib/documents/storage-upload"
 import { createClient } from "@/lib/supabase/client"
 import {
   PROJECT_TYPES,
@@ -62,6 +63,11 @@ import {
   OWNER_ID_CARD_ACCEPT,
   validateOwnerIdCardFile,
 } from "@/lib/projects/owner-id-card"
+import {
+  PROJECT_IMAGE_ACCEPT,
+  PROJECT_IMAGE_BUCKET,
+  validateProjectImageFile,
+} from "@/lib/projects/project-image"
 import { cn } from "@/lib/utils"
 
 type OwnerDetails = {
@@ -105,6 +111,8 @@ export function ProjectCreateForm({
   const [projectType, setProjectType] = useState<ProjectTypeValue | "">("")
   const [supervisionType, setSupervisionType] = useState<SupervisionTypeValue | "">("")
   const [location, setLocation] = useState<ProjectLocationValue>(EMPTY_PROJECT_LOCATION)
+  const [description, setDescription] = useState("")
+  const [projectImageFile, setProjectImageFile] = useState<File | null>(null)
   const [assignedUserId, setAssignedUserId] = useState("")
   const [assignedSupervisorId, setAssignedSupervisorId] = useState("")
   const [owners, setOwners] = useState<OwnerDetails[]>([emptyOwner()])
@@ -125,6 +133,7 @@ export function ProjectCreateForm({
   const [createdOwnerIds, setCreatedOwnerIds] = useState<string[]>([])
   const [ownerIdCardsUploaded, setOwnerIdCardsUploaded] = useState(false)
   const [documentsUploaded, setDocumentsUploaded] = useState(false)
+  const [projectImageUploaded, setProjectImageUploaded] = useState(false)
   const submissionLockRef = useRef(false)
 
   const selectedDocumentCount = useMemo(
@@ -135,7 +144,7 @@ export function ProjectCreateForm({
     () => owners.reduce((total, owner) => total + (owner.idCardFile ? 1 : 0), 0),
     [owners],
   )
-  const selectedUploadCount = selectedDocumentCount + selectedOwnerIdCardCount
+  const selectedUploadCount = selectedDocumentCount + selectedOwnerIdCardCount + (projectImageFile ? 1 : 0)
 
   const copy = isArabic
     ? {
@@ -162,6 +171,14 @@ export function ProjectCreateForm({
         assignUserPlaceholder: "اختر مستخدم المشروع",
         assignSupervisor: "تعيين مشرف",
         assignSupervisorPlaceholder: "اختر مشرف المشروع",
+        projectImage: "صورة المشروع",
+        projectImageHelp: "اختياري. JPG أو PNG أو WebP بحد أقصى 10 ميجابايت.",
+        chooseProjectImage: "اختيار صورة",
+        changeProjectImage: "تغيير الصورة",
+        removeProjectImage: "إزالة الصورة",
+        noProjectImage: "لم يتم اختيار صورة للمشروع",
+        description: "وصف المشروع",
+        descriptionPlaceholder: "نبذة مختصرة عن نطاق المشروع وأهدافه",
         ownerCount: "عدد المالكين",
         owner: "المالك",
         ownerName: "اسم المالك",
@@ -222,6 +239,14 @@ export function ProjectCreateForm({
         assignUserPlaceholder: "Select a project user",
         assignSupervisor: "Assign Supervisor",
         assignSupervisorPlaceholder: "Select a project supervisor",
+        projectImage: "Project Image",
+        projectImageHelp: "Optional. JPG, PNG, or WebP up to 10 MB.",
+        chooseProjectImage: "Choose Image",
+        changeProjectImage: "Change Image",
+        removeProjectImage: "Remove Image",
+        noProjectImage: "No project image selected",
+        description: "Project Description",
+        descriptionPlaceholder: "Briefly describe the project scope and objectives",
         ownerCount: "Number of Owners",
         owner: "Owner",
         ownerName: "Owner Name",
@@ -284,6 +309,10 @@ export function ProjectCreateForm({
 
   function validateStep(targetStep: number): string | null {
     if (targetStep === 1) {
+      if (projectImageFile) {
+        const imageValidationError = validateProjectImageFile(projectImageFile)
+        if (imageValidationError) return imageValidationError
+      }
       if (
         name.trim().length < 2 ||
         code.trim().length < 1 ||
@@ -337,6 +366,42 @@ export function ProjectCreateForm({
     setError(null)
     setStep((current) => Math.max(1, current - 1))
     window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  async function uploadProjectImage(projectId: string) {
+    if (!projectImageFile) return
+    const validationError = validateProjectImageFile(projectImageFile)
+    if (validationError) throw new Error(validationError)
+
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error("Your session has expired. Sign in again.")
+
+    const progressLabel = isArabic ? "جارٍ رفع صورة المشروع…" : "Uploading project image…"
+    setSubmissionMessage(progressLabel)
+    setUploadingFile(progressLabel)
+    const storagePath = `${projectId}/${session.user.id}/cover/${crypto.randomUUID()}-${sanitizeStorageFileName(projectImageFile.name)}`
+
+    try {
+      await uploadStorageAsset(
+        projectImageFile,
+        storagePath,
+        session.access_token,
+        setUploadProgress,
+        PROJECT_IMAGE_BUCKET,
+      )
+      const result = await attachProjectImage({
+        projectId,
+        storagePath,
+        originalFilename: projectImageFile.name,
+        mimeType: projectImageFile.type,
+        sizeBytes: projectImageFile.size,
+      })
+      if (!result.ok) throw new Error(result.error)
+    } catch (uploadError) {
+      void supabase.storage.from(PROJECT_IMAGE_BUCKET).remove([storagePath]).then(() => undefined, () => undefined)
+      throw uploadError
+    }
   }
 
   async function uploadOwnerIdCards(projectId: string, ownerIds: string[]) {
@@ -487,6 +552,7 @@ export function ProjectCreateForm({
           location: location.address,
           latitude: location.latitude,
           longitude: location.longitude,
+          description,
           assignedUserId,
           assignedSupervisorId,
           owners: owners.map((owner) => ({
@@ -514,6 +580,12 @@ export function ProjectCreateForm({
         setCreatedOwnerIds(ownerIds)
       }
 
+      if (projectImageFile && !projectImageUploaded) {
+        setUploadProgress(0)
+        await uploadProjectImage(projectId)
+        setProjectImageUploaded(true)
+      }
+
       if (selectedOwnerIdCardCount > 0 && !ownerIdCardsUploaded) {
         setUploadProgress(0)
         await uploadOwnerIdCards(projectId, ownerIds)
@@ -532,9 +604,10 @@ export function ProjectCreateForm({
       setUploadingFile(copy.created)
       setSuccess(true)
 
-      router.replace("/")
+      const destination = `/projects/${projectId}`
+      router.replace(destination)
       window.setTimeout(() => {
-        if (window.location.pathname !== "/") window.location.assign("/")
+        if (window.location.pathname !== destination) window.location.assign(destination)
       }, 1500)
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Could not create project."
@@ -675,6 +748,31 @@ export function ProjectCreateForm({
                     value={location}
                     onChange={setLocation}
                     disabled={pending}
+                  />
+                </div>
+
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.65fr)]">
+                  <Field label={`${copy.description} (${copy.optional})`} htmlFor="new-project-description">
+                    <textarea
+                      id="new-project-description"
+                      value={description}
+                      onChange={(event) => setDescription(event.target.value)}
+                      placeholder={copy.descriptionPlaceholder}
+                      disabled={pending}
+                      rows={5}
+                      className="min-h-32 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  </Field>
+                  <ProjectImageField
+                    file={projectImageFile}
+                    onChange={setProjectImageFile}
+                    disabled={pending}
+                    label={`${copy.projectImage} (${copy.optional})`}
+                    help={copy.projectImageHelp}
+                    chooseLabel={copy.chooseProjectImage}
+                    changeLabel={copy.changeProjectImage}
+                    removeLabel={copy.removeProjectImage}
+                    emptyLabel={copy.noProjectImage}
                   />
                 </div>
 
@@ -915,6 +1013,112 @@ function Field({
         {required ? <span className="ms-1 text-destructive" aria-hidden="true">*</span> : null}
       </Label>
       {children}
+    </div>
+  )
+}
+
+function ProjectImageField({
+  file,
+  onChange,
+  disabled,
+  label,
+  help,
+  chooseLabel,
+  changeLabel,
+  removeLabel,
+  emptyLabel,
+}: {
+  file: File | null
+  onChange: (file: File | null) => void
+  disabled: boolean
+  label: string
+  help: string
+  chooseLabel: string
+  changeLabel: string
+  removeLabel: string
+  emptyLabel: string
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [localError, setLocalError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null)
+      return
+    }
+    const objectUrl = URL.createObjectURL(file)
+    setPreviewUrl(objectUrl)
+    return () => URL.revokeObjectURL(objectUrl)
+  }, [file])
+
+  function selectFile(nextFile: File | null) {
+    if (!nextFile) return
+    const validationError = validateProjectImageFile(nextFile)
+    if (validationError) {
+      setLocalError(validationError)
+      if (inputRef.current) inputRef.current.value = ""
+      return
+    }
+    setLocalError(null)
+    onChange(nextFile)
+    if (inputRef.current) inputRef.current.value = ""
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="project-image-input">{label}</Label>
+      <input
+        ref={inputRef}
+        id="project-image-input"
+        type="file"
+        accept={PROJECT_IMAGE_ACCEPT}
+        className="sr-only"
+        disabled={disabled}
+        onChange={(event) => selectFile(event.target.files?.[0] ?? null)}
+      />
+      <div className="overflow-hidden rounded-xl border bg-background">
+        <div className="aspect-[16/9] w-full bg-muted/30">
+          {previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={previewUrl} alt={file?.name || label} className="size-full object-cover" />
+          ) : (
+            <div className="flex size-full flex-col items-center justify-center gap-2 text-muted-foreground">
+              <ImageIcon className="size-8" />
+              <span className="px-3 text-center text-xs">{emptyLabel}</span>
+            </div>
+          )}
+        </div>
+        <div className="space-y-3 border-t p-3">
+          {file ? (
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{file.name}</p>
+              <p className="text-xs text-muted-foreground">{(file.size / (1024 * 1024)).toFixed(1)} MB</p>
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={disabled}>
+              <FileUp className="size-4" />
+              {file ? changeLabel : chooseLabel}
+            </Button>
+            {file ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => { setLocalError(null); onChange(null) }}
+                disabled={disabled}
+                className="text-destructive hover:text-destructive"
+              >
+                <Trash2 className="size-4" />
+                {removeLabel}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">{help}</p>
+      {localError ? <p role="alert" className="text-xs text-destructive">{localError}</p> : null}
     </div>
   )
 }

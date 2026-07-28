@@ -404,3 +404,24 @@
   font-size: 0.75rem;
   color: var(--muted-foreground);
 }
+
+/* AI Summary professional report and PDF page-break controls */
+.ai-summary-report,
+.ai-summary-pdf-export {
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.ai-summary-pdf-export {
+  background: #fff !important;
+  color: #1e293b !important;
+  box-shadow: none !important;
+}
+
+.ai-summary-pdf-export .ai-summary-no-break,
+.ai-summary-pdf-export table,
+.ai-summary-pdf-export tr,
+.ai-summary-pdf-export img {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}

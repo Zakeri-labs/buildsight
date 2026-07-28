@@ -1,5 +1,6 @@
 import type { DomainProject } from "@/lib/db/domain"
 import type { ProjectRecord, ProjectStatusKey } from "@/lib/mock-data"
+import { PROJECT_TYPES } from "@/lib/projects/project-options"
 
 function projectStatusKey(status: string): ProjectStatusKey {
   const normalized = status.trim().toLowerCase().replaceAll("_", "-").replaceAll(" ", "-")
@@ -21,6 +22,10 @@ function displayDate(value: string | null): string {
   }).format(date)
 }
 
+function projectTypeLabel(value: string | null): string {
+  return PROJECT_TYPES.find((option) => option.value === value)?.label ?? (value?.trim() || "Not set")
+}
+
 export function toProjectRecord(
   project: DomainProject,
   counts?: { ncrs: number; inspections: number },
@@ -28,9 +33,13 @@ export function toProjectRecord(
   return {
     id: project.id,
     name: project.name,
+    code: project.code?.trim() || "Not set",
     location: project.location ?? "Location not set",
     image: project.image ?? "/placeholder.svg",
     statusKey: projectStatusKey(project.status),
+    projectType: projectTypeLabel(project.projectType),
+    organizationRole: project.ourRole?.trim() || "Consultant",
+    description: project.description?.trim() || "No project description has been added.",
     contractor: project.contractor ?? "Not assigned",
     consultant: project.consultant ?? "Not assigned",
     client: project.client ?? "Not assigned",
