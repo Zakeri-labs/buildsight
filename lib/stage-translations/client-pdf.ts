@@ -1,63 +1,176 @@
 "use client"
 
-import { extractSourcePdf } from "@/lib/stage-translations/client-source-pdf"
-import { buildTranslationPdfDocument, type PdfKind } from "@/lib/stage-translations/pdf-templates"
+import { extractSourcePdf, loadPdfJs } from "@/lib/stage-translations/client-source-pdf"
+import {
+  buildLanguagePdfTemplate,
+  type LanguagePdfTemplate,
+  type PdfKind,
+  type PdfSectionTemplate,
+} from "@/lib/stage-translations/pdf-templates"
 import { getSourcePdfAttachment, stageSourceDocumentUrl } from "@/lib/stage-translations/source-document"
 import type { StageTranslationPageData, StageTranslationRecord } from "@/lib/stage-translations/types"
+import { createClient as createSupabaseClient } from "@/lib/supabase/client"
 
-const HTML2PDF_SCRIPT_ID = "buildsight-html2pdf"
-const HTML2PDF_SCRIPT_URL = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"
-const HTML2PDF_INTEGRITY = "sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg=="
-const MAX_CANVAS_DIMENSION = 30_000
+const JSPDF_SCRIPT_ID = "buildsight-jspdf"
+const JSPDF_SCRIPT_URLS = [
+  "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
+  "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js",
+  "https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js",
+]
+const AUTOTABLE_SCRIPT_ID = "buildsight-jspdf-autotable"
+const AUTOTABLE_SCRIPT_URLS = [
+  "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js",
+  "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js",
+  "https://unpkg.com/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js",
+]
+const ARABIC_FONT_FILENAME = "NotoNaskhArabic-Regular.ttf"
+const ARABIC_FONT_FAMILY = "NotoNaskhArabic"
+const ARABIC_FONT_URL = "/api/stage-translations/font"
 
-type Html2PdfFactory = () => any
-type PdfFrameWindow = Window & { html2pdf?: Html2PdfFactory }
+const TRANSLATION_BUCKET = "project-stage-translations"
+const MAX_PDF_BYTES = 60 * 1024 * 1024
 
-function loadHtml2PdfInFrame(iframe: HTMLIFrameElement) {
-  return new Promise<Html2PdfFactory>((resolve, reject) => {
-    const frameDocument = iframe.contentDocument
-    const frameWindow = iframe.contentWindow as PdfFrameWindow | null
-    if (!frameDocument || !frameWindow) {
-      reject(new Error("The isolated PDF renderer is unavailable."))
+const PAGE = {
+  portraitWidth: 210,
+  portraitHeight: 297,
+  landscapeWidth: 297,
+  landscapeHeight: 210,
+  margin: 14,
+  footer: 10,
+} as const
+
+type JsPdfDocument = any
+type JsPdfConstructor = new (options?: Record<string, unknown>) => JsPdfDocument
+type JsPdfWindow = Window & { jspdf?: { jsPDF?: JsPdfConstructor } }
+
+type PdfBlock =
+  | { type: "heading"; level: number; text: string }
+  | { type: "paragraph"; text: string }
+  | { type: "list"; ordered: boolean; items: string[] }
+  | { type: "table"; headers: string[]; rows: string[][] }
+  | { type: "image"; src: string; caption: string }
+  | { type: "spacer"; height: number }
+
+type LoadedImage = { dataUrl: string; width: number; height: number }
+
+type Flow = {
+  doc: JsPdfDocument
+  template: LanguagePdfTemplate
+  rtl: boolean
+  pageWidth: number
+  pageHeight: number
+  x: number
+  y: number
+  width: number
+  bottom: number
+  pageNumber: number
+}
+
+let pdfToolsPromise: Promise<JsPdfConstructor> | null = null
+let arabicFontPromise: Promise<string> | null = null
+const imageCache = new Map<string, Promise<LoadedImage | null>>()
+
+function loadScript(id: string, src: string) {
+  return new Promise<void>((resolve, reject) => {
+    const existing = document.getElementById(id) as HTMLScriptElement | null
+    if (existing?.dataset.loaded === "1") {
+      resolve()
       return
     }
-    if (frameWindow.html2pdf) {
-      resolve(frameWindow.html2pdf)
-      return
-    }
-
-    const script = frameDocument.createElement("script")
+    if (existing) existing.remove()
+    const script = document.createElement("script")
     const timeout = window.setTimeout(() => {
       script.remove()
-      reject(new Error("PDF tools did not load inside the isolated renderer."))
+      reject(new Error(`PDF library timed out: ${id}`))
     }, 20_000)
     const finish = () => {
       window.clearTimeout(timeout)
-      if (!frameWindow.html2pdf) {
-        reject(new Error("PDF tools failed to initialize inside the isolated renderer."))
-        return
-      }
-      resolve(frameWindow.html2pdf)
+      script.dataset.loaded = "1"
+      resolve()
     }
     const fail = () => {
       window.clearTimeout(timeout)
       script.remove()
-      reject(new Error("PDF tools could not be loaded inside the isolated renderer."))
+      reject(new Error(`PDF library could not be loaded: ${id}`))
     }
-
-    script.id = HTML2PDF_SCRIPT_ID
-    script.src = HTML2PDF_SCRIPT_URL
+    script.addEventListener("load", finish, { once: true })
+    script.addEventListener("error", fail, { once: true })
+    script.id = id
+    script.src = src
     script.async = true
     script.crossOrigin = "anonymous"
     script.referrerPolicy = "no-referrer"
-    script.integrity = HTML2PDF_INTEGRITY
-    script.addEventListener("load", finish, { once: true })
-    script.addEventListener("error", fail, { once: true })
-    frameDocument.head.appendChild(script)
+    document.head.appendChild(script)
   })
 }
 
-function safeFilename(value: string) {
+async function loadScriptFromCandidates(id: string, urls: string[]) {
+  let lastError: unknown = null
+  for (const url of urls) {
+    try {
+      await loadScript(id, url)
+      return
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`PDF library could not be loaded: ${id}`)
+}
+
+async function loadPdfTools() {
+  if (pdfToolsPromise) return pdfToolsPromise
+  pdfToolsPromise = (async () => {
+    await loadScriptFromCandidates(JSPDF_SCRIPT_ID, JSPDF_SCRIPT_URLS)
+    const constructor = (window as JsPdfWindow).jspdf?.jsPDF
+    if (!constructor) throw new Error("The PDF generator failed to initialize.")
+    await loadScriptFromCandidates(AUTOTABLE_SCRIPT_ID, AUTOTABLE_SCRIPT_URLS)
+    return constructor
+  })().catch((error) => {
+    pdfToolsPromise = null
+    throw error
+  })
+  return pdfToolsPromise
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer)
+  let binary = ""
+  const chunk = 0x8000
+  for (let index = 0; index < bytes.length; index += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(index, Math.min(index + chunk, bytes.length)))
+  }
+  return window.btoa(binary)
+}
+
+async function loadArabicFontBase64() {
+  if (arabicFontPromise) return arabicFontPromise
+  arabicFontPromise = (async () => {
+    const response = await fetch(ARABIC_FONT_URL, { cache: "force-cache", credentials: "same-origin" })
+    if (!response.ok) {
+      const details = await response.text().catch(() => "")
+      throw new Error(details || `Arabic font request failed with status ${response.status}.`)
+    }
+    const bytes = await response.arrayBuffer()
+    if (bytes.byteLength < 20_000) throw new Error("Arabic font response is invalid.")
+    return arrayBufferToBase64(bytes)
+  })().catch((error) => {
+    arabicFontPromise = null
+    throw error
+  })
+  return arabicFontPromise
+}
+
+async function installArabicFont(doc: JsPdfDocument) {
+  const base64 = await loadArabicFontBase64()
+  if (!doc.existsFileInVFS?.(ARABIC_FONT_FILENAME)) doc.addFileToVFS(ARABIC_FONT_FILENAME, base64)
+  const fontList = doc.getFontList?.() as Record<string, string[]> | undefined
+  if (!fontList?.[ARABIC_FONT_FAMILY]) {
+    doc.addFont(ARABIC_FONT_FILENAME, ARABIC_FONT_FAMILY, "normal")
+  }
+  doc.setFont(ARABIC_FONT_FAMILY, "normal")
+}
+
+export function safePdfFilename(value: string) {
   const normalized = value
     .trim()
     .toLowerCase()
@@ -66,7 +179,7 @@ function safeFilename(value: string) {
   return normalized || "inspection-report"
 }
 
-function downloadBlob(blob: Blob, filename: string) {
+export function downloadPdfBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.href = url
@@ -78,83 +191,639 @@ function downloadBlob(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
 }
 
-async function waitForImages(root: HTMLElement) {
-  const images = Array.from(root.querySelectorAll("img"))
-  await Promise.all(images.map((image) => {
-    if (image.complete) return Promise.resolve()
-    return new Promise<void>((resolve) => {
-      const finish = () => resolve()
-      image.addEventListener("load", finish, { once: true })
-      image.addEventListener("error", finish, { once: true })
-      window.setTimeout(finish, 20_000)
+export async function storeTranslationPdf(input: {
+  projectId: string
+  translationId: string
+  kind: PdfKind
+  blob: Blob
+  filename: string
+}) {
+  if (input.blob.size <= 0 || input.blob.size > MAX_PDF_BYTES) {
+    throw new Error("The generated PDF is empty or exceeds the 60 MB Storage limit.")
+  }
+  const signature = new TextDecoder("ascii").decode(new Uint8Array(await input.blob.slice(0, 5).arrayBuffer()))
+  if (signature !== "%PDF-") throw new Error("The generated file is not a valid PDF.")
+
+  const prepareResponse = await fetch("/api/stage-translations/pdf", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "prepare",
+      projectId: input.projectId,
+      translationId: input.translationId,
+      kind: input.kind,
+      filename: input.filename,
+    }),
+  })
+  const prepared = await prepareResponse.json().catch(() => null)
+  if (!prepareResponse.ok || !prepared?.storagePath || !prepared?.token) {
+    throw new Error(prepared?.error || "Unable to prepare Supabase Storage upload.")
+  }
+
+  const storagePath = String(prepared.storagePath)
+  const token = String(prepared.token)
+  const supabase = createSupabaseClient()
+  const { error: uploadError } = await supabase.storage
+    .from(TRANSLATION_BUCKET)
+    .uploadToSignedUrl(storagePath, token, input.blob, {
+      contentType: "application/pdf",
+      cacheControl: "3600",
     })
-  }))
+  if (uploadError) throw new Error(`Supabase Storage upload failed: ${uploadError.message}`)
+
+  const finalizeResponse = await fetch("/api/stage-translations/pdf", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "finalize",
+      projectId: input.projectId,
+      translationId: input.translationId,
+      kind: input.kind,
+      storagePath,
+    }),
+  })
+  const finalized = await finalizeResponse.json().catch(() => null)
+  if (!finalizeResponse.ok) throw new Error(finalized?.error || "The PDF was uploaded, but its saved path could not be finalized.")
+  return String(finalized.storagePath || storagePath)
 }
 
-function assertPdfSafeDocument(html: string) {
-  const css = [
-    ...Array.from(html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi), (match) => match[1]),
-    ...Array.from(html.matchAll(/\sstyle\s*=\s*(["'])([\s\S]*?)\1/gi), (match) => match[2]),
-  ].join("\n")
-  const unsupported = css.match(/\b(?:lab|lch|oklab|oklch|color-mix|light-dark|var)\s*\(/i)
-  if (unsupported) throw new Error(`PDF template contains unsupported CSS: ${unsupported[0]}`)
-  if (/--tw-|@tailwind/i.test(css)) throw new Error("PDF template must not contain application or Tailwind styles.")
+function normalizeText(value: string) {
+  return value.replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim()
 }
 
-function mountPdfTemplate(html: string, width: number) {
-  return new Promise<{ iframe: HTMLIFrameElement; root: HTMLElement; html2pdf: Html2PdfFactory }>((resolve, reject) => {
-    const iframe = document.createElement("iframe")
-    iframe.setAttribute("aria-hidden", "true")
-    iframe.setAttribute("tabindex", "-1")
-    iframe.setAttribute("sandbox", "allow-same-origin allow-scripts")
-    iframe.style.position = "fixed"
-    iframe.style.left = "-20000px"
-    iframe.style.top = "0"
-    iframe.style.width = `${width}px`
-    iframe.style.height = "1200px"
-    iframe.style.border = "0"
-    iframe.style.background = "#ffffff"
-    iframe.style.pointerEvents = "none"
-    iframe.style.zIndex = "-1"
+function directChildElements(element: Element, selector: string) {
+  return Array.from(element.children).filter((child) => child.matches(selector))
+}
 
-    const timeout = window.setTimeout(() => {
-      iframe.remove()
-      reject(new Error("The PDF template did not finish loading."))
-    }, 20_000)
-
-    iframe.addEventListener("load", () => {
-      window.clearTimeout(timeout)
-      const frameDocument = iframe.contentDocument
-      const root = frameDocument?.getElementById("pdf-root") as HTMLElement | null
-      if (!frameDocument || !root) {
-        iframe.remove()
-        reject(new Error("The PDF template could not be initialized."))
-        return
+function htmlToBlocks(html: string): PdfBlock[] {
+  if (!html.trim()) return []
+  const documentNode = new DOMParser().parseFromString(`<div id="pdf-content">${html}</div>`, "text/html")
+  const root = documentNode.getElementById("pdf-content")
+  if (!root) return []
+  root.querySelectorAll("script,style,iframe,object,embed,form,input,button,textarea,select,meta,link,base").forEach((node) => node.remove())
+  root.querySelectorAll("*").forEach((node) => {
+    for (const attribute of Array.from(node.attributes)) {
+      if (/^on/i.test(attribute.name) || ["class", "id", "style"].includes(attribute.name.toLowerCase())) {
+        node.removeAttribute(attribute.name)
       }
-      void loadHtml2PdfInFrame(iframe)
-        .then((html2pdf) => resolve({ iframe, root, html2pdf }))
-        .catch((loadError) => {
-          iframe.remove()
-          reject(loadError)
-        })
-    }, { once: true })
+    }
+  })
 
-    iframe.srcdoc = html
-    document.body.appendChild(iframe)
+  const blocks: PdfBlock[] = []
+  const visit = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = normalizeText(node.textContent || "")
+      if (text) blocks.push({ type: "paragraph", text })
+      return
+    }
+    if (!(node instanceof Element)) return
+    const tag = node.tagName.toLowerCase()
+    if (/^h[1-6]$/.test(tag)) {
+      const text = normalizeText(node.textContent || "")
+      if (text) blocks.push({ type: "heading", level: Number(tag.slice(1)), text })
+      return
+    }
+    if (tag === "p" || tag === "blockquote") {
+      const text = normalizeText(node.textContent || "")
+      if (text) blocks.push({ type: "paragraph", text })
+      for (const image of Array.from(node.querySelectorAll(":scope > img"))) visit(image)
+      return
+    }
+    if (tag === "ul" || tag === "ol") {
+      const items = directChildElements(node, "li").map((item) => normalizeText(item.textContent || "")).filter(Boolean)
+      if (items.length) blocks.push({ type: "list", ordered: tag === "ol", items })
+      return
+    }
+    if (tag === "table") {
+      const rows = Array.from(node.querySelectorAll("tr")).map((row) =>
+        Array.from(row.querySelectorAll(":scope > th, :scope > td")).map((cell) => normalizeText(cell.textContent || "")),
+      ).filter((row) => row.length)
+      if (rows.length) {
+        const firstRow = node.querySelector("tr")
+        const hasHeader = Boolean(firstRow?.querySelector("th"))
+        blocks.push({
+          type: "table",
+          headers: hasHeader ? rows[0] : [],
+          rows: hasHeader ? rows.slice(1) : rows,
+        })
+      }
+      return
+    }
+    if (tag === "img") {
+      const src = node.getAttribute("src")?.trim()
+      if (src) blocks.push({ type: "image", src, caption: node.getAttribute("alt") || "" })
+      return
+    }
+    if (tag === "figure") {
+      const image = node.querySelector("img")
+      const src = image?.getAttribute("src")?.trim()
+      if (src) {
+        blocks.push({
+          type: "image",
+          src,
+          caption: normalizeText(node.querySelector("figcaption")?.textContent || image?.getAttribute("alt") || ""),
+        })
+      }
+      return
+    }
+    if (tag === "br") {
+      blocks.push({ type: "spacer", height: 2 })
+      return
+    }
+    for (const child of Array.from(node.childNodes)) visit(child)
+  }
+
+  for (const child of Array.from(root.childNodes)) visit(child)
+  return blocks
+}
+
+function dataUrlFromBlob(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.addEventListener("load", () => resolve(String(reader.result)), { once: true })
+    reader.addEventListener("error", () => reject(new Error("Unable to read an image for the PDF.")), { once: true })
+    reader.readAsDataURL(blob)
   })
 }
 
-async function exportOriginalUploadedPdf(data: StageTranslationPageData) {
+function decodeImage(dataUrl: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.decoding = "async"
+    image.addEventListener("load", () => resolve(image), { once: true })
+    image.addEventListener("error", () => reject(new Error("Unable to decode an image for the PDF.")), { once: true })
+    image.src = dataUrl
+  })
+}
+
+async function normalizeImage(dataUrl: string): Promise<LoadedImage> {
+  const image = await decodeImage(dataUrl)
+  const maxDimension = 1800
+  const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth || 1, image.naturalHeight || 1))
+  const canvas = document.createElement("canvas")
+  canvas.width = Math.max(1, Math.round((image.naturalWidth || 1) * scale))
+  canvas.height = Math.max(1, Math.round((image.naturalHeight || 1) * scale))
+  const context = canvas.getContext("2d", { alpha: false })
+  if (!context) throw new Error("Unable to prepare an image for the PDF.")
+  context.fillStyle = "#ffffff"
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.drawImage(image, 0, 0, canvas.width, canvas.height)
+  return { dataUrl: canvas.toDataURL("image/jpeg", 0.84), width: canvas.width, height: canvas.height }
+}
+
+function loadImage(src: string) {
+  const cached = imageCache.get(src)
+  if (cached) return cached
+  const promise = (async () => {
+    try {
+      const rawDataUrl = src.startsWith("data:")
+        ? src
+        : await fetch(src, { cache: "no-store", credentials: "same-origin" }).then(async (response) => {
+            if (!response.ok) throw new Error(`Image request failed with status ${response.status}.`)
+            return dataUrlFromBlob(await response.blob())
+          })
+      return await normalizeImage(rawDataUrl)
+    } catch {
+      return null
+    }
+  })()
+  imageCache.set(src, promise)
+  return promise
+}
+
+function setLanguage(doc: JsPdfDocument, rtl: boolean, fontSize = 10, bold = false) {
+  doc.setR2L?.(rtl)
+  doc.setFont(rtl ? ARABIC_FONT_FAMILY : "helvetica", rtl ? "normal" : bold ? "bold" : "normal")
+  doc.setFontSize(fontSize)
+}
+
+function textLines(doc: JsPdfDocument, text: string, width: number) {
+  const normalized = normalizeText(text) || "—"
+  const split = doc.splitTextToSize(normalized, Math.max(8, width))
+  return Array.isArray(split) ? split : [String(split)]
+}
+
+function drawContinuationHeader(flow: Flow) {
+  const { doc, template, pageWidth, rtl } = flow
+  doc.setFillColor(29, 78, 216)
+  doc.rect(0, 0, pageWidth, 3, "F")
+  setLanguage(doc, rtl, 10, true)
+  doc.setTextColor(15, 23, 42)
+  doc.text(template.projectName, rtl ? pageWidth - PAGE.margin : PAGE.margin, 10, { align: rtl ? "right" : "left" })
+  setLanguage(doc, rtl, 8, false)
+  doc.setTextColor(100, 116, 139)
+  doc.text(`${template.reportNumber} · ${template.title}`, rtl ? PAGE.margin : pageWidth - PAGE.margin, 10, { align: rtl ? "left" : "right" })
+  flow.y = 17
+}
+
+function addFlowPage(flow: Flow) {
+  flow.doc.addPage("a4", "portrait")
+  flow.pageNumber += 1
+  drawContinuationHeader(flow)
+}
+
+function ensureSpace(flow: Flow, required: number) {
+  if (flow.y + required <= flow.bottom) return
+  addFlowPage(flow)
+}
+
+function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: string, value: string) {
+  const { doc, rtl } = flow
+  doc.setDrawColor(203, 213, 225)
+  doc.setFillColor(255, 255, 255)
+  doc.roundedRect(x, y, width, 15, 1.5, 1.5, "FD")
+  setLanguage(doc, rtl, 7, true)
+  doc.setTextColor(100, 116, 139)
+  doc.text(label, rtl ? x + width - 3 : x + 3, y + 4.5, { align: rtl ? "right" : "left" })
+  setLanguage(doc, rtl, 9, false)
+  doc.setTextColor(15, 23, 42)
+  const lines = textLines(doc, value, width - 6).slice(0, 2)
+  doc.text(lines, rtl ? x + width - 3 : x + 3, y + 9, { align: rtl ? "right" : "left", lineHeightFactor: 1.1 })
+}
+
+function drawFirstPageHeader(flow: Flow) {
+  const { doc, template, pageWidth, rtl } = flow
+  doc.setFillColor(29, 78, 216)
+  doc.rect(0, 0, pageWidth, 4, "F")
+  doc.setFillColor(248, 250, 252)
+  doc.rect(0, 4, pageWidth, 63, "F")
+
+  setLanguage(doc, rtl, 9, true)
+  doc.setTextColor(29, 78, 216)
+  doc.text(rtl ? "ترجمة مستندات الإنشاء" : "AI DOCUMENT TRANSLATION", rtl ? pageWidth - PAGE.margin : PAGE.margin, 13, { align: rtl ? "right" : "left" })
+  setLanguage(doc, rtl, 19, true)
+  doc.setTextColor(15, 23, 42)
+  doc.text(template.title, rtl ? pageWidth - PAGE.margin : PAGE.margin, 23, { align: rtl ? "right" : "left" })
+  setLanguage(doc, rtl, 10, false)
+  doc.setTextColor(71, 85, 105)
+  doc.text(`${template.projectName} · ${template.termName}`, rtl ? pageWidth - PAGE.margin : PAGE.margin, 29, { align: rtl ? "right" : "left" })
+
+  const labels = rtl
+    ? ["المشروع", "مرجع المشروع", "المرحلة", "البند", "رقم المستند", "رقم الزيارة", "النوع", "الموضوع"]
+    : ["Project", "Project Reference", "Stage", "Term", "Document Number", "Visit Number", "Type", "Subject"]
+  const values = [
+    template.projectName,
+    template.projectReference,
+    template.stageName,
+    template.termName,
+    template.reportNumber,
+    template.visitNumber,
+    template.reportType,
+    template.subject,
+  ]
+  const gap = 3
+  const cellWidth = (pageWidth - PAGE.margin * 2 - gap * 3) / 4
+  for (let index = 0; index < values.length; index += 1) {
+    const row = Math.floor(index / 4)
+    const column = index % 4
+    drawMetaCell(flow, PAGE.margin + column * (cellWidth + gap), 34 + row * 18, cellWidth, labels[index], values[index])
+  }
+  flow.y = 74
+}
+
+function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>) {
+  const size = block.level <= 2 ? 14 : block.level === 3 ? 12 : 10.5
+  setLanguage(flow.doc, flow.rtl, size, true)
+  const lines = textLines(flow.doc, block.text, flow.width)
+  const height = lines.length * (size * 0.42 + 1.4) + 3
+  ensureSpace(flow, height)
+  flow.doc.setTextColor(15, 23, 42)
+  flow.doc.text(lines, flow.rtl ? flow.x + flow.width : flow.x, flow.y, {
+    align: flow.rtl ? "right" : "left",
+    lineHeightFactor: 1.25,
+  })
+  flow.y += height
+}
+
+function renderParagraph(flow: Flow, text: string, options: { indent?: number; bullet?: string } = {}) {
+  setLanguage(flow.doc, flow.rtl, 10, false)
+  const indent = options.indent ?? 0
+  const bulletWidth = options.bullet ? 6 : 0
+  const available = flow.width - indent - bulletWidth
+  const lines = textLines(flow.doc, text, available)
+  const lineHeight = 5.1
+  const height = Math.max(lineHeight, lines.length * lineHeight) + 2
+  ensureSpace(flow, height)
+  flow.doc.setTextColor(51, 65, 85)
+  if (options.bullet) {
+    const bulletX = flow.rtl ? flow.x + flow.width - indent : flow.x + indent
+    flow.doc.text(options.bullet, bulletX, flow.y, { align: flow.rtl ? "right" : "left" })
+  }
+  const textX = flow.rtl
+    ? flow.x + flow.width - indent - bulletWidth
+    : flow.x + indent + bulletWidth
+  flow.doc.text(lines, textX, flow.y, { align: flow.rtl ? "right" : "left", lineHeightFactor: 1.25 })
+  flow.y += height
+}
+
+function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
+  const rows = block.rows.length ? block.rows : []
+  if (!block.headers.length && !rows.length) return
+  ensureSpace(flow, 18)
+  setLanguage(flow.doc, flow.rtl, 8.5, false)
+  const options: Record<string, unknown> = {
+    startY: flow.y,
+    head: block.headers.length ? [block.headers] : [],
+    body: rows,
+    theme: "grid",
+    tableWidth: flow.width,
+    margin: { top: 17, left: flow.x, right: flow.pageWidth - flow.x - flow.width, bottom: PAGE.footer + 5 },
+    styles: {
+      font: flow.rtl ? ARABIC_FONT_FAMILY : "helvetica",
+      fontStyle: "normal",
+      fontSize: 8.5,
+      textColor: [51, 65, 85],
+      lineColor: [148, 163, 184],
+      lineWidth: 0.2,
+      cellPadding: 2,
+      halign: flow.rtl ? "right" : "left",
+      valign: "top",
+      overflow: "linebreak",
+    },
+    headStyles: {
+      fillColor: [226, 232, 240],
+      textColor: [15, 23, 42],
+      font: flow.rtl ? ARABIC_FONT_FAMILY : "helvetica",
+      fontStyle: "normal",
+      halign: flow.rtl ? "right" : "left",
+    },
+    didDrawPage: () => {
+      const currentPage = flow.doc.internal.getCurrentPageInfo?.().pageNumber ?? flow.doc.internal.getNumberOfPages()
+      if (currentPage > flow.pageNumber) {
+        flow.pageNumber = currentPage
+        drawContinuationHeader(flow)
+      }
+    },
+  }
+  flow.doc.autoTable(options)
+  const finalY = Number(flow.doc.lastAutoTable?.finalY ?? flow.y + 12)
+  flow.pageNumber = flow.doc.internal.getNumberOfPages()
+  flow.y = finalY + 5
+  if (flow.y > flow.bottom) addFlowPage(flow)
+}
+
+async function renderImageBlock(flow: Flow, block: Extract<PdfBlock, { type: "image" }>, preferredWidth?: number) {
+  const image = await loadImage(block.src)
+  if (!image) {
+    renderParagraph(flow, block.caption || (flow.rtl ? "تعذر تحميل الصورة." : "Image unavailable."))
+    return
+  }
+  const maxWidth = Math.min(flow.width, preferredWidth ?? flow.width)
+  const maxHeight = 115
+  const ratio = Math.min(maxWidth / image.width, maxHeight / image.height)
+  const width = image.width * ratio
+  const height = image.height * ratio
+  const captionHeight = block.caption ? 7 : 0
+  ensureSpace(flow, height + captionHeight + 4)
+  const x = flow.rtl ? flow.x + flow.width - width : flow.x
+  flow.doc.setDrawColor(203, 213, 225)
+  flow.doc.rect(x - 0.5, flow.y - 0.5, width + 1, height + 1)
+  flow.doc.addImage(image.dataUrl, "JPEG", x, flow.y, width, height, undefined, "FAST")
+  flow.y += height + 2
+  if (block.caption) {
+    setLanguage(flow.doc, flow.rtl, 7.5, false)
+    flow.doc.setTextColor(100, 116, 139)
+    flow.doc.text(textLines(flow.doc, block.caption, width), flow.rtl ? x + width : x, flow.y, {
+      align: flow.rtl ? "right" : "left",
+      lineHeightFactor: 1.1,
+    })
+    flow.y += captionHeight
+  }
+  flow.y += 3
+}
+
+async function renderBlocks(flow: Flow, blocks: PdfBlock[]) {
+  for (const block of blocks) {
+    if (block.type === "heading") renderHeading(flow, block)
+    else if (block.type === "paragraph") renderParagraph(flow, block.text)
+    else if (block.type === "list") {
+      for (let index = 0; index < block.items.length; index += 1) {
+        renderParagraph(flow, block.items[index], { indent: 2, bullet: block.ordered ? `${index + 1}.` : "•" })
+      }
+    } else if (block.type === "table") renderTable(flow, block)
+    else if (block.type === "image") await renderImageBlock(flow, block)
+    else if (block.type === "spacer") flow.y += block.height
+  }
+}
+
+function renderSectionTitle(flow: Flow, title: string) {
+  ensureSpace(flow, 14)
+  setLanguage(flow.doc, flow.rtl, 13, true)
+  flow.doc.setTextColor(15, 23, 42)
+  flow.doc.text(title, flow.rtl ? flow.x + flow.width : flow.x, flow.y, { align: flow.rtl ? "right" : "left" })
+  flow.doc.setDrawColor(203, 213, 225)
+  flow.doc.line(flow.x, flow.y + 3, flow.x + flow.width, flow.y + 3)
+  flow.y += 9
+}
+
+async function renderImageGrid(flow: Flow, images: NonNullable<PdfSectionTemplate["images"]>, sourceVisuals: boolean) {
+  if (!images.length) {
+    renderParagraph(flow, flow.rtl ? "لا توجد صور." : "No images recorded.")
+    return
+  }
+  for (const image of images) {
+    await renderImageBlock(flow, { type: "image", ...image }, sourceVisuals ? flow.width : flow.width * 0.72)
+  }
+}
+
+function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
+  const pages = doc.internal.getNumberOfPages()
+  for (let page = 1; page <= pages; page += 1) {
+    doc.setPage(page)
+    setLanguage(doc, rtl, 8, false)
+    doc.setTextColor(100, 116, 139)
+    doc.text(`${page} / ${pages}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() - 5, { align: "center" })
+  }
+}
+
+async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
+  const JsPdf = await loadPdfTools()
+  const doc = new JsPdf({
+    unit: "mm",
+    format: "a4",
+    orientation: "portrait",
+    compress: true,
+    putOnlyUsedFonts: true,
+  })
+  if (template.language === "ar") await installArabicFont(doc)
+  const flow: Flow = {
+    doc,
+    template,
+    rtl: template.direction === "rtl",
+    pageWidth: PAGE.portraitWidth,
+    pageHeight: PAGE.portraitHeight,
+    x: PAGE.margin,
+    y: 0,
+    width: PAGE.portraitWidth - PAGE.margin * 2,
+    bottom: PAGE.portraitHeight - PAGE.footer - 5,
+    pageNumber: 1,
+  }
+  drawFirstPageHeader(flow)
+
+  for (const section of template.sections) {
+    renderSectionTitle(flow, section.title)
+    if (section.html !== undefined) {
+      const blocks = htmlToBlocks(section.html)
+      if (blocks.length) await renderBlocks(flow, blocks)
+      else renderParagraph(flow, flow.rtl ? "لا يوجد محتوى مسجل." : "No content recorded.")
+    }
+    if (section.table) renderTable(flow, { type: "table", ...section.table })
+    if (section.images) await renderImageGrid(flow, section.images, section.key === "source-visuals")
+    flow.y += 4
+  }
+
+  addPageNumbers(doc, flow.rtl)
+  doc.setProperties({
+    title: template.title,
+    subject: template.subject,
+    author: template.projectName,
+    creator: "BuildSight AI Document Translation",
+  })
+  return doc.output("blob") as Blob
+}
+
+async function fetchOriginalPdf(data: StageTranslationPageData) {
   const sourcePdf = getSourcePdfAttachment(data)
   if (!sourcePdf) return null
   const response = await fetch(stageSourceDocumentUrl(data, sourcePdf), { cache: "no-store" })
   if (!response.ok) throw new Error("Unable to load the original uploaded PDF.")
   const blob = await response.blob()
-  const filename = sourcePdf.originalFilename.toLowerCase().endsWith(".pdf")
-    ? sourcePdf.originalFilename
-    : `${safeFilename(sourcePdf.originalFilename)}.pdf`
-  downloadBlob(blob, filename)
-  return { blob, filename }
+  if (!blob.type.includes("pdf") && !sourcePdf.originalFilename.toLowerCase().endsWith(".pdf")) {
+    throw new Error("The uploaded source document is not a PDF.")
+  }
+  return {
+    blob,
+    filename: sourcePdf.originalFilename.toLowerCase().endsWith(".pdf")
+      ? sourcePdf.originalFilename
+      : `${safePdfFilename(sourcePdf.originalFilename)}.pdf`,
+  }
+}
+
+async function openPdfBlob(blob: Blob) {
+  const pdfjs = await loadPdfJs()
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  const loadingTask = pdfjs.getDocument({ data: bytes } as any)
+  const documentProxy = await loadingTask.promise
+  return { documentProxy, loadingTask }
+}
+
+async function renderPdfPage(documentProxy: any, pageNumber: number, targetWidth: number) {
+  const page = await documentProxy.getPage(pageNumber)
+  try {
+    const viewportAtOne = page.getViewport({ scale: 1 })
+    const scale = Math.max(0.35, targetWidth / Math.max(1, viewportAtOne.width))
+    const viewport = page.getViewport({ scale })
+    const canvas = document.createElement("canvas")
+    const context = canvas.getContext("2d", { alpha: false })
+    if (!context) throw new Error("Unable to render a PDF page for bilingual export.")
+    canvas.width = Math.ceil(viewport.width)
+    canvas.height = Math.ceil(viewport.height)
+    context.fillStyle = "#ffffff"
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    await page.render({ canvasContext: context, viewport, background: "#ffffff" }).promise
+    return canvas.toDataURL("image/jpeg", 0.8)
+  } finally {
+    page.cleanup?.()
+  }
+}
+
+function drawPageImage(doc: JsPdfDocument, dataUrl: string | undefined, x: number, y: number, width: number, height: number, empty: string) {
+  doc.setDrawColor(148, 163, 184)
+  doc.setFillColor(255, 255, 255)
+  doc.rect(x, y, width, height, "FD")
+  if (!dataUrl) {
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(10)
+    doc.setTextColor(100, 116, 139)
+    doc.text(empty, x + width / 2, y + height / 2, { align: "center" })
+    return
+  }
+  const imageProperties = doc.getImageProperties(dataUrl)
+  const ratio = Math.min((width - 4) / imageProperties.width, (height - 4) / imageProperties.height)
+  const renderedWidth = imageProperties.width * ratio
+  const renderedHeight = imageProperties.height * ratio
+  doc.addImage(dataUrl, "JPEG", x + (width - renderedWidth) / 2, y + (height - renderedHeight) / 2, renderedWidth, renderedHeight, undefined, "FAST")
+}
+
+async function buildBilingualPdfBlob(input: {
+  data: StageTranslationPageData
+  englishBlob: Blob
+  arabicBlob: Blob
+}) {
+  const [JsPdf, englishSource, arabicSource] = await Promise.all([
+    loadPdfTools(),
+    openPdfBlob(input.englishBlob),
+    openPdfBlob(input.arabicBlob),
+  ])
+  const doc = new JsPdf({ unit: "mm", format: "a4", orientation: "landscape", compress: true })
+  await installArabicFont(doc)
+  const total = Math.max(englishSource.documentProxy.numPages, arabicSource.documentProxy.numPages, 1)
+  const renderWidth = total > 30 ? 700 : 850
+  const margin = 9
+  const gap = 6
+  const top = 22
+  const bottom = 12
+  const columnWidth = (PAGE.landscapeWidth - margin * 2 - gap) / 2
+  const contentHeight = PAGE.landscapeHeight - top - bottom
+
+  try {
+    for (let index = 0; index < total; index += 1) {
+      if (index > 0) doc.addPage("a4", "landscape")
+      const pageNumber = index + 1
+      const [englishPage, arabicPage] = await Promise.all([
+        pageNumber <= englishSource.documentProxy.numPages
+          ? renderPdfPage(englishSource.documentProxy, pageNumber, renderWidth)
+          : Promise.resolve(undefined),
+        pageNumber <= arabicSource.documentProxy.numPages
+          ? renderPdfPage(arabicSource.documentProxy, pageNumber, renderWidth)
+          : Promise.resolve(undefined),
+      ])
+
+      doc.setFillColor(29, 78, 216)
+      doc.rect(0, 0, PAGE.landscapeWidth, 4, "F")
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(13)
+      doc.setTextColor(15, 23, 42)
+      doc.text(input.data.project.name, margin, 12)
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(8)
+      doc.setTextColor(100, 116, 139)
+      doc.text(`${input.data.response.reportNumber} · ${input.data.term.name}`, PAGE.landscapeWidth - margin, 12, { align: "right" })
+
+      doc.setFillColor(226, 232, 240)
+      doc.rect(margin, 15, columnWidth, 6, "F")
+      doc.rect(margin + columnWidth + gap, 15, columnWidth, 6, "F")
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(9)
+      doc.setTextColor(15, 23, 42)
+      doc.text("English Original", margin + 3, 19.2)
+      doc.setFont(ARABIC_FONT_FAMILY, "normal")
+      doc.setR2L?.(true)
+      doc.text("الترجمة العربية", PAGE.landscapeWidth - margin - 3, 19.2, { align: "right" })
+      doc.setR2L?.(false)
+
+      drawPageImage(doc, englishPage, margin, top, columnWidth, contentHeight, "No English page")
+      drawPageImage(doc, arabicPage, margin + columnWidth + gap, top, columnWidth, contentHeight, "No Arabic page")
+
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(8)
+      doc.setTextColor(100, 116, 139)
+      doc.text(`${pageNumber} / ${total}`, PAGE.landscapeWidth / 2, PAGE.landscapeHeight - 5, { align: "center" })
+    }
+  } finally {
+    await englishSource.documentProxy.destroy?.()
+    englishSource.loadingTask.destroy?.()
+    await arabicSource.documentProxy.destroy?.()
+    arabicSource.loadingTask.destroy?.()
+  }
+
+  doc.setProperties({
+    title: `${input.data.response.reportTitle} — Bilingual`,
+    subject: input.data.response.subject || input.data.term.name,
+    author: input.data.project.name,
+    creator: "BuildSight AI Document Translation",
+  })
+  return doc.output("blob") as Blob
 }
 
 export async function exportTranslationPdf({
@@ -166,92 +835,38 @@ export async function exportTranslationPdf({
   translation: StageTranslationRecord | null
   kind: PdfKind
 }) {
+  const base = safePdfFilename(data.project.code || data.project.name)
+  const report = safePdfFilename(data.response.reportNumber)
+
   if (kind === "original") {
-    const sourceExport = await exportOriginalUploadedPdf(data)
-    if (sourceExport) return sourceExport
+    const source = await fetchOriginalPdf(data)
+    if (source) return source
+    const template = buildLanguagePdfTemplate({ data, translation, language: "en" })
+    return { blob: await buildLanguagePdfBlob(template), filename: `${base}-${report}-english-original.pdf` }
   }
 
+  if (!translation?.translatedContent) throw new Error("Generate the Arabic translation before exporting PDFs.")
   const sourcePdf = getSourcePdfAttachment(data)
-  let extractedSource = null
-  if (sourcePdf && kind === "bilingual") {
+  let sourceDocument = null
+  if (sourcePdf) {
     try {
-      extractedSource = await extractSourcePdf(data, sourcePdf, { includePageImages: true, imageWidth: 520 })
+      sourceDocument = await extractSourcePdf(data, sourcePdf, {
+        includePageImages: true,
+        imageWidth: 900,
+        imageMode: "visuals",
+      })
     } catch {
-      // A source-PDF preview improves the bilingual export, but structured report export remains available if extraction fails.
-      extractedSource = null
+      sourceDocument = null
     }
   }
-
-  const html = buildTranslationPdfDocument({
-    kind,
-    data,
-    translation,
-    sourceDocument: extractedSource,
-  })
-  assertPdfSafeDocument(html)
-
-  const landscape = kind === "bilingual"
-  const width = landscape ? 1123 : 794
-  const { iframe, root, html2pdf } = await mountPdfTemplate(html, width)
-
-  try {
-    await iframe.contentDocument?.fonts?.ready
-    await waitForImages(root)
-    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
-
-    const base = safeFilename(data.project.code || data.project.name)
-    const suffix = kind === "original" ? "english-original" : kind === "arabic" ? "arabic-translation" : "bilingual"
-    const filename = `${base}-${safeFilename(data.response.reportNumber)}-${suffix}.pdf`
-    const renderHeight = Math.max(root.scrollHeight, root.getBoundingClientRect().height, 1)
-    iframe.style.height = `${Math.ceil(renderHeight + 20)}px`
-    const scale = Math.min(2, MAX_CANVAS_DIMENSION / Math.max(width, renderHeight))
-
-    const options = {
-      margin: [10, 10, 14, 10],
-      filename,
-      image: { type: "jpeg", quality: 0.98 },
-      html2canvas: {
-        scale,
-        useCORS: true,
-        allowTaint: false,
-        backgroundColor: "#ffffff",
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: width,
-        windowHeight: Math.ceil(renderHeight),
-        imageTimeout: 20_000,
-        logging: false,
-        removeContainer: true,
-      },
-      jsPDF: {
-        unit: "mm",
-        format: "a4",
-        orientation: landscape ? "landscape" : "portrait",
-        compress: true,
-      },
-      pagebreak: {
-        mode: ["css", "legacy"],
-        avoid: [".no-break", "table", "tr", "figure", "img", ".source-page", ".approval"],
-      },
-    }
-
-    const worker = (html2pdf() as any).set(options).from(root).toPdf()
-    const pdf = await worker.get("pdf")
-    const pageCount = pdf.internal.getNumberOfPages()
-    for (let page = 1; page <= pageCount; page += 1) {
-      pdf.setPage(page)
-      const pageWidth = pdf.internal.pageSize.getWidth()
-      const pageHeight = pdf.internal.pageSize.getHeight()
-      pdf.setFont("helvetica", "normal")
-      pdf.setFontSize(8)
-      pdf.setTextColor(100, 116, 139)
-      pdf.text(`${page} / ${pageCount}`, pageWidth / 2, pageHeight - 5, { align: "center" })
-    }
-
-    const blob = pdf.output("blob") as Blob
-    downloadBlob(blob, filename)
-    return { blob, filename }
-  } finally {
-    iframe.remove()
+  const arabicTemplate = buildLanguagePdfTemplate({ data, translation, language: "ar", sourceDocument })
+  const arabicBlob = await buildLanguagePdfBlob(arabicTemplate)
+  if (kind === "arabic") {
+    return { blob: arabicBlob, filename: `${base}-${report}-arabic-translation.pdf` }
   }
+
+  const source = await fetchOriginalPdf(data)
+  const englishBlob = source?.blob ?? await buildLanguagePdfBlob(buildLanguagePdfTemplate({ data, translation, language: "en" }))
+  const bilingualBlob = await buildBilingualPdfBlob({ data, englishBlob, arabicBlob })
+  return { blob: bilingualBlob, filename: `${base}-${report}-bilingual.pdf` }
 }

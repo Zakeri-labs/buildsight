@@ -11,7 +11,8 @@ const PDFJS_WORKER_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174
 
 type PdfJsLibrary = {
   GlobalWorkerOptions: { workerSrc: string }
-  getDocument: (source: string | { url: string }) => { promise: Promise<any>; destroy?: () => void }
+  getDocument: (source: string | { url?: string; data?: Uint8Array | ArrayBuffer }) => { promise: Promise<any>; destroy?: () => void }
+  OPS?: Record<string, number>
   renderTextLayer?: (options: Record<string, unknown>) => { promise?: Promise<void> } | Promise<void>
 }
 
@@ -203,9 +204,9 @@ export async function loadSourcePdfDocument(
 export async function extractSourcePdf(
   data: StageTranslationPageData,
   attachment: ProjectStageAttachment,
-  options: { includePageImages?: boolean; imageWidth?: number } = {},
+  options: { includePageImages?: boolean; imageWidth?: number; imageMode?: "all" | "visuals" } = {},
 ): Promise<ExtractedSourceDocument> {
-  const { documentProxy, loadingTask } = await loadSourcePdfDocument(data, attachment)
+  const { pdfjs, documentProxy, loadingTask } = await loadSourcePdfDocument(data, attachment)
   const pages: ExtractedPdfPage[] = []
   try {
     for (let pageNumber = 1; pageNumber <= documentProxy.numPages; pageNumber += 1) {
@@ -213,11 +214,28 @@ export async function extractSourcePdf(
       const textContent = await page.getTextContent({ includeMarkedContent: true })
       const textHtml = textContentToHtml(textContent)
       const textLength = (textContent.items ?? []).reduce((sum: number, item: TextItem) => sum + (item.str?.trim().length ?? 0), 0)
-      const shouldRenderImage = options.includePageImages === true && textLength < 120
+      let hasImages = false
+      if (options.includePageImages === true && options.imageMode !== "all") {
+        try {
+          const operatorList = await page.getOperatorList()
+          const imageOperations = new Set([
+            pdfjs.OPS?.paintImageXObject,
+            pdfjs.OPS?.paintInlineImageXObject,
+            pdfjs.OPS?.paintImageMaskXObject,
+            pdfjs.OPS?.paintSolidColorImageMask,
+          ].filter((value): value is number => typeof value === "number"))
+          hasImages = operatorList.fnArray?.some((operation: number) => imageOperations.has(operation)) === true
+        } catch {
+          hasImages = textLength < 120
+        }
+      }
+      const shouldRenderImage = options.includePageImages === true && (
+        options.imageMode === "all" || hasImages || textLength < 120
+      )
       const imageDataUrl = shouldRenderImage
         ? await renderPagePreview(page, options.imageWidth ?? 520)
         : null
-      pages.push({ pageNumber, textHtml, imageDataUrl })
+      pages.push({ pageNumber, textHtml, imageDataUrl, hasImages })
       page.cleanup?.()
     }
   } finally {

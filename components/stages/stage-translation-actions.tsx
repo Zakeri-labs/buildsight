@@ -5,7 +5,7 @@ import { useState } from "react"
 import { Download, Languages, Loader2 } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import type { ProjectStageTranslationSummary } from "@/lib/db/project-stages"
-import { exportTranslationPdf } from "@/lib/stage-translations/client-pdf"
+import { downloadPdfBlob, exportTranslationPdf, storeTranslationPdf } from "@/lib/stage-translations/client-pdf"
 import type { StageTranslationPageData } from "@/lib/stage-translations/types"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -76,22 +76,20 @@ export function StageTranslationActions({
     if (kind !== "original" && isStale) throw new Error(copy.stale)
 
     const exported = await exportTranslationPdf({ data, translation: record, kind })
-    const form = new FormData()
-    form.set("projectId", projectId)
-    form.set("translationId", record.id)
-    form.set("kind", kind)
-    form.set("file", new File([exported.blob], exported.filename, { type: "application/pdf" }))
-    const uploadResponse = await fetch("/api/stage-translations/pdf", { method: "POST", body: form })
-    const uploadPayload = await uploadResponse.json().catch(() => null)
-    if (!uploadResponse.ok) throw new Error(uploadPayload?.error || copy.failed)
-
-    const storagePath = String(uploadPayload.storagePath)
+    const storagePath = await storeTranslationPdf({
+      projectId,
+      translationId: record.id,
+      kind,
+      blob: exported.blob,
+      filename: exported.filename,
+    })
     setTranslation((current) => ({
       ...current,
       originalPdfPath: kind === "original" ? storagePath : current.originalPdfPath,
       arabicPdfPath: kind === "arabic" ? storagePath : current.arabicPdfPath,
       bilingualPdfPath: kind === "bilingual" ? storagePath : current.bilingualPdfPath,
     }))
+    downloadPdfBlob(exported.blob, exported.filename)
   }
 
   async function download(kind: PdfKind) {

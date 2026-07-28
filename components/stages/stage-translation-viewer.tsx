@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { forwardRef, useState, type ReactNode } from "react"
+import { forwardRef, useEffect, useState, type ReactNode } from "react"
 import {
   AlertCircle,
   ArrowLeft,
@@ -20,7 +20,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { SourcePdfViewer } from "@/components/stages/source-pdf-viewer"
-import { exportTranslationPdf } from "@/lib/stage-translations/client-pdf"
+import { extractSourcePdf } from "@/lib/stage-translations/client-source-pdf"
+import { downloadPdfBlob, exportTranslationPdf, storeTranslationPdf } from "@/lib/stage-translations/client-pdf"
 import { getSourcePdfAttachment } from "@/lib/stage-translations/source-document"
 import type {
   StageTranslationPageData,
@@ -74,6 +75,7 @@ const COPY = {
     evidence: "Image Evidence",
     attachments: "Related Documents",
     translatedAttachments: "Translated Attachment Content",
+    sourceVisuals: "Original Document Images",
     noContent: "No content recorded.",
     noApprovals: "No approval decisions recorded.",
     noAttachments: "No related attachments.",
@@ -115,6 +117,7 @@ const COPY = {
     evidence: "صور الإثبات",
     attachments: "المستندات المرتبطة",
     translatedAttachments: "محتوى المرفقات المترجم",
+    sourceVisuals: "صور المستند الأصلي",
     noContent: "لا يوجد محتوى مسجل.",
     noApprovals: "لا توجد قرارات اعتماد مسجلة.",
     noAttachments: "لا توجد مرفقات مرتبطة.",
@@ -143,6 +146,7 @@ type ReportLabels = {
   evidence: string
   attachments: string
   translatedAttachments: string
+  sourceVisuals: string
   noContent: string
   noApprovals: string
   noAttachments: string
@@ -216,21 +220,20 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
 
   async function storePdf(blob: Blob, filename: string, kind: "original" | "arabic" | "bilingual") {
     if (!translation) throw new Error("Generate the translation before exporting PDFs.")
-    const form = new FormData()
-    form.set("projectId", data.project.id)
-    form.set("translationId", translation.id)
-    form.set("kind", kind)
-    form.set("file", new File([blob], filename, { type: "application/pdf" }))
-    const response = await fetch("/api/stage-translations/pdf", { method: "POST", body: form })
-    const payload = await response.json().catch(() => null)
-    if (!response.ok) throw new Error(payload?.error || copy.pdfError)
-    const path = String(payload.storagePath)
+    const path = await storeTranslationPdf({
+      projectId: data.project.id,
+      translationId: translation.id,
+      kind,
+      blob,
+      filename,
+    })
     setTranslation((current) => current ? {
       ...current,
       originalPdfPath: kind === "original" ? path : current.originalPdfPath,
       arabicPdfPath: kind === "arabic" ? path : current.arabicPdfPath,
       bilingualPdfPath: kind === "bilingual" ? path : current.bilingualPdfPath,
     } : current)
+    return path
   }
 
   async function downloadPdf(kind: "original" | "arabic" | "bilingual") {
@@ -254,8 +257,10 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
       const exported = await exportTranslationPdf({ data, translation, kind })
       if (translation) {
         await storePdf(exported.blob, exported.filename, kind)
+        downloadPdfBlob(exported.blob, exported.filename)
         setSuccess(copy.stored)
       } else {
+        downloadPdfBlob(exported.blob, exported.filename)
         setSuccess(kind === "original" ? copy.downloadOriginal : copy.stored)
       }
     } catch (exportError) {
@@ -337,6 +342,7 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
             content={translated}
             labels={labelsAr}
             generatedAt={translation?.generatedAt ?? null}
+            sourcePdf={sourcePdf}
           />
         ) : (
           <Card className="min-h-[560px] py-0">
@@ -367,9 +373,10 @@ const LanguageReport = forwardRef<HTMLElement, {
   content: TranslationReportContent
   labels: ReportLabels
   generatedAt: string | null
-}>(function LanguageReport({ language, title, data, content, labels, generatedAt }, ref) {
+  sourcePdf?: StageTranslationPageData["response"]["attachments"][number] | null
+}>(function LanguageReport({ language, title, data, content, labels, generatedAt, sourcePdf }, ref) {
   const isArabic = language === "ar"
-  const evidence = data.response.attachments.filter((item) => item.attachmentKind === "evidence_image")
+  const evidence = data.response.attachments.filter((item) => item.attachmentKind === "evidence_image" || item.attachmentKind === "inline_image")
   const documents = data.response.attachments.filter((item) => item.attachmentKind === "document")
 
   return (
@@ -407,6 +414,7 @@ const LanguageReport = forwardRef<HTMLElement, {
         <ApprovalSection content={content} labels={labels} language={language} />
         <EvidenceSection attachments={evidence} title={labels.evidence} empty={labels.noAttachments} />
         <DocumentsSection documents={documents} content={content} labels={labels} language={language} />
+        {isArabic && sourcePdf ? <SourceDocumentVisuals data={data} attachment={sourcePdf} title={labels.sourceVisuals} /> : null}
       </div>
 
       <footer className="stage-translation-no-break border-t border-slate-200 bg-slate-50 px-5 py-3 text-center text-[11px] text-slate-500 sm:px-7">
@@ -415,6 +423,47 @@ const LanguageReport = forwardRef<HTMLElement, {
     </article>
   )
 })
+
+
+function SourceDocumentVisuals({
+  data,
+  attachment,
+  title,
+}: {
+  data: StageTranslationPageData
+  attachment: StageTranslationPageData["response"]["attachments"][number]
+  title: string
+}) {
+  const [pages, setPages] = useState<Array<{ pageNumber: number; imageDataUrl: string }>>([])
+
+  useEffect(() => {
+    let active = true
+    void extractSourcePdf(data, attachment, { includePageImages: true, imageWidth: 760, imageMode: "visuals" })
+      .then((document) => {
+        if (!active) return
+        setPages(document.pages.flatMap((page) => page.imageDataUrl ? [{ pageNumber: page.pageNumber, imageDataUrl: page.imageDataUrl }] : []))
+      })
+      .catch(() => {
+        if (active) setPages([])
+      })
+    return () => { active = false }
+  }, [attachment, data])
+
+  if (!pages.length) return null
+  return (
+    <section>
+      <SectionHeading icon={<ImageIcon className="size-4" />} title={title} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        {pages.map((page) => (
+          <figure key={page.pageNumber} className="stage-translation-no-break overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+            <img src={page.imageDataUrl} alt={`${attachment.originalFilename} page ${page.pageNumber}`} className="h-auto w-full" />
+            <figcaption className="px-3 py-2 text-[11px] text-slate-600">{attachment.originalFilename} · {page.pageNumber}</figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
+  )
+}
 
 function ReportMeta({ label, value }: { label: string; value: string }) {
   return <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3"><dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-1 break-words font-semibold text-slate-900">{value || "—"}</dd></div>

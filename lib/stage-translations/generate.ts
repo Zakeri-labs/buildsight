@@ -2,8 +2,14 @@ import "server-only"
 
 import { assertProjectMember, audit } from "@/lib/auth/guards"
 import { loadStageTranslationPageData } from "@/lib/stage-translations/data"
-import { parseTranslationContent } from "@/lib/stage-translations/content"
-import type { TranslationReportContent, TranslationSectionKey } from "@/lib/stage-translations/types"
+import type {
+  AttachmentTranslation,
+  TranslationApprovalItem,
+  TranslationChecklistItem,
+  TranslationReportContent,
+  TranslationSectionKey,
+} from "@/lib/stage-translations/types"
+import { sanitizeReportHtml } from "@/lib/stages/execution"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
@@ -18,14 +24,59 @@ const SUPPORTED_ATTACHMENT_EXTENSIONS = new Set([
   "ppt", "pptx", "csv", "xls", "xlsx", "tsv",
 ])
 
+const MEDIA_TOKEN_PATTERN = /^\[\[\[BUILDSIGHT_[A-Z0-9_]+_MEDIA_\d+\]\]\]$/
+
 type OpenAiContentItem =
   | { type: "input_text"; text: string }
   | { type: "input_file"; file_url: string }
 
 type MediaPlaceholder = { token: string; html: string }
+type TextSegment = { id: string; text: string }
+type HtmlTranslationTemplate = { templateHtml: string; segments: TextSegment[] }
+
+type RawTranslation = {
+  stageName: string
+  termName: string
+  reportTitle: string
+  subject: string
+  reportType: string
+  sections: Record<TranslationSectionKey, TextSegment[]>
+  checklist: TranslationChecklistItem[]
+  approvals: TranslationApprovalItem[]
+  attachmentTranslations: AttachmentTranslation[]
+}
 
 function extension(name: string) {
   return name.toLowerCase().split(".").pop() ?? ""
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function stringValue(value: unknown, max = 250_000) {
+  return typeof value === "string" ? value.slice(0, max) : ""
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;")
+}
+
+function decodeHtmlText(value: string) {
+  return value
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replaceAll("&nbsp;", " ")
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#039;", "'")
 }
 
 function outputText(payload: any): string {
@@ -43,7 +94,7 @@ function outputText(payload: any): string {
 
 function protectInlineMedia(html: string, prefix: string) {
   const media: MediaPlaceholder[] = []
-  const protectedHtml = html.replace(/<figure\b[\s\S]*?<\/figure>|<img\b[^>]*>/gi, (match) => {
+  const protectedHtml = html.replace(/<img\b[^>]*>/gi, (match) => {
     const token = `[[[BUILDSIGHT_${prefix.toUpperCase()}_MEDIA_${String(media.length + 1).padStart(3, "0")}]]]`
     media.push({ token, html: match })
     return token
@@ -57,14 +108,55 @@ function restoreInlineMedia(html: string, media: MediaPlaceholder[]) {
   for (const item of media) {
     if (result.includes(item.token)) {
       result = result.replace(item.token, item.html).replaceAll(item.token, "")
-    } else missing.push(item.html)
+    } else {
+      missing.push(item.html)
+    }
   }
   if (missing.length) result += missing.join("")
   return result
 }
 
+function createHtmlTranslationTemplate(html: string, prefix: string): HtmlTranslationTemplate {
+  const segments: TextSegment[] = []
+  const parts = html.split(/(<[^>]+>)/g)
+  const templateHtml = parts.map((part) => {
+    if (!part || part.startsWith("<")) return part
+    return part.split(/(\[\[\[BUILDSIGHT_[A-Z0-9_]+_MEDIA_\d+\]\]\])/g).map((piece) => {
+      if (!piece || MEDIA_TOKEN_PATTERN.test(piece.trim())) return piece
+      const match = piece.match(/^(\s*)([\s\S]*?)(\s*)$/)
+      const leading = match?.[1] ?? ""
+      const core = match?.[2] ?? piece
+      const trailing = match?.[3] ?? ""
+      if (!core.trim()) return piece
+      const id = `${prefix}_TEXT_${String(segments.length + 1).padStart(4, "0")}`
+      segments.push({ id, text: decodeHtmlText(core.trim()) })
+      return `${leading}[[[${id}]]]${trailing}`
+    }).join("")
+  }).join("")
+  return { templateHtml, segments }
+}
+
+function restoreTranslatedTemplate(template: HtmlTranslationTemplate, translatedSegments: TextSegment[]) {
+  const translated = new Map(translatedSegments.map((segment) => [segment.id, segment.text]))
+  let html = template.templateHtml
+  for (const source of template.segments) {
+    const value = translated.get(source.id)?.trim() || source.text
+    html = html.replaceAll(`[[[${source.id}]]]`, escapeHtml(value))
+  }
+  return sanitizeReportHtml(html)
+}
+
 function translationSchema() {
   const stringField = { type: "string" }
+  const segmentArray = {
+    type: "array",
+    items: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "text"],
+      properties: { id: stringField, text: stringField },
+    },
+  }
   return {
     type: "object",
     additionalProperties: false,
@@ -80,11 +172,11 @@ function translationSchema() {
         additionalProperties: false,
         required: ["feedback", "observation", "findings", "recommendations", "correctiveActions"],
         properties: {
-          feedback: stringField,
-          observation: stringField,
-          findings: stringField,
-          recommendations: stringField,
-          correctiveActions: stringField,
+          feedback: segmentArray,
+          observation: segmentArray,
+          findings: segmentArray,
+          recommendations: segmentArray,
+          correctiveActions: segmentArray,
         },
       },
       checklist: {
@@ -133,18 +225,90 @@ function translationSchema() {
   }
 }
 
+function parseSegments(value: unknown): TextSegment[] {
+  if (!Array.isArray(value)) return []
+  return value.slice(0, 5000).map((item) => {
+    const row = objectValue(item)
+    return { id: stringValue(row.id, 120), text: stringValue(row.text, 20_000) }
+  }).filter((item) => item.id)
+}
+
+function parseChecklist(value: unknown): TranslationChecklistItem[] {
+  if (!Array.isArray(value)) return []
+  return value.slice(0, 250).map((item, index) => {
+    const row = objectValue(item)
+    return {
+      id: stringValue(row.id, 100) || `checklist-${index + 1}`,
+      label: stringValue(row.label, 2_000),
+      checked: row.checked === true,
+      notes: stringValue(row.notes, 4_000),
+    }
+  })
+}
+
+function parseApprovals(value: unknown): TranslationApprovalItem[] {
+  if (!Array.isArray(value)) return []
+  return value.slice(0, 100).map((item, index) => {
+    const row = objectValue(item)
+    return {
+      id: stringValue(row.id, 100) || `approval-${index + 1}`,
+      reviewerName: stringValue(row.reviewerName, 500),
+      decision: stringValue(row.decision, 500),
+      comments: stringValue(row.comments, 10_000),
+      decidedAt: stringValue(row.decidedAt, 100),
+    }
+  })
+}
+
+function parseAttachmentTranslations(value: unknown): AttachmentTranslation[] {
+  if (!Array.isArray(value)) return []
+  return value.slice(0, MAX_READABLE_ATTACHMENTS).map((item) => {
+    const row = objectValue(item)
+    return {
+      attachmentId: stringValue(row.attachmentId, 100),
+      filename: stringValue(row.filename, 1_000),
+      contentHtml: sanitizeReportHtml(stringValue(row.contentHtml)),
+    }
+  }).filter((item) => item.attachmentId || item.filename || item.contentHtml)
+}
+
+function parseRawTranslation(value: unknown): RawTranslation | null {
+  const row = objectValue(value)
+  if (!Object.keys(row).length) return null
+  const sections = objectValue(row.sections)
+  return {
+    stageName: stringValue(row.stageName, 2_000),
+    termName: stringValue(row.termName, 2_000),
+    reportTitle: stringValue(row.reportTitle, 2_000),
+    subject: stringValue(row.subject, 4_000),
+    reportType: stringValue(row.reportType, 1_000),
+    sections: {
+      feedback: parseSegments(sections.feedback),
+      observation: parseSegments(sections.observation),
+      findings: parseSegments(sections.findings),
+      recommendations: parseSegments(sections.recommendations),
+      correctiveActions: parseSegments(sections.correctiveActions),
+    },
+    checklist: parseChecklist(row.checklist),
+    approvals: parseApprovals(row.approvals),
+    attachmentTranslations: parseAttachmentTranslations(row.attachmentTranslations),
+  }
+}
+
 function normalizeTranslation(
   value: unknown,
   original: TranslationReportContent,
+  templatesBySection: Record<TranslationSectionKey, HtmlTranslationTemplate>,
   mediaBySection: Record<TranslationSectionKey, MediaPlaceholder[]>,
   readableAttachments: Array<{ id: string; filename: string }>,
 ): TranslationReportContent {
-  const parsed = parseTranslationContent(value)
+  const parsed = parseRawTranslation(value)
   if (!parsed) throw new Error("The AI service returned an invalid translation.")
 
-  const sections = { ...parsed.sections }
-  for (const key of Object.keys(sections) as TranslationSectionKey[]) {
-    sections[key] = restoreInlineMedia(sections[key], mediaBySection[key])
+  const sections = {} as Record<TranslationSectionKey, string>
+  for (const key of Object.keys(original.sections) as TranslationSectionKey[]) {
+    const structuredHtml = restoreTranslatedTemplate(templatesBySection[key], parsed.sections[key])
+    sections[key] = sanitizeReportHtml(restoreInlineMedia(structuredHtml, mediaBySection[key]))
   }
 
   const checklist = original.checklist.map((source, index) => {
@@ -174,7 +338,7 @@ function normalizeTranslation(
     .map((item) => ({
       attachmentId: item.attachmentId,
       filename: allowedAttachments.get(item.attachmentId)!,
-      contentHtml: item.contentHtml,
+      contentHtml: sanitizeReportHtml(item.contentHtml),
     }))
 
   return {
@@ -211,18 +375,26 @@ export async function generateStageTranslation(input: {
 
   const original = pageData.response.content
   const mediaBySection = {} as Record<TranslationSectionKey, MediaPlaceholder[]>
-  const protectedSections = {} as Record<TranslationSectionKey, string>
+  const templatesBySection = {} as Record<TranslationSectionKey, HtmlTranslationTemplate>
+  const structuredSections = {} as Record<TranslationSectionKey, HtmlTranslationTemplate>
   for (const key of Object.keys(original.sections) as TranslationSectionKey[]) {
     const protectedValue = protectInlineMedia(original.sections[key], key)
-    protectedSections[key] = protectedValue.protectedHtml
     mediaBySection[key] = protectedValue.media
+    const template = createHtmlTranslationTemplate(protectedValue.protectedHtml, key.toUpperCase())
+    templatesBySection[key] = template
+    structuredSections[key] = template
   }
 
   const content: OpenAiContentItem[] = []
-  const readableAttachments: Array<{ id: string; filename: string }> = []
   const documentAttachments = pageData.response.attachments
     .filter((item) => item.attachmentKind === "document" && SUPPORTED_ATTACHMENT_EXTENSIONS.has(extension(item.originalFilename)))
     .slice(0, MAX_READABLE_ATTACHMENTS)
+  const readableAttachmentInputs: Array<{ id: string; filename: string; url: string }> = []
+  for (const attachment of documentAttachments) {
+    const url = await createSignedUrl(attachment.storagePath)
+    if (url) readableAttachmentInputs.push({ id: attachment.id, filename: attachment.originalFilename, url })
+  }
+  const readableAttachments = readableAttachmentInputs.map(({ id, filename }) => ({ id, filename }))
 
   const sourceDocument = {
     project: pageData.project.name,
@@ -238,13 +410,13 @@ export async function generateStageTranslation(input: {
     reportTitle: original.reportTitle,
     subject: original.subject,
     reportType: original.reportType,
-    sections: protectedSections,
+    sections: structuredSections,
     checklist: original.checklist,
     approvals: original.approvals,
     evidenceImages: pageData.response.attachments
       .filter((item) => item.attachmentKind !== "document")
       .map((item) => ({ id: item.id, filename: item.originalFilename })),
-    readableAttachments: documentAttachments.map((item) => ({ id: item.id, filename: item.originalFilename })),
+    readableAttachments,
   }
 
   content.push({
@@ -252,22 +424,19 @@ export async function generateStageTranslation(input: {
     text: [
       "Translate the complete construction inspection document from English into professional Arabic.",
       "This is translation only: do not summarize, shorten, omit, reinterpret, add, or invent any information.",
-      "Preserve engineering meaning, measurements, references, report numbers, dates, names, URLs, HTML structure, tables, lists, links, and all [[[BUILDSIGHT_...]]] media placeholders exactly.",
+      "The application rich-text sections are supplied as immutable HTML templates plus textSegments. Return one Arabic translation for every text segment using the exact same segment id. Never add, remove, rename, merge, split, or reorder segment ids.",
+      "The application reconstructs the final Arabic HTML from the original template, so headings, paragraphs, lists, tables, links, and image positions will remain unchanged.",
       "Use established construction terminology, including: Inspection Report = تقرير التفتيش, Concrete Pour = صب الخرسانة, Reinforcement = حديد التسليح, Formwork = الشدات/القوالب, Submittal = تقديم فني, Approval = اعتماد, NCR = تقرير عدم المطابقة, Snag List = قائمة الملاحظات, Corrective Action = إجراء تصحيحي, Testing and Commissioning = الاختبارات والتشغيل التجريبي.",
-      "Return Arabic HTML fragments in every rich-text field. Preserve the original tags and translate only human-readable text inside them.",
-      "Translate stageName and termName into professional Arabic. Keep project names, checklist IDs, approval IDs, attachment IDs, reviewer names, dates, booleans, and filenames unchanged. Translate checklist wording, decisions, comments, and readable attachment text.",
-      "For each readable attachment supplied after this JSON, add one attachmentTranslations entry using its exact attachmentId and filename. Translate all readable text without summarizing. Use structured HTML paragraphs, headings, lists, and tables where appropriate.",
-      "Do not include evidence images in attachmentTranslations; they are automatically reused in the translated document.",
+      "For each readable attachment supplied after this JSON, add exactly one attachmentTranslations entry using its exact attachmentId and filename. Translate all readable text without summarizing. Preserve page order and return structured HTML with headings, paragraphs, lists, and real <table>/<tr>/<th>/<td> elements whenever the source contains a table. Never flatten tables into prose.",
+      "Original evidence and PDF images are reused by the application and PDF renderer. Do not invent replacement images or data URLs.",
+      "Keep project names, checklist IDs, approval IDs, attachment IDs, reviewer names, dates, booleans, filenames, report numbers, measurements, and URLs unchanged unless they are human-readable descriptive text.",
       `SOURCE DOCUMENT JSON:\n${JSON.stringify(sourceDocument)}`,
     ].join("\n\n"),
   })
 
-  for (const attachment of documentAttachments) {
-    const url = await createSignedUrl(attachment.storagePath)
-    if (!url) continue
-    readableAttachments.push({ id: attachment.id, filename: attachment.originalFilename })
-    content.push({ type: "input_text", text: `READABLE ATTACHMENT — attachmentId: ${attachment.id}; filename: ${attachment.originalFilename}` })
-    content.push({ type: "input_file", file_url: url })
+  for (const attachment of readableAttachmentInputs) {
+    content.push({ type: "input_text", text: `READABLE ATTACHMENT — attachmentId: ${attachment.id}; filename: ${attachment.filename}` })
+    content.push({ type: "input_file", file_url: attachment.url })
   }
 
   const admin = createAdminClient()
@@ -307,13 +476,13 @@ export async function generateStageTranslation(input: {
       body: JSON.stringify({
         model: OPENAI_MODEL,
         store: false,
-        max_output_tokens: 16_000,
+        max_output_tokens: 24_000,
         input: [{ role: "user", content }],
         text: {
           format: {
             type: "json_schema",
             name: "construction_document_translation",
-            description: "A complete Arabic translation of a structured construction inspection document.",
+            description: "A complete Arabic translation that preserves the source document structure.",
             strict: true,
             schema: translationSchema(),
           },
@@ -334,7 +503,7 @@ export async function generateStageTranslation(input: {
       throw new Error("The AI service returned an invalid translation format.")
     }
 
-    const translated = normalizeTranslation(rawTranslation, original, mediaBySection, readableAttachments)
+    const translated = normalizeTranslation(rawTranslation, original, templatesBySection, mediaBySection, readableAttachments)
     const generatedAt = new Date().toISOString()
     const previousPdfPaths = [
       pageData.translation?.originalPdfPath,
