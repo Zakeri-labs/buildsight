@@ -11,7 +11,13 @@ function initials(name: string, email: string) {
   return (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")
 }
 
-export default async function AppGroupLayout({ children }: { children: React.ReactNode }) {
+export default async function AppGroupLayout({
+  children,
+  modal,
+}: {
+  children: React.ReactNode
+  modal: React.ReactNode
+}) {
   const session = await requireOnboarded()
 
   const fullName = session.profile?.full_name?.trim() || session.email
@@ -44,6 +50,7 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
         canManageStages={Boolean(stageManagementOrganization)}
       >
         {children}
+        {modal}
       </AppShell>
     </CurrentUserProvider>
   )

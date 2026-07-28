@@ -81,7 +81,6 @@ type UserOption = {
 }
 
 const MAX_OWNERS = 10
-
 function emptyOwner(): OwnerDetails {
   return { name: "", contactName: "", contactEmail: "", contactPhone: "", idCardFile: null }
 }
@@ -121,9 +120,11 @@ export function ProjectCreateForm({
   const [pending, setPending] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadingFile, setUploadingFile] = useState<string | null>(null)
+  const [submissionMessage, setSubmissionMessage] = useState<string | null>(null)
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null)
   const [createdOwnerIds, setCreatedOwnerIds] = useState<string[]>([])
   const [ownerIdCardsUploaded, setOwnerIdCardsUploaded] = useState(false)
+  const [documentsUploaded, setDocumentsUploaded] = useState(false)
   const submissionLockRef = useRef(false)
 
   const selectedDocumentCount = useMemo(
@@ -357,10 +358,14 @@ export function ProjectCreateForm({
     const records: OwnerIdCardUploadInput[] = []
 
     try {
-      for (const { ownerId, file } of filesToUpload) {
+      for (const [index, { ownerId, file }] of filesToUpload.entries()) {
         const validationError = validateOwnerIdCardFile(file)
         if (validationError) throw new Error(validationError)
-        setUploadingFile(file.name)
+        const progressLabel = isArabic
+          ? `جارٍ رفع بطاقة هوية المالك ${index + 1}/${filesToUpload.length}: ${file.name}`
+          : `Uploading owner ID card ${index + 1}/${filesToUpload.length}: ${file.name}`
+        setSubmissionMessage(progressLabel)
+        setUploadingFile(progressLabel)
         const storagePath = `${projectId}/${session.user.id}/owner-id-cards/${ownerId}/${crypto.randomUUID()}-${sanitizeStorageFileName(file.name)}`
         await uploadDocumentAsset(file, storagePath, session.access_token, (fileProgress) => {
           const uploadedBytes = completedBytes + (file.size * fileProgress) / 100
@@ -377,13 +382,17 @@ export function ProjectCreateForm({
         })
       }
 
-      setUploadingFile(isArabic ? "جارٍ ربط بطاقات الهوية" : "Linking owner ID cards")
+      const linkMessage = isArabic ? "جارٍ ربط بطاقات الهوية بالمالكين…" : "Linking owner ID cards…"
+      setSubmissionMessage(linkMessage)
+      setUploadingFile(linkMessage)
       const result = await attachProjectOwnerIdCards({ projectId, files: records })
       if (!result.ok) throw new Error(result.error)
       setUploadProgress(100)
       return result.data?.count ?? records.length
     } catch (uploadError) {
-      if (uploadedPaths.length) await supabase.storage.from(DOCUMENT_ASSET_BUCKET).remove(uploadedPaths)
+      if (uploadedPaths.length) {
+        void supabase.storage.from(DOCUMENT_ASSET_BUCKET).remove(uploadedPaths).then(() => undefined, () => undefined)
+      }
       throw uploadError
     }
   }
@@ -404,10 +413,14 @@ export function ProjectCreateForm({
     const records: SimpleUploadedFileInput[] = []
 
     try {
-      for (const { category, file } of filesToUpload) {
+      for (const [index, { category, file }] of filesToUpload.entries()) {
         const validationError = validateSimpleUploadFile(file)
         if (validationError) throw new Error(validationError)
-        setUploadingFile(file.name)
+        const progressLabel = isArabic
+          ? `جارٍ رفع المستند ${index + 1}/${filesToUpload.length}: ${file.name}`
+          : `Uploading document ${index + 1}/${filesToUpload.length}: ${file.name}`
+        setSubmissionMessage(progressLabel)
+        setUploadingFile(progressLabel)
         const storagePath = `${projectId}/${session.user.id}/files/${crypto.randomUUID()}-${sanitizeStorageFileName(file.name)}`
         await uploadDocumentAsset(file, storagePath, session.access_token, (fileProgress) => {
           const uploadedBytes = completedBytes + (file.size * fileProgress) / 100
@@ -424,13 +437,17 @@ export function ProjectCreateForm({
         })
       }
 
-      setUploadingFile(isArabic ? "جارٍ حفظ سجلات المستندات" : "Saving document records")
+      const savingMessage = isArabic ? "جارٍ حفظ سجلات المستندات…" : "Saving document records…"
+      setSubmissionMessage(savingMessage)
+      setUploadingFile(savingMessage)
       const result = await createUploadedDocumentsAction({ projectId, files: records })
       if (!result.ok) throw new Error(result.error)
       setUploadProgress(100)
       return result.count
     } catch (uploadError) {
-      if (uploadedPaths.length) await supabase.storage.from(DOCUMENT_ASSET_BUCKET).remove(uploadedPaths)
+      if (uploadedPaths.length) {
+        void supabase.storage.from(DOCUMENT_ASSET_BUCKET).remove(uploadedPaths).then(() => undefined, () => undefined)
+      }
       throw uploadError
     }
   }
@@ -452,9 +469,13 @@ export function ProjectCreateForm({
     setSuccess(false)
     setPending(true)
     setUploadProgress(0)
+    setUploadingFile(null)
+    setSubmissionMessage(copy.creating)
 
     let projectId = createdProjectId
     let ownerIds = createdOwnerIds
+    let completed = false
+
     try {
       if (!projectId) {
         const result = await createProject({
@@ -484,18 +505,9 @@ export function ProjectCreateForm({
           },
         })
 
-        if (!result.ok) {
-          setError(result.error)
-          setPending(false)
-          submissionLockRef.current = false
-          return
-        }
-        if (!result.data) {
-          setError(isArabic ? "تعذر إنشاء المشروع." : "Could not create project.")
-          setPending(false)
-          submissionLockRef.current = false
-          return
-        }
+        if (!result.ok) throw new Error(result.error)
+        if (!result.data) throw new Error(isArabic ? "تعذر إنشاء المشروع." : "Could not create project.")
+
         projectId = result.data.id
         ownerIds = result.data.ownerIds
         setCreatedProjectId(projectId)
@@ -508,24 +520,37 @@ export function ProjectCreateForm({
         setOwnerIdCardsUploaded(true)
       }
 
-      if (selectedDocumentCount > 0) {
+      if (selectedDocumentCount > 0 && !documentsUploaded) {
         setUploadProgress(0)
         await uploadProjectDocuments(projectId)
+        setDocumentsUploaded(true)
       }
 
+      completed = true
+      setUploadProgress(100)
+      setSubmissionMessage(copy.created)
+      setUploadingFile(copy.created)
       setSuccess(true)
-      router.replace(`/projects?created=${encodeURIComponent(projectId)}`)
-      router.refresh()
+
+      router.replace("/")
+      window.setTimeout(() => {
+        if (window.location.pathname !== "/") window.location.assign("/")
+      }, 1500)
     } catch (submitError) {
+      const message = submitError instanceof Error ? submitError.message : "Could not create project."
       setError(
         createdProjectId || projectId
-          ? `${copy.documentUploadFailed} ${submitError instanceof Error ? submitError.message : ""}`.trim()
-          : submitError instanceof Error ? submitError.message : "Could not create project.",
+          ? `${copy.documentUploadFailed} ${message}`.trim()
+          : message,
       )
-      setPending(false)
-      setUploadingFile(null)
-      setUploadProgress(0)
-      submissionLockRef.current = false
+    } finally {
+      if (!completed) {
+        setPending(false)
+        setUploadingFile(null)
+        setSubmissionMessage(null)
+        setUploadProgress(0)
+        submissionLockRef.current = false
+      }
     }
   }
 
@@ -809,15 +834,20 @@ export function ProjectCreateForm({
                   disabled={pending}
                   onValidationError={setError}
                 />
-                {pending && selectedUploadCount > 0 ? (
+                {pending ? (
                   <div className="rounded-xl border bg-muted/20 px-4 py-3" role="status" aria-live="polite">
-                    <div className="mb-2 flex items-center justify-between gap-4 text-xs font-medium">
-                      <span className="flex min-w-0 items-center gap-2"><Loader2 className="size-4 shrink-0 animate-spin text-primary" /><span className="truncate">{uploadingFile || copy.uploading}</span></span>
-                      <span className="tabular-nums">{uploadProgress}%</span>
+                    <div className={cn("flex items-center justify-between gap-4 text-xs font-medium", selectedUploadCount > 0 && "mb-2")}>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
+                        <span className="truncate">{submissionMessage || uploadingFile || copy.creating}</span>
+                      </span>
+                      {selectedUploadCount > 0 ? <span className="tabular-nums">{uploadProgress}%</span> : null}
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-muted">
-                      <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${uploadProgress}%` }} />
-                    </div>
+                    {selectedUploadCount > 0 ? (
+                      <div className="h-2 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${uploadProgress}%` }} />
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
