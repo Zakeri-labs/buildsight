@@ -19,6 +19,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
+import { StageTranslationActions } from "@/components/stages/stage-translation-actions"
 import type { ProjectStageExecutionData, ProjectStageTermExecution } from "@/lib/db/project-stages"
 import { statusLabel, statusTone } from "@/lib/stages/execution"
 import { cn } from "@/lib/utils"
@@ -207,73 +208,89 @@ function TermRow({
 }) {
   const overdue = isOverdue(term)
   const complete = isComplete(term)
+  const translationAvailable = Boolean(term.response && term.translation?.status === "completed")
+
   return (
-    <Link
-      href={`/projects/${projectId}/stages/${stageId}/terms/${term.id}`}
-      className="group grid gap-4 px-4 py-4 transition-colors hover:bg-muted/35 sm:px-5 lg:grid-cols-[minmax(260px,1.4fr)_minmax(180px,0.8fr)_minmax(150px,0.65fr)_auto] lg:items-center"
-      aria-label={`${copy.openReport}: ${term.reportName}`}
-    >
-      <div className="flex min-w-0 items-start gap-3">
-        <span className={cn(
-          "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full border",
-          complete ? "border-emerald-200 bg-emerald-50 text-emerald-600" : overdue ? "border-red-200 bg-red-50 text-red-600" : "border-slate-200 bg-white text-slate-400 dark:bg-slate-950",
-        )}>
-          {complete ? <CheckCircle2 className="size-4" /> : overdue ? <AlertTriangle className="size-4" /> : <Circle className="size-4" />}
-        </span>
-        <div className="min-w-0">
-          <p className="truncate font-semibold group-hover:text-primary">{term.reportName}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className={term.required ? "border-amber-200 bg-amber-50 text-amber-700" : "text-muted-foreground"}>
-              {term.required ? copy.required : copy.optional}
-            </Badge>
-            <Badge variant="outline" className={statusTone(term.status)}>{statusLabel(term.status, locale)}</Badge>
-            {overdue ? <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">{copy.overdue}</Badge> : null}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex min-w-0 items-center gap-2 text-sm">
-        {term.responsibleUser ? (
-          <>
-            <Avatar size="sm">
-              {term.responsibleUser.avatarUrl ? <AvatarImage src={term.responsibleUser.avatarUrl} alt="" /> : null}
-              <AvatarFallback>{initials(term.responsibleUser.name)}</AvatarFallback>
-            </Avatar>
+    <div className="px-4 py-4 transition-colors hover:bg-muted/35 sm:px-5">
+      <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-center">
+        <Link
+          href={`/projects/${projectId}/stages/${stageId}/terms/${term.id}`}
+          className="group grid min-w-0 flex-1 gap-4 lg:grid-cols-[minmax(260px,1.4fr)_minmax(180px,0.8fr)_minmax(150px,0.65fr)_auto] lg:items-center"
+          aria-label={`${copy.openReport}: ${term.reportName}`}
+        >
+          <div className="flex min-w-0 items-start gap-3">
+            <span className={cn(
+              "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full border",
+              complete ? "border-emerald-200 bg-emerald-50 text-emerald-600" : overdue ? "border-red-200 bg-red-50 text-red-600" : "border-slate-200 bg-white text-slate-400 dark:bg-slate-950",
+            )}>
+              {complete ? <CheckCircle2 className="size-4" /> : overdue ? <AlertTriangle className="size-4" /> : <Circle className="size-4" />}
+            </span>
             <div className="min-w-0">
-              <p className="truncate font-medium">{term.responsibleUser.name}</p>
-              <p className="truncate text-xs text-muted-foreground">{term.responsibleOrganization?.name ?? copy.responsible}</p>
+              <p className="truncate font-semibold group-hover:text-primary">{term.reportName}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className={term.required ? "border-amber-200 bg-amber-50 text-amber-700" : "text-muted-foreground"}>
+                  {term.required ? copy.required : copy.optional}
+                </Badge>
+                <Badge variant="outline" className={statusTone(term.status)}>{statusLabel(term.status, locale)}</Badge>
+                {overdue ? <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">{copy.overdue}</Badge> : null}
+              </div>
             </div>
-          </>
-        ) : term.responsibleOrganization ? (
-          <>
-            <Building2 className="size-4 text-muted-foreground" />
-            <span className="truncate">{term.responsibleOrganization.name}</span>
-          </>
-        ) : (
-          <>
-            <UserRound className="size-4 text-muted-foreground" />
-            <span className="text-muted-foreground">{copy.unassigned}</span>
-          </>
-        )}
-      </div>
+          </div>
 
-      <div className="flex items-center gap-2 text-sm">
-        <ShieldCheck className="size-4 text-muted-foreground" />
-        <div>
-          <p className="text-xs text-muted-foreground">{copy.approval}</p>
-          <p className="font-medium">{approvalText(term, copy, locale)}</p>
-        </div>
-      </div>
+          <div className="flex min-w-0 items-center gap-2 text-sm">
+            {term.responsibleUser ? (
+              <>
+                <Avatar size="sm">
+                  {term.responsibleUser.avatarUrl ? <AvatarImage src={term.responsibleUser.avatarUrl} alt="" /> : null}
+                  <AvatarFallback>{initials(term.responsibleUser.name)}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{term.responsibleUser.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">{term.responsibleOrganization?.name ?? copy.responsible}</p>
+                </div>
+              </>
+            ) : term.responsibleOrganization ? (
+              <>
+                <Building2 className="size-4 text-muted-foreground" />
+                <span className="truncate">{term.responsibleOrganization.name}</span>
+              </>
+            ) : (
+              <>
+                <UserRound className="size-4 text-muted-foreground" />
+                <span className="text-muted-foreground">{copy.unassigned}</span>
+              </>
+            )}
+          </div>
 
-      <div className="flex items-center justify-between gap-3 lg:justify-end">
-        {term.dueDate ? (
-          <span className={cn("inline-flex items-center gap-1 text-xs", overdue ? "font-semibold text-red-600" : "text-muted-foreground")}>
-            <Clock3 className="size-3.5" />
-            {new Intl.DateTimeFormat(locale === "ar" ? "ar" : "en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${term.dueDate}T00:00:00`))}
-          </span>
+          <div className="flex items-center gap-2 text-sm">
+            <ShieldCheck className="size-4 text-muted-foreground" />
+            <div>
+              <p className="text-xs text-muted-foreground">{copy.approval}</p>
+              <p className="font-medium">{approvalText(term, copy, locale)}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 lg:justify-end">
+            {term.dueDate ? (
+              <span className={cn("inline-flex items-center gap-1 text-xs", overdue ? "font-semibold text-red-600" : "text-muted-foreground")}>
+                <Clock3 className="size-3.5" />
+                {new Intl.DateTimeFormat(locale === "ar" ? "ar" : "en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${term.dueDate}T00:00:00`))}
+              </span>
+            ) : null}
+            <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5" />
+          </div>
+        </Link>
+
+        {translationAvailable && term.response && term.translation ? (
+          <StageTranslationActions
+            projectId={projectId}
+            stageId={stageId}
+            termId={term.id}
+            responseUpdatedAt={term.response.updatedAt}
+            translation={term.translation}
+          />
         ) : null}
-        <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5" />
       </div>
-    </Link>
+    </div>
   )
 }

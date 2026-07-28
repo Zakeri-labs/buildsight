@@ -58,6 +58,15 @@ export type ProjectTermResponse = {
   approvals: ProjectStageApproval[]
 }
 
+export type ProjectStageTranslationSummary = {
+  id: string
+  status: "pending" | "completed" | "failed"
+  generatedAt: string | null
+  originalPdfPath: string | null
+  arabicPdfPath: string | null
+  bilingualPdfPath: string | null
+}
+
 export type ProjectStageTermExecution = {
   id: string
   projectStageId: string
@@ -72,6 +81,7 @@ export type ProjectStageTermExecution = {
   status: ProjectStageTermStatus
   sortOrder: number
   response: ProjectTermResponse | null
+  translation: ProjectStageTranslationSummary | null
 }
 
 export type ProjectStageExecution = {
@@ -187,7 +197,7 @@ export async function loadProjectStageExecution(projectId: string, userId: strin
   if (responseError) throw responseError
 
   const responseIds = (responses ?? []).map((response: any) => response.id as string)
-  const [{ data: attachments }, { data: approvals }] = await Promise.all([
+  const [{ data: attachments }, { data: approvals }, { data: translations }] = await Promise.all([
     responseIds.length
       ? admin
           .from("response_attachments")
@@ -201,6 +211,12 @@ export async function loadProjectStageExecution(projectId: string, userId: strin
           .select("id, response_id, reviewer_id, decision, comments, decided_at")
           .in("response_id", responseIds)
           .order("decided_at", { ascending: false })
+      : Promise.resolve({ data: [] as any[] }),
+    responseIds.length
+      ? admin
+          .from("translation_documents")
+          .select("id, response_id, translation_status, generated_at, original_pdf_url, arabic_pdf_url, bilingual_pdf_url")
+          .in("response_id", responseIds)
       : Promise.resolve({ data: [] as any[] }),
   ])
 
@@ -269,6 +285,21 @@ export async function loadProjectStageExecution(projectId: string, userId: strin
     approvalByResponse.set(approval.response_id, items)
   }
 
+  const translationByResponse = new Map<string, ProjectStageTranslationSummary>()
+  for (const translation of translations ?? []) {
+    const status = translation.translation_status === "completed" || translation.translation_status === "failed"
+      ? translation.translation_status
+      : "pending"
+    translationByResponse.set(translation.response_id, {
+      id: translation.id,
+      status,
+      generatedAt: translation.generated_at,
+      originalPdfPath: translation.original_pdf_url,
+      arabicPdfPath: translation.arabic_pdf_url,
+      bilingualPdfPath: translation.bilingual_pdf_url,
+    })
+  }
+
   const responseByTerm = new Map<string, ProjectTermResponse>()
   for (const response of responses ?? []) {
     const createdBy = people.get(response.created_by) ?? {
@@ -299,6 +330,7 @@ export async function loadProjectStageExecution(projectId: string, userId: strin
   const termsByStage = new Map<string, ProjectStageTermExecution[]>()
   for (const term of terms ?? []) {
     const list = termsByStage.get(term.project_stage_id) ?? []
+    const response = responseByTerm.get(term.id) ?? null
     list.push({
       id: term.id,
       projectStageId: term.project_stage_id,
@@ -312,7 +344,8 @@ export async function loadProjectStageExecution(projectId: string, userId: strin
       templateReference: term.template_reference,
       status: term.status,
       sortOrder: term.sort_order,
-      response: responseByTerm.get(term.id) ?? null,
+      response,
+      translation: response ? translationByResponse.get(response.id) ?? null : null,
     })
     termsByStage.set(term.project_stage_id, list)
   }

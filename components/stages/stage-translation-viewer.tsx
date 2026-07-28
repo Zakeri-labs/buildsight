@@ -482,6 +482,30 @@ const BilingualReport = forwardRef<HTMLElement, {
   )
 })
 
+export const TranslationPdfReport = forwardRef<HTMLElement, {
+  kind: "original" | "arabic" | "bilingual"
+  data: StageTranslationPageData
+  translation: StageTranslationRecord
+}>(function TranslationPdfReport({ kind, data, translation }, ref) {
+  const translated = translation.translatedContent
+  if (!translated) return null
+  if (kind === "bilingual") {
+    return <BilingualReport ref={ref} data={data} translated={translated} generatedAt={translation.generatedAt ?? translation.updatedAt} />
+  }
+  const language = kind === "arabic" ? "ar" : "en"
+  return (
+    <LanguageReport
+      ref={ref}
+      language={language}
+      title={kind === "arabic" ? COPY.ar.arabic : COPY.en.original}
+      data={data}
+      content={kind === "arabic" ? translated : data.response.content}
+      labels={kind === "arabic" ? COPY.ar : COPY.en}
+      generatedAt={translation.generatedAt}
+    />
+  )
+})
+
 function ReportMeta({ label, value }: { label: string; value: string }) {
   return <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3"><dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-1 break-words font-semibold text-slate-900">{value || "—"}</dd></div>
 }
