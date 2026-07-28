@@ -426,17 +426,10 @@
   page-break-inside: avoid;
 }
 
-/* Project stage AI document translation viewer and PDF export */
-.stage-translation-report,
-.stage-translation-pdf-export {
+/* Project stage AI document translation viewer */
+.stage-translation-report {
   print-color-adjust: exact;
   -webkit-print-color-adjust: exact;
-}
-
-.stage-translation-pdf-export {
-  background: #fff !important;
-  color: #1e293b !important;
-  box-shadow: none !important;
 }
 
 .stage-translation-richtext p,
@@ -524,20 +517,29 @@
   font-size: 0.75rem;
 }
 
-.stage-translation-pdf-export .stage-translation-no-break,
-.stage-translation-pdf-export table,
-.stage-translation-pdf-export tr,
-.stage-translation-pdf-export figure,
-.stage-translation-pdf-export img {
-  break-inside: avoid;
-  page-break-inside: avoid;
+
+/* PDF.js selectable text overlay for the original translation source viewer. */
+.source-pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  text-align: initial;
+  text-size-adjust: none;
+  transform-origin: 0 0;
+  forced-color-adjust: none;
 }
 
-.stage-translation-pdf-export .stage-translation-richtext {
-  overflow-wrap: anywhere;
+.source-pdf-text-layer span,
+.source-pdf-text-layer br {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
 }
 
-.stage-translation-bilingual .stage-translation-richtext {
-  font-size: 12px;
-  line-height: 1.65;
+.source-pdf-text-layer ::selection {
+  color: transparent;
+  background: rgba(37, 99, 235, 0.28);
 }

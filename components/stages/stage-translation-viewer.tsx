@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { forwardRef, useRef, useState, type ReactNode } from "react"
+import { forwardRef, useState, type ReactNode } from "react"
 import {
   AlertCircle,
   ArrowLeft,
@@ -19,7 +19,9 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { SourcePdfViewer } from "@/components/stages/source-pdf-viewer"
 import { exportTranslationPdf } from "@/lib/stage-translations/client-pdf"
+import { getSourcePdfAttachment } from "@/lib/stage-translations/source-document"
 import type {
   StageTranslationPageData,
   StageTranslationRecord,
@@ -47,7 +49,7 @@ const COPY = {
     generate: "Generate Translation",
     regenerate: "Regenerate Translation",
     generating: "Translating complete document...",
-    downloadOriginal: "Download Original PDF",
+    downloadOriginal: "Download English PDF",
     downloadArabic: "Download Arabic PDF",
     downloadBilingual: "Download Bilingual PDF",
     original: "English Original Document",
@@ -78,7 +80,7 @@ const COPY = {
     checked: "Completed",
     unchecked: "Open",
     pdfError: "Unable to generate or store the PDF.",
-    stale: "The original inspection report changed after this translation was generated. Regenerate the translation before exporting PDFs.",
+    stale: "The original inspection report changed after this translation was generated. Regenerate the translation before exporting Arabic or bilingual PDFs.",
   },
   ar: {
     back: "العودة إلى تقرير التفتيش",
@@ -88,7 +90,7 @@ const COPY = {
     generate: "إنشاء الترجمة",
     regenerate: "إعادة إنشاء الترجمة",
     generating: "جارٍ ترجمة المستند بالكامل...",
-    downloadOriginal: "تنزيل ملف PDF الأصلي",
+    downloadOriginal: "تنزيل ملف PDF الإنجليزي",
     downloadArabic: "تنزيل ملف PDF العربي",
     downloadBilingual: "تنزيل ملف PDF ثنائي اللغة",
     original: "المستند الإنجليزي الأصلي",
@@ -119,7 +121,7 @@ const COPY = {
     checked: "مكتمل",
     unchecked: "مفتوح",
     pdfError: "تعذر إنشاء ملف PDF أو حفظه.",
-    stale: "تم تعديل تقرير التفتيش الأصلي بعد إنشاء هذه الترجمة. أعد إنشاء الترجمة قبل تصدير ملفات PDF.",
+    stale: "تم تعديل تقرير التفتيش الأصلي بعد إنشاء هذه الترجمة. أعد إنشاء الترجمة قبل تصدير ملف PDF العربي أو ثنائي اللغة.",
   },
 } as const
 
@@ -170,13 +172,10 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
   const [busy, setBusy] = useState<"generate" | "original" | "arabic" | "bilingual" | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const originalRef = useRef<HTMLElement>(null)
-  const arabicRef = useRef<HTMLElement>(null)
-  const bilingualRef = useRef<HTMLElement>(null)
-
   const labelsEn = COPY.en
   const labelsAr = COPY.ar
   const translated = translation?.translatedContent ?? null
+  const sourcePdf = getSourcePdfAttachment(data)
   const translationIsStale = Boolean(
     translation?.generatedAt && new Date(data.response.updatedAt).getTime() > new Date(translation.generatedAt).getTime(),
   )
@@ -235,28 +234,30 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
   }
 
   async function downloadPdf(kind: "original" | "arabic" | "bilingual") {
-    if (!translation?.translatedContent || translationIsStale) return
-    const storedPath = kind === "original" ? translation.originalPdfPath : kind === "arabic" ? translation.arabicPdfPath : translation.bilingualPdfPath
-    if (storedPath) {
+    if (kind !== "original" && (!translation?.translatedContent || translationIsStale)) return
+    const storedPath = translation
+      ? kind === "original"
+        ? translation.originalPdfPath
+        : kind === "arabic"
+          ? translation.arabicPdfPath
+          : translation.bilingualPdfPath
+      : null
+    if (storedPath && translation && !(kind === "original" && sourcePdf)) {
       const params = new URLSearchParams({ projectId: data.project.id, translationId: translation.id, kind })
       window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
       return
     }
-    const source = kind === "original" ? originalRef.current : kind === "arabic" ? arabicRef.current : bilingualRef.current
-    if (!source) return
     setBusy(kind)
     setError(null)
     setSuccess(null)
     try {
-      const exported = await exportTranslationPdf({
-        source,
-        projectName: data.project.name,
-        projectReference: data.project.code,
-        documentNumber: data.response.reportNumber,
-        kind,
-      })
-      await storePdf(exported.blob, exported.filename, kind)
-      setSuccess(copy.stored)
+      const exported = await exportTranslationPdf({ data, translation, kind })
+      if (translation) {
+        await storePdf(exported.blob, exported.filename, kind)
+        setSuccess(copy.stored)
+      } else {
+        setSuccess(kind === "original" ? copy.downloadOriginal : copy.stored)
+      }
     } catch (exportError) {
       setError(exportError instanceof Error ? exportError.message : copy.pdfError)
     } finally {
@@ -289,7 +290,7 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
                 {busy === "generate" ? <Loader2 className="size-4 animate-spin" /> : translation ? <RefreshCw className="size-4" /> : <Sparkles className="size-4" />}
                 {busy === "generate" ? copy.generating : translation ? copy.regenerate : copy.generate}
               </Button>
-              <Button variant="outline" onClick={() => void downloadPdf("original")} disabled={!translated || translationIsStale || busy !== null}>
+              <Button variant="outline" onClick={() => void downloadPdf("original")} disabled={busy !== null}>
                 {busy === "original" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.downloadOriginal}
               </Button>
               <Button variant="outline" onClick={() => void downloadPdf("arabic")} disabled={!translated || translationIsStale || busy !== null}>
@@ -315,19 +316,21 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
       {translationIsStale ? <div role="status" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"><AlertCircle className="mt-0.5 size-4 shrink-0" />{copy.stale}</div> : null}
       {success ? <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"><CheckCircle2 className="mt-0.5 size-4 shrink-0" />{success}</div> : null}
 
-      <div className="grid items-start gap-5 xl:grid-cols-2">
-        <LanguageReport
-          ref={originalRef}
-          language="en"
-          title={copy.original}
-          data={data}
-          content={data.response.content}
-          labels={labelsEn}
-          generatedAt={translation?.generatedAt ?? null}
-        />
+      <div className="grid items-start gap-5 lg:grid-cols-2">
+        {sourcePdf ? (
+          <SourcePdfViewer data={data} attachment={sourcePdf} title={copy.original} />
+        ) : (
+          <LanguageReport
+            language="en"
+            title={copy.original}
+            data={data}
+            content={data.response.content}
+            labels={labelsEn}
+            generatedAt={translation?.generatedAt ?? null}
+          />
+        )}
         {translated ? (
           <LanguageReport
-            ref={arabicRef}
             language="ar"
             title={copy.arabic}
             data={data}
@@ -349,11 +352,6 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
         )}
       </div>
 
-      {translated ? (
-        <div className="pointer-events-none fixed -left-[20000px] top-0 w-[1123px] bg-white" aria-hidden="true" inert>
-          <BilingualReport ref={bilingualRef} data={data} translated={translated} generatedAt={translation?.generatedAt ?? new Date().toISOString()} />
-        </div>
-      ) : null}
     </div>
   )
 }
@@ -415,94 +413,6 @@ const LanguageReport = forwardRef<HTMLElement, {
         {data.project.name} · {data.response.reportNumber} · {title}
       </footer>
     </article>
-  )
-})
-
-const BilingualReport = forwardRef<HTMLElement, {
-  data: StageTranslationPageData
-  translated: TranslationReportContent
-  generatedAt: string
-}>(function BilingualReport({ data, translated, generatedAt }, ref) {
-  const original = data.response.content
-  const evidence = data.response.attachments.filter((item) => item.attachmentKind === "evidence_image")
-  const documents = data.response.attachments.filter((item) => item.attachmentKind === "document")
-
-  return (
-    <article ref={ref} className="stage-translation-report stage-translation-bilingual overflow-hidden bg-white text-slate-800">
-      <div className="h-2 bg-blue-700" />
-      <header className="stage-translation-no-break border-b border-slate-200 bg-slate-50 px-7 py-6">
-        <div className="flex items-start justify-between gap-6">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-blue-700"><Languages className="size-4" />Bilingual Construction Document · مستند إنشائي ثنائي اللغة</div>
-            <h2 className="text-2xl font-bold text-slate-950">{data.response.reportTitle}</h2>
-            <p className="mt-1 text-sm text-slate-600">{data.project.name} · {original.stageName} / <span className="font-arabic">{translated.stageName}</span> · {original.termName} / <span className="font-arabic">{translated.termName}</span></p>
-          </div>
-          <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">EN / AR</div>
-        </div>
-        <div className="mt-5 grid grid-cols-4 gap-3 text-sm">
-          <ReportMeta label="Project Reference / مرجع المشروع" value={data.project.code || "—"} />
-          <ReportMeta label="Document Number / رقم المستند" value={data.response.reportNumber} />
-          <ReportMeta label="Visit Number / رقم الزيارة" value={String(data.response.visitNumber)} />
-          <ReportMeta label="Generated / تاريخ الإنشاء" value={formatDate(generatedAt, "en", true)} />
-        </div>
-      </header>
-
-      <div className="space-y-6 px-7 py-7">
-        <BilingualPair titleEn="Document Information" titleAr="معلومات المستند">
-          <BilingualInfo content={original} labels={COPY.en} language="en" />
-          <BilingualInfo content={translated} labels={COPY.ar} language="ar" />
-        </BilingualPair>
-        {SECTION_LABELS.map((section) => (
-          <BilingualPair key={section.key} titleEn={section.en} titleAr={section.ar}>
-            <RichHtml html={original.sections[section.key]} empty={COPY.en.noContent} />
-            <RichHtml html={translated.sections[section.key]} empty={COPY.ar.noContent} />
-          </BilingualPair>
-        ))}
-        <BilingualPair titleEn={COPY.en.checklist} titleAr={COPY.ar.checklist}>
-          <ChecklistBody content={original} labels={COPY.en} language="en" />
-          <ChecklistBody content={translated} labels={COPY.ar} language="ar" />
-        </BilingualPair>
-        <BilingualPair titleEn={COPY.en.approvals} titleAr={COPY.ar.approvals}>
-          <ApprovalBody content={original} labels={COPY.en} language="en" />
-          <ApprovalBody content={translated} labels={COPY.ar} language="ar" />
-        </BilingualPair>
-        <BilingualPair titleEn={COPY.en.evidence} titleAr={COPY.ar.evidence}>
-          <EvidenceGrid attachments={evidence} empty={COPY.en.noAttachments} />
-          <EvidenceGrid attachments={evidence} empty={COPY.ar.noAttachments} />
-        </BilingualPair>
-        <BilingualPair titleEn={COPY.en.attachments} titleAr={COPY.ar.attachments}>
-          <DocumentList documents={documents} content={original} labels={COPY.en} language="en" />
-          <DocumentList documents={documents} content={translated} labels={COPY.ar} language="ar" />
-        </BilingualPair>
-      </div>
-      <footer className="stage-translation-no-break border-t border-slate-200 bg-slate-50 px-7 py-3 text-center text-[11px] text-slate-500">
-        {data.project.name} · {data.response.reportNumber} · English / العربية
-      </footer>
-    </article>
-  )
-})
-
-export const TranslationPdfReport = forwardRef<HTMLElement, {
-  kind: "original" | "arabic" | "bilingual"
-  data: StageTranslationPageData
-  translation: StageTranslationRecord
-}>(function TranslationPdfReport({ kind, data, translation }, ref) {
-  const translated = translation.translatedContent
-  if (!translated) return null
-  if (kind === "bilingual") {
-    return <BilingualReport ref={ref} data={data} translated={translated} generatedAt={translation.generatedAt ?? translation.updatedAt} />
-  }
-  const language = kind === "arabic" ? "ar" : "en"
-  return (
-    <LanguageReport
-      ref={ref}
-      language={language}
-      title={kind === "arabic" ? COPY.ar.arabic : COPY.en.original}
-      data={data}
-      content={kind === "arabic" ? translated : data.response.content}
-      labels={kind === "arabic" ? COPY.ar : COPY.en}
-      generatedAt={translation.generatedAt}
-    />
   )
 })
 
@@ -572,28 +482,4 @@ function DocumentList({ documents, content, labels, language }: { documents: Sta
     const translatedAttachment = content.attachmentTranslations.find((item) => item.attachmentId === document.id)
     return <div key={document.id} className="stage-translation-no-break rounded-xl border border-slate-200 p-3"><a href={`/api/stage-evidence?path=${encodeURIComponent(document.storagePath)}&download=1&filename=${encodeURIComponent(document.originalFilename)}`} className="flex items-center gap-3 font-semibold text-blue-700"><span className="flex size-9 items-center justify-center rounded-lg bg-blue-50"><FileText className="size-4" /></span><span className="min-w-0 flex-1 truncate">{document.originalFilename}</span><Download className="size-4" /></a>{translatedAttachment?.contentHtml ? <div className="mt-4"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">{labels.translatedAttachments}: {filenameWithoutExtension(document.originalFilename)}</p><RichHtml html={translatedAttachment.contentHtml} empty={labels.noContent} /></div> : null}</div>
   })}</div>
-}
-
-function BilingualPair({ titleEn, titleAr, children }: { titleEn: string; titleAr: string; children: ReactNode }) {
-  const values = Array.isArray(children) ? children : [children]
-  return (
-    <section className="overflow-hidden rounded-xl border border-slate-200">
-      <div className="stage-translation-no-break grid grid-cols-2 border-b border-slate-200 bg-slate-100">
-        <h3 className="px-4 py-3 text-base font-bold text-slate-950" dir="ltr">{titleEn}</h3>
-        <h3 className="border-s border-slate-200 px-4 py-3 text-base font-bold text-slate-950 font-arabic" dir="rtl">{titleAr}</h3>
-      </div>
-      <div className="grid grid-cols-2">
-        <div className="min-w-0 px-4 py-4" dir="ltr">{values[0]}</div>
-        <div className="min-w-0 border-s border-slate-200 px-4 py-4 font-arabic" dir="rtl">{values[1]}</div>
-      </div>
-    </section>
-  )
-}
-
-function BilingualInfo({ content, labels, language }: { content: TranslationReportContent; labels: ReportLabels; language: "en" | "ar" }) {
-  return <dl className="space-y-3 text-sm"><SimpleInfo label={labels.stage} value={content.stageName} /><SimpleInfo label={labels.term} value={content.termName} /><SimpleInfo label={labels.type} value={content.reportType} /><SimpleInfo label={labels.subject} value={content.subject || "—"} /><SimpleInfo label={language === "ar" ? "عنوان التقرير" : "Report Title"} value={content.reportTitle} /></dl>
-}
-
-function SimpleInfo({ label, value }: { label: string; value: string }) {
-  return <div><dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-1 font-semibold text-slate-900">{value}</dd></div>
 }

@@ -6,7 +6,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 const BUCKET = "project-stage-translations"
-const MAX_PDF_BYTES = 40 * 1024 * 1024
+const MAX_PDF_BYTES = 60 * 1024 * 1024
 const PDF_COLUMNS = {
   original: "original_pdf_url",
   arabic: "arabic_pdf_url",
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid PDF upload request." }, { status: 400 })
     }
     if (!(file instanceof File) || file.type !== "application/pdf" || file.size <= 0 || file.size > MAX_PDF_BYTES) {
-      return NextResponse.json({ error: "The generated PDF is invalid or exceeds the 40 MB limit." }, { status: 400 })
+      return NextResponse.json({ error: "The generated PDF is invalid or exceeds the 60 MB limit." }, { status: 400 })
     }
 
     const userId = await assertProjectMember(projectId)
