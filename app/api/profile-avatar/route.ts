@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertOrgAdmin, assertProjectAdmin, audit, AuthzError, getUserIdOrThrow } from "@/lib/auth/guards"
+import { resolveParticipantProfile } from "@/lib/projects/participant-user-resolution"
+import { PARTICIPANT_AVATAR_BUCKET, participantAvatarStoragePath } from "@/lib/projects/participant-avatar"
 import {
   isAllowedProfileAvatarType,
   isStoredProfileAvatar,
@@ -55,7 +57,7 @@ async function authorizeTarget(
     const [{ data: participant, error: participantError }, { data: project, error: projectError }] = await Promise.all([
       admin
         .from("project_participants")
-        .select("id, key_contact_user_id")
+        .select("id, organization_id, key_contact_user_id, key_contact_name, key_contact_email")
         .eq("id", participantId)
         .eq("project_id", projectId)
         .maybeSingle(),
@@ -67,10 +69,24 @@ async function authorizeTarget(
     ])
     if (participantError) throw participantError
     if (projectError) throw projectError
-    if (!participant || participant.key_contact_user_id !== targetUserId) {
+    if (!participant) throw new AuthzError("Project participant not found.")
+    if (!project) throw new AuthzError("Project not found.")
+
+    const resolvedProfile = await resolveParticipantProfile(admin, projectId, participant)
+    if (!resolvedProfile || resolvedProfile.id !== targetUserId) {
       throw new AuthzError("The selected user is not the linked contact for this project participant.")
     }
-    if (!project) throw new AuthzError("Project not found.")
+
+    // Persist a safe, uniquely resolved legacy email/name match so future reads
+    // use the canonical user relationship and never create duplicate avatars.
+    if (!participant.key_contact_user_id) {
+      await admin
+        .from("project_participants")
+        .update({ key_contact_user_id: targetUserId, updated_at: new Date().toISOString() })
+        .eq("id", participantId)
+        .eq("project_id", projectId)
+        .is("key_contact_user_id", null)
+    }
 
     return {
       actorId,
@@ -94,6 +110,33 @@ async function authorizeTarget(
   if (!data) throw new AuthzError("The selected user is not an active member of this organization.")
 
   return { actorId, organizationId, projectId: null as string | null }
+}
+
+
+async function clearParticipantAvatarDuplicate(
+  admin: ReturnType<typeof createAdminClient>,
+  projectId: string | null | undefined,
+  participantId: string | null | undefined,
+) {
+  if (!isUuid(projectId) || !isUuid(participantId)) return
+
+  const { data: participant } = await admin
+    .from("project_participants")
+    .select("avatar_url")
+    .eq("id", participantId)
+    .eq("project_id", projectId)
+    .maybeSingle()
+  const oldPath = participantAvatarStoragePath(participant?.avatar_url as string | null | undefined)
+
+  await admin
+    .from("project_participants")
+    .update({ avatar_url: null, updated_at: new Date().toISOString() })
+    .eq("id", participantId)
+    .eq("project_id", projectId)
+
+  if (oldPath) {
+    await admin.storage.from(PARTICIPANT_AVATAR_BUCKET).remove([oldPath]).catch(() => undefined)
+  }
 }
 
 async function getProfile(admin: ReturnType<typeof createAdminClient>, targetUserId: string) {
@@ -240,6 +283,8 @@ export async function POST(request: NextRequest) {
         await admin.storage.from(PROFILE_AVATAR_BUCKET).remove([profile.avatar_url]).catch(() => undefined)
       }
 
+      await clearParticipantAvatarDuplicate(admin, projectId, body.participantId)
+
       await audit({
         actorId,
         action: "profile.avatar_updated",
@@ -267,6 +312,8 @@ export async function POST(request: NextRequest) {
     if (oldAvatarPath) {
       await admin.storage.from(PROFILE_AVATAR_BUCKET).remove([oldAvatarPath]).catch(() => undefined)
     }
+
+    await clearParticipantAvatarDuplicate(admin, projectId, body.participantId)
 
     await audit({
       actorId,

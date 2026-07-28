@@ -14,6 +14,7 @@ import {
   UsersRound,
 } from "lucide-react"
 import { ProfileAvatar } from "@/components/profile/profile-avatar"
+import { AvatarManagementDialog } from "@/components/profile/avatar-management-dialog"
 import { ParticipantAvatarManagementDialog } from "@/components/projects/participant-avatar-management-dialog"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -65,6 +66,7 @@ function OrganizationMark({ participant }: { participant: ProjectParticipant }) 
 
 type AvatarDialogState = {
   participant: ProjectParticipant
+  kind: "profile" | "participant"
   remove: boolean
 }
 
@@ -78,12 +80,21 @@ export function ProjectParticipants({
   canManageAvatars?: boolean
 }) {
   const [avatarDialog, setAvatarDialog] = useState<AvatarDialogState | null>(null)
-  const [avatarOverrides, setAvatarOverrides] = useState<Record<string, string | null>>({})
+  const [participantAvatarOverrides, setParticipantAvatarOverrides] = useState<Record<string, string | null>>({})
+  const [profileAvatarOverrides, setProfileAvatarOverrides] = useState<Record<string, string | null>>({})
 
   function participantAvatar(participant: ProjectParticipant) {
-    return Object.prototype.hasOwnProperty.call(avatarOverrides, participant.id)
-      ? avatarOverrides[participant.id]
-      : participant.keyContact.avatar ?? null
+    const userId = participant.keyContact.userId
+    if (userId) {
+      if (Object.prototype.hasOwnProperty.call(profileAvatarOverrides, userId)) {
+        return profileAvatarOverrides[userId]
+      }
+      return participant.keyContact.profileAvatar ?? null
+    }
+
+    return Object.prototype.hasOwnProperty.call(participantAvatarOverrides, participant.id)
+      ? participantAvatarOverrides[participant.id]
+      : participant.keyContact.participantAvatar ?? null
   }
 
   return (
@@ -177,39 +188,63 @@ export function ProjectParticipants({
                               </button>
                             }
                           />
-                          <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem
-                              render={
-                                <Link href="/users?tab=organizations">
-                                  <Eye className="size-4" />
-                                  View organization
-                                </Link>
-                              }
-                            />
-                            <DropdownMenuItem
-                              render={
-                                <Link href="/users?tab=projects">
-                                  <UserRoundCog className="size-4" />
-                                  Manage access
-                                </Link>
-                              }
-                            />
-                            {canManageAvatars ? (
+                          <DropdownMenuContent align="end" className="w-52">
+                            {participant.keyContact.userId ? (
+                              <DropdownMenuItem
+                                render={
+                                  <Link href={`/users?tab=members&userId=${encodeURIComponent(participant.keyContact.userId)}`}>
+                                    <Eye className="size-4" />
+                                    View Profile
+                                  </Link>
+                                }
+                              />
+                            ) : (
                               <>
-                                <DropdownMenuItem onClick={() => setAvatarDialog({ participant, remove: false })}>
-                                  <ImagePlus className="size-4" />
-                                  {avatar ? "Change Avatar" : "Upload Avatar"}
-                                </DropdownMenuItem>
-                                {avatar ? (
-                                  <DropdownMenuItem
-                                    variant="destructive"
-                                    onClick={() => setAvatarDialog({ participant, remove: true })}
-                                  >
-                                    <Trash2 className="size-4" />
-                                    Remove Avatar
-                                  </DropdownMenuItem>
-                                ) : null}
+                                <DropdownMenuItem
+                                  render={
+                                    <Link href="/users?tab=organizations">
+                                      <Eye className="size-4" />
+                                      View organization
+                                    </Link>
+                                  }
+                                />
+                                <DropdownMenuItem
+                                  render={
+                                    <Link href="/users?tab=projects">
+                                      <UserRoundCog className="size-4" />
+                                      Manage access
+                                    </Link>
+                                  }
+                                />
                               </>
+                            )}
+                            {canManageAvatars ? (
+                              participant.keyContact.userId ? (
+                                <DropdownMenuItem
+                                  onClick={() => setAvatarDialog({ participant, kind: "profile", remove: false })}
+                                >
+                                  <ImagePlus className="size-4" />
+                                  Change Avatar
+                                </DropdownMenuItem>
+                              ) : (
+                                <>
+                                  <DropdownMenuItem
+                                    onClick={() => setAvatarDialog({ participant, kind: "participant", remove: false })}
+                                  >
+                                    <ImagePlus className="size-4" />
+                                    {avatar ? "Change Avatar" : "Upload Avatar"}
+                                  </DropdownMenuItem>
+                                  {avatar ? (
+                                    <DropdownMenuItem
+                                      variant="destructive"
+                                      onClick={() => setAvatarDialog({ participant, kind: "participant", remove: true })}
+                                    >
+                                      <Trash2 className="size-4" />
+                                      Remove Avatar
+                                    </DropdownMenuItem>
+                                  ) : null}
+                                </>
+                              )
                             ) : null}
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -223,7 +258,30 @@ export function ProjectParticipants({
         </CardContent>
       </Card>
 
-      {avatarDialog ? (
+      {avatarDialog?.kind === "profile" && avatarDialog.participant.keyContact.userId ? (
+        <AvatarManagementDialog
+          hideTrigger
+          open
+          onOpenChange={(next) => {
+            if (!next) setAvatarDialog(null)
+          }}
+          projectId={projectId}
+          participantId={avatarDialog.participant.id}
+          targetUser={{
+            id: avatarDialog.participant.keyContact.userId,
+            name: avatarDialog.participant.keyContact.name,
+            email: avatarDialog.participant.keyContact.email ?? "",
+            avatarUrl: participantAvatar(avatarDialog.participant),
+          }}
+          onSaved={(avatarUrl) => {
+            const userId = avatarDialog.participant.keyContact.userId
+            if (!userId) return
+            setProfileAvatarOverrides((current) => ({ ...current, [userId]: avatarUrl }))
+          }}
+        />
+      ) : null}
+
+      {avatarDialog?.kind === "participant" ? (
         <ParticipantAvatarManagementDialog
           open
           onOpenChange={(next) => {
@@ -236,7 +294,7 @@ export function ProjectParticipants({
           participantEmail={avatarDialog.participant.keyContact.email}
           currentAvatar={participantAvatar(avatarDialog.participant)}
           onSaved={(avatarUrl) => {
-            setAvatarOverrides((current) => ({
+            setParticipantAvatarOverrides((current) => ({
               ...current,
               [avatarDialog.participant.id]: avatarUrl,
             }))

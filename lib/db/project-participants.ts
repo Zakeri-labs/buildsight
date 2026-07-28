@@ -1,6 +1,12 @@
 import "server-only"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { participantAvatarDisplayUrl } from "@/lib/projects/participant-avatar"
+import {
+  PARTICIPANT_AVATAR_BUCKET,
+  participantAvatarDisplayUrl,
+  participantAvatarStoragePath,
+} from "@/lib/projects/participant-avatar"
+import { profileAvatarDisplayUrl } from "@/lib/profile-avatar"
+import { resolveParticipantProfiles } from "@/lib/projects/participant-user-resolution"
 import type {
   ProjectParticipantRole,
   ProjectParticipantView,
@@ -18,12 +24,6 @@ type ParticipantRow = {
   key_contact_phone: string | null
   avatar_url: string | null
   status: string
-}
-
-type ProfileRow = {
-  id: string
-  full_name: string | null
-  email: string | null
 }
 
 function initials(value: string): string {
@@ -103,38 +103,53 @@ export async function getProjectParticipants(projectId: string): Promise<Project
   const rows = (data ?? []) as ParticipantRow[]
   if (rows.length === 0) return []
 
-  const contactUserIds = Array.from(
-    new Set(rows.map((row) => row.key_contact_user_id).filter((id): id is string => Boolean(id))),
-  )
   const organizationIds = Array.from(
     new Set(rows.map((row) => row.organization_id).filter((id): id is string => Boolean(id))),
   )
 
-  let profileRows: ProfileRow[] = []
-  if (contactUserIds.length) {
-    const { data: profiles, error: profileError } = await admin
-      .from("profiles")
-      .select("id, full_name, email")
-      .in("id", contactUserIds)
-    if (profileError) throw profileError
-    profileRows = (profiles ?? []) as ProfileRow[]
-  }
+  const [resolvedProfiles, membershipResult] = await Promise.all([
+    resolveParticipantProfiles(admin, projectId, rows),
+    organizationIds.length
+      ? admin
+          .from("project_user_memberships")
+          .select("organization_id, user_id")
+          .eq("project_id", projectId)
+          .eq("status", "active")
+          .in("organization_id", organizationIds)
+      : Promise.resolve({ data: [], error: null }),
+  ])
 
-  let membershipRows: Array<{ organization_id: string; user_id: string }> = []
-  if (organizationIds.length) {
-    const { data: memberships, error: membershipError } = await admin
-      .from("project_user_memberships")
-      .select("organization_id, user_id")
-      .eq("project_id", projectId)
-      .eq("status", "active")
-      .in("organization_id", organizationIds)
-    if (membershipError) throw membershipError
-    membershipRows = memberships ?? []
-  }
+  if (membershipResult.error) throw membershipResult.error
+  const membershipRows = (membershipResult.data ?? []) as Array<{ organization_id: string; user_id: string }>
 
-  const profilesById = new Map(
-    profileRows.map((profile) => [profile.id, profile] as const),
+  // Persist only uniquely resolved legacy contacts. Once a participant is
+  // linked, its profile avatar becomes canonical and any old participant-only
+  // avatar is cleared to prevent duplicate files and duplicate management.
+  await Promise.allSettled(
+    rows
+      .filter((row) => resolvedProfiles.has(row.id) && (!row.key_contact_user_id || row.avatar_url))
+      .map(async (row) => {
+        const resolved = resolvedProfiles.get(row.id)!
+        const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
+        if (!row.key_contact_user_id) update.key_contact_user_id = resolved.id
+        if (row.avatar_url) update.avatar_url = null
+
+        let query = admin
+          .from("project_participants")
+          .update(update)
+          .eq("id", row.id)
+          .eq("project_id", projectId)
+        if (!row.key_contact_user_id) query = query.is("key_contact_user_id", null)
+        const { error: updateError } = await query
+        if (updateError) return
+
+        const oldPath = participantAvatarStoragePath(row.avatar_url)
+        if (oldPath) {
+          await admin.storage.from(PARTICIPANT_AVATAR_BUCKET).remove([oldPath]).catch(() => undefined)
+        }
+      }),
   )
+
   const accessByOrganization = new Map<string, Set<string>>()
   for (const membership of membershipRows) {
     const users = accessByOrganization.get(membership.organization_id) ?? new Set<string>()
@@ -143,7 +158,9 @@ export async function getProjectParticipants(projectId: string): Promise<Project
   }
 
   return rows.map((row) => {
-    const profile = row.key_contact_user_id ? profilesById.get(row.key_contact_user_id) : undefined
+    const profile = resolvedProfiles.get(row.id)
+    const participantAvatar = participantAvatarDisplayUrl(row.avatar_url)
+    const profileAvatar = profileAvatarDisplayUrl(profile?.avatar_url)
     const contactName =
       row.key_contact_name?.trim() ||
       profile?.full_name?.trim() ||
@@ -163,11 +180,14 @@ export async function getProjectParticipants(projectId: string): Promise<Project
       organizationType: organizationType(row.participant_type),
       projectRole: role,
       keyContact: {
-        userId: row.key_contact_user_id ?? undefined,
+        userId: profile?.id ?? undefined,
+        linkedBy: profile?.match,
         name: contactName,
         email: profile?.email?.trim() || row.key_contact_email?.trim() || undefined,
         initials: initials(contactName),
-        avatar: participantAvatarDisplayUrl(row.avatar_url),
+        avatar: profile ? profileAvatar : participantAvatar ?? undefined,
+        profileAvatar,
+        participantAvatar: participantAvatar ?? undefined,
         detail: contactDetail || undefined,
       },
       usersWithAccess: row.organization_id

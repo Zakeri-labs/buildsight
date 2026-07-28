@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useState } from "react"
 import {
   MapPin,
@@ -82,6 +83,7 @@ export function ProjectDetail({
   canManageImages?: boolean
 }) {
   const { t, locale } = useI18n()
+  const router = useRouter()
   const [projectImage, setProjectImage] = useState<string | null>(projectImageDisplayUrl(project.image))
   const isArabic = locale === "ar"
   const labels = isArabic
@@ -137,7 +139,10 @@ export function ProjectDetail({
                       projectId={project.id}
                       projectName={project.name}
                       currentImage={projectImage}
-                      onSaved={setProjectImage}
+                      onSaved={(imageUrl) => {
+                        setProjectImage(imageUrl)
+                        router.refresh()
+                      }}
                     />
                   </div>
                 ) : null}

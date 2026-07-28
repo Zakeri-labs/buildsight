@@ -31,6 +31,7 @@ export function ProjectImageDisplay({
         // Authenticated Storage proxy URLs and local previews are handled by the browser.
         // eslint-disable-next-line @next/next/no-img-element
         <img
+          key={resolved}
           src={resolved}
           alt={alt}
           className={cn("absolute inset-0 size-full object-cover", imageClassName)}

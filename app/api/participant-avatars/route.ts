@@ -13,6 +13,7 @@ import {
 } from "@/lib/projects/participant-avatar"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { resolveParticipantProfile } from "@/lib/projects/participant-user-resolution"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -128,7 +129,7 @@ export async function POST(request: NextRequest) {
     const [{ data: participant, error: participantError }, { data: project, error: projectError }] = await Promise.all([
       admin
         .from("project_participants")
-        .select("id, project_id, avatar_url")
+        .select("id, project_id, organization_id, key_contact_user_id, key_contact_name, key_contact_email, avatar_url")
         .eq("id", body.participantId)
         .eq("project_id", body.projectId)
         .maybeSingle(),
@@ -142,6 +143,14 @@ export async function POST(request: NextRequest) {
     if (projectError) throw projectError
     if (!participant) return NextResponse.json({ error: "Project participant not found." }, { status: 404 })
     if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 })
+
+    const linkedProfile = await resolveParticipantProfile(admin, body.projectId, participant)
+    if (linkedProfile) {
+      return NextResponse.json(
+        { error: "This participant is linked to a platform user. Update the user profile avatar instead." },
+        { status: 409, headers: { "Cache-Control": "no-store" } },
+      )
+    }
 
     if (body.action === "prepare") {
       const contentType = String(body.contentType ?? "").toLowerCase()

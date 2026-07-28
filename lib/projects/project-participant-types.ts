@@ -13,10 +13,13 @@ export type ProjectParticipantView = {
   projectRole: ProjectParticipantRole
   keyContact: {
     userId?: string
+    linkedBy?: "linked" | "email" | "name"
     name: string
     email?: string
     initials: string
     avatar?: string
+    profileAvatar?: string
+    participantAvatar?: string
     detail?: string
   }
   usersWithAccess: number

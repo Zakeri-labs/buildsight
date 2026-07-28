@@ -67,12 +67,25 @@ export async function GET(request: NextRequest) {
   const { data: project } = await supabase.from("projects").select("id").eq("id", projectId).maybeSingle()
   if (!project) return new NextResponse("Forbidden", { status: 403 })
 
-  const { data, error } = await supabase.storage.from(PROJECT_IMAGE_BUCKET).createSignedUrl(path, 60 * 10)
-  if (error || !data?.signedUrl) return new NextResponse("Image not found", { status: 404 })
+  // Read through the service-role client after the authenticated project check.
+  // This avoids false "resource does not exist" responses caused by Storage
+  // RLS while still keeping the object private from unauthorised users.
+  const admin = createAdminClient()
+  const { data: image, error: imageError } = await admin.storage.from(PROJECT_IMAGE_BUCKET).download(path)
+  if (imageError || !image) return new NextResponse("Image not found", { status: 404 })
 
-  return NextResponse.redirect(data.signedUrl, {
-    status: 302,
-    headers: { "Cache-Control": "private, max-age=300" },
+  const bytes = new Uint8Array(await image.arrayBuffer())
+  const contentType = detectProjectImageMimeType(bytes) ?? image.type ?? "application/octet-stream"
+  if (!isAllowedProjectImageType(contentType)) return new NextResponse("Image not found", { status: 404 })
+
+  return new NextResponse(bytes, {
+    status: 200,
+    headers: {
+      "Content-Type": contentType,
+      "Content-Length": String(bytes.byteLength),
+      "Cache-Control": "private, max-age=60, must-revalidate",
+      "X-Content-Type-Options": "nosniff",
+    },
   })
 }
 
@@ -139,7 +152,7 @@ export async function POST(request: NextRequest) {
         throw new Error("The uploaded file is not a valid JPG, PNG, or WEBP project image.")
       }
 
-      const imageUrl = `/api/project-images?path=${encodeURIComponent(storagePath)}`
+      const imageUrl = `/api/project-images?path=${encodeURIComponent(storagePath)}&v=${Date.now()}`
       const { error: updateError } = await admin
         .from("projects")
         .update({ image: storagePath, updated_at: new Date().toISOString() })

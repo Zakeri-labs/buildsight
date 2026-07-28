@@ -52,23 +52,66 @@ export function detectProjectImageMimeType(bytes: Uint8Array): string | null {
   return null
 }
 
+function validStoragePath(candidate: string | null | undefined): string | null {
+  if (!candidate) return null
+  let decoded = candidate.trim()
+  try {
+    decoded = decodeURIComponent(decoded)
+  } catch {
+    // Keep the original value when legacy data contains a literal percent sign.
+  }
+
+  decoded = decoded.replace(/^\/+/, "")
+  if (decoded.startsWith(`${PROJECT_IMAGE_BUCKET}/`)) {
+    decoded = decoded.slice(PROJECT_IMAGE_BUCKET.length + 1)
+  }
+
+  const firstSegment = decoded.split("/")[0] ?? ""
+  if (
+    UUID_PATTERN.test(firstSegment) &&
+    decoded.includes("/") &&
+    !decoded.includes("..") &&
+    !decoded.includes("\\")
+  ) {
+    return decoded
+  }
+  return null
+}
+
 export function projectImageStoragePath(value: string | null | undefined): string | null {
   const trimmed = value?.trim()
   if (!trimmed) return null
 
   if (trimmed.startsWith("/api/project-images?")) {
     try {
-      return new URL(trimmed, "https://buildsight.local").searchParams.get("path")
+      return validStoragePath(new URL(trimmed, "https://buildsight.local").searchParams.get("path"))
     } catch {
       return null
     }
   }
 
-  const firstSegment = trimmed.split("/")[0] ?? ""
-  if (UUID_PATTERN.test(firstSegment) && trimmed.includes("/") && !trimmed.includes("..") && !trimmed.startsWith("/")) {
-    return trimmed
+  try {
+    const url = new URL(trimmed)
+    const pathname = decodeURIComponent(url.pathname)
+    if (pathname === "/api/project-images") {
+      return validStoragePath(url.searchParams.get("path"))
+    }
+    const markers = [
+      `/storage/v1/object/public/${PROJECT_IMAGE_BUCKET}/`,
+      `/storage/v1/object/sign/${PROJECT_IMAGE_BUCKET}/`,
+      `/storage/v1/object/authenticated/${PROJECT_IMAGE_BUCKET}/`,
+      `/storage/v1/render/image/public/${PROJECT_IMAGE_BUCKET}/`,
+      `/storage/v1/render/image/authenticated/${PROJECT_IMAGE_BUCKET}/`,
+    ]
+    for (const marker of markers) {
+      const index = pathname.indexOf(marker)
+      if (index >= 0) return validStoragePath(pathname.slice(index + marker.length))
+    }
+  } catch {
+    // Plain Storage paths are handled below.
   }
-  return null
+
+  return validStoragePath(trimmed)
 }
 
 export function projectImageDisplayUrl(value: string | null | undefined): string | null {
