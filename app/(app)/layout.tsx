@@ -13,10 +13,8 @@ function initials(name: string, email: string) {
 
 export default async function AppGroupLayout({
   children,
-  modal,
 }: {
   children: React.ReactNode
-  modal: React.ReactNode
 }) {
   const session = await requireOnboarded()
 
@@ -50,7 +48,6 @@ export default async function AppGroupLayout({
         canManageStages={Boolean(stageManagementOrganization)}
       >
         {children}
-        {modal}
       </AppShell>
     </CurrentUserProvider>
   )
