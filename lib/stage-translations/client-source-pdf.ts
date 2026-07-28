@@ -457,37 +457,111 @@ function imageFingerprint(dataUrl: string) {
   return (hash >>> 0).toString(36)
 }
 
+function samePlacementKey(image: ExtractedPdfImage) {
+  return [
+    image.fingerprint,
+    Math.round(image.xRatio * 200),
+    Math.round(image.yRatio * 200),
+    Math.round(image.widthRatio * 200),
+    Math.round(image.heightRatio * 200),
+  ].join(":")
+}
+
 function markRepeatedDecorativeImages(pages: ExtractedPdfPage[]) {
-  const groups = new Map<string, ExtractedPdfImage[]>()
-  for (const image of pages.flatMap((page) => page.images ?? [])) {
+  const allImages = pages.flatMap((page) => page.images ?? [])
+  const exactGroups = new Map<string, ExtractedPdfImage[]>()
+  const positionedGroups = new Map<string, ExtractedPdfImage[]>()
+
+  for (const image of allImages) {
     if (!image.fingerprint) continue
-    const positionKey = [
-      image.fingerprint,
-      Math.round(image.xRatio * 100),
-      Math.round(image.yRatio * 100),
-      Math.round(image.widthRatio * 100),
-      Math.round(image.heightRatio * 100),
-    ].join(":")
-    const group = groups.get(positionKey) ?? []
-    group.push(image)
-    groups.set(positionKey, group)
+    const exact = exactGroups.get(image.fingerprint) ?? []
+    exact.push(image)
+    exactGroups.set(image.fingerprint, exact)
+    const positioned = positionedGroups.get(samePlacementKey(image)) ?? []
+    positioned.push(image)
+    positionedGroups.set(samePlacementKey(image), positioned)
   }
 
-  for (const group of groups.values()) {
-    const pageCount = new Set(group.map((image) => image.pageNumber)).size
-    if (pageCount < 3) continue
-    const sample = group[0]
-    const area = sample.widthRatio * sample.heightRatio
-    const atHeader = sample.yRatio <= 0.12
-    const atFooter = sample.yRatio + sample.heightRatio >= 0.88
-    const headerOrFooterBranding = (atHeader || atFooter) && area <= 0.12
-    // Only exact-byte repeats with the same size and position in a header or
-    // footer are considered decorative. Similar-looking photos, body stamps,
-    // signatures and repeated inspection evidence are deliberately retained.
-    if (headerOrFooterBranding) {
-      for (const image of group) image.decorative = true
+  const totalPages = Math.max(1, pages.length)
+  for (const image of allImages) {
+    const area = image.widthRatio * image.heightRatio
+    const atHeader = image.yRatio <= 0.13
+    const atFooter = image.yRatio + image.heightRatio >= 0.88
+    const atEdge = atHeader || atFooter || image.xRatio <= 0.025 || image.xRatio + image.widthRatio >= 0.975
+    const tiny = area <= 0.0025 || image.widthRatio <= 0.035 || image.heightRatio <= 0.018
+    const nearFullPage = area >= 0.72 && image.xRatio <= 0.08 && image.yRatio <= 0.08
+    const exact = image.fingerprint ? exactGroups.get(image.fingerprint) ?? [] : []
+    const positioned = image.fingerprint ? positionedGroups.get(samePlacementKey(image)) ?? [] : []
+    const exactPageCount = new Set(exact.map((candidate) => candidate.pageNumber)).size
+    const positionedPageCount = new Set(positioned.map((candidate) => candidate.pageNumber)).size
+    const repeatedOnMostPages = exactPageCount >= Math.max(2, Math.ceil(totalPages * 0.55))
+    const repeatedAtFixedPosition = positionedPageCount >= 2
+    const captionEvidence = Boolean(image.sourceCaption.trim()) && (
+      (!atHeader && !atFooter) || CAPTION_PATTERN.test(image.sourceCaption.trim())
+    )
+    const protectedEvidence = captionEvidence || Boolean(
+      !atHeader
+      && !atFooter
+      && area >= 0.01
+      && !image.isMask
+      && !repeatedOnMostPages
+      && image.sectionHint
+      && !["evidence", "documents"].includes(image.sectionHint),
+    )
+
+    // Unique body images are evidence by default. Decorative classification
+    // requires strong geometric/repetition evidence and never uses visual
+    // similarity, so repeated construction photos remain untouched.
+    if (!protectedEvidence && tiny && atEdge) {
+      image.decorative = true
+      image.decorativeReason = "tiny-edge-artwork"
+      continue
+    }
+    if (!protectedEvidence && repeatedAtFixedPosition && atHeader && area <= 0.16) {
+      image.decorative = true
+      image.decorativeReason = "repeated-header"
+      continue
+    }
+    if (!protectedEvidence && repeatedAtFixedPosition && atFooter && area <= 0.16) {
+      image.decorative = true
+      image.decorativeReason = "repeated-footer"
+      continue
+    }
+    if (!protectedEvidence && repeatedAtFixedPosition && nearFullPage) {
+      image.decorative = true
+      image.decorativeReason = "repeated-background"
+      continue
+    }
+    if (!protectedEvidence && repeatedOnMostPages && repeatedAtFixedPosition && area >= 0.05 && area <= 0.5) {
+      image.decorative = true
+      image.decorativeReason = "repeated-watermark"
     }
   }
+}
+
+function resolveImageSectionFromLayout(
+  image: ExtractedPdfImage,
+  layoutBlocks: ExtractedPdfLayoutBlock[],
+): SourceImageSectionHint | null {
+  const candidates = layoutBlocks.filter((block) => block.sectionHint)
+  if (!candidates.length) {
+    const bodyImage = image.yRatio >= 0.12 && image.yRatio + image.heightRatio <= 0.92
+    const meaningfulArea = image.widthRatio * image.heightRatio >= 0.012
+    return bodyImage && meaningfulArea ? "observation" : image.sectionHint
+  }
+
+  const imageMiddle = image.yRatio + image.heightRatio / 2
+  const ranked = candidates
+    .map((block) => {
+      const blockMiddle = block.yRatio + block.heightRatio / 2
+      const precedingPenalty = blockMiddle <= imageMiddle ? 0 : 0.08
+      return { block, distance: Math.abs(blockMiddle - imageMiddle) + precedingPenalty }
+    })
+    .sort((left, right) => left.distance - right.distance)
+
+  const nearest = ranked[0]?.block.sectionHint ?? null
+  if (!image.sectionHint || image.sectionHint === "evidence" || image.sectionHint === "documents") return nearest ?? image.sectionHint
+  return image.sectionHint
 }
 
 function getObjectFromStore(store: any, key: string) {
@@ -535,7 +609,12 @@ function collectImagePlacements(pdfjs: PdfJsLibrary, page: any, operatorList: an
     operations.paintImageMaskXObjectRepeat,
     operations.paintSolidColorImageMask,
   ].filter((value): value is number => typeof value === "number"))
-  const placements: Array<{ objectKey: string; imageReference: unknown; box: ImageBox; operationIndex: number }> = []
+  const maskOperations = new Set([
+    operations.paintImageMaskXObject,
+    operations.paintImageMaskXObjectRepeat,
+    operations.paintSolidColorImageMask,
+  ].filter((value): value is number => typeof value === "number"))
+  const placements: Array<{ objectKey: string; imageReference: unknown; box: ImageBox; operationIndex: number; isMask: boolean }> = []
   const stack: Matrix[] = []
   let current: Matrix = [1, 0, 0, 1, 0, 0]
   let hasImageOperations = false
@@ -567,7 +646,7 @@ function collectImagePlacements(pdfjs: PdfJsLibrary, page: any, operatorList: an
       for (let cursor = 0; cursor + 1 < positions.length; cursor += 2) {
         const repeated = multiplyMatrices(current, [scaleX, 0, 0, scaleY, Number(positions[cursor]), Number(positions[cursor + 1])])
         const box = placementBox(repeated, viewport)
-        if (box) placements.push({ objectKey: `${String(reference)}:${cursor / 2}`, imageReference: reference, box, operationIndex: index })
+        if (box) placements.push({ objectKey: `${String(reference)}:${cursor / 2}`, imageReference: reference, box, operationIndex: index, isMask: maskOperations.has(operation) })
       }
       continue
     }
@@ -575,7 +654,7 @@ function collectImagePlacements(pdfjs: PdfJsLibrary, page: any, operatorList: an
     const box = placementBox(current, viewport)
     if (!box) continue
     const reference = args[0]
-    placements.push({ objectKey: `${String(reference ?? "inline")}:${index}`, imageReference: reference, box, operationIndex: index })
+    placements.push({ objectKey: `${String(reference ?? "inline")}:${index}`, imageReference: reference, box, operationIndex: index, isMask: maskOperations.has(operation) })
   }
 
   return { placements, hasImageOperations }
@@ -750,6 +829,7 @@ async function extractPageImages(input: {
       heightRatio: placement.box.heightRatio,
       fingerprint: imageFingerprint(dataUrl),
       decorative: false,
+      isMask: placement.isMask,
     })
   }
 
@@ -803,6 +883,10 @@ export async function extractSourcePdf(
             targetWidth: options.imageWidth ?? 900,
           })
           images = extracted.images
+          images = images.map((image) => ({
+            ...image,
+            sectionHint: resolveImageSectionFromLayout(image, layoutBlocks),
+          }))
           hasImages = extracted.hasImages
           preview = extracted.preview
           imageExtractionComplete = extracted.complete

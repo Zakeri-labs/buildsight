@@ -29,6 +29,8 @@ export type ExtractedPdfImage = {
   heightRatio: number
   fingerprint?: string
   decorative?: boolean
+  decorativeReason?: "repeated-header" | "repeated-footer" | "repeated-background" | "tiny-edge-artwork" | "repeated-watermark"
+  isMask?: boolean
 }
 
 export type ExtractedPdfLayoutBlock = {
@@ -71,6 +73,14 @@ export type PdfImageTemplate = {
   sectionKey?: string
   preferredWidthRatio?: number
   alignment?: "left" | "center" | "right"
+  /** Position in the source document flow, from 0 (before the first block) to 1 (after the final block). */
+  flowRatio?: number
+  /** Source paint order used to keep repeated/similar evidence images stable. */
+  sourceOrder?: number
+  /** Source vertical position used as a deterministic secondary sort key. */
+  sourceYRatio?: number
+  /** Images extracted from the source PDF are rendered inside the translated attachment flow. */
+  flowTarget?: "section" | "documents" | "gallery"
 }
 
 export type PdfSectionTemplate = {
@@ -85,6 +95,8 @@ export type PdfSectionTemplate = {
   imageTitle?: string
   documentsHtml?: string
   documentsTitle?: string
+  sourceDocumentHtml?: string
+  otherDocumentsHtml?: string
 }
 
 export type PreservedSourceLayout = {
@@ -305,25 +317,41 @@ function evidenceImages(data: StageTranslationPageData): PdfImageTemplate[] {
     }))
 }
 
-function sourceDocumentHtmlForLanguage(input: {
-  data: StageTranslationPageData,
-  content: TranslationReportContent,
-  language: "en" | "ar",
-  sourceDocument?: ExtractedSourceDocument | null,
+function attachmentDocumentHtml(input: {
+  data: StageTranslationPageData
+  content: TranslationReportContent
+  language: "en" | "ar"
+  sourceDocument?: ExtractedSourceDocument | null
+  documentId: string
 }) {
+  const document = input.data.response.attachments.find((item) => item.id === input.documentId)
+  if (!document) return ""
   const sourcePdf = sourcePdfAttachment(input.data)
-  const extractedEnglish = input.language === "en" ? sourcePdfEnglishHtml(input.sourceDocument) : ""
-  return input.data.response.attachments
-    .filter((item) => item.attachmentKind === "document")
-    .map((document) => {
-      const stored = input.content.attachmentTranslations.find((item) => item.attachmentId === document.id)
-      const html = document.id === sourcePdf?.id && extractedEnglish.trim()
-        ? extractedEnglish
-        : stored?.contentHtml || ""
-      const body = html.trim() || `<p>${escapeSourceHtml(document.originalFilename)}</p>`
-      return `<section data-attachment-id="${escapeSourceHtml(document.id)}"><h3>${escapeSourceHtml(document.originalFilename)}</h3>${body}</section>`
-    })
+  const extractedEnglish = input.language === "en" && document.id === sourcePdf?.id
+    ? sourcePdfEnglishHtml(input.sourceDocument)
+    : ""
+  const stored = input.content.attachmentTranslations.find((item) => item.attachmentId === document.id)
+  const html = extractedEnglish.trim() ? extractedEnglish : stored?.contentHtml || ""
+  const body = html.trim() || `<p>${escapeSourceHtml(document.originalFilename)}</p>`
+  return `<section data-attachment-id="${escapeSourceHtml(document.id)}"><h3>${escapeSourceHtml(document.originalFilename)}</h3>${body}</section>`
+}
+
+function sourceAndOtherDocumentHtml(input: {
+  data: StageTranslationPageData
+  content: TranslationReportContent
+  language: "en" | "ar"
+  sourceDocument?: ExtractedSourceDocument | null
+}) {
+  const documents = input.data.response.attachments.filter((item) => item.attachmentKind === "document")
+  const sourcePdf = sourcePdfAttachment(input.data)
+  const sourceDocumentHtml = sourcePdf
+    ? attachmentDocumentHtml({ ...input, documentId: sourcePdf.id })
+    : ""
+  const otherDocumentsHtml = documents
+    .filter((document) => document.id !== sourcePdf?.id)
+    .map((document) => attachmentDocumentHtml({ ...input, documentId: document.id }))
     .join("")
+  return { sourceDocumentHtml, otherDocumentsHtml }
 }
 
 function attachmentsSection(input: {
@@ -333,13 +361,16 @@ function attachmentsSection(input: {
   sourceDocument?: ExtractedSourceDocument | null
 }): PdfSectionTemplate {
   const labels = LABELS[input.language]
+  const documentHtml = sourceAndOtherDocumentHtml(input)
   return {
     key: "attachments",
     title: labels.attachments,
     imageTitle: labels.evidence,
     images: evidenceImages(input.data),
     documentsTitle: labels.documents,
-    documentsHtml: sourceDocumentHtmlForLanguage(input),
+    documentsHtml: `${documentHtml.sourceDocumentHtml}${documentHtml.otherDocumentsHtml}`,
+    sourceDocumentHtml: documentHtml.sourceDocumentHtml,
+    otherDocumentsHtml: documentHtml.otherDocumentsHtml,
   }
 }
 
@@ -464,7 +495,7 @@ export function buildBilingualSourceImages(input: {
     }
   })
   const fallbackPages: BilingualSourceImage[] = (input.sourceDocument?.pages ?? [])
-    .filter((page) => page.imageDataUrl && page.imageExtractionComplete === false)
+    .filter((page) => page.imageDataUrl && page.imageExtractionComplete === false && !(page.images ?? []).some((image) => image.decorative !== true))
     .map((page) => ({
       src: page.imageDataUrl!,
       pageNumber: page.pageNumber,
@@ -487,30 +518,51 @@ function addSourcePdfImages(input: {
   sections: PdfSectionTemplate[]
 }) {
   const pairedImages = buildBilingualSourceImages(input)
+  const attachments = input.sections.find((section) => section.key === "attachments")
+  if (!attachments) return
+
+  const allSourceBlocks = (input.sourceDocument?.pages ?? [])
+    .flatMap((page) => page.layoutBlocks ?? [])
+    .sort((left, right) => left.pageNumber - right.pageNumber || left.yRatio - right.yRatio || left.xRatio - right.xRatio || left.order - right.order)
+
+  const isBeforeImage = (block: ExtractedPdfLayoutBlock, pageNumber: number, yRatio: number) =>
+    block.pageNumber < pageNumber || (block.pageNumber === pageNumber && block.yRatio < yRatio)
+
   for (const image of pairedImages) {
-    const sectionKey = image.sectionKey === "evidence" || image.sectionKey === "documents" || image.sectionKey === "source-visuals"
-      ? "attachments"
-      : image.sectionKey
-    const existing = input.sections.find((section) => section.key === sectionKey)
+    const source = input.sourceDocument?.pages
+      .find((page) => page.pageNumber === image.pageNumber)
+      ?.images?.find((candidate) => candidate.order === image.order)
+    const sectionKey = image.sectionKey === "checklist"
+      ? "checklist"
+      : image.sectionKey === "approvals"
+        ? "approvals"
+        : SECTION_LABELS.some((section) => section.key === image.sectionKey)
+          ? image.sectionKey
+          : "attachments"
+    const targetSection = input.sections.find((section) => section.key === sectionKey) ?? attachments
+    const sectionBlocks = sectionKey === "attachments"
+      ? allSourceBlocks
+      : allSourceBlocks.filter((block) => block.sectionHint === image.sectionKey)
+    const anchorBlocks = sectionBlocks.length ? sectionBlocks : allSourceBlocks
+    const beforeCount = anchorBlocks.filter((block) => isBeforeImage(block, image.pageNumber, source?.yRatio ?? 1)).length
+    const flowRatio = anchorBlocks.length ? beforeCount / anchorBlocks.length : 1
     const item: PdfImageTemplate = {
       src: image.src,
       caption: input.language === "ar" ? image.arabicCaption : image.englishCaption,
       sourcePage: image.pageNumber,
       sectionKey,
-      preferredWidthRatio: Math.max(0.42, Math.min(1, (input.sourceDocument?.pages.find((page) => page.pageNumber === image.pageNumber)?.images?.find((source) => source.order === image.order)?.widthRatio ?? 0.72) * 1.35)),
+      preferredWidthRatio: Math.max(0.42, Math.min(1, (source?.widthRatio ?? 0.72) * 1.35)),
       alignment: (() => {
-        const source = input.sourceDocument?.pages.find((page) => page.pageNumber === image.pageNumber)?.images?.find((candidate) => candidate.order === image.order)
         if (!source) return "center" as const
         const center = source.xRatio + source.widthRatio / 2
         return center < 0.4 ? "left" as const : center > 0.6 ? "right" as const : "center" as const
       })(),
+      flowRatio,
+      sourceOrder: image.order,
+      sourceYRatio: source?.yRatio ?? 1,
+      flowTarget: sectionKey === "attachments" ? "documents" : "section",
     }
-    if (existing) {
-      existing.images = [...(existing.images ?? []), item]
-    } else {
-      const labels = LABELS[input.language]
-      input.sections.push({ key: "attachments", title: labels.attachments, imageTitle: labels.evidence, images: [item] })
-    }
+    targetSection.images = [...(targetSection.images ?? []), item]
   }
 }
 

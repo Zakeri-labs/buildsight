@@ -367,6 +367,45 @@ function htmlToBlocks(html: string): PdfBlock[] {
   return blocks
 }
 
+function imageTemplateBlock(image: NonNullable<PdfSectionTemplate["images"]>[number]): PdfBlock {
+  return {
+    type: "image",
+    src: image.src,
+    caption: image.caption,
+    preferredWidthRatio: image.preferredWidthRatio,
+    alignment: image.alignment,
+  }
+}
+
+function interleaveFlowImages(
+  blocks: PdfBlock[],
+  images: NonNullable<PdfSectionTemplate["images"]>,
+) {
+  if (!images.length) return blocks
+  const buckets = new Map<number, PdfBlock[]>()
+  const blockCount = blocks.length
+  const ordered = [...images].sort((left, right) =>
+    (left.flowRatio ?? 1) - (right.flowRatio ?? 1)
+    || (left.sourcePage ?? 0) - (right.sourcePage ?? 0)
+    || (left.sourceYRatio ?? 0) - (right.sourceYRatio ?? 0)
+    || (left.sourceOrder ?? 0) - (right.sourceOrder ?? 0),
+  )
+  for (const image of ordered) {
+    const ratio = Math.max(0, Math.min(1, image.flowRatio ?? 1))
+    const index = blockCount ? Math.max(0, Math.min(blockCount, Math.round(ratio * blockCount))) : 0
+    const bucket = buckets.get(index) ?? []
+    bucket.push(imageTemplateBlock(image))
+    buckets.set(index, bucket)
+  }
+
+  const output: PdfBlock[] = []
+  for (let index = 0; index <= blockCount; index += 1) {
+    output.push(...(buckets.get(index) ?? []))
+    if (index < blockCount) output.push(blocks[index])
+  }
+  return output
+}
+
 function dataUrlFromBlob(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
@@ -1165,6 +1204,24 @@ function validateTemplateAssets(template: LanguagePdfTemplate, sourceDocument: E
   if (expectedImages > 0 && inventory.images < expectedImages) {
     throw new Error(`The PDF report model is missing source images (${inventory.images}/${expectedImages}).`)
   }
+  const misplacedSourceImages = template.sections
+    .flatMap((section) => section.images ?? [])
+    .filter((image) => image.sourcePage !== undefined && image.flowTarget === "gallery")
+  if (misplacedSourceImages.length) {
+    throw new Error("Source PDF images must remain in document flow and cannot be rendered as an appendix gallery.")
+  }
+}
+
+function imageFlowSignature(template: LanguagePdfTemplate) {
+  return template.sections.flatMap((section) => (section.images ?? [])
+    .filter((image) => image.sourcePage !== undefined)
+    .map((image) => [
+      section.key,
+      image.flowTarget ?? "gallery",
+      image.sourcePage ?? 0,
+      image.sourceOrder ?? 0,
+      Math.round((image.flowRatio ?? 1) * 10_000),
+    ].join(":")))
 }
 
 function validateMirroredTemplates(english: LanguagePdfTemplate, arabic: LanguagePdfTemplate) {
@@ -1180,6 +1237,9 @@ function validateMirroredTemplates(english: LanguagePdfTemplate, arabic: Languag
   }
   if (englishInventory.tables !== arabicInventory.tables) {
     throw new Error("English and Arabic PDF table structures are not synchronized.")
+  }
+  if (imageFlowSignature(english).join("|") !== imageFlowSignature(arabic).join("|")) {
+    throw new Error("English and Arabic PDF image placement is not synchronized.")
   }
 }
 
@@ -1212,23 +1272,34 @@ async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
   drawFirstPageHeader(flow)
   for (const section of template.sections) {
     renderSectionTitle(flow, section.title)
-    if (section.html !== undefined) {
-      const blocks = htmlToBlocks(section.html)
-      if (blocks.length) await renderBlocks(flow, blocks)
-      else renderParagraph(flow, flow.rtl ? "لا يوجد محتوى مسجل." : "No content recorded.")
-    }
-    if (section.table) renderTable(flow, { type: "table", ...section.table })
-    if (section.imageTitle) {
-      renderHeading(flow, { type: "heading", level: 3, text: section.imageTitle })
-      await renderImageGrid(flow, section.images ?? [], false)
-    } else if (section.images) {
-      await renderImageGrid(flow, section.images, section.key === "source-visuals")
-    }
+    const sectionFlowImages = (section.images ?? []).filter((image) => image.flowTarget === "section")
+    const galleryImages = (section.images ?? []).filter((image) => image.flowTarget !== "section" && image.flowTarget !== "documents")
+    const contentBlocks = section.html !== undefined ? htmlToBlocks(section.html) : []
+    if (section.table) contentBlocks.push({ type: "table", ...section.table })
+    const flowedContent = interleaveFlowImages(contentBlocks, sectionFlowImages)
+    if (flowedContent.length) await renderBlocks(flow, flowedContent)
+    else if (section.html !== undefined) renderParagraph(flow, flow.rtl ? "لا يوجد محتوى مسجل." : "No content recorded.")
+
     if (section.documentsTitle) {
       renderHeading(flow, { type: "heading", level: 3, text: section.documentsTitle })
-      const documentBlocks = htmlToBlocks(section.documentsHtml ?? "")
-      if (documentBlocks.length) await renderBlocks(flow, documentBlocks)
-      else renderParagraph(flow, flow.rtl ? "لا توجد مرفقات مرتبطة." : "No related attachments.")
+      const sourceDocumentBlocks = htmlToBlocks(section.sourceDocumentHtml ?? section.documentsHtml ?? "")
+      const sourceDocumentImages = (section.images ?? []).filter((image) => image.flowTarget === "documents")
+      const reconstructedSource = interleaveFlowImages(sourceDocumentBlocks, sourceDocumentImages)
+      const otherDocumentBlocks = htmlToBlocks(section.otherDocumentsHtml ?? "")
+      if (reconstructedSource.length || otherDocumentBlocks.length) {
+        if (reconstructedSource.length) await renderBlocks(flow, reconstructedSource)
+        if (otherDocumentBlocks.length) await renderBlocks(flow, otherDocumentBlocks)
+      } else {
+        renderParagraph(flow, flow.rtl ? "لا توجد مرفقات مرتبطة." : "No related attachments.")
+      }
+    }
+
+    if (section.imageTitle) {
+      renderHeading(flow, { type: "heading", level: 3, text: section.imageTitle })
+      if (galleryImages.length) await renderImageGrid(flow, galleryImages, false)
+      else renderParagraph(flow, flow.rtl ? "لا توجد صور مرفقة." : "No images attached.")
+    } else if (galleryImages.length) {
+      await renderImageGrid(flow, galleryImages, section.key === "source-visuals")
     }
     flow.y += 4
   }
