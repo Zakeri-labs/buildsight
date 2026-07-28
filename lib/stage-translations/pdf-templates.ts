@@ -7,17 +7,49 @@ import type {
 
 export type PdfKind = "original" | "arabic" | "bilingual"
 
+export type SourceImageSectionHint =
+  | TranslationSectionKey
+  | "checklist"
+  | "approvals"
+  | "evidence"
+  | "documents"
+
+export type ExtractedPdfImage = {
+  id: string
+  pageNumber: number
+  order: number
+  dataUrl: string
+  sourceCaption: string
+  contextText: string
+  sectionHint: SourceImageSectionHint | null
+  xRatio: number
+  yRatio: number
+  widthRatio: number
+  heightRatio: number
+}
+
 export type ExtractedPdfPage = {
   pageNumber: number
   textHtml: string
   imageDataUrl?: string | null
   hasImages?: boolean
+  images?: ExtractedPdfImage[]
+  imageExtractionComplete?: boolean
 }
 
 export type ExtractedSourceDocument = {
   filename: string
   pageCount: number
   pages: ExtractedPdfPage[]
+}
+
+export type PdfImageTemplate = {
+  src: string
+  caption: string
+  sourcePage?: number
+  sectionKey?: string
+  preferredWidthRatio?: number
+  alignment?: "left" | "center" | "right"
 }
 
 export type PdfSectionTemplate = {
@@ -28,7 +60,7 @@ export type PdfSectionTemplate = {
     headers: string[]
     rows: string[][]
   }
-  images?: Array<{ src: string; caption: string }>
+  images?: PdfImageTemplate[]
 }
 
 export type LanguagePdfTemplate = {
@@ -50,6 +82,17 @@ export type LanguagePdfTemplate = {
   sections: PdfSectionTemplate[]
 }
 
+export type BilingualSourceImage = {
+  src: string
+  pageNumber: number
+  order: number
+  sectionKey: SourceImageSectionHint | "source-visuals"
+  englishSectionTitle: string
+  arabicSectionTitle: string
+  englishCaption: string
+  arabicCaption: string
+}
+
 const SECTION_LABELS: Array<{ key: TranslationSectionKey; en: string; ar: string }> = [
   { key: "feedback", en: "Feedback", ar: "الملاحظات العامة" },
   { key: "observation", en: "Observation", ar: "المعاينة" },
@@ -65,7 +108,7 @@ const LABELS = {
     approvals: "Approval Information",
     evidence: "Image Evidence",
     documents: "Related Documents",
-    sourceVisuals: "Original Document Images",
+    sourceVisuals: "Original PDF Image Evidence",
     item: "Item",
     state: "Status",
     checked: "Completed",
@@ -81,7 +124,7 @@ const LABELS = {
     approvals: "معلومات الاعتماد",
     evidence: "صور الإثبات",
     documents: "المستندات المرتبطة",
-    sourceVisuals: "صور المستند الأصلي",
+    sourceVisuals: "صور الإثبات من ملف PDF الأصلي",
     item: "البند",
     state: "الحالة",
     checked: "مكتمل",
@@ -91,6 +134,11 @@ const LABELS = {
     comments: "التعليقات",
     date: "التاريخ",
   },
+} as const
+
+const CAPTION_PATTERNS = {
+  en: /^(?:figure|fig\.?|photo|image|plate|photograph)\s*(?:(?:no\.?|number)\s*)?[\d٠-٩]*/i,
+  ar: /^(?:الشكل|شكل|الصورة|صورة|اللقطة|لقطة)\s*(?:رقم\s*)?[\d٠-٩]*/i,
 } as const
 
 function attachmentImageUrl(data: StageTranslationPageData, path: string, filename: string) {
@@ -136,6 +184,9 @@ function evidenceSection(data: StageTranslationPageData, language: "en" | "ar"):
     .map((item) => ({
       src: attachmentImageUrl(data, item.storagePath, item.originalFilename),
       caption: item.originalFilename,
+      sectionKey: "evidence",
+      preferredWidthRatio: 0.72,
+      alignment: "center" as const,
     }))
   return { key: "evidence", title: LABELS[language].evidence, images }
 }
@@ -151,11 +202,140 @@ function documentsSection(
     const translated = content.attachmentTranslations.find((item) => item.attachmentId === document.id)
     const html = translated?.contentHtml || `<p>${document.originalFilename}</p>`
     return {
-      key: `document-${index + 1}`,
+      key: index === 0 ? "documents" : `document-${index + 1}`,
       title: index === 0 ? LABELS[language].documents : document.originalFilename,
       html,
     }
   })
+}
+
+function stripHtmlToLines(html: string) {
+  return html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+    .replace(/<\/(?:p|div|h[1-6]|li|figcaption|caption|tr|td|th|section|article)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;/gi, "'")
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+}
+
+function captionCandidates(html: string, language: "en" | "ar") {
+  if (!html.trim()) return []
+  const explicit = Array.from(html.matchAll(/<figcaption\b[^>]*>([\s\S]*?)<\/figcaption>/gi))
+    .map((match) => stripHtmlToLines(match[1]).join(" ").trim())
+    .filter(Boolean)
+  const lines = stripHtmlToLines(html)
+  const patterned = lines.filter((line) => CAPTION_PATTERNS[language].test(line))
+  return [...explicit, ...patterned].filter((value, index, values) => values.indexOf(value) === index)
+}
+
+function isPdfDocument(filename: string, mimeType: string) {
+  return mimeType.toLowerCase() === "application/pdf" || filename.toLowerCase().endsWith(".pdf")
+}
+
+function sourcePdfTranslationHtml(data: StageTranslationPageData, translation: StageTranslationRecord | null) {
+  const source = data.response.attachments
+    .filter((item) => item.attachmentKind === "document" && isPdfDocument(item.originalFilename, item.mimeType))
+    .sort((left, right) => left.sortOrder - right.sortOrder)[0]
+  if (!source || !translation?.translatedContent) return ""
+  return translation.translatedContent.attachmentTranslations.find((item) => item.attachmentId === source.id)?.contentHtml ?? ""
+}
+
+function sectionTitles(key: SourceImageSectionHint | "source-visuals") {
+  const section = SECTION_LABELS.find((item) => item.key === key)
+  if (section) return { en: section.en, ar: section.ar }
+  if (key === "checklist") return { en: LABELS.en.checklist, ar: LABELS.ar.checklist }
+  if (key === "approvals") return { en: LABELS.en.approvals, ar: LABELS.ar.approvals }
+  if (key === "evidence") return { en: LABELS.en.evidence, ar: LABELS.ar.evidence }
+  if (key === "documents") return { en: LABELS.en.documents, ar: LABELS.ar.documents }
+  return { en: LABELS.en.sourceVisuals, ar: LABELS.ar.sourceVisuals }
+}
+
+function flattenSourceImages(sourceDocument: ExtractedSourceDocument | null | undefined) {
+  if (!sourceDocument) return []
+  return sourceDocument.pages
+    .flatMap((page) => page.images ?? [])
+    .sort((left, right) => left.pageNumber - right.pageNumber || left.order - right.order)
+}
+
+export function buildBilingualSourceImages(input: {
+  data: StageTranslationPageData
+  translation: StageTranslationRecord | null
+  sourceDocument?: ExtractedSourceDocument | null
+}): BilingualSourceImage[] {
+  const images = flattenSourceImages(input.sourceDocument)
+  const translatedCaptions = captionCandidates(sourcePdfTranslationHtml(input.data, input.translation), "ar")
+  const extracted: BilingualSourceImage[] = images.map((image, index) => {
+    const sectionKey = image.sectionHint ?? "source-visuals"
+    const titles = sectionTitles(sectionKey)
+    const englishCaption = image.sourceCaption || `Figure ${String(index + 1).padStart(2, "0")} — source PDF page ${image.pageNumber}`
+    const arabicCaption = translatedCaptions[index] || `الصورة ${String(index + 1).padStart(2, "0")} — الصفحة ${image.pageNumber} من ملف PDF الأصلي`
+    return {
+      src: image.dataUrl,
+      pageNumber: image.pageNumber,
+      order: image.order,
+      sectionKey,
+      englishSectionTitle: titles.en,
+      arabicSectionTitle: titles.ar,
+      englishCaption,
+      arabicCaption,
+    }
+  })
+  const fallbackPages: BilingualSourceImage[] = (input.sourceDocument?.pages ?? [])
+    .filter((page) => page.imageDataUrl && page.imageExtractionComplete === false)
+    .map((page) => ({
+      src: page.imageDataUrl!,
+      pageNumber: page.pageNumber,
+      order: 10_000,
+      sectionKey: "source-visuals",
+      englishSectionTitle: LABELS.en.sourceVisuals,
+      arabicSectionTitle: LABELS.ar.sourceVisuals,
+      englishCaption: `Source PDF page ${page.pageNumber} — full-page visual fallback preserving images that could not be decoded separately.`,
+      arabicCaption: `الصفحة ${page.pageNumber} من ملف PDF الأصلي — نسخة مرئية كاملة للحفاظ على الصور التي تعذر استخراجها بشكل منفصل.`,
+    }))
+  return [...extracted, ...fallbackPages]
+    .sort((left, right) => left.pageNumber - right.pageNumber || left.order - right.order)
+}
+
+function addSourcePdfImages(input: {
+  data: StageTranslationPageData
+  translation: StageTranslationRecord | null
+  sourceDocument?: ExtractedSourceDocument | null
+  language: "en" | "ar"
+  sections: PdfSectionTemplate[]
+}) {
+  const pairedImages = buildBilingualSourceImages(input)
+  for (const image of pairedImages) {
+    const sectionKey = image.sectionKey
+    const existing = input.sections.find((section) => section.key === sectionKey)
+    const item: PdfImageTemplate = {
+      src: image.src,
+      caption: input.language === "ar" ? image.arabicCaption : image.englishCaption,
+      sourcePage: image.pageNumber,
+      sectionKey,
+      preferredWidthRatio: Math.max(0.42, Math.min(1, (input.sourceDocument?.pages.find((page) => page.pageNumber === image.pageNumber)?.images?.find((source) => source.order === image.order)?.widthRatio ?? 0.72) * 1.35)),
+      alignment: (() => {
+        const source = input.sourceDocument?.pages.find((page) => page.pageNumber === image.pageNumber)?.images?.find((candidate) => candidate.order === image.order)
+        if (!source) return "center" as const
+        const center = source.xRatio + source.widthRatio / 2
+        return center < 0.4 ? "left" as const : center > 0.6 ? "right" as const : "center" as const
+      })(),
+    }
+    if (existing) {
+      existing.images = [...(existing.images ?? []), item]
+    } else {
+      const title = input.language === "ar" ? image.arabicSectionTitle : image.englishSectionTitle
+      input.sections.push({ key: sectionKey, title, images: [item] })
+    }
+  }
 }
 
 export function buildLanguagePdfTemplate(input: {
@@ -178,16 +358,8 @@ export function buildLanguagePdfTemplate(input: {
   sections.push(evidenceSection(data, language))
   sections.push(...documentsSection(data, content, language))
 
-  if (language === "ar" && sourceDocument) {
-    const sourceImages = sourceDocument.pages
-      .filter((page) => page.imageDataUrl)
-      .map((page) => ({
-        src: page.imageDataUrl!,
-        caption: `الصفحة ${page.pageNumber} / ${sourceDocument.pageCount} — ${sourceDocument.filename}`,
-      }))
-    if (sourceImages.length) {
-      sections.push({ key: "source-visuals", title: LABELS.ar.sourceVisuals, images: sourceImages })
-    }
+  if (sourceDocument) {
+    addSourcePdfImages({ data, translation, sourceDocument, language, sections })
   }
 
   return {

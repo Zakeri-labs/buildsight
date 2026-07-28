@@ -2,7 +2,9 @@
 
 import { extractSourcePdf, loadPdfJs } from "@/lib/stage-translations/client-source-pdf"
 import {
+  buildBilingualSourceImages,
   buildLanguagePdfTemplate,
+  type ExtractedSourceDocument,
   type LanguagePdfTemplate,
   type PdfKind,
   type PdfSectionTemplate,
@@ -60,7 +62,7 @@ type PdfBlock =
   | { type: "paragraph"; text: string }
   | { type: "list"; ordered: boolean; items: string[] }
   | { type: "table"; headers: string[]; rows: string[][] }
-  | { type: "image"; src: string; caption: string }
+  | { type: "image"; src: string; caption: string; preferredWidthRatio?: number; alignment?: "left" | "center" | "right" }
   | { type: "spacer"; height: number }
 
 type LoadedImage = { dataUrl: string; width: number; height: number }
@@ -822,14 +824,20 @@ async function renderImageBlock(flow: Flow, block: Extract<PdfBlock, { type: "im
     renderParagraph(flow, block.caption || (flow.rtl ? "تعذر تحميل الصورة." : "Image unavailable."))
     return
   }
-  const maxWidth = Math.min(flow.width, preferredWidth ?? flow.width)
+  const widthFromRatio = block.preferredWidthRatio ? flow.width * Math.max(0.2, Math.min(1, block.preferredWidthRatio)) : undefined
+  const maxWidth = Math.min(flow.width, preferredWidth ?? widthFromRatio ?? flow.width)
   const maxHeight = 115
   const ratio = Math.min(maxWidth / image.width, maxHeight / image.height)
   const width = image.width * ratio
   const height = image.height * ratio
   const captionHeight = block.caption ? 7 : 0
   ensureSpace(flow, height + captionHeight + 4)
-  const x = flow.rtl ? flow.x + flow.width - width : flow.x
+  const alignment = block.alignment ?? (flow.rtl ? "right" : "left")
+  const x = alignment === "center"
+    ? flow.x + (flow.width - width) / 2
+    : alignment === "right"
+      ? flow.x + flow.width - width
+      : flow.x
   flow.doc.setDrawColor(203, 213, 225)
   flow.doc.rect(x - 0.5, flow.y - 0.5, width + 1, height + 1)
   flow.doc.addImage(image.dataUrl, "JPEG", x, flow.y, width, height, undefined, "FAST")
@@ -883,7 +891,7 @@ async function renderImageGrid(flow: Flow, images: NonNullable<PdfSectionTemplat
     return
   }
   for (const image of images) {
-    await renderImageBlock(flow, { type: "image", ...image }, sourceVisuals ? flow.width : flow.width * 0.72)
+    await renderImageBlock(flow, { type: "image", ...image }, sourceVisuals ? flow.width : undefined)
   }
 }
 
@@ -1011,10 +1019,100 @@ function drawPageImage(doc: JsPdfDocument, dataUrl: string | undefined, x: numbe
   doc.addImage(dataUrl, "JPEG", x + (width - renderedWidth) / 2, y + (height - renderedHeight) / 2, renderedWidth, renderedHeight, undefined, "FAST")
 }
 
+function drawBilingualHeader(input: {
+  doc: JsPdfDocument
+  data: StageTranslationPageData
+  margin: number
+  columnWidth: number
+  gap: number
+  englishLabel?: string
+  arabicLabel?: string
+}) {
+  const { doc, data, margin, columnWidth, gap } = input
+  doc.setFillColor(29, 78, 216)
+  doc.rect(0, 0, PAGE.landscapeWidth, 4, "F")
+  const projectNameIsArabic = containsArabic(data.project.name)
+  setLanguage(doc, projectNameIsArabic, 13, true)
+  doc.setTextColor(15, 23, 42)
+  writePdfText(doc, data.project.name, projectNameIsArabic ? PAGE.landscapeWidth - margin : margin, 12, {
+    align: projectNameIsArabic ? "right" : "left",
+  }, projectNameIsArabic)
+  const reportHeader = `${data.response.reportNumber} · ${data.term.name}`
+  const reportHeaderIsArabic = containsArabic(reportHeader)
+  setLanguage(doc, reportHeaderIsArabic, 8, false)
+  doc.setTextColor(100, 116, 139)
+  writePdfText(doc, reportHeader, PAGE.landscapeWidth - margin, 12, { align: "right" }, reportHeaderIsArabic)
+
+  doc.setFillColor(226, 232, 240)
+  doc.rect(margin, 15, columnWidth, 6, "F")
+  doc.rect(margin + columnWidth + gap, 15, columnWidth, 6, "F")
+  setLanguage(doc, false, 9, true)
+  doc.setTextColor(15, 23, 42)
+  doc.text(input.englishLabel || "English Original", margin + 3, 19.2)
+  setLanguage(doc, true, 9, false)
+  writePdfText(doc, input.arabicLabel || "الترجمة العربية", PAGE.landscapeWidth - margin - 3, 19.2, { align: "right" }, true)
+}
+
+function drawEvidenceImageInBox(
+  doc: JsPdfDocument,
+  image: LoadedImage,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  doc.setDrawColor(148, 163, 184)
+  doc.setFillColor(255, 255, 255)
+  doc.rect(x, y, width, height, "FD")
+  const ratio = Math.min((width - 5) / image.width, (height - 5) / image.height)
+  const renderedWidth = image.width * ratio
+  const renderedHeight = image.height * ratio
+  doc.addImage(
+    image.dataUrl,
+    "JPEG",
+    x + (width - renderedWidth) / 2,
+    y + (height - renderedHeight) / 2,
+    renderedWidth,
+    renderedHeight,
+    undefined,
+    "FAST",
+  )
+}
+
+function drawBilingualCaption(input: {
+  doc: JsPdfDocument
+  text: string
+  x: number
+  y: number
+  width: number
+  rtl: boolean
+}) {
+  const { doc, text, x, y, width, rtl } = input
+  setLanguage(doc, rtl, 8.5, false)
+  doc.setTextColor(71, 85, 105)
+  const lines = textLines(doc, text, width).slice(0, 4)
+  writePdfText(doc, lines, rtl ? x + width : x, y, {
+    align: rtl ? "right" : "left",
+    lineHeightFactor: 1.2,
+  }, rtl)
+}
+
+function addBilingualPageNumbers(doc: JsPdfDocument) {
+  const pages = doc.internal.getNumberOfPages()
+  for (let page = 1; page <= pages; page += 1) {
+    doc.setPage(page)
+    setLanguage(doc, false, 8, false)
+    doc.setTextColor(100, 116, 139)
+    doc.text(`${page} / ${pages}`, PAGE.landscapeWidth / 2, PAGE.landscapeHeight - 5, { align: "center" })
+  }
+}
+
 async function buildBilingualPdfBlob(input: {
   data: StageTranslationPageData
+  translation: StageTranslationRecord
   englishBlob: Blob
   arabicBlob: Blob
+  sourceDocument?: ExtractedSourceDocument | null
 }) {
   const [JsPdf, englishSource, arabicSource] = await Promise.all([
     loadPdfTools(),
@@ -1045,39 +1143,54 @@ async function buildBilingualPdfBlob(input: {
           : Promise.resolve(undefined),
       ])
 
-      doc.setFillColor(29, 78, 216)
-      doc.rect(0, 0, PAGE.landscapeWidth, 4, "F")
-      const projectNameIsArabic = containsArabic(input.data.project.name)
-      setLanguage(doc, projectNameIsArabic, 13, true)
-      doc.setTextColor(15, 23, 42)
-      writePdfText(doc, input.data.project.name, projectNameIsArabic ? PAGE.landscapeWidth - margin : margin, 12, {
-        align: projectNameIsArabic ? "right" : "left",
-      }, projectNameIsArabic)
-      const reportHeader = `${input.data.response.reportNumber} · ${input.data.term.name}`
-      const reportHeaderIsArabic = containsArabic(reportHeader)
-      setLanguage(doc, reportHeaderIsArabic, 8, false)
-      doc.setTextColor(100, 116, 139)
-      writePdfText(doc, reportHeader, PAGE.landscapeWidth - margin, 12, { align: "right" }, reportHeaderIsArabic)
-
-      doc.setFillColor(226, 232, 240)
-      doc.rect(margin, 15, columnWidth, 6, "F")
-      doc.rect(margin + columnWidth + gap, 15, columnWidth, 6, "F")
-      doc.setFont("helvetica", "bold")
-      doc.setFontSize(9)
-      doc.setTextColor(15, 23, 42)
-      doc.text("English Original", margin + 3, 19.2)
-      doc.setFont(ARABIC_FONT_FAMILY, "normal")
-      doc.setLanguage?.("ar-SA")
-      doc.setR2L?.(false)
-      writePdfText(doc, "الترجمة العربية", PAGE.landscapeWidth - margin - 3, 19.2, { align: "right" }, true)
-
+      drawBilingualHeader({ doc, data: input.data, margin, columnWidth, gap })
       drawPageImage(doc, englishPage, margin, top, columnWidth, contentHeight, "No English page")
       drawPageImage(doc, arabicPage, margin + columnWidth + gap, top, columnWidth, contentHeight, "No Arabic page")
+    }
 
-      doc.setFont("helvetica", "normal")
-      doc.setFontSize(8)
+    const evidenceImages = buildBilingualSourceImages({
+      data: input.data,
+      translation: input.translation,
+      sourceDocument: input.sourceDocument,
+    })
+    for (const evidence of evidenceImages) {
+      const image = await loadImage(evidence.src)
+      if (!image) continue
+      doc.addPage("a4", "landscape")
+      drawBilingualHeader({
+        doc,
+        data: input.data,
+        margin,
+        columnWidth,
+        gap,
+        englishLabel: evidence.englishSectionTitle,
+        arabicLabel: evidence.arabicSectionTitle,
+      })
+      const captionTop = PAGE.landscapeHeight - bottom - 18
+      const imageHeight = captionTop - top - 3
+      drawEvidenceImageInBox(doc, image, margin, top, columnWidth, imageHeight)
+      drawEvidenceImageInBox(doc, image, margin + columnWidth + gap, top, columnWidth, imageHeight)
+      drawBilingualCaption({
+        doc,
+        text: evidence.englishCaption,
+        x: margin,
+        y: captionTop + 4,
+        width: columnWidth,
+        rtl: false,
+      })
+      drawBilingualCaption({
+        doc,
+        text: evidence.arabicCaption,
+        x: margin + columnWidth + gap,
+        y: captionTop + 4,
+        width: columnWidth,
+        rtl: true,
+      })
+      setLanguage(doc, false, 7.5, false)
       doc.setTextColor(100, 116, 139)
-      doc.text(`${pageNumber} / ${total}`, PAGE.landscapeWidth / 2, PAGE.landscapeHeight - 5, { align: "center" })
+      doc.text(`Source PDF page ${evidence.pageNumber}`, margin, PAGE.landscapeHeight - 8)
+      setLanguage(doc, true, 7.5, false)
+      writePdfText(doc, `صفحة المصدر ${evidence.pageNumber}`, PAGE.landscapeWidth - margin, PAGE.landscapeHeight - 8, { align: "right" }, true)
     }
   } finally {
     await englishSource.documentProxy.destroy?.()
@@ -1086,6 +1199,7 @@ async function buildBilingualPdfBlob(input: {
     arabicSource.loadingTask.destroy?.()
   }
 
+  addBilingualPageNumbers(doc)
   doc.setProperties({
     title: `${input.data.response.reportTitle} — Bilingual`,
     subject: input.data.response.subject || input.data.term.name,
@@ -1124,8 +1238,9 @@ export async function exportTranslationPdf({
         imageWidth: 900,
         imageMode: "visuals",
       })
-    } catch {
-      sourceDocument = null
+    } catch (error) {
+      const details = error instanceof Error ? error.message : "Unknown PDF extraction error."
+      throw new Error(`Unable to preserve images from the original PDF: ${details}`)
     }
   }
   const arabicTemplate = buildLanguagePdfTemplate({ data, translation, language: "ar", sourceDocument })
@@ -1135,7 +1250,7 @@ export async function exportTranslationPdf({
   }
 
   const source = await fetchOriginalPdf(data)
-  const englishBlob = source?.blob ?? await buildLanguagePdfBlob(buildLanguagePdfTemplate({ data, translation, language: "en" }))
-  const bilingualBlob = await buildBilingualPdfBlob({ data, englishBlob, arabicBlob })
+  const englishBlob = source?.blob ?? await buildLanguagePdfBlob(buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument }))
+  const bilingualBlob = await buildBilingualPdfBlob({ data, translation, englishBlob, arabicBlob, sourceDocument })
   return { blob: bilingualBlob, filename: `${base}-${report}-bilingual.pdf` }
 }
