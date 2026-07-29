@@ -172,12 +172,19 @@ type ReportLabels = {
 function formatDate(value: string, language: "en" | "ar", includeTime = false) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return "—"
-  return new Intl.DateTimeFormat(language === "ar" ? "ar" : "en-GB", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-    ...(includeTime ? { hour: "2-digit", minute: "2-digit" } : {}),
-  }).format(date)
+  const year = date.getUTCFullYear()
+  const monthNamesEn = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+  const monthNamesAr = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"]
+  const month = (language === "ar" ? monthNamesAr : monthNamesEn)[date.getUTCMonth()]
+  const day = String(date.getUTCDate()).padStart(2, "0")
+
+  if (!includeTime) {
+    return `${day} ${month} ${year}`
+  }
+
+  const hours = String(date.getUTCHours()).padStart(2, "0")
+  const minutes = String(date.getUTCMinutes()).padStart(2, "0")
+  return `${day} ${month} ${year} ${hours}:${minutes}`
 }
 
 function filenameWithoutExtension(value: string) {

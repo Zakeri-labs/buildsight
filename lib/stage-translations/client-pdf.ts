@@ -1065,6 +1065,41 @@ function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "tabl
   flow.y += 2
 }
 
+function renderNativeVectorTable(flow: Flow, headers: string[], rows: string[][]) {
+  if (!rows.length) return
+  const colCount = Math.max(headers.length, ...rows.map((r) => r.length))
+  if (!colCount) return
+
+  const colWidth = flow.width / colCount
+  const rowHeight = 6.5
+  const padding = 2
+
+  for (let r = 0; r < rows.length; r += 1) {
+    ensureSpace(flow, rowHeight + 2)
+    const row = rows[r]
+
+    for (let c = 0; c < colCount; c += 1) {
+      const cellText = row[c] || ""
+      const x = flow.x + c * colWidth
+
+      setLanguage(flow.doc, flow.rtl, 8, false)
+      flow.doc.setTextColor(51, 65, 85)
+
+      if (flow.rtl) {
+        writePdfText(flow.doc, cellText, x + colWidth - padding, flow.y + 4.5, { align: "right" }, true)
+      } else {
+        writePdfText(flow.doc, cellText, x + padding, flow.y + 4.5, { align: "left" }, false)
+      }
+    }
+
+    flow.y += rowHeight
+    flow.doc.setDrawColor(226, 232, 240)
+    flow.doc.setLineWidth(0.15)
+    flow.doc.line(flow.x, flow.y, flow.x + flow.width, flow.y)
+  }
+  flow.y += 4
+}
+
 function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>, sectionKey?: string) {
   if (sectionKey === "checklist") {
     renderChecklistTable(flow, block)
@@ -1085,39 +1120,48 @@ function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>, se
     rows.forEach((r) => r.reverse())
   }
 
-  const options: Record<string, unknown> = {
-    startY: flow.y,
-    ...(headers.length ? { head: [headers] } : {}),
-    showHead: "never", // Cleanly hide table header row without crashing jspdf-autotable
-    body: rows,
-    theme: "horizontal", // Simple, clean minimal rows
-    tableWidth: flow.width,
-    margin: { top: 17, left: flow.x, right: flow.pageWidth - flow.x - flow.width, bottom: PAGE.footer + 5 },
-    styles: {
-      font: flow.rtl ? ARABIC_FONT_FAMILY : LATIN_FONT_FAMILY,
-      fontStyle: "normal",
-      fontSize: 8,
-      textColor: [51, 65, 85],
-      lineColor: [226, 232, 240],
-      lineWidth: 0.15,
-      cellPadding: 2,
-      halign: flow.rtl ? "right" : "left",
-      valign: "middle",
-      overflow: "linebreak",
-    },
-    didDrawPage: () => {
-      const currentPage = flow.doc.internal.getCurrentPageInfo?.().pageNumber ?? flow.doc.internal.getNumberOfPages()
-      if (currentPage > flow.pageNumber) {
-        flow.pageNumber = currentPage
-        drawContinuationHeader(flow)
+  try {
+    if (typeof flow.doc.autoTable === "function") {
+      const options: Record<string, unknown> = {
+        startY: flow.y,
+        ...(headers.length ? { head: [headers] } : {}),
+        showHead: "never",
+        body: rows,
+        theme: "horizontal",
+        tableWidth: flow.width,
+        margin: { top: 17, left: flow.x, right: flow.pageWidth - flow.x - flow.width, bottom: PAGE.footer + 5 },
+        styles: {
+          font: flow.rtl ? ARABIC_FONT_FAMILY : LATIN_FONT_FAMILY,
+          fontStyle: "normal",
+          fontSize: 8,
+          textColor: [51, 65, 85],
+          lineColor: [226, 232, 240],
+          lineWidth: 0.15,
+          cellPadding: 2,
+          halign: flow.rtl ? "right" : "left",
+          valign: "middle",
+          overflow: "linebreak",
+        },
+        didDrawPage: () => {
+          const currentPage = flow.doc.internal.getCurrentPageInfo?.().pageNumber ?? flow.doc.internal.getNumberOfPages()
+          if (currentPage > flow.pageNumber) {
+            flow.pageNumber = currentPage
+            drawContinuationHeader(flow)
+          }
+        },
       }
-    },
+      flow.doc.autoTable(options)
+      const finalY = Number(flow.doc.lastAutoTable?.finalY ?? flow.y + 10)
+      flow.pageNumber = flow.doc.internal.getNumberOfPages()
+      flow.y = finalY + 4
+      if (flow.y > flow.bottom) addFlowPage(flow)
+      return
+    }
+  } catch (autotableError) {
+    console.warn("jsPDF autoTable failed, falling back to native vector table renderer:", autotableError)
   }
-  flow.doc.autoTable(options)
-  const finalY = Number(flow.doc.lastAutoTable?.finalY ?? flow.y + 10)
-  flow.pageNumber = flow.doc.internal.getNumberOfPages()
-  flow.y = finalY + 4
-  if (flow.y > flow.bottom) addFlowPage(flow)
+
+  renderNativeVectorTable(flow, headers, rows)
 }
 
 async function renderImageBlock(flow: Flow, block: Extract<PdfBlock, { type: "image" }>, preferredWidth?: number) {
