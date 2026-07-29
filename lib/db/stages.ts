@@ -77,31 +77,13 @@ export async function resolveStageManagementOrganization(
   return null
 }
 
-export type StageOrganizationOption = {
-  id: string
-  name: string
-  type: string
-}
-
-export type StageUserOption = {
-  id: string
-  name: string
-  email: string | null
-  avatarUrl: string | null
-  organizationId: string | null
-  organizationName: string | null
-}
 
 export type StageTermRecord = {
   id: string
   stageId: string
   reportName: string
   required: boolean
-  responsibleOrganizationId: string | null
-  responsibleUserId: string | null
-  dueDateRule: string
   approvalRequired: boolean
-  templateReference: string | null
   status: "active" | "disabled"
   sortOrder: number
   createdAt: string
@@ -174,7 +156,7 @@ export async function loadStageManagement(organizationId: string): Promise<Stage
     admin
       .from("stage_terms")
       .select(
-        "id, stage_id, report_name, is_required, responsible_organization_id, responsible_user_id, due_date_rule, approval_required, template_reference, status, sort_order, created_at, updated_at, stages!inner(organization_id)",
+        "id, stage_id, report_name, is_required, approval_required, status, sort_order, created_at, updated_at, stages!inner(organization_id)",
       )
       .eq("stages.organization_id", organizationId)
       .order("sort_order", { ascending: true })
@@ -191,11 +173,7 @@ export async function loadStageManagement(organizationId: string): Promise<Stage
       stageId: term.stage_id,
       reportName: term.report_name,
       required: term.is_required,
-      responsibleOrganizationId: term.responsible_organization_id,
-      responsibleUserId: term.responsible_user_id,
-      dueDateRule: term.due_date_rule,
       approvalRequired: term.approval_required,
-      templateReference: term.template_reference,
       status: term.status,
       sortOrder: term.sort_order,
       createdAt: term.created_at,

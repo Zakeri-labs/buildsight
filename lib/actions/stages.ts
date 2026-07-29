@@ -4,15 +4,12 @@ import { revalidatePath } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertStageManager, audit, AuthzError } from "@/lib/auth/guards"
 import type { ActionResult } from "@/lib/actions/invitations"
-import { DUE_DATE_RULES, STAGE_TERM_STATUSES, type StageTermStatus } from "@/lib/stages/config"
+import { STAGE_TERM_STATUSES, type StageTermStatus } from "@/lib/stages/config"
 
 function cleanText(value: string | null | undefined) {
   return value?.trim() || null
 }
 
-function validUuid(value: string | null | undefined) {
-  return !value || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
-}
 
 async function stageScope(stageId: string) {
   const admin = createAdminClient()
@@ -207,91 +204,13 @@ export async function moveStage(input: { stageId: string; direction: "up" | "dow
 type TermInput = {
   reportName: string
   required: boolean
-  responsibleOrganizationId?: string | null
-  responsibleUserId?: string | null
-  dueDateRule: string
   approvalRequired: boolean
-  templateReference?: string
   status: StageTermStatus
 }
 
-async function validateResponsibilityScope(
-  organizationId: string,
-  responsibleOrganizationId?: string | null,
-  responsibleUserId?: string | null,
-): Promise<string | null> {
-  if (!responsibleOrganizationId && !responsibleUserId) return null
-
-  const admin = createAdminClient()
-  const { data: projectRows, error: projectError } = await admin
-    .from("projects")
-    .select("id")
-    .eq("supervising_organization_id", organizationId)
-  if (projectError) throw projectError
-
-  const projectIds = (projectRows ?? []).map((project: any) => project.id as string)
-  const allowedOrganizationIds = new Set<string>([organizationId])
-
-  if (projectIds.length > 0) {
-    const { data: participantRows, error: participantError } = await admin
-      .from("project_organization_memberships")
-      .select("organization_id")
-      .in("project_id", projectIds)
-      .eq("status", "active")
-    if (participantError) throw participantError
-    for (const participant of participantRows ?? []) {
-      allowedOrganizationIds.add(participant.organization_id)
-    }
-  }
-
-  if (responsibleOrganizationId && !allowedOrganizationIds.has(responsibleOrganizationId)) {
-    return "The selected responsible organization is not available in this organization’s projects."
-  }
-
-  if (!responsibleUserId) return null
-
-  const organizationScope = responsibleOrganizationId
-    ? [responsibleOrganizationId]
-    : Array.from(allowedOrganizationIds)
-
-  const { data: organizationMembership, error: organizationMembershipError } = await admin
-    .from("organization_memberships")
-    .select("id")
-    .eq("user_id", responsibleUserId)
-    .eq("status", "active")
-    .in("organization_id", organizationScope)
-    .limit(1)
-    .maybeSingle()
-  if (organizationMembershipError) throw organizationMembershipError
-  if (organizationMembership) return null
-
-  if (projectIds.length > 0) {
-    let projectMembershipQuery = admin
-      .from("project_user_memberships")
-      .select("id")
-      .eq("user_id", responsibleUserId)
-      .eq("status", "active")
-      .in("project_id", projectIds)
-      .limit(1)
-    if (responsibleOrganizationId) {
-      projectMembershipQuery = projectMembershipQuery.eq("organization_id", responsibleOrganizationId)
-    }
-    const { data: projectMembership, error: projectMembershipError } =
-      await projectMembershipQuery.maybeSingle()
-    if (projectMembershipError) throw projectMembershipError
-    if (projectMembership) return null
-  }
-
-  return "The selected responsible user is not available in this organization’s projects."
-}
-
 function validateTermInput(input: TermInput): string | null {
-  if (input.reportName.trim().length < 2) return "Report name must contain at least 2 characters."
-  if (!DUE_DATE_RULES.some((rule) => rule.value === input.dueDateRule)) return "Select a valid due date rule."
-  if (!STAGE_TERM_STATUSES.includes(input.status)) return "Select a valid report status."
-  if (!validUuid(input.responsibleOrganizationId) || !validUuid(input.responsibleUserId)) {
-    return "Select a valid responsible organization and user."
-  }
+  if (input.reportName.trim().length < 2) return "Term name must contain at least 2 characters."
+  if (!STAGE_TERM_STATUSES.includes(input.status)) return "Select a valid term status."
   return null
 }
 
@@ -301,12 +220,6 @@ export async function createStageTerm(input: TermInput & { stageId: string }): P
     if (validationError) return { ok: false, error: validationError }
     const stage = await stageScope(input.stageId)
     const actorId = await assertStageManager(stage.organization_id)
-    const responsibilityError = await validateResponsibilityScope(
-      stage.organization_id,
-      input.responsibleOrganizationId,
-      input.responsibleUserId,
-    )
-    if (responsibilityError) return { ok: false, error: responsibilityError }
     const admin = createAdminClient()
     const { data: last } = await admin
       .from("stage_terms")
@@ -321,11 +234,11 @@ export async function createStageTerm(input: TermInput & { stageId: string }): P
         stage_id: input.stageId,
         report_name: input.reportName.trim(),
         is_required: input.required,
-        responsible_organization_id: input.responsibleOrganizationId || null,
-        responsible_user_id: input.responsibleUserId || null,
-        due_date_rule: input.dueDateRule,
+        responsible_organization_id: null,
+        responsible_user_id: null,
+        due_date_rule: "none",
         approval_required: input.approvalRequired,
-        template_reference: cleanText(input.templateReference),
+        template_reference: null,
         status: input.status,
         sort_order: (last?.sort_order ?? 0) + 1,
         created_by: actorId,
@@ -354,23 +267,13 @@ export async function updateStageTerm(input: TermInput & { termId: string }): Pr
     if (validationError) return { ok: false, error: validationError }
     const term = await termScope(input.termId)
     const actorId = await assertStageManager(term.organization_id)
-    const responsibilityError = await validateResponsibilityScope(
-      term.organization_id,
-      input.responsibleOrganizationId,
-      input.responsibleUserId,
-    )
-    if (responsibilityError) return { ok: false, error: responsibilityError }
     const admin = createAdminClient()
     const { error } = await admin
       .from("stage_terms")
       .update({
         report_name: input.reportName.trim(),
         is_required: input.required,
-        responsible_organization_id: input.responsibleOrganizationId || null,
-        responsible_user_id: input.responsibleUserId || null,
-        due_date_rule: input.dueDateRule,
         approval_required: input.approvalRequired,
-        template_reference: cleanText(input.templateReference),
         status: input.status,
         updated_at: new Date().toISOString(),
       })

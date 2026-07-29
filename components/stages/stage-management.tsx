@@ -315,7 +315,7 @@ export function StageManagement({
           {data.stages.map((stage, stageIndex) => {
             const isExpanded = expanded.has(stage.id)
             return (
-              <Card key={stage.id} className={`!gap-0 !py-0${!stage.active ? " opacity-75" : ""}`}>
+              <Card key={stage.id} className={`overflow-hidden !gap-0 !py-0${!stage.active ? " opacity-75" : ""}`}>
                 <CardHeader className="border-b !px-4 !py-3">
                   <div className="flex min-w-0 items-start gap-3">
                     <button
@@ -432,8 +432,8 @@ export function StageManagement({
                       </div>
                     ) : (
                       <>
-                        <div className="hidden md:block">
-                          <Table className="table-fixed">
+                        <div className="hidden w-full overflow-hidden md:block">
+                          <Table className="w-full table-fixed border-collapse">
                             <TermTableColumns />
                             <TableHeader>
                               <TableRow className="bg-muted/35 hover:bg-muted/35">
@@ -469,7 +469,7 @@ export function StageManagement({
                                         {c.approvalRequired}
                                       </Badge>
                                     ) : (
-                                      <span className="text-muted-foreground">—</span>
+                                      <span aria-hidden="true" className="inline-block h-6 min-w-16" />
                                     )}
                                   </TableCell>
                                   <TableCell className="px-3 py-2.5 align-middle">
@@ -558,7 +558,7 @@ export function StageManagement({
                                     {term.approvalRequired ? (
                                       <Badge variant="outline" className="h-6 px-2 text-xs">{c.approvalRequired}</Badge>
                                     ) : (
-                                      <span className="text-muted-foreground">—</span>
+                                      <span aria-hidden="true" className="block h-6" />
                                     )}
                                   </dd>
                                 </div>
@@ -612,22 +612,8 @@ export function StageManagement({
           execute(
             () =>
               termDialog.mode === "create"
-                ? createStageTerm({
-                    stageId: termDialog.stage.id,
-                    ...values,
-                    responsibleOrganizationId: null,
-                    responsibleUserId: null,
-                    dueDateRule: "none",
-                    templateReference: "",
-                  })
-                : updateStageTerm({
-                    termId: termDialog.term.id,
-                    ...values,
-                    responsibleOrganizationId: termDialog.term.responsibleOrganizationId,
-                    responsibleUserId: termDialog.term.responsibleUserId,
-                    dueDateRule: termDialog.term.dueDateRule,
-                    templateReference: termDialog.term.templateReference ?? "",
-                  }),
+                ? createStageTerm({ stageId: termDialog.stage.id, ...values })
+                : updateStageTerm({ termId: termDialog.term.id, ...values }),
             () => setTermDialog(null),
           )
         }}
@@ -830,7 +816,7 @@ function TermEditorDialog({
 
   return (
     <Dialog open={state != null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[36rem]">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[32rem]">
         <form
           onSubmit={(event) => {
             event.preventDefault()
