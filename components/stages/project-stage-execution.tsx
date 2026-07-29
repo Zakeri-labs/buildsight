@@ -241,6 +241,7 @@ function TermRow({
             {term.response?.createdBy || term.responsibleUser ? (
               (() => {
                 const user = term.response?.createdBy ?? term.responsibleUser!
+                const roleText = user.role || "Organization Admin"
                 return (
                   <>
                     <Avatar size="sm">
@@ -248,10 +249,8 @@ function TermRow({
                       <AvatarFallback>{initials(user.name)}</AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
-                      <p className="truncate font-medium">{user.name}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {term.responsibleOrganization?.name ?? (term.response ? (locale === "ar" ? "مُنشئ التقرير" : "Author") : copy.responsible)}
-                      </p>
+                      <p className="truncate font-semibold text-foreground">{user.name}</p>
+                      <p className="truncate text-xs text-muted-foreground">{roleText}</p>
                     </div>
                   </>
                 )

@@ -9,11 +9,14 @@ import {
   type TermResponseContent,
 } from "@/lib/stages/execution"
 
+import { roleLabel } from "@/lib/db/types"
+
 export type ProjectStagePerson = {
   id: string
   name: string
   email: string | null
   avatarUrl: string | null
+  role?: string | null
 }
 
 export type ProjectStageOrganization = {
@@ -227,24 +230,33 @@ export async function loadProjectStageExecution(projectId: string, userId: strin
   ])) as string[]
   const organizationIds = Array.from(new Set((terms ?? []).map((term: any) => term.responsible_organization_id).filter(Boolean))) as string[]
 
-  const [{ data: profiles }, { data: organizations }] = await Promise.all([
+  const [{ data: profiles }, { data: organizations }, { data: memberships }] = await Promise.all([
     profileIds.length
       ? admin.from("profiles").select("id, full_name, email, avatar_url").in("id", profileIds)
       : Promise.resolve({ data: [] as any[] }),
     organizationIds.length
       ? admin.from("organizations").select("id, name").in("id", organizationIds)
       : Promise.resolve({ data: [] as any[] }),
+    profileIds.length
+      ? admin.from("organization_memberships").select("user_id, role").in("user_id", profileIds).eq("status", "active")
+      : Promise.resolve({ data: [] as any[] }),
   ])
 
-  const people = new Map<string, ProjectStagePerson>((profiles ?? []).map((profile: any) => [
-    profile.id,
-    {
-      id: profile.id,
-      name: profile.full_name?.trim() || profile.email || "Project member",
-      email: profile.email,
-      avatarUrl: profile.avatar_url,
-    },
-  ]))
+  const rolesByUser = new Map<string, string>((memberships ?? []).map((m: any) => [m.user_id, m.role]))
+
+  const people = new Map<string, ProjectStagePerson>((profiles ?? []).map((profile: any) => {
+    const rawRole = rolesByUser.get(profile.id)
+    return [
+      profile.id,
+      {
+        id: profile.id,
+        name: profile.full_name?.trim() || profile.email || "Project member",
+        email: profile.email,
+        avatarUrl: profile.avatar_url,
+        role: rawRole ? roleLabel(rawRole) : "Organization Admin",
+      },
+    ]
+  }))
   const orgs = new Map<string, ProjectStageOrganization>((organizations ?? []).map((organization: any) => [
     organization.id,
     { id: organization.id, name: organization.name },
