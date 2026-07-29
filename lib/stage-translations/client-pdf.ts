@@ -1077,15 +1077,18 @@ function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>, se
   ensureSpace(flow, 16)
   setLanguage(flow.doc, flow.rtl, 8.5, false)
 
+  const headers = block.headers ? block.headers.map((h) => flow.rtl ? shapeArabicText(flow.doc, h) : h) : []
   const rows = rawRows.map((row) => row.map((cell) => flow.rtl ? shapeArabicText(flow.doc, cell) : cell))
 
   if (flow.rtl) {
+    if (headers.length) headers.reverse()
     rows.forEach((r) => r.reverse())
   }
 
   const options: Record<string, unknown> = {
     startY: flow.y,
-    head: [], // Omit title/header row!
+    ...(headers.length ? { head: [headers] } : {}),
+    showHead: "never", // Cleanly hide table header row without crashing jspdf-autotable
     body: rows,
     theme: "horizontal", // Simple, clean minimal rows
     tableWidth: flow.width,
