@@ -985,27 +985,109 @@ function renderRtlTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>)
   flow.y += 5
 }
 
-function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
-  const rawRows = block.rows.length ? block.rows : []
-  if (!block.headers.length && !rawRows.length) return
+function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
+  const rows = block.rows.length ? block.rows : []
+  if (!rows.length) return
 
-  ensureSpace(flow, 18)
+  const boxSize = 3.8
+  const gap = 2.5
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i]
+    if (!row.length) continue
+
+    const labelText = row.length >= 3 ? row[1] : row[0]
+    const statusText = row.length >= 3 ? row[2] : (row[1] || "")
+    const isChecked = Boolean(
+      statusText && (
+        statusText.toLowerCase().includes("complete") ||
+        statusText.includes("مكتمل") ||
+        statusText.includes("مكتملة") ||
+        statusText.includes("تم")
+      )
+    )
+
+    const textAvailable = flow.width - boxSize - gap - 2
+    setLanguage(flow.doc, flow.rtl, 8.5, false)
+    const lines = textLines(flow.doc, labelText, textAvailable)
+    const lineH = 4.2
+    const itemH = Math.max(6, lines.length * lineH + 2.5)
+
+    ensureSpace(flow, itemH)
+
+    const boxY = flow.y + 0.6
+
+    if (flow.rtl) {
+      const boxX = flow.x + flow.width - boxSize
+      const textX = boxX - gap
+
+      if (isChecked) {
+        flow.doc.setFillColor(22, 163, 74)
+        flow.doc.roundedRect(boxX, boxY, boxSize, boxSize, 0.6, 0.6, "F")
+        setLanguage(flow.doc, false, 6.5, true)
+        flow.doc.setTextColor(255, 255, 255)
+        flow.doc.text("v", boxX + 1.1, boxY + 2.8, { align: "left" })
+      } else {
+        flow.doc.setDrawColor(203, 213, 225)
+        flow.doc.setFillColor(255, 255, 255)
+        flow.doc.roundedRect(boxX, boxY, boxSize, boxSize, 0.6, 0.6, "FD")
+      }
+
+      const shaped = shapeArabicText(flow.doc, lines)
+      setLanguage(flow.doc, true, 8.5, false)
+      flow.doc.setTextColor(15, 23, 42)
+      writePdfText(flow.doc, shaped, textX, flow.y + 3, { align: "right", lineHeightFactor: 1.15 }, true)
+    } else {
+      const boxX = flow.x
+      const textX = boxX + boxSize + gap
+
+      if (isChecked) {
+        flow.doc.setFillColor(22, 163, 74)
+        flow.doc.roundedRect(boxX, boxY, boxSize, boxSize, 0.6, 0.6, "F")
+        setLanguage(flow.doc, false, 6.5, true)
+        flow.doc.setTextColor(255, 255, 255)
+        flow.doc.text("v", boxX + 1.1, boxY + 2.8, { align: "left" })
+      } else {
+        flow.doc.setDrawColor(203, 213, 225)
+        flow.doc.setFillColor(255, 255, 255)
+        flow.doc.roundedRect(boxX, boxY, boxSize, boxSize, 0.6, 0.6, "FD")
+      }
+
+      setLanguage(flow.doc, false, 8.5, false)
+      flow.doc.setTextColor(15, 23, 42)
+      writePdfText(flow.doc, lines, textX, flow.y + 3, { align: "left", lineHeightFactor: 1.15 }, false)
+    }
+
+    flow.y += itemH
+    flow.doc.setDrawColor(241, 245, 249)
+    flow.doc.line(flow.x, flow.y - 0.5, flow.x + flow.width, flow.y - 0.5)
+  }
+  flow.y += 2
+}
+
+function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>, sectionKey?: string) {
+  if (sectionKey === "checklist") {
+    renderChecklistTable(flow, block)
+    return
+  }
+
+  const rawRows = block.rows.length ? block.rows : []
+  if (!rawRows.length) return
+
+  ensureSpace(flow, 16)
   setLanguage(flow.doc, flow.rtl, 8.5, false)
 
-  // Shape Arabic text inside table headers and cells if RTL
-  const headers = block.headers.map((h) => flow.rtl ? shapeArabicText(flow.doc, h) : h)
   const rows = rawRows.map((row) => row.map((cell) => flow.rtl ? shapeArabicText(flow.doc, cell) : cell))
 
   if (flow.rtl) {
-    headers.reverse()
     rows.forEach((r) => r.reverse())
   }
 
   const options: Record<string, unknown> = {
     startY: flow.y,
-    head: headers.length ? [headers] : [],
+    head: [], // Omit title/header row!
     body: rows,
-    theme: "grid",
+    theme: "horizontal", // Simple, clean minimal rows
     tableWidth: flow.width,
     margin: { top: 17, left: flow.x, right: flow.pageWidth - flow.x - flow.width, bottom: PAGE.footer + 5 },
     styles: {
@@ -1014,19 +1096,11 @@ function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
       fontSize: 8,
       textColor: [51, 65, 85],
       lineColor: [226, 232, 240],
-      lineWidth: 0.2,
-      cellPadding: 2.2,
+      lineWidth: 0.15,
+      cellPadding: 2,
       halign: flow.rtl ? "right" : "left",
-      valign: "top",
+      valign: "middle",
       overflow: "linebreak",
-    },
-    headStyles: {
-      fillColor: [226, 232, 240],
-      textColor: [15, 23, 42],
-      font: flow.rtl ? ARABIC_FONT_FAMILY : LATIN_FONT_FAMILY,
-      fontStyle: "bold",
-      fontSize: 8,
-      halign: flow.rtl ? "right" : "left",
     },
     didDrawPage: () => {
       const currentPage = flow.doc.internal.getCurrentPageInfo?.().pageNumber ?? flow.doc.internal.getNumberOfPages()
@@ -1037,9 +1111,9 @@ function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
     },
   }
   flow.doc.autoTable(options)
-  const finalY = Number(flow.doc.lastAutoTable?.finalY ?? flow.y + 12)
+  const finalY = Number(flow.doc.lastAutoTable?.finalY ?? flow.y + 10)
   flow.pageNumber = flow.doc.internal.getNumberOfPages()
-  flow.y = finalY + 5
+  flow.y = finalY + 4
   if (flow.y > flow.bottom) addFlowPage(flow)
 }
 
@@ -1082,7 +1156,7 @@ async function renderImageBlock(flow: Flow, block: Extract<PdfBlock, { type: "im
   flow.y += 3
 }
 
-async function renderBlocks(flow: Flow, blocks: PdfBlock[]) {
+async function renderBlocks(flow: Flow, blocks: PdfBlock[], sectionKey?: string) {
   for (const block of blocks) {
     if (block.type === "heading") renderHeading(flow, block)
     else if (block.type === "paragraph") renderParagraph(flow, block.text)
@@ -1090,7 +1164,7 @@ async function renderBlocks(flow: Flow, blocks: PdfBlock[]) {
       for (let index = 0; index < block.items.length; index += 1) {
         renderParagraph(flow, block.items[index], { indent: 2, bullet: block.ordered ? `${index + 1}.` : "•" })
       }
-    } else if (block.type === "table") renderTable(flow, block)
+    } else if (block.type === "table") renderTable(flow, block, sectionKey)
     else if (block.type === "image") await renderImageBlock(flow, block)
     else if (block.type === "spacer") flow.y += block.height
   }
@@ -1647,13 +1721,13 @@ async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
     renderSectionTitle(flow, section.title)
 
     if (flowedContent.length) {
-      await renderBlocks(flow, flowedContent)
+      await renderBlocks(flow, flowedContent, section.key)
     }
 
     if (section.documentsTitle && hasDocuments) {
       renderHeading(flow, { type: "heading", level: 3, text: section.documentsTitle })
-      if (reconstructedSource.length) await renderBlocks(flow, reconstructedSource)
-      if (otherDocumentBlocks.length) await renderBlocks(flow, otherDocumentBlocks)
+      if (reconstructedSource.length) await renderBlocks(flow, reconstructedSource, section.key)
+      if (otherDocumentBlocks.length) await renderBlocks(flow, otherDocumentBlocks, section.key)
     }
 
     if (hasGalleryImages) {
@@ -1947,8 +2021,8 @@ async function buildNativeBilingualPdfBlob(input: {
       const leftSub: Flow = { ...flow, x: flow.x, width: colWidth, y: rowY, rtl: false }
       const rightSub: Flow = { ...flow, x: flow.x + colWidth + gap, width: colWidth, y: rowY, rtl: true }
 
-      if (engBlock) await renderBlocks(leftSub, [engBlock])
-      if (arBlock) await renderBlocks(rightSub, [arBlock])
+      if (engBlock) await renderBlocks(leftSub, [engBlock], engSection.key)
+      if (arBlock) await renderBlocks(rightSub, [arBlock], engSection.key)
 
       if (leftSub.pageNumber > flow.pageNumber || rightSub.pageNumber > flow.pageNumber) {
         flow.pageNumber = Math.max(leftSub.pageNumber, rightSub.pageNumber)
