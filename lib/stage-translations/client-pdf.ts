@@ -1804,56 +1804,123 @@ function addBilingualPageNumbers(doc: JsPdfDocument) {
 async function buildBilingualPdfBlob(input: {
   data: StageTranslationPageData
   translation: StageTranslationRecord
-  englishBlob: Blob
-  arabicBlob: Blob
+  englishTemplate: LanguagePdfTemplate
+  arabicTemplate: LanguagePdfTemplate
   sourceDocument?: ExtractedSourceDocument | null
 }) {
-  const [JsPdf, englishSource, arabicSource] = await Promise.all([
+  const { data, englishTemplate, arabicTemplate } = input
+  const [JsPdf, logoImage] = await Promise.all([
     loadPdfTools(),
-    openPdfBlob(input.englishBlob),
-    openPdfBlob(input.arabicBlob),
+    loadImage("/LogoB.png"),
   ])
-  const doc = new JsPdf({ unit: "mm", format: "a4", orientation: "landscape", compress: true })
+  const doc = new JsPdf({
+    unit: "mm",
+    format: "a4",
+    orientation: "portrait",
+    compress: true,
+    putOnlyUsedFonts: true,
+  })
   await installFonts(doc)
-  const total = Math.max(englishSource.documentProxy.numPages, arabicSource.documentProxy.numPages, 1)
-  const renderWidth = total > 30 ? 700 : 850
-  const margin = 9
-  const gap = 6
-  const top = 22
-  const bottom = 12
-  const columnWidth = (PAGE.landscapeWidth - margin * 2 - gap) / 2
-  const contentHeight = PAGE.landscapeHeight - top - bottom
 
-  try {
-    for (let index = 0; index < total; index += 1) {
-      if (index > 0) doc.addPage("a4", "landscape")
-      const pageNumber = index + 1
-      const [englishPage, arabicPage] = await Promise.all([
-        pageNumber <= englishSource.documentProxy.numPages
-          ? renderPdfPage(englishSource.documentProxy, pageNumber, renderWidth)
-          : Promise.resolve(undefined),
-        pageNumber <= arabicSource.documentProxy.numPages
-          ? renderPdfPage(arabicSource.documentProxy, pageNumber, renderWidth)
-          : Promise.resolve(undefined),
-      ])
-
-      drawBilingualHeader({ doc, data: input.data, margin, columnWidth, gap })
-      drawPageImage(doc, englishPage, margin, top, columnWidth, contentHeight, "No English page")
-      drawPageImage(doc, arabicPage, margin + columnWidth + gap, top, columnWidth, contentHeight, "No Arabic page")
-    }
-
-  } finally {
-    await englishSource.documentProxy.destroy?.()
-    englishSource.loadingTask.destroy?.()
-    await arabicSource.documentProxy.destroy?.()
-    arabicSource.loadingTask.destroy?.()
+  const flow: Flow = {
+    doc,
+    template: englishTemplate,
+    rtl: false,
+    pageWidth: PAGE.portraitWidth,
+    pageHeight: PAGE.portraitHeight,
+    x: PAGE.margin,
+    y: 0,
+    width: PAGE.portraitWidth - PAGE.margin * 2,  // 182 mm
+    bottom: PAGE.portraitHeight - PAGE.footer - 5,
+    pageNumber: 1,
+    logoImage,
   }
 
-  addBilingualPageNumbers(doc)
+  // 1. Draw header & top 8 metadata cards (from English template layout)
+  drawFirstPageHeader(flow)
+
+  const engSections = englishTemplate.sections
+  const arSections = arabicTemplate.sections
+  const arSectionMap = new Map(arSections.map((s) => [s.key, s]))
+
+  const gap = 6
+  const colWidth = (flow.width - gap) / 2  // 88 mm each
+
+  for (const engSection of engSections) {
+    if (engSection.key === "projectInformation" || engSection.key === "project-info") {
+      continue // Skip redundant top project info table
+    }
+
+    const arSection = arSectionMap.get(engSection.key)
+
+    const engBlocks = engSection.html !== undefined ? htmlToBlocks(engSection.html) : []
+    if (engSection.table) engBlocks.push({ type: "table", ...engSection.table })
+    const arBlocks = arSection?.html !== undefined ? htmlToBlocks(arSection.html) : []
+    if (arSection?.table) arBlocks.push({ type: "table", ...arSection.table })
+
+    const galleryImages = (engSection.images ?? []).filter((i) => i.flowTarget !== "section" && i.flowTarget !== "documents")
+    const hasContent = engBlocks.length > 0 || arBlocks.length > 0 || galleryImages.length > 0
+
+    if (!hasContent) continue
+
+    const startY = flow.y
+
+    // Left Column (English): Helvetica font, LTR
+    const leftFlow: Flow = {
+      ...flow,
+      x: flow.x,
+      width: colWidth,
+      y: startY,
+      rtl: false,
+    }
+
+    // Right Column (Arabic): Greta Arabic font, RTL
+    const rightFlow: Flow = {
+      ...flow,
+      x: flow.x + colWidth + gap,
+      width: colWidth,
+      y: startY,
+      rtl: true,
+    }
+
+    // Render Section Titles side-by-side
+    renderSectionTitle(leftFlow, engSection.title)
+    if (arSection) {
+      renderSectionTitle(rightFlow, arSection.title)
+    }
+
+    // Synchronize Y offset after section titles
+    const titleEndY = Math.max(leftFlow.y, rightFlow.y)
+    leftFlow.y = titleEndY
+    rightFlow.y = titleEndY
+
+    // Render Blocks in Left (English) and Right (Arabic) columns
+    if (engBlocks.length) {
+      await renderBlocks(leftFlow, engBlocks)
+    }
+    if (arBlocks.length) {
+      await renderBlocks(rightFlow, arBlocks)
+    }
+
+    // Render gallery images if present
+    if (galleryImages.length) {
+      const imgY = Math.max(leftFlow.y, rightFlow.y)
+      leftFlow.y = imgY
+      rightFlow.y = imgY
+      await renderImageGrid(leftFlow, galleryImages, false)
+    }
+
+    // Update flow.y and page number to taller column
+    const endY = Math.max(leftFlow.y, rightFlow.y)
+    flow.pageNumber = Math.max(leftFlow.pageNumber, rightFlow.pageNumber)
+    flow.y = endY + 4
+  }
+
+  addPageNumbers(doc, false)
   doc.setProperties({
-    title: `${input.data.response.reportTitle} — Bilingual`,
-    subject: input.data.response.subject || input.data.term.name,
-    author: input.data.project.name,
+    title: `${data.response.reportTitle} — Simultaneous Bilingual`,
+    subject: data.response.subject || data.term.name,
+    author: data.project.name,
     creator: "BuildSight AI Document Translation",
   })
   return doc.output("blob") as Blob
@@ -1905,7 +1972,6 @@ export async function exportTranslationPdf({
     return { blob: arabicBlob, filename: `${base}-${report}-arabic-translation.pdf` }
   }
 
-  const englishBlob = await buildLanguagePdfBlob(englishTemplate)
-  const bilingualBlob = await buildBilingualPdfBlob({ data, translation, englishBlob, arabicBlob, sourceDocument })
+  const bilingualBlob = await buildNativeBilingualPdfBlob({ data, translation, englishTemplate, arabicTemplate, sourceDocument })
   return { blob: bilingualBlob, filename: `${base}-${report}-bilingual.pdf` }
 }
