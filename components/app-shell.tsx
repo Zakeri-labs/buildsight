@@ -1,5 +1,7 @@
 import { AppSidebar } from "@/components/app-sidebar"
+import { Suspense } from "react"
 import { AppTopbar } from "@/components/app-topbar"
+import { NavigationProgress } from "@/components/loading/navigation-progress"
 
 export type ProjectOption = { id: string; name: string }
 
@@ -19,6 +21,7 @@ export function AppShell({
 
   return (
     <div className="flex min-h-dvh bg-background">
+      <Suspense fallback={null}><NavigationProgress /></Suspense>
       <AppSidebar projects={projects} selectedProjectId={selectedProjectId} canManageStages={canManageStages} />
       <div className="flex min-w-0 flex-1 flex-col">
         <AppTopbar activeProjectName={activeProjectName} />

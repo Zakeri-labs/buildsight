@@ -543,3 +543,70 @@
   color: transparent;
   background: rgba(37, 99, 235, 0.28);
 }
+
+/* Route loading states: hidden briefly to avoid flashing on fast navigations. */
+@keyframes route-loading-reveal {
+  from { opacity: 0; visibility: hidden; }
+  to { opacity: 1; visibility: visible; }
+}
+
+@keyframes loading-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes loading-progress-line {
+  0% { transform: translateX(-120%); }
+  50% { transform: translateX(110%); }
+  100% { transform: translateX(330%); }
+}
+
+@keyframes loading-building-rise {
+  from { transform: scaleY(0.3); opacity: 0.35; }
+  to { transform: scaleY(1); opacity: 1; }
+}
+
+@keyframes loading-hardhat-bob {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-1.5px) rotate(-3deg); }
+}
+
+.route-loading-reveal {
+  opacity: 0;
+  visibility: hidden;
+  animation: route-loading-reveal 160ms ease-out 180ms forwards;
+}
+
+.loading-shimmer {
+  background-image: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.72) 45%, transparent 70%);
+  background-size: 220% 100%;
+  animation: loading-shimmer 1.55s linear infinite;
+}
+
+.dark .loading-shimmer {
+  background-image: linear-gradient(100deg, transparent 20%, rgba(148, 163, 184, 0.12) 45%, transparent 70%);
+}
+
+.loading-progress-line {
+  animation: loading-progress-line 1.45s ease-in-out infinite;
+}
+
+.loading-building-left,
+.loading-building-right {
+  transform-origin: bottom;
+  animation: loading-building-rise 800ms ease-out infinite alternate;
+}
+
+.loading-building-right { animation-delay: 160ms; }
+.loading-building-icon { animation: loading-hardhat-bob 1.4s ease-in-out infinite; }
+.loading-hardhat { animation: loading-hardhat-bob 1.25s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .route-loading-reveal { animation-delay: 120ms; animation-duration: 1ms; }
+  .loading-shimmer,
+  .loading-progress-line,
+  .loading-building-left,
+  .loading-building-right,
+  .loading-building-icon,
+  .loading-hardhat { animation: none; }
+}

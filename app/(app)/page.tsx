@@ -86,9 +86,8 @@ async function getProjectDocuments(projectId: string, currentUserId: string, cur
 }
 
 export default async function DashboardPage() {
-  const session = await requireOnboarded()
+  const [session, projectId] = await Promise.all([requireOnboarded(), getSelectedProjectId()])
   const orgId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id ?? null
-  const projectId = await getSelectedProjectId()
 
   let data: DashboardData
   let orgProjects: DomainProject[]

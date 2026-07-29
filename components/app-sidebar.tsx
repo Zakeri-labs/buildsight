@@ -32,6 +32,7 @@ import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { selectProject } from "@/lib/actions/project-scope"
 import type { ProjectOption } from "@/components/app-shell"
+import { NAVIGATION_START_EVENT } from "@/components/loading/navigation-progress"
 import { useI18n } from "@/lib/i18n"
 
 function NavLink({
@@ -135,6 +136,7 @@ export function AppSidebar({
     setProject(value)
     setProjectMenuOpen(false)
     setProjectSearch("")
+    window.dispatchEvent(new Event(NAVIGATION_START_EVENT))
     startTransition(async () => {
       await selectProject(value)
       router.push("/")
