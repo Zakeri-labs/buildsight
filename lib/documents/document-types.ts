@@ -36,11 +36,10 @@ const badgeStyles = {
 
 export const DOCUMENT_TYPES = [
   { value: "ncr", label: "NCR — Non-Conformance Report", shortLabel: "NCR", group: "quality", icon: "quality" },
-  { value: "ipc", label: "IPC — Interim Payment Certificate", shortLabel: "IPC", group: "commercial", icon: "commercial" },
+  { value: "ipc", label: "IPC — Inspection and Test Plan / Inspection Process Control", shortLabel: "IPC", group: "inspection", icon: "inspection" },
   { value: "inspection_report", label: "Inspection Report", shortLabel: "Inspection Report", group: "inspection", icon: "inspection" },
   { value: "site_inspection_request", label: "Site Inspection Request", shortLabel: "Site Inspection", group: "inspection", icon: "inspection" },
-  { value: "material_inspection_request", label: "MIR — Material Inspection Request", shortLabel: "MIR", group: "inspection", icon: "inspection" },
-  { value: "wir_ir", label: "WIR / IR — Work Inspection Request", shortLabel: "WIR / IR", group: "inspection", icon: "inspection" },
+  { value: "material_inspection_request", label: "Material Inspection Request", shortLabel: "Material Inspection", group: "inspection", icon: "inspection" },
   { value: "request_for_inspection", label: "Request for Inspection (RFI)", shortLabel: "RFI · Inspection", group: "inspection", icon: "inspection" },
   { value: "request_for_information", label: "Request for Information (RFI)", shortLabel: "RFI · Information", group: "communication", icon: "communication" },
   { value: "method_statement", label: "Method Statement", shortLabel: "Method Statement", group: "management", icon: "document" },
@@ -71,7 +70,7 @@ export const DOCUMENT_TYPES = [
   { value: "transmittal", label: "Transmittal", shortLabel: "Transmittal", group: "communication", icon: "communication" },
   { value: "technical_query", label: "Technical Query", shortLabel: "Technical Query", group: "communication", icon: "communication" },
   { value: "change_request", label: "Change Request", shortLabel: "Change Request", group: "commercial", icon: "commercial" },
-  { value: "variation_order", label: "VO — Variation Order", shortLabel: "VO", group: "commercial", icon: "commercial" },
+  { value: "variation_order", label: "Variation Order", shortLabel: "Variation Order", group: "commercial", icon: "commercial" },
   { value: "site_instruction", label: "Site Instruction", shortLabel: "Site Instruction", group: "communication", icon: "communication" },
   { value: "work_order", label: "Work Order", shortLabel: "Work Order", group: "management", icon: "document" },
   { value: "meeting_minutes", label: "Meeting Minutes", shortLabel: "Meeting Minutes", group: "communication", icon: "communication" },
@@ -84,7 +83,7 @@ export const DOCUMENT_TYPES = [
   { value: "manual", label: "Manual", shortLabel: "Manual", group: "management", icon: "document" },
   { value: "schedule", label: "Schedule", shortLabel: "Schedule", group: "management", icon: "document" },
   { value: "bill_of_quantities", label: "Bill of Quantities (BOQ)", shortLabel: "BOQ", group: "commercial", icon: "commercial" },
-  { value: "other", label: "General Documents", shortLabel: "General", group: "other", icon: "document" },
+  { value: "other", label: "Other", shortLabel: "Other", group: "other", icon: "document" },
 ] as const
 
 export type DocumentTypeValue = (typeof DOCUMENT_TYPES)[number]["value"]
@@ -107,11 +106,6 @@ const LEGACY_DOCUMENT_TYPE_MAP: Record<string, DocumentTypeValue> = {
   rfi: "request_for_information",
   "request for information": "request_for_information",
   "request for inspection": "request_for_inspection",
-  "work inspection request": "wir_ir",
-  "wir / ir": "wir_ir",
-  wir: "wir_ir",
-  mir: "material_inspection_request",
-  vo: "variation_order",
   ncr: "ncr",
   drawing: "drawing",
 }

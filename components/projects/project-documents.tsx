@@ -14,7 +14,6 @@ import {
   Pencil,
   Upload,
 } from "lucide-react"
-import { CreateDocumentDialog } from "@/components/documents/create-document-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -87,18 +86,13 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
           <FileText className="size-5 text-primary" />
           3. Core Project Documents
         </CardTitle>
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-          <CreateDocumentDialog
-            projectId={projectId}
-            triggerLabel="Create Document"
-            triggerClassName="h-9 w-full sm:w-auto"
-          />
+        <div className="flex flex-col gap-2 sm:flex-row">
           <Link
             href="/documents/new"
-            className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-9 w-full sm:w-auto")}
+            className={cn(buttonVariants({ size: "lg" }), "h-9 w-full sm:w-auto")}
           >
             <Upload className="size-4" />
-            Upload File
+            Upload Document
           </Link>
           <Link
             href={`/documents?project=${projectQuery}`}
