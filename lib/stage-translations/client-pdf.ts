@@ -559,12 +559,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   const col2X = margin + col1W
   const col3X = margin + col1W + col2W
 
-  // Column dividers spanning full header height
-  doc.setDrawColor(226, 232, 240)
-  doc.setLineWidth(0.25)
-  doc.line(col2X, 2, col2X, headerH - 1)
-  doc.line(col3X, 2, col3X, headerH - 1)
-  doc.setLineWidth(0.2)
+
 
   // ── LEFT COLUMN: Logo (Left-aligned) ────────────────────────────────────
   if (logoImage) {
