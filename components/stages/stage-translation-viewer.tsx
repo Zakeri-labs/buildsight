@@ -268,7 +268,7 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
           ? translation.arabicPdfPath
           : translation.bilingualPdfPath
       : null
-    if (storedPath && translation && !(kind === "original" && sourcePdf)) {
+    if (storedPath && translation && !(kind === "original" && sourcePdf) && false) {
       const params = new URLSearchParams({ projectId: data.project.id, translationId: translation.id, kind })
       window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
       return
