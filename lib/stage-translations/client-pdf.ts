@@ -1918,18 +1918,28 @@ function addBilingualPageNumbers(doc: JsPdfDocument) {
 
 function measureBlockHeight(doc: JsPdfDocument, block: PdfBlock | undefined, width: number, rtl: boolean): number {
   if (!block) return 0
-  if (block.type === "heading") return 10
+  if (block.type === "heading") {
+    const size = block.level <= 2 ? 14 : block.level === 3 ? 12 : 10.5
+    setLanguage(doc, rtl, size, true)
+    const lines = textLines(doc, block.text, width)
+    return Math.max(size * 0.42 + 1.4, lines.length * (size * 0.42 + 1.4)) + 5
+  }
   if (block.type === "paragraph") {
     setLanguage(doc, rtl, 9, false)
-    const lines = textLines(doc, block.text, width)
+    const indent = block.indent ?? 0
+    const bulletW = block.bullet ? 6 : 0
+    const available = width - indent - bulletW
+    const lines = textLines(doc, block.text, available)
     const lineHeight = 4.6
-    return Math.max(lineHeight, lines.length * lineHeight) + 2
+    return Math.max(lineHeight, lines.length * lineHeight) + 2.5
   }
   if (block.type === "table") {
     const rows = (block && Array.isArray(block.rows)) ? block.rows : []
     const headers = (block && Array.isArray(block.headers)) ? block.headers : []
     const rowCount = rows.length + (headers.length ? 1 : 0)
-    return rowCount * 7.5 + 6
+    // Estimate an average of 1.5 lines per cell for bilingual narrow columns
+    const avgCellLines = 1.5
+    return rowCount * (avgCellLines * 4.2 + 4) + 6
   }
   if (block.type === "spacer") return block.height
   return 18
@@ -2040,25 +2050,25 @@ async function buildNativeBilingualPdfBlob(input: {
       const hAr = measureBlockHeight(flow.doc, arBlock, colWidth, true)
       const rowHeight = Math.max(hEng, hAr)
 
-      // Pre-check if row exceeds remaining space on current page
+      // Pre-check: if EITHER column would overflow, add a new page for BOTH columns together
       if (flow.y + rowHeight > flow.bottom) {
-        addFlowPage(flow)
+        flow.doc.addPage("a4", "portrait")
+        flow.pageNumber += 1
+        // Redraw the bilingual header on the new page
+        drawBilingualHeader({ doc: flow.doc, data, margin: PAGE.margin, columnWidth: colWidth, gap, englishLabel: engSections[0]?.title, arabicLabel: arSections[0]?.title })
+        flow.y = 28  // below the bilingual header
       }
 
       const rowY = flow.y
 
-      const leftSub: Flow = { ...flow, x: flow.x, width: colWidth, y: rowY, rtl: false }
-      const rightSub: Flow = { ...flow, x: flow.x + colWidth + gap, width: colWidth, y: rowY, rtl: true }
+      // Render both columns at the same Y using shallow sub-flows that do NOT add pages
+      const leftSub: Flow = { ...flow, x: flow.x, width: colWidth, y: rowY, rtl: false, bottom: 99999 }
+      const rightSub: Flow = { ...flow, x: flow.x + colWidth + gap, width: colWidth, y: rowY, rtl: true, bottom: 99999 }
 
       if (engBlock) await renderBlocks(leftSub, [engBlock], engSection.key)
       if (arBlock) await renderBlocks(rightSub, [arBlock], engSection.key)
 
-      if (leftSub.pageNumber > flow.pageNumber || rightSub.pageNumber > flow.pageNumber) {
-        flow.pageNumber = Math.max(leftSub.pageNumber, rightSub.pageNumber)
-        flow.y = Math.max(leftSub.y, rightSub.y)
-      } else {
-        flow.y = Math.max(leftSub.y, rightSub.y)
-      }
+      flow.y = Math.max(leftSub.y, rightSub.y)
     }
 
     // 3. Render Gallery Images across FULL page width (Not split into 2 narrow columns)
