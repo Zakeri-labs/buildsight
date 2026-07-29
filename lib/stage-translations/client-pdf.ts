@@ -80,6 +80,7 @@ type Flow = {
   width: number
   bottom: number
   pageNumber: number
+  logoImage?: LoadedImage | null
 }
 
 let pdfToolsPromise: Promise<JsPdfConstructor> | null = null
@@ -425,24 +426,31 @@ function decodeImage(dataUrl: string) {
   })
 }
 
-async function normalizeImage(dataUrl: string): Promise<LoadedImage> {
+async function normalizeImage(dataUrl: string, isPng = false): Promise<LoadedImage> {
   const image = await decodeImage(dataUrl)
   const maxDimension = 1800
   const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth || 1, image.naturalHeight || 1))
   const canvas = document.createElement("canvas")
   canvas.width = Math.max(1, Math.round((image.naturalWidth || 1) * scale))
   canvas.height = Math.max(1, Math.round((image.naturalHeight || 1) * scale))
-  const context = canvas.getContext("2d", { alpha: false })
+  const context = canvas.getContext("2d", { alpha: isPng })
   if (!context) throw new Error("Unable to prepare an image for the PDF.")
-  context.fillStyle = "#ffffff"
-  context.fillRect(0, 0, canvas.width, canvas.height)
+  if (!isPng) {
+    context.fillStyle = "#ffffff"
+    context.fillRect(0, 0, canvas.width, canvas.height)
+  }
   context.drawImage(image, 0, 0, canvas.width, canvas.height)
-  return { dataUrl: canvas.toDataURL("image/jpeg", 0.84), width: canvas.width, height: canvas.height }
+  return {
+    dataUrl: isPng ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", 0.84),
+    width: canvas.width,
+    height: canvas.height,
+  }
 }
 
 function loadImage(src: string) {
   const cached = imageCache.get(src)
   if (cached) return cached
+  const isPng = src.toLowerCase().endsWith(".png") || src.startsWith("data:image/png")
   const promise = (async () => {
     try {
       const rawDataUrl = src.startsWith("data:")
@@ -451,7 +459,7 @@ function loadImage(src: string) {
             if (!response.ok) throw new Error(`Image request failed with status ${response.status}.`)
             return dataUrlFromBlob(await response.blob())
           })
-      return await normalizeImage(rawDataUrl)
+      return await normalizeImage(rawDataUrl, isPng)
     } catch {
       return null
     }
@@ -494,23 +502,38 @@ function textLines(doc: JsPdfDocument, text: string, width: number) {
 }
 
 function drawContinuationHeader(flow: Flow) {
-  const { doc, template, pageWidth, rtl } = flow
+  const { doc, template, pageWidth, rtl, logoImage } = flow
   doc.setFillColor(29, 78, 216)
   doc.rect(0, 0, pageWidth, 3, "F")
-  setLanguage(doc, rtl, 10, true)
-  doc.setTextColor(15, 23, 42)
-  writePdfText(doc, template.projectName, rtl ? pageWidth - PAGE.margin : PAGE.margin, 10, { align: rtl ? "right" : "left" }, rtl)
+
+  if (logoImage) {
+    const maxHeight = 5.5
+    const maxW = 28
+    const ratio = Math.min(maxW / logoImage.width, maxHeight / logoImage.height)
+    const w = logoImage.width * ratio
+    const h = logoImage.height * ratio
+    const logoX = rtl ? pageWidth - PAGE.margin - w : PAGE.margin
+    doc.addImage(logoImage.dataUrl, "PNG", logoX, 4.5, w, h, undefined, "FAST")
+  } else {
+    setLanguage(doc, rtl, 8, true)
+    doc.setTextColor(15, 23, 42)
+    writePdfText(doc, template.projectName, rtl ? pageWidth - PAGE.margin : PAGE.margin, 8.5, { align: rtl ? "right" : "left" }, rtl)
+  }
+
   setLanguage(doc, rtl, 8, false)
   doc.setTextColor(100, 116, 139)
   writePdfText(
     doc,
-    `${template.reportNumber} · ${template.title}`,
+    `${template.termName || template.title} · ${template.reportNumber}`,
     rtl ? PAGE.margin : pageWidth - PAGE.margin,
-    10,
+    8.5,
     { align: rtl ? "left" : "right" },
     rtl,
   )
-  flow.y = 17
+
+  doc.setDrawColor(226, 232, 240)
+  doc.line(PAGE.margin, 12, pageWidth - PAGE.margin, 12)
+  flow.y = 16
 }
 
 function addFlowPage(flow: Flow) {
@@ -546,36 +569,81 @@ function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: st
 }
 
 function drawFirstPageHeader(flow: Flow) {
-  const { doc, template, pageWidth, rtl } = flow
+  const { doc, template, pageWidth, rtl, logoImage } = flow
+
+  // 1. Top accent bar
   doc.setFillColor(29, 78, 216)
-  doc.rect(0, 0, pageWidth, 4, "F")
+  doc.rect(0, 0, pageWidth, 3.5, "F")
+
+  // 2. Banner background box
   doc.setFillColor(248, 250, 252)
-  doc.rect(0, 4, pageWidth, 63, "F")
+  doc.rect(0, 3.5, pageWidth, 65, "F")
 
-  setLanguage(doc, rtl, 9, true)
-  doc.setTextColor(29, 78, 216)
+  // 3. Header bar with LogoB.png logo
+  if (logoImage) {
+    const maxHeight = 9
+    const maxW = 42
+    const ratio = Math.min(maxW / logoImage.width, maxHeight / logoImage.height)
+    const w = logoImage.width * ratio
+    const h = logoImage.height * ratio
+    const logoX = rtl ? pageWidth - PAGE.margin - w : PAGE.margin
+    doc.addImage(logoImage.dataUrl, "PNG", logoX, 6.5, w, h, undefined, "FAST")
+  } else {
+    setLanguage(doc, rtl, 10, true)
+    doc.setTextColor(29, 78, 216)
+    writePdfText(
+      doc,
+      rtl ? "روية للاستشارات" : "PROVISION CONSULTANCY",
+      rtl ? pageWidth - PAGE.margin : PAGE.margin,
+      11.5,
+      { align: rtl ? "right" : "left" },
+      rtl,
+    )
+  }
+
+  // Header right side text (Platform Name)
+  setLanguage(doc, rtl, 8, true)
+  doc.setTextColor(100, 116, 139)
   writePdfText(
     doc,
-    rtl ? "ترجمة مستندات الإنشاء" : "AI DOCUMENT TRANSLATION",
-    rtl ? pageWidth - PAGE.margin : PAGE.margin,
-    13,
-    { align: rtl ? "right" : "left" },
+    rtl ? "منصة إشراف الإنشاءات" : "CONSTRUCTION SUPERVISION PLATFORM",
+    rtl ? PAGE.margin : pageWidth - PAGE.margin,
+    11.5,
+    { align: rtl ? "left" : "right" },
     rtl,
   )
-  setLanguage(doc, rtl, 19, true)
+
+  // Separator line under header logo
+  doc.setDrawColor(226, 232, 240)
+  doc.line(PAGE.margin, 18.5, pageWidth - PAGE.margin, 18.5)
+
+  // Main Title: Report / Term Name (AI DOCUMENT TRANSLATION & English Original Document REMOVED!)
+  const reportMainTitle = template.termName || template.title
+  setLanguage(doc, rtl, 17, true)
   doc.setTextColor(15, 23, 42)
-  writePdfText(doc, template.title, rtl ? pageWidth - PAGE.margin : PAGE.margin, 23, { align: rtl ? "right" : "left" }, rtl)
-  setLanguage(doc, rtl, 10, false)
-  doc.setTextColor(71, 85, 105)
   writePdfText(
     doc,
-    `${template.projectName} · ${template.termName}`,
+    reportMainTitle,
     rtl ? pageWidth - PAGE.margin : PAGE.margin,
-    29,
+    26,
     { align: rtl ? "right" : "left" },
     rtl,
   )
 
+  // Subtitle: Project Name · Report Number
+  setLanguage(doc, rtl, 9.5, false)
+  doc.setTextColor(71, 85, 105)
+  const subtitle = `${template.projectName} · ${template.reportNumber}`
+  writePdfText(
+    doc,
+    subtitle,
+    rtl ? pageWidth - PAGE.margin : PAGE.margin,
+    32,
+    { align: rtl ? "right" : "left" },
+    rtl,
+  )
+
+  // Metadata Grid (8 boxes)
   const labels = rtl
     ? ["المشروع", "مرجع المشروع", "المرحلة", "البند", "رقم المستند", "رقم الزيارة", "النوع", "الموضوع"]
     : ["Project", "Project Reference", "Stage", "Term", "Document Number", "Visit Number", "Type", "Subject"]
@@ -598,13 +666,13 @@ function drawFirstPageHeader(flow: Flow) {
     drawMetaCell(
       flow,
       PAGE.margin + physicalColumn * (cellWidth + gap),
-      34 + row * 18,
+      36 + row * 15,
       cellWidth,
       labels[index],
       values[index],
     )
   }
-  flow.y = 74
+  flow.y = 72
 }
 
 function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>) {
@@ -1158,12 +1226,34 @@ async function renderPreservedSourceLayout(flow: Flow, layout: NonNullable<Langu
 
 function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
   const pages = doc.internal.getNumberOfPages()
+  const width = doc.internal.pageSize.getWidth()
+  const height = doc.internal.pageSize.getHeight()
+  const margin = PAGE.margin
+
   for (let page = 1; page <= pages; page += 1) {
     doc.setPage(page)
-    // Page numbers are neutral numeric content and must never be reversed.
-    setLanguage(doc, false, 8, false)
+    doc.setDrawColor(226, 232, 240)
+    doc.line(margin, height - 9, width - margin, height - 9)
+
+    setLanguage(doc, rtl, 7.5, false)
     doc.setTextColor(100, 116, 139)
-    doc.text(`${page} / ${pages}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() - 5, { align: "center" })
+    writePdfText(
+      doc,
+      rtl ? "روية للاستشارات · مستند سري" : "Provision Consultancy · Confidential Document",
+      rtl ? width - margin : margin,
+      height - 4.5,
+      { align: rtl ? "right" : "left" },
+      rtl,
+    )
+
+    setLanguage(doc, false, 7.5, false)
+    doc.setTextColor(100, 116, 139)
+    doc.text(
+      `${page} / ${pages}`,
+      rtl ? margin : width - margin,
+      height - 4.5,
+      { align: rtl ? "left" : "right" },
+    )
   }
   if (rtl) setLanguage(doc, true, 8, false)
 }
@@ -1245,7 +1335,10 @@ function validateMirroredTemplates(english: LanguagePdfTemplate, arabic: Languag
 
 async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
   validateLanguagePdfTemplate(template)
-  const JsPdf = await loadPdfTools()
+  const [JsPdf, logoImage] = await Promise.all([
+    loadPdfTools(),
+    loadImage("/LogoB.png"),
+  ])
   const doc = new JsPdf({
     unit: "mm",
     format: "a4",
@@ -1268,6 +1361,7 @@ async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
     width: PAGE.portraitWidth - PAGE.margin * 2,
     bottom: PAGE.portraitHeight - PAGE.footer - 5,
     pageNumber: 1,
+    logoImage,
   }
   drawFirstPageHeader(flow)
   for (const section of template.sections) {
@@ -1440,11 +1534,20 @@ function drawBilingualCaption(input: {
 
 function addBilingualPageNumbers(doc: JsPdfDocument) {
   const pages = doc.internal.getNumberOfPages()
+  const width = PAGE.landscapeWidth
+  const height = PAGE.landscapeHeight
+  const margin = PAGE.margin
+
   for (let page = 1; page <= pages; page += 1) {
     doc.setPage(page)
-    setLanguage(doc, false, 8, false)
+    doc.setDrawColor(226, 232, 240)
+    doc.line(margin, height - 9, width - margin, height - 9)
+
+    setLanguage(doc, false, 7.5, false)
     doc.setTextColor(100, 116, 139)
-    doc.text(`${page} / ${pages}`, PAGE.landscapeWidth / 2, PAGE.landscapeHeight - 5, { align: "center" })
+    doc.text("Provision Consultancy · Confidential Document", margin, height - 4.5, { align: "left" })
+
+    doc.text(`${page} / ${pages}`, width - margin, height - 4.5, { align: "right" })
   }
 }
 
