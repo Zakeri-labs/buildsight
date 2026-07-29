@@ -23,15 +23,22 @@ function LoginCard() {
     e.preventDefault()
     setLoading(true)
     setError(null)
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    if (!supabaseUrl || supabaseUrl.includes("placeholder")) {
+      router.push(next)
+      router.refresh()
+      return
+    }
+
     try {
       const supabase = createClient()
       const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (!error) {
-        router.push(next)
-        router.refresh()
+      if (error) {
+        setError(error.message)
+        setLoading(false)
         return
       }
-      // Fallback for dev mode without live Supabase
       router.push(next)
       router.refresh()
     } catch {

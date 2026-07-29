@@ -13,17 +13,17 @@ import { cn } from "@/lib/utils"
 const COPY = {
   en: {
     translate: "Translate",
-    english: "English PDF",
-    arabic: "Arabic PDF",
-    bilingual: "Bilingual PDF",
+    english: "EN",
+    arabic: "AR",
+    bilingual: "EN / AR",
     stale: "The report changed after translation. Regenerate the translation before downloading Arabic or bilingual PDFs.",
     failed: "Unable to generate or download the PDF.",
   },
   ar: {
     translate: "ترجمة",
-    english: "PDF إنجليزي",
-    arabic: "PDF عربي",
-    bilingual: "PDF ثنائي اللغة",
+    english: "EN",
+    arabic: "AR",
+    bilingual: "EN / AR",
     stale: "تم تعديل التقرير بعد الترجمة. أعد إنشاء الترجمة قبل تنزيل ملف PDF العربي أو ثنائي اللغة.",
     failed: "تعذر إنشاء ملف PDF أو تنزيله.",
   },
