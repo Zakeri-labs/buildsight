@@ -36,7 +36,7 @@ export function toProjectRecord(
     name: project.name,
     code: project.code?.trim() || "Not set",
     location: project.location ?? "Location not set",
-    image: projectImageDisplayUrl(project.image) ?? "/placeholder.svg",
+    image: projectImageDisplayUrl(project.image, project.id) ?? "/placeholder.svg",
     statusKey: projectStatusKey(project.status),
     projectType: projectTypeLabel(project.projectType),
     organizationRole: project.ourRole?.trim() || "Consultant",

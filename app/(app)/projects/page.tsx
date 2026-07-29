@@ -62,7 +62,7 @@ export default async function ProjectsPage({
     status: projectStatus(project.status),
     startDate: displayDate(project.startDate),
     progress: Math.min(100, Math.max(0, Math.round(project.progressActual))),
-    imageUrl: projectImageDisplayUrl(project.image) ?? "/placeholder.svg",
+    imageUrl: projectImageDisplayUrl(project.image, project.id) ?? "/placeholder.svg",
     latitude: project.latitude,
     longitude: project.longitude,
     canEdit: editPermissions[index] ?? false,

@@ -460,6 +460,7 @@ export function ProjectsList({
                     <div className="flex items-center gap-3">
                       <ProjectImageDisplay
                         src={row.imageUrl}
+                        projectId={row.id}
                         alt={row.name}
                         className="size-10 shrink-0 rounded-lg border border-slate-200 dark:border-slate-700"
                         iconClassName="size-4"

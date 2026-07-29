@@ -52,7 +52,10 @@ export function detectProjectImageMimeType(bytes: Uint8Array): string | null {
   return null
 }
 
-function validStoragePath(candidate: string | null | undefined): string | null {
+function validStoragePath(
+  candidate: string | null | undefined,
+  expectedProjectId?: string | null,
+): string | null {
   if (!candidate) return null
   let decoded = candidate.trim()
   try {
@@ -73,18 +76,25 @@ function validStoragePath(candidate: string | null | undefined): string | null {
     !decoded.includes("..") &&
     !decoded.includes("\\")
   ) {
+    if (expectedProjectId && firstSegment !== expectedProjectId) return null
     return decoded
   }
   return null
 }
 
-export function projectImageStoragePath(value: string | null | undefined): string | null {
+export function projectImageStoragePath(
+  value: string | null | undefined,
+  expectedProjectId?: string | null,
+): string | null {
   const trimmed = value?.trim()
   if (!trimmed) return null
 
   if (trimmed.startsWith("/api/project-images?")) {
     try {
-      return validStoragePath(new URL(trimmed, "https://buildsight.local").searchParams.get("path"))
+      const url = new URL(trimmed, "https://buildsight.local")
+      const urlProjectId = url.searchParams.get("projectId")
+      if (expectedProjectId && urlProjectId && urlProjectId !== expectedProjectId) return null
+      return validStoragePath(url.searchParams.get("path"), expectedProjectId)
     } catch {
       return null
     }
@@ -94,7 +104,7 @@ export function projectImageStoragePath(value: string | null | undefined): strin
     const url = new URL(trimmed)
     const pathname = decodeURIComponent(url.pathname)
     if (pathname === "/api/project-images") {
-      return validStoragePath(url.searchParams.get("path"))
+      return validStoragePath(url.searchParams.get("path"), expectedProjectId)
     }
     const markers = [
       `/storage/v1/object/public/${PROJECT_IMAGE_BUCKET}/`,
@@ -105,21 +115,44 @@ export function projectImageStoragePath(value: string | null | undefined): strin
     ]
     for (const marker of markers) {
       const index = pathname.indexOf(marker)
-      if (index >= 0) return validStoragePath(pathname.slice(index + marker.length))
+      if (index >= 0) return validStoragePath(pathname.slice(index + marker.length), expectedProjectId)
     }
   } catch {
     // Plain Storage paths are handled below.
   }
 
-  return validStoragePath(trimmed)
+  return validStoragePath(trimmed, expectedProjectId)
 }
 
-export function projectImageDisplayUrl(value: string | null | undefined): string | null {
+
+function looksLikeManagedProjectImage(value: string): boolean {
+  if (value.startsWith("/api/project-images?")) return true
+  if (value.startsWith(`${PROJECT_IMAGE_BUCKET}/`)) return true
+  if (UUID_PATTERN.test(value.replace(/^\/+/, "").split("/")[0] ?? "")) return true
+
+  try {
+    const pathname = decodeURIComponent(new URL(value).pathname)
+    return pathname.includes(`/storage/v1/object/public/${PROJECT_IMAGE_BUCKET}/`) ||
+      pathname.includes(`/storage/v1/object/sign/${PROJECT_IMAGE_BUCKET}/`) ||
+      pathname.includes(`/storage/v1/object/authenticated/${PROJECT_IMAGE_BUCKET}/`) ||
+      pathname.includes(`/storage/v1/render/image/public/${PROJECT_IMAGE_BUCKET}/`) ||
+      pathname.includes(`/storage/v1/render/image/authenticated/${PROJECT_IMAGE_BUCKET}/`)
+  } catch {
+    return false
+  }
+}
+
+export function projectImageDisplayUrl(
+  value: string | null | undefined,
+  expectedProjectId?: string | null,
+): string | null {
   const trimmed = value?.trim()
   if (!trimmed || trimmed === "/placeholder.svg" || trimmed === "/placeholder.jpg") return null
-  if (trimmed.startsWith("/api/project-images?")) return trimmed
-
-  const storagePath = projectImageStoragePath(trimmed)
-  if (storagePath) return `/api/project-images?path=${encodeURIComponent(storagePath)}`
+  const storagePath = projectImageStoragePath(trimmed, expectedProjectId)
+  if (storagePath) {
+    const projectId = expectedProjectId ?? storagePath.split("/")[0]
+    return `/api/project-images?projectId=${encodeURIComponent(projectId)}&path=${encodeURIComponent(storagePath)}`
+  }
+  if (looksLikeManagedProjectImage(trimmed)) return null
   return trimmed
 }

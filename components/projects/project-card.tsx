@@ -16,6 +16,7 @@ export function ProjectCard({ project }: { project: ProjectRecord }) {
       <Card className="overflow-hidden py-0 gap-0 transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring">
         <ProjectImageDisplay
           src={project.image}
+          projectId={project.id}
           alt={project.name}
           className="aspect-[16/9]"
           imageClassName="transition-transform duration-300 group-hover:scale-105"

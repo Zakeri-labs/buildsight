@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   MapPin,
   ArrowLeft,
@@ -84,7 +84,12 @@ export function ProjectDetail({
 }) {
   const { t, locale } = useI18n()
   const router = useRouter()
-  const [projectImage, setProjectImage] = useState<string | null>(projectImageDisplayUrl(project.image))
+  const [projectImage, setProjectImage] = useState<string | null>(projectImageDisplayUrl(project.image, project.id))
+
+  useEffect(() => {
+    setProjectImage(projectImageDisplayUrl(project.image, project.id))
+  }, [project.id, project.image])
+
   const isArabic = locale === "ar"
   const labels = isArabic
     ? {
@@ -130,6 +135,7 @@ export function ProjectDetail({
             <div className="grid gap-5 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)]">
               <ProjectImageDisplay
                 src={projectImage}
+                projectId={project.id}
                 alt={project.name}
                 className="aspect-[4/3] w-full rounded-xl border md:aspect-[5/4]"
               >

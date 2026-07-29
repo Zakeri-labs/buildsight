@@ -25,6 +25,7 @@ export default async function ProjectDetailPage({
   ])
   return (
     <ProjectDetail
+      key={project.id}
       project={toProjectRecord(project)}
       participants={participants}
       canManageImages={canManageImages}

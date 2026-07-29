@@ -121,6 +121,7 @@ export default async function DashboardPage() {
       ])
       return (
         <ProjectDetail
+          key={selectedProject.id}
           project={toProjectRecord(selectedProject, projectCounts)}
           documents={documents}
           participants={participants}

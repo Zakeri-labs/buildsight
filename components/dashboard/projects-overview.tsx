@@ -54,6 +54,7 @@ export function ProjectsOverview({ projects }: { projects: ProjectOverviewRow[] 
                   <Link href={`/projects/${p.id}`} className="flex items-center gap-3 hover:text-primary">
                     <ProjectImageDisplay
                       src={p.image}
+                      projectId={p.id}
                       alt={p.name}
                       className="size-9 shrink-0 rounded-lg border"
                       iconClassName="size-4"

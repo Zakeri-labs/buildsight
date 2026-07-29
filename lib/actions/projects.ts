@@ -19,6 +19,7 @@ import {
   PROJECT_IMAGE_BUCKET,
   PROJECT_IMAGE_MAX_SIZE_BYTES,
   projectImageDisplayUrl,
+  projectImageStoragePath,
   validateProjectImageFile,
 } from "@/lib/projects/project-image"
 
@@ -367,20 +368,40 @@ export async function attachProjectImage(input: {
       return { ok: false, error: "The uploaded file is not a valid JPG, PNG, or WEBP project image." }
     }
 
-    const imageUrl = projectImageDisplayUrl(input.storagePath) ?? "/placeholder.svg"
-    const { data: project, error: lookupError } = await admin
-      .from("projects")
-      .select("supervising_organization_id")
-      .eq("id", input.projectId)
-      .maybeSingle()
+    const imageUrl = projectImageDisplayUrl(input.storagePath, input.projectId) ?? "/placeholder.svg"
+    const [{ data: project, error: lookupError }, { data: currentImage, error: currentImageError }] = await Promise.all([
+      admin
+        .from("projects")
+        .select("image, supervising_organization_id")
+        .eq("id", input.projectId)
+        .maybeSingle(),
+      admin.from("project_images").select("storage_path").eq("project_id", input.projectId).maybeSingle(),
+    ])
     if (lookupError) throw lookupError
+    if (currentImageError) throw currentImageError
     if (!project) return { ok: false, error: "Project not found." }
 
-    const { error } = await admin
+    const { error: assignmentError } = await admin.from("project_images").upsert(
+      {
+        project_id: input.projectId,
+        storage_path: input.storagePath,
+        created_by: actorId,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "project_id" },
+    )
+    if (assignmentError) throw assignmentError
+
+    const { error: legacyUpdateError } = await admin
       .from("projects")
       .update({ image: input.storagePath, updated_at: new Date().toISOString() })
       .eq("id", input.projectId)
-    if (error) throw error
+    if (legacyUpdateError) throw legacyUpdateError
+
+    const previousPath = projectImageStoragePath(currentImage?.storage_path ?? project.image, input.projectId)
+    if (previousPath && previousPath !== input.storagePath) {
+      await admin.storage.from(PROJECT_IMAGE_BUCKET).remove([previousPath]).catch(() => undefined)
+    }
 
     await audit({
       actorId,
@@ -391,6 +412,7 @@ export async function attachProjectImage(input: {
       projectId: input.projectId,
       metadata: { storagePath: input.storagePath, originalFilename: input.originalFilename },
     })
+    revalidatePath("/", "layout")
     revalidatePath("/projects")
     revalidatePath(`/projects/${input.projectId}`)
     return { ok: true, data: { imageUrl } }

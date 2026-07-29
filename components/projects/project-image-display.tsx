@@ -12,6 +12,7 @@ export function ProjectImageDisplay({
   imageClassName,
   children,
   iconClassName,
+  projectId,
 }: {
   src: string | null | undefined
   alt: string
@@ -19,11 +20,20 @@ export function ProjectImageDisplay({
   imageClassName?: string
   children?: ReactNode
   iconClassName?: string
+  projectId?: string
 }) {
-  const resolved = projectImageDisplayUrl(src)
+  const resolved = projectImageDisplayUrl(src, projectId)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => setFailed(false), [resolved])
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production" && projectId) {
+      console.debug("[project-image-debug]", {
+        project: { id: projectId, name: alt, imageUrl: resolved },
+      })
+    }
+  }, [alt, projectId, resolved])
 
   return (
     <div className={cn("relative overflow-hidden bg-muted", className)}>

@@ -126,7 +126,21 @@ export async function getOrgProjects(orgId: string): Promise<DomainProject[]> {
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true })
 
-  return (data ?? []).map((p: any) => ({
+  const projectRows = data ?? []
+  const projectIds = projectRows.map((project: any) => project.id)
+  const { data: imageRows } = projectIds.length
+    ? await admin.from("project_images").select("project_id, storage_path").in("project_id", projectIds)
+    : { data: [] as Array<{ project_id: string; storage_path: string }> }
+  const imageByProject = new Map(
+    (imageRows ?? []).map((image: any) => [image.project_id as string, image.storage_path as string]),
+  )
+  const legacyImageCounts = new Map<string, number>()
+  for (const project of projectRows as any[]) {
+    const legacyImage = project.image?.trim()
+    if (legacyImage) legacyImageCounts.set(legacyImage, (legacyImageCounts.get(legacyImage) ?? 0) + 1)
+  }
+
+  return projectRows.map((p: any) => ({
     id: p.id,
     name: p.name,
     code: p.code,
@@ -138,7 +152,9 @@ export async function getOrgProjects(orgId: string): Promise<DomainProject[]> {
     supervisionType: p.supervision_type,
     region: p.region,
     description: p.description,
-    image: p.image,
+    image:
+      imageByProject.get(p.id) ??
+      (p.image?.trim() && legacyImageCounts.get(p.image.trim()) === 1 ? p.image : null),
     ourRole: p.our_role,
     contractor: p.contractor,
     consultant: p.consultant,
@@ -244,7 +260,7 @@ export async function getDashboardData(orgId: string, projectId: string | null):
   const projectRows = scoped.map((p) => ({
     id: p.id,
     name: p.name,
-    image: projectImageDisplayUrl(p.image),
+    image: projectImageDisplayUrl(p.image, p.id),
     role: p.ourRole ?? "Consultant",
     ncrs: ncrPer.get(p.id) ?? 0,
     inspections: inspPer.get(p.id) ?? 0,

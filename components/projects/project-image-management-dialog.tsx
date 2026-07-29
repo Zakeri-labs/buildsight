@@ -34,7 +34,7 @@ export function ProjectImageManagementDialog({
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [open, setOpen] = useState(false)
-  const [storedImage, setStoredImage] = useState<string | null>(projectImageDisplayUrl(currentImage))
+  const [storedImage, setStoredImage] = useState<string | null>(projectImageDisplayUrl(currentImage, projectId))
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [removeRequested, setRemoveRequested] = useState(false)
@@ -43,9 +43,9 @@ export function ProjectImageManagementDialog({
   const [imageFailed, setImageFailed] = useState(false)
 
   useEffect(() => {
-    setStoredImage(projectImageDisplayUrl(currentImage))
+    setStoredImage(projectImageDisplayUrl(currentImage, projectId))
     setImageFailed(false)
-  }, [currentImage])
+  }, [currentImage, projectId])
 
   useEffect(() => {
     if (!file) {
