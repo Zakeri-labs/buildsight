@@ -1868,34 +1868,27 @@ function drawBilingualHeader(input: {
   doc: JsPdfDocument
   data: StageTranslationPageData
   margin: number
-  columnWidth: number
-  gap: number
-  englishLabel?: string
-  arabicLabel?: string
 }) {
-  const { doc, data, margin, columnWidth, gap } = input
+  const { doc, data, margin } = input
+  const width = PAGE.portraitWidth
   doc.setFillColor(29, 78, 216)
-  doc.rect(0, 0, PAGE.landscapeWidth, 4, "F")
+  doc.rect(0, 0, width, 3, "F")
   const projectNameIsArabic = containsArabic(data.project.name)
-  setLanguage(doc, projectNameIsArabic, 13, true)
+  setLanguage(doc, projectNameIsArabic, 11, true)
   doc.setTextColor(15, 23, 42)
-  writePdfText(doc, data.project.name, projectNameIsArabic ? PAGE.landscapeWidth - margin : margin, 12, {
+  writePdfText(doc, data.project.name, projectNameIsArabic ? width - margin : margin, 10, {
     align: projectNameIsArabic ? "right" : "left",
   }, projectNameIsArabic)
   const reportHeader = `${data.response.reportNumber} · ${data.term.name}`
   const reportHeaderIsArabic = containsArabic(reportHeader)
   setLanguage(doc, reportHeaderIsArabic, 8, false)
   doc.setTextColor(100, 116, 139)
-  writePdfText(doc, reportHeader, PAGE.landscapeWidth - margin, 12, { align: "right" }, reportHeaderIsArabic)
+  writePdfText(doc, reportHeader, projectNameIsArabic ? margin : width - margin, 10, { align: projectNameIsArabic ? "left" : "right" }, reportHeaderIsArabic)
 
-  doc.setFillColor(226, 232, 240)
-  doc.rect(margin, 15, columnWidth, 6, "F")
-  doc.rect(margin + columnWidth + gap, 15, columnWidth, 6, "F")
-  setLanguage(doc, false, 9, true)
-  doc.setTextColor(15, 23, 42)
-  doc.text(input.englishLabel || "English Original", margin + 3, 19.2)
-  setLanguage(doc, true, 9, false)
-  writePdfText(doc, input.arabicLabel || "الترجمة العربية", PAGE.landscapeWidth - margin - 3, 19.2, { align: "right" }, true)
+  doc.setDrawColor(226, 232, 240)
+  doc.setLineWidth(0.3)
+  doc.line(margin, 14, width - margin, 14)
+  doc.setLineWidth(0.2)
 }
 
 function drawEvidenceImageInBox(
@@ -2113,17 +2106,8 @@ async function buildNativeBilingualPdfBlob(input: {
       if (flow.y + rowHeight > flow.bottom) {
         flow.doc.addPage("a4", "portrait")
         flow.pageNumber += 1
-        // Redraw the bilingual header on the new page
-        drawBilingualHeader({
-          doc: flow.doc,
-          data,
-          margin: PAGE.margin,
-          columnWidth: colWidth,
-          gap,
-          englishLabel: "English Original",
-          arabicLabel: "الترجمة العربية",
-        })
-        flow.y = 31  // below the bilingual header with padding
+        drawBilingualHeader({ doc: flow.doc, data, margin: PAGE.margin })
+        flow.y = 19  // clean start below top header line
       }
 
       const rowY = flow.y
