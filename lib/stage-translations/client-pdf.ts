@@ -580,23 +580,24 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     doc.text("BONYAN", col1X + 2.5, headerH / 2 + 2, { align: "left" })
   }
 
-  // ── CENTER COLUMN: Company Name (EN + AR) (Center-aligned) ───────────────
+  // ── CENTER COLUMN: Company Name (EN + AR) Bold Center-aligned ─────────────
   const nameEn = org.nameEn || "BONYAN CONSTRUCTION FOR ENGINEERING CONSULTANCY"
   const nameAr = org.nameAr || "بنيان الإنشائية للاستشارات الهندسية"
   const cx = col2X + col2W / 2
+  const midY = 1.5 + (headerH - 1.5) / 2   // vertical center of header area
 
-  // Auto-scale English name if needed so it never overflows col2W
-  let enSize = 9
+  // English name – Bold, auto-scale to fit col2W
+  let enSize = 8.5
   setLanguage(doc, false, enSize, true)
   while (doc.getTextWidth(nameEn) > col2W - 4 && enSize > 5) {
     enSize -= 0.3
     setLanguage(doc, false, enSize, true)
   }
   doc.setTextColor(15, 23, 42)
-  doc.text(nameEn, cx, headerH / 2 - 1.5, { align: "center" })
+  doc.text(nameEn, cx, midY - 2, { align: "center" })
 
-  // Auto-scale Arabic name if needed
-  let arSize = 9.5
+  // Arabic name – Normal (Arabic font has one face), auto-scale to fit col2W
+  let arSize = 8.5
   setLanguage(doc, true, arSize, false)
   const shapedAr = String(shapeArabicText(doc, nameAr))
   while (doc.getTextWidth(shapedAr) > col2W - 4 && arSize > 5) {
@@ -604,7 +605,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     setLanguage(doc, true, arSize, false)
   }
   doc.setTextColor(30, 58, 138)
-  writePdfText(doc, nameAr, cx, headerH / 2 + 5.5, { align: "center" }, true)
+  writePdfText(doc, nameAr, cx, midY + 4, { align: "center" }, true)
 
   // ── RIGHT COLUMN: Date / Document No. / Page (Right-aligned) ─────────────
   const rawDate = template.createdAt || ""
@@ -624,13 +625,24 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     { label: rtl ? "رقم المستند:" : "Doc No.:", value: template.reportNumber || "—" },
     { label: rtl ? "الصفحة:" : "Page:",    value: String(flow.pageNumber) },
   ]
+  const labelX  = col3X + 2.5
   const rightX  = col3X + col3W - 2.5
   const rowH    = (headerH - 2) / 3
 
   infoRows.forEach(({ label, value }, i) => {
-    const y = 2 + i * rowH + rowH * 0.65
+    const y = 2 + i * rowH + rowH * 0.68
 
-    // Value on the far right
+    // Label: left edge of column, muted
+    const labelIsArabic = containsArabic(label)
+    setLanguage(doc, labelIsArabic, 6.5, false)
+    doc.setTextColor(100, 116, 139)
+    if (labelIsArabic) {
+      writePdfText(doc, label, rightX, y, { align: "right" }, true)
+    } else {
+      doc.text(label, labelX, y)
+    }
+
+    // Value: right edge of column, dark
     const valIsArabic = containsArabic(value)
     setLanguage(doc, valIsArabic, 8, false)
     doc.setTextColor(15, 23, 42)
@@ -638,18 +650,6 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
       writePdfText(doc, value, rightX, y + 0.5, { align: "right" }, true)
     } else {
       doc.text(value, rightX, y + 0.5, { align: "right" })
-    }
-
-    // Label right to the left of value
-    const valWidth = doc.getTextWidth(value)
-    const labelIsArabic = containsArabic(label)
-    setLanguage(doc, labelIsArabic, 6.5, false)
-    doc.setTextColor(100, 116, 139)
-    const labelX = rightX - valWidth - 2.5
-    if (labelIsArabic) {
-      writePdfText(doc, label, labelX, y, { align: "right" }, true)
-    } else {
-      doc.text(label, labelX, y, { align: "right" })
     }
   })
 
@@ -661,7 +661,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
 }
 
 function drawContinuationHeader(flow: Flow) {
-  const headerH = 26
+  const headerH = 20   // tighter 3-row header
   drawHeaderColumns(flow.doc, flow, headerH)
   flow.y = headerH + 4
 }
@@ -710,7 +710,7 @@ function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: st
 function drawFirstPageHeader(flow: Flow) {
   const { doc, template, pageWidth, rtl } = flow
   const margin = PAGE.margin
-  const headerH = 26
+  const headerH = 20   // tighter header, same as continuation
 
   drawHeaderColumns(doc, flow, headerH)
 
@@ -1352,36 +1352,37 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     doc.setPage(page)
 
     // ── Update Header Page Number (Right Column, Row 3) ─────────────────
-    const headerH = 26
+    const headerH = 20   // must match drawHeaderColumns headerH
     const totalW = width - margin * 2
     const col1W = 42
     const col3W = 55
     const col2W = totalW - col1W - col3W
     const col3X = margin + col1W + col2W
     const rightX = col3X + col3W - 2.5
+    const labelX  = col3X + 2.5
     const rowH = (headerH - 2) / 3
-    const pageY = 2 + 2 * rowH + rowH * 0.65
+    const pageY = 2 + 2 * rowH + rowH * 0.68
 
-    // Blank out old row 3 in column 3
+    // Blank out old row 3 in column 3 area (white fill)
     doc.setFillColor(255, 255, 255)
     doc.rect(col3X + 0.5, pageY - 4, col3W - 1, 5.5, "F")
 
-    // Draw Value right-aligned
+    // Page label: left of column, muted
+    const pageLabel = rtl ? "الصفحة:" : "Page:"
+    const labelIsAr = rtl
+    setLanguage(doc, labelIsAr, 6.5, false)
+    doc.setTextColor(100, 116, 139)
+    if (labelIsAr) {
+      writePdfText(doc, pageLabel, rightX, pageY, { align: "right" }, true)
+    } else {
+      doc.text(pageLabel, labelX, pageY)
+    }
+
+    // Page value: right-aligned, dark
     const pageStr = `${page} / ${pages}`
     setLanguage(doc, false, 8, false)
     doc.setTextColor(15, 23, 42)
     doc.text(pageStr, rightX, pageY + 0.5, { align: "right" })
-
-    // Draw Label right-aligned left of value
-    const valWidth = doc.getTextWidth(pageStr)
-    const label = rtl ? "الصفحة:" : "Page:"
-    setLanguage(doc, rtl, 6.5, false)
-    doc.setTextColor(100, 116, 139)
-    if (rtl) {
-      writePdfText(doc, label, rightX - valWidth - 2.5, pageY, { align: "right" }, true)
-    } else {
-      doc.text(label, rightX - valWidth - 2.5, pageY, { align: "right" })
-    }
 
     // ── Footer Lines & Contact Details ──────────────────────────────────
     doc.setDrawColor(226, 232, 240)
