@@ -4,8 +4,9 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 const DEFAULT_FONT_URLS = [
+  "https://cdn.jsdelivr.net/gh/notofonts/noto-fonts@main/unhinted/ttf/NotoSansArabic/NotoSansArabic-Regular.ttf",
+  "https://raw.githubusercontent.com/notofonts/noto-fonts/main/unhinted/ttf/NotoSansArabic/NotoSansArabic-Regular.ttf",
   "https://cdn.jsdelivr.net/gh/notofonts/noto-fonts@main/hinted/ttf/NotoNaskhArabic/NotoNaskhArabic-Regular.ttf",
-  "https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf/NotoNaskhArabic/NotoNaskhArabic-Regular.ttf",
 ]
 const MIN_FONT_BYTES = 20_000
 const MAX_FONT_BYTES = 2 * 1024 * 1024

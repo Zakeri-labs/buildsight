@@ -596,16 +596,16 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   doc.setTextColor(15, 23, 42)
   doc.text(nameEn, cx, midY - 2, { align: "center" })
 
-  // Arabic name – Normal (Arabic font has one face), auto-scale to fit col2W
+  // Arabic name – Bold, auto-scale to fit col2W
   let arSize = 8.5
-  setLanguage(doc, true, arSize, false)
+  setLanguage(doc, true, arSize, true)
   const shapedAr = String(shapeArabicText(doc, nameAr))
   while (doc.getTextWidth(shapedAr) > col2W - 4 && arSize > 5) {
     arSize -= 0.3
-    setLanguage(doc, true, arSize, false)
+    setLanguage(doc, true, arSize, true)
   }
   doc.setTextColor(30, 58, 138)
-  writePdfText(doc, nameAr, cx, midY + 4, { align: "center" }, true)
+  writePdfText(doc, nameAr, cx, midY + 3.5, { align: "center" }, true)
 
   // ── RIGHT COLUMN: Date / Document No. / Page (Right-aligned) ─────────────
   const rawDate = template.createdAt || ""
@@ -630,7 +630,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   const rowH    = (headerH - 2) / 3
 
   infoRows.forEach(({ label, value }, i) => {
-    const y = 2 + i * rowH + rowH * 0.68
+    const y = 1.5 + i * rowH + rowH * 0.62
 
     // Label: left edge of column, muted
     const labelIsArabic = containsArabic(label)
@@ -644,12 +644,12 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
 
     // Value: right edge of column, dark
     const valIsArabic = containsArabic(value)
-    setLanguage(doc, valIsArabic, 8, false)
+    setLanguage(doc, valIsArabic, 7.5, true)
     doc.setTextColor(15, 23, 42)
     if (valIsArabic) {
-      writePdfText(doc, value, rightX, y + 0.5, { align: "right" }, true)
+      writePdfText(doc, value, rightX, y + 0.3, { align: "right" }, true)
     } else {
-      doc.text(value, rightX, y + 0.5, { align: "right" })
+      doc.text(value, rightX, y + 0.3, { align: "right" })
     }
   })
 
@@ -661,7 +661,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
 }
 
 function drawContinuationHeader(flow: Flow) {
-  const headerH = 20   // tighter 3-row header
+  const headerH = 17   // compact height for 3 rows
   drawHeaderColumns(flow.doc, flow, headerH)
   flow.y = headerH + 4
 }
@@ -710,7 +710,7 @@ function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: st
 function drawFirstPageHeader(flow: Flow) {
   const { doc, template, pageWidth, rtl } = flow
   const margin = PAGE.margin
-  const headerH = 20   // tighter header, same as continuation
+  const headerH = 17   // compact height for 3 rows
 
   drawHeaderColumns(doc, flow, headerH)
 
@@ -1352,7 +1352,7 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     doc.setPage(page)
 
     // ── Update Header Page Number (Right Column, Row 3) ─────────────────
-    const headerH = 20   // must match drawHeaderColumns headerH
+    const headerH = 17   // must match drawHeaderColumns headerH
     const totalW = width - margin * 2
     const col1W = 42
     const col3W = 55
@@ -1361,7 +1361,7 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     const rightX = col3X + col3W - 2.5
     const labelX  = col3X + 2.5
     const rowH = (headerH - 2) / 3
-    const pageY = 2 + 2 * rowH + rowH * 0.68
+    const pageY = 1.5 + 2 * rowH + rowH * 0.62
 
     // Blank out old row 3 in column 3 area (white fill)
     doc.setFillColor(255, 255, 255)
