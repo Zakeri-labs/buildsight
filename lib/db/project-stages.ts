@@ -352,7 +352,7 @@ export async function loadProjectStageExecution(projectId: string, userId: strin
       responsibleUser: term.responsible_user_id ? people.get(term.responsible_user_id) ?? null : null,
       dueDateRule: term.due_date_rule,
       dueDate: term.due_date,
-      approvalRequired: term.approval_required,
+      approvalRequired: term.approval_required ?? true,
       templateReference: term.template_reference,
       status: term.status,
       sortOrder: term.sort_order,

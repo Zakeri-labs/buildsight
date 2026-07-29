@@ -268,13 +268,41 @@ function TermRow({
             )}
           </div>
 
-          <div className="flex items-center gap-2 text-sm">
-            <ShieldCheck className="size-4 text-muted-foreground" />
-            <div>
-              <p className="text-xs text-muted-foreground">{copy.approval}</p>
-              <p className="font-medium">{approvalText(term, copy, locale)}</p>
+          {term.status === "approved" ? (
+            <div className="flex items-center gap-2 text-sm">
+              <ShieldCheck className="size-4 text-emerald-600 dark:text-emerald-400" />
+              <div>
+                <p className="text-xs text-muted-foreground">{copy.approval}</p>
+                <p className="font-semibold text-emerald-700 dark:text-emerald-300">{statusLabel("approved", locale)}</p>
+              </div>
             </div>
-          </div>
+          ) : term.status === "rejected" ? (
+            <div className="flex items-center gap-2 text-sm">
+              <ShieldCheck className="size-4 text-red-600 dark:text-red-400" />
+              <div>
+                <p className="text-xs text-muted-foreground">{copy.approval}</p>
+                <p className="font-semibold text-red-700 dark:text-red-300">{statusLabel("rejected", locale)}</p>
+              </div>
+            </div>
+          ) : term.status === "submitted" || term.status === "under_review" ? (
+            <div className="flex items-center gap-2 text-sm">
+              <ShieldCheck className="size-4 text-amber-600 dark:text-amber-400" />
+              <div>
+                <p className="text-xs text-muted-foreground">{copy.approval}</p>
+                <p className="font-semibold text-amber-700 dark:text-amber-300">{copy.pendingApproval}</p>
+              </div>
+            </div>
+          ) : !term.approvalRequired ? (
+            <div className="flex items-center gap-2 text-sm">
+              <ShieldCheck className="size-4 text-muted-foreground/60" />
+              <div>
+                <p className="text-xs text-muted-foreground">{copy.approval}</p>
+                <p className="font-medium text-muted-foreground">{copy.noApproval}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="hidden min-w-[120px] lg:block" />
+          )}
 
           <div className="flex items-center justify-between gap-3 lg:justify-end">
             {term.dueDate ? (
