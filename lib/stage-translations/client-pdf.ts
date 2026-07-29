@@ -520,30 +520,31 @@ function textLines(doc: JsPdfDocument, text: string, width: number) {
 function drawContinuationHeader(flow: Flow) {
   const { doc, template, pageWidth, rtl, logoImage } = flow
 
-  // Navy top bar
-  doc.setFillColor(30, 58, 138)
-  doc.rect(0, 0, pageWidth, 2, "F")
-
-  // Light-blue continuation header band
-  doc.setFillColor(239, 246, 255)
-  doc.rect(0, 2, pageWidth, 9, "F")
+  // Full-width navy band (slim on continuation pages)
+  doc.setFillColor(15, 40, 100)
+  doc.rect(0, 0, pageWidth, 12, "F")
 
   if (logoImage) {
-    const maxHeight = 5.5
-    const maxW = 28
+    const maxHeight = 6
+    const maxW = 26
     const ratio = Math.min(maxW / logoImage.width, maxHeight / logoImage.height)
     const w = logoImage.width * ratio
     const h = logoImage.height * ratio
     const logoX = rtl ? pageWidth - PAGE.margin - w : PAGE.margin
-    doc.addImage(logoImage.dataUrl, "PNG", logoX, 3.5, w, h, undefined, "FAST")
+    doc.addImage(logoImage.dataUrl, "PNG", logoX, 3, w, h, undefined, "FAST")
   } else {
-    setLanguage(doc, rtl, 8, true)
-    doc.setTextColor(30, 58, 138)
-    writePdfText(doc, template.projectName, rtl ? pageWidth - PAGE.margin : PAGE.margin, 8.5, { align: rtl ? "right" : "left" }, rtl)
+    setLanguage(doc, false, 8, true)
+    doc.setTextColor(255, 255, 255)
+    doc.text(
+      "BONYAN",
+      rtl ? pageWidth - PAGE.margin : PAGE.margin,
+      9,
+      { align: rtl ? "right" : "left" },
+    )
   }
 
   setLanguage(doc, rtl, 7.5, false)
-  doc.setTextColor(71, 85, 105)
+  doc.setTextColor(186, 213, 255)
   writePdfText(
     doc,
     `${template.termName || template.title} · ${template.reportNumber}`,
@@ -553,15 +554,10 @@ function drawContinuationHeader(flow: Flow) {
     rtl,
   )
 
-  // Double-rule separator
-  doc.setDrawColor(191, 219, 254)
-  doc.setLineWidth(0.5)
-  doc.line(0, 11, pageWidth, 11)
-  doc.setDrawColor(30, 58, 138)
-  doc.setLineWidth(1.2)
-  doc.line(0, 11.8, pageWidth, 11.8)
-  doc.setLineWidth(0.2)
-  flow.y = 16
+  // Bottom gold accent stripe
+  doc.setFillColor(234, 179, 8)
+  doc.rect(0, 12, pageWidth, 1, "F")
+  flow.y = 17
 }
 
 function addFlowPage(flow: Flow) {
@@ -577,22 +573,31 @@ function ensureSpace(flow: Flow, required: number) {
 
 function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: string, value: string) {
   const { doc, rtl } = flow
-  doc.setDrawColor(226, 232, 240)
-  doc.setFillColor(248, 250, 252)
-  doc.roundedRect(x, y, width, 14, 1, 1, "FD")
+  // Left accent pip on each cell
+  doc.setFillColor(37, 99, 235)
+  doc.rect(rtl ? x + width - 1.2 : x, y, 1.2, 13, "F")
+  doc.setDrawColor(213, 227, 250)
+  doc.setFillColor(244, 247, 254)
+  doc.rect(rtl ? x : x + 1.2, y, width - 1.2, 13, "FD")
+
   setLanguage(doc, rtl, 6.5, true)
-  doc.setTextColor(100, 116, 139)
-  writePdfText(doc, label, rtl ? x + width - 3 : x + 3, y + 4.2, { align: rtl ? "right" : "left" }, rtl)
+  doc.setTextColor(71, 85, 105)
+  writePdfText(doc, label,
+    rtl ? x + width - 3.5 : x + 4,
+    y + 4.2,
+    { align: rtl ? "right" : "left" },
+    rtl,
+  )
 
   const valHasArabic = containsArabic(value)
   setLanguage(doc, valHasArabic, 8.5, false)
-  doc.setTextColor(15, 23, 42)
-  const lines = textLines(doc, value, width - 6).slice(0, 2)
+  doc.setTextColor(10, 20, 50)
+  const lines = textLines(doc, value, width - 7).slice(0, 2)
   writePdfText(
     doc,
     lines,
-    rtl && valHasArabic ? x + width - 3 : x + 3,
-    y + 8.5,
+    rtl && valHasArabic ? x + width - 3.5 : x + 4,
+    y + 8.8,
     { align: rtl && valHasArabic ? "right" : "left", lineHeightFactor: 1.1 },
     valHasArabic,
   )
@@ -601,84 +606,84 @@ function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: st
 function drawFirstPageHeader(flow: Flow) {
   const { doc, template, pageWidth, rtl, logoImage } = flow
 
-  // 1. Top accent bar – deep navy
-  doc.setFillColor(30, 58, 138)
-  doc.rect(0, 0, pageWidth, 2.5, "F")
+  // ── CORPORATE NAVY HEADER BAND ──────────────────────────────────────────────
+  // Full-width dark navy header spanning edge-to-edge
+  doc.setFillColor(15, 40, 100)
+  doc.rect(0, 0, pageWidth, 26, "F")
 
-  // 2. Light-blue header band (logo + platform name zone)
-  doc.setFillColor(239, 246, 255)   // blue-50 equivalent
-  doc.rect(0, 2.5, pageWidth, 16, "F")
+  // Thin gold accent stripe at bottom of navy band
+  doc.setFillColor(234, 179, 8)
+  doc.rect(0, 26, pageWidth, 1.5, "F")
 
-  // 3. Header content: logo left, platform text right (or flipped for RTL)
+  // Logo inside navy band
   if (logoImage) {
-    const maxHeight = 10
-    const maxW = 44
+    const maxHeight = 14
+    const maxW = 55
     const ratio = Math.min(maxW / logoImage.width, maxHeight / logoImage.height)
     const w = logoImage.width * ratio
     const h = logoImage.height * ratio
     const logoX = rtl ? pageWidth - PAGE.margin - w : PAGE.margin
-    doc.addImage(logoImage.dataUrl, "PNG", logoX, 5, w, h, undefined, "FAST")
+    doc.addImage(logoImage.dataUrl, "PNG", logoX, 6, w, h, undefined, "FAST")
   } else {
-    setLanguage(doc, rtl, 10, true)
-    doc.setTextColor(30, 58, 138)
-    writePdfText(
-      doc,
-      rtl ? "روية للاستشارات" : "PROVISION CONSULTANCY",
+    setLanguage(doc, false, 12, true)
+    doc.setTextColor(255, 255, 255)
+    doc.text(
+      "BONYAN",
       rtl ? pageWidth - PAGE.margin : PAGE.margin,
-      11,
+      17,
       { align: rtl ? "right" : "left" },
-      rtl,
     )
   }
 
-  // Platform name (right side / left side for RTL)
-  setLanguage(doc, rtl, 7.5, true)
-  doc.setTextColor(71, 85, 105)
+  // Platform tagline inside navy band (opposite side)
+  setLanguage(doc, rtl, 7, false)
+  doc.setTextColor(186, 213, 255)   // blue-200 for soft white-blue
   writePdfText(
     doc,
     rtl ? "منصة إشراف الإنشاءات" : "CONSTRUCTION SUPERVISION PLATFORM",
     rtl ? PAGE.margin : pageWidth - PAGE.margin,
-    11,
+    21,
     { align: rtl ? "left" : "right" },
     rtl,
   )
 
-  // 4. Double-rule separator for visual depth
-  doc.setDrawColor(191, 219, 254)   // blue-200
-  doc.setLineWidth(0.6)
-  doc.line(0, 18.5, pageWidth, 18.5)
-  doc.setDrawColor(30, 58, 138)
-  doc.setLineWidth(1.5)
-  doc.line(0, 19.5, pageWidth, 19.5)
-  doc.setLineWidth(0.2)
+  // ── TITLE BLOCK ─────────────────────────────────────────────────────────────
+  // Vertical accent bar for the title
+  doc.setFillColor(234, 179, 8)
+  doc.rect(rtl ? pageWidth - PAGE.margin : PAGE.margin, 31, 2, 12, "F")
 
-  // 5. Main Title: Report / Term Name
   const reportMainTitle = template.termName || template.title
-  setLanguage(doc, rtl, 15, true)
-  doc.setTextColor(15, 23, 42)
+  setLanguage(doc, rtl, 16, true)
+  doc.setTextColor(10, 20, 50)
   writePdfText(
     doc,
     reportMainTitle,
-    rtl ? pageWidth - PAGE.margin : PAGE.margin,
-    27,
+    rtl ? pageWidth - PAGE.margin - 5 : PAGE.margin + 5,
+    38,
     { align: rtl ? "right" : "left" },
     rtl,
   )
 
-  // Subtitle: Project Name · Report Number
+  // Subtitle: Project Name · Report Number (right-aligned opposite side)
   setLanguage(doc, rtl, 8.5, false)
   doc.setTextColor(71, 85, 105)
-  const subtitle = `${template.projectName} · ${template.reportNumber}`
+  const subtitle = `${template.projectName}  ·  ${template.reportNumber}`
   writePdfText(
     doc,
     subtitle,
-    rtl ? pageWidth - PAGE.margin : PAGE.margin,
-    33,
-    { align: rtl ? "right" : "left" },
+    rtl ? PAGE.margin : pageWidth - PAGE.margin,
+    38,
+    { align: rtl ? "left" : "right" },
     rtl,
   )
 
-  // 6. Metadata Grid (8 boxes)
+  // Light rule below title block
+  doc.setDrawColor(213, 227, 250)
+  doc.setLineWidth(0.4)
+  doc.line(PAGE.margin, 45, pageWidth - PAGE.margin, 45)
+  doc.setLineWidth(0.2)
+
+  // ── METADATA GRID ────────────────────────────────────────────────────────────
   const labels = rtl
     ? ["المشروع", "مرجع المشروع", "المرحلة", "البند", "رقم المستند", "رقم الزيارة", "النوع", "الموضوع"]
     : ["Project", "Project Reference", "Stage", "Term", "Document Number", "Visit Number", "Type", "Subject"]
@@ -701,13 +706,13 @@ function drawFirstPageHeader(flow: Flow) {
     drawMetaCell(
       flow,
       PAGE.margin + physicalColumn * (cellWidth + gap),
-      37 + row * 15,
+      48 + row * 15,
       cellWidth,
       labels[index],
       values[index],
     )
   }
-  flow.y = 72
+  flow.y = 80
 }
 
 function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>) {
