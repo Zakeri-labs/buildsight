@@ -156,15 +156,15 @@ export function ProjectImageManagementDialog({
         render={
           <Button type="button" size="sm" variant="secondary" className="shadow-sm">
             <ImagePlus className="size-4" data-icon="inline-start" />
-            {storedImage ? "Edit image" : "Add image"}
+            {storedImage ? "Edit cover" : "Add cover"}
           </Button>
         }
       />
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Project image</DialogTitle>
+          <DialogTitle>Project cover image</DialogTitle>
           <DialogDescription>
-            Add or replace the dashboard image for {projectName}. Upload a JPG, PNG, or WEBP file up to 10 MB.
+            Add or replace the cover image for {projectName}. Upload a JPG, PNG, or WEBP file up to 10 MB.
           </DialogDescription>
         </DialogHeader>
 
@@ -199,7 +199,7 @@ export function ProjectImageManagementDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor={`project-image-${projectId}`}>Project image</Label>
+            <Label htmlFor={`project-image-${projectId}`}>Project cover image</Label>
             <input
               ref={inputRef}
               id={`project-image-${projectId}`}

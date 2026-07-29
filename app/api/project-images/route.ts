@@ -50,6 +50,13 @@ async function removeStoredProjectImage(
   }
 }
 
+async function refreshProjectImageRoutes(projectId: string) {
+  revalidatePath("/", "layout")
+  revalidatePath("/projects")
+  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/projects/${projectId}/gallery`)
+}
+
 export async function GET(request: NextRequest) {
   const path = request.nextUrl.searchParams.get("path")?.trim()
   if (!path) return new NextResponse("Missing image path", { status: 400 })
@@ -72,18 +79,20 @@ export async function GET(request: NextRequest) {
 
   const [{ data: project }, { data: imageRecord }] = await Promise.all([
     supabase.from("projects").select("id, image").eq("id", requestedProjectId).maybeSingle(),
-    supabase.from("project_images").select("storage_path").eq("project_id", requestedProjectId).maybeSingle(),
+    supabase
+      .from("project_images")
+      .select("id")
+      .eq("project_id", requestedProjectId)
+      .eq("storage_path", path)
+      .maybeSingle(),
   ])
   if (!project) return new NextResponse("Forbidden", { status: 403 })
 
-  const assignedPath = projectImageStoragePath(imageRecord?.storage_path ?? project.image, requestedProjectId)
-  if (!assignedPath || assignedPath !== path) {
+  const legacyAssignedPath = projectImageStoragePath(project.image, requestedProjectId)
+  if (!imageRecord && legacyAssignedPath !== path) {
     return new NextResponse("Image not assigned to this project", { status: 404 })
   }
 
-  // Read through the service-role client after both project access and image
-  // ownership have been checked. A project can never request another
-  // project's image, even if an old URL is accidentally reused by the UI.
   const admin = createAdminClient()
   const { data: image, error: imageError } = await admin.storage.from(PROJECT_IMAGE_BUCKET).download(path)
   if (imageError || !image) return new NextResponse("Image not found", { status: 404 })
@@ -98,7 +107,7 @@ export async function GET(request: NextRequest) {
       "Content-Type": contentType,
       "Content-Length": String(bytes.byteLength),
       "Cache-Control": "private, no-store, max-age=0",
-      "Vary": "Cookie",
+      Vary: "Cookie",
       "X-Content-Type-Options": "nosniff",
     },
   })
@@ -113,16 +122,22 @@ export async function POST(request: NextRequest) {
 
     const actorId = await assertProjectAdmin(body.projectId)
     const admin = createAdminClient()
-    const [{ data: project, error: projectError }, { data: imageRecord, error: imageRecordError }] = await Promise.all([
+    const [{ data: project, error: projectError }, { data: coverRecord, error: coverRecordError }] = await Promise.all([
       admin
         .from("projects")
         .select("id, image, supervising_organization_id")
         .eq("id", body.projectId)
         .maybeSingle(),
-      admin.from("project_images").select("storage_path").eq("project_id", body.projectId).maybeSingle(),
+      admin
+        .from("project_images")
+        .select("id, storage_path, order_index")
+        .eq("project_id", body.projectId)
+        .order("order_index", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
     ])
     if (projectError) throw projectError
-    if (imageRecordError) throw imageRecordError
+    if (coverRecordError) throw coverRecordError
     if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 })
 
     if (body.action === "prepare") {
@@ -175,28 +190,30 @@ export async function POST(request: NextRequest) {
         throw new Error("The uploaded file is not a valid JPG, PNG, or WEBP project image.")
       }
 
-      const oldImage = imageRecord?.storage_path ?? project.image
-      const { error: assignError } = await admin.from("project_images").upsert(
-        {
+      const oldImage = coverRecord?.storage_path ?? project.image
+      if (coverRecord?.id) {
+        const { error: assignError } = await admin
+          .from("project_images")
+          .update({ storage_path: storagePath, order_index: 0, updated_at: new Date().toISOString() })
+          .eq("id", coverRecord.id)
+          .eq("project_id", body.projectId)
+        if (assignError) {
+          await admin.storage.from(PROJECT_IMAGE_BUCKET).remove([storagePath]).catch(() => undefined)
+          throw assignError
+        }
+      } else {
+        const { error: assignError } = await admin.from("project_images").insert({
           project_id: body.projectId,
           storage_path: storagePath,
           created_by: actorId,
+          order_index: 0,
           updated_at: new Date().toISOString(),
-        },
-        { onConflict: "project_id" },
-      )
-      if (assignError) {
-        await admin.storage.from(PROJECT_IMAGE_BUCKET).remove([storagePath]).catch(() => undefined)
-        throw assignError
+        })
+        if (assignError) {
+          await admin.storage.from(PROJECT_IMAGE_BUCKET).remove([storagePath]).catch(() => undefined)
+          throw assignError
+        }
       }
-
-      // Keep the legacy column synchronized even before the migration trigger is
-      // present in a rolling deployment. Reads prefer project_images.
-      const { error: legacyUpdateError } = await admin
-        .from("projects")
-        .update({ image: storagePath, updated_at: new Date().toISOString() })
-        .eq("id", body.projectId)
-      if (legacyUpdateError) throw legacyUpdateError
 
       await removeStoredProjectImage(admin, oldImage, body.projectId, storagePath)
       await audit({
@@ -207,28 +224,36 @@ export async function POST(request: NextRequest) {
         organizationId: project.supervising_organization_id,
         projectId: body.projectId,
         metadata: { storagePath, size, contentType },
-      })
+      }).catch(() => undefined)
 
       const imageUrl = projectImageDisplayUrl(storagePath, body.projectId)
-      revalidatePath("/", "layout")
-      revalidatePath("/projects")
-      revalidatePath(`/projects/${body.projectId}`)
+      await refreshProjectImageRoutes(body.projectId)
       return NextResponse.json({ imageUrl }, { headers: { "Cache-Control": "no-store" } })
     }
 
-    const oldImage = imageRecord?.storage_path ?? project.image
-    const { error: relationDeleteError } = await admin
+    const oldImage = coverRecord?.storage_path ?? project.image
+    if (coverRecord?.id) {
+      const { error: deleteError } = await admin.rpc("delete_project_gallery_image", {
+        p_project_id: body.projectId,
+        p_image_id: coverRecord.id,
+      })
+      if (deleteError) throw deleteError
+    } else {
+      const { error: legacyRemoveError } = await admin
+        .from("projects")
+        .update({ image: null, updated_at: new Date().toISOString() })
+        .eq("id", body.projectId)
+      if (legacyRemoveError) throw legacyRemoveError
+    }
+
+    const { data: remainingRows, error: remainingError } = await admin
       .from("project_images")
-      .delete()
+      .select("id, storage_path, order_index")
       .eq("project_id", body.projectId)
-    if (relationDeleteError) throw relationDeleteError
+      .order("order_index", { ascending: true })
+    if (remainingError) throw remainingError
 
-    const { error: legacyRemoveError } = await admin
-      .from("projects")
-      .update({ image: null, updated_at: new Date().toISOString() })
-      .eq("id", body.projectId)
-    if (legacyRemoveError) throw legacyRemoveError
-
+    const nextCover = remainingRows?.[0]?.storage_path ?? null
     await removeStoredProjectImage(admin, oldImage, body.projectId)
     await audit({
       actorId,
@@ -237,12 +262,14 @@ export async function POST(request: NextRequest) {
       entityId: body.projectId,
       organizationId: project.supervising_organization_id,
       projectId: body.projectId,
-    })
+      metadata: { promotedStoragePath: nextCover },
+    }).catch(() => undefined)
 
-    revalidatePath("/", "layout")
-    revalidatePath("/projects")
-    revalidatePath(`/projects/${body.projectId}`)
-    return NextResponse.json({ imageUrl: null }, { headers: { "Cache-Control": "no-store" } })
+    await refreshProjectImageRoutes(body.projectId)
+    return NextResponse.json(
+      { imageUrl: projectImageDisplayUrl(nextCover, body.projectId) },
+      { headers: { "Cache-Control": "no-store" } },
+    )
   } catch (error) {
     const status = error instanceof AuthzError ? 403 : 400
     return NextResponse.json(

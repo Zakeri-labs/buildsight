@@ -327,6 +327,146 @@ export async function updateProject(input: {
   }
 }
 
+export type ProjectGalleryUploadInput = {
+  storagePath: string
+  originalFilename: string
+  mimeType: string
+  sizeBytes: number
+  orderIndex: number
+}
+
+async function validateStoredProjectGalleryImage(
+  admin: ReturnType<typeof createAdminClient>,
+  projectId: string,
+  actorId: string,
+  image: ProjectGalleryUploadInput,
+  folder: "cover" | "gallery",
+) {
+  const validationError = validateProjectImageFile({
+    name: image.originalFilename,
+    size: image.sizeBytes,
+    type: image.mimeType,
+  })
+  if (validationError) throw new Error(validationError)
+
+  const expectedPrefix = `${projectId}/${actorId}/${folder}/`
+  if (
+    !image.storagePath.startsWith(expectedPrefix) ||
+    image.storagePath.includes("..") ||
+    !projectImageStoragePath(image.storagePath, projectId)
+  ) {
+    throw new Error("The uploaded project image does not belong to this project.")
+  }
+
+  const { data: uploadedFile, error: downloadError } = await admin.storage
+    .from(PROJECT_IMAGE_BUCKET)
+    .download(image.storagePath)
+  if (downloadError || !uploadedFile) {
+    throw new Error(downloadError?.message || "The uploaded project image could not be found in Storage.")
+  }
+
+  const actualSize = uploadedFile.size
+  const detectedType = detectProjectImageMimeType(new Uint8Array(await uploadedFile.arrayBuffer()))
+  if (
+    actualSize <= 0 ||
+    actualSize > PROJECT_IMAGE_MAX_SIZE_BYTES ||
+    !detectedType ||
+    !isAllowedProjectImageType(detectedType)
+  ) {
+    throw new Error("The uploaded file is not a valid JPG, PNG, or WEBP project image.")
+  }
+
+  return { actualSize, detectedType }
+}
+
+export async function attachProjectGalleryImages(input: {
+  projectId: string
+  images: ProjectGalleryUploadInput[]
+}): Promise<ActionResult<{ imageUrls: string[] }>> {
+  try {
+    if (input.images.length === 0) return { ok: true, data: { imageUrls: [] } }
+
+    const orderIndexes = input.images.map((image) => image.orderIndex)
+    if (new Set(orderIndexes).size !== orderIndexes.length || orderIndexes.some((index) => !Number.isInteger(index) || index < 0)) {
+      return { ok: false, error: "Project images must have a valid unique order." }
+    }
+
+    const actorId = await assertProjectAdmin(input.projectId)
+    const admin = createAdminClient()
+    const { data: project, error: projectError } = await admin
+      .from("projects")
+      .select("image, supervising_organization_id")
+      .eq("id", input.projectId)
+      .maybeSingle()
+    if (projectError) throw projectError
+    if (!project) return { ok: false, error: "Project not found." }
+
+    for (const image of input.images) {
+      await validateStoredProjectGalleryImage(admin, input.projectId, actorId, image, "gallery")
+    }
+
+    const { data: existingRows, error: existingError } = await admin
+      .from("project_images")
+      .select("id, storage_path, order_index")
+      .eq("project_id", input.projectId)
+      .order("order_index", { ascending: true })
+    if (existingError) throw existingError
+
+    const existingPaths = new Set((existingRows ?? []).map((row: { storage_path: string }) => row.storage_path))
+    const nextOrder = (existingRows ?? []).length
+    const newImages = input.images
+      .slice()
+      .sort((a, b) => a.orderIndex - b.orderIndex)
+      .filter((image) => !existingPaths.has(image.storagePath))
+
+    if (newImages.length > 0) {
+      const { error: insertError } = await admin.from("project_images").insert(
+        newImages.map((image, index) => ({
+          project_id: input.projectId,
+          storage_path: image.storagePath,
+          created_by: actorId,
+          order_index: nextOrder + index,
+          updated_at: new Date().toISOString(),
+        })),
+      )
+      if (insertError) throw insertError
+    }
+
+    await audit({
+      actorId,
+      action: "project.gallery_images_uploaded",
+      entityType: "project",
+      entityId: input.projectId,
+      organizationId: project.supervising_organization_id,
+      projectId: input.projectId,
+      metadata: { count: newImages.length, storagePaths: newImages.map((image) => image.storagePath) },
+    }).catch(() => undefined)
+
+    revalidatePath("/", "layout")
+    revalidatePath("/projects")
+    revalidatePath(`/projects/${input.projectId}`)
+    revalidatePath(`/projects/${input.projectId}/gallery`)
+
+    const orderedPaths = [
+      ...(existingRows ?? []).map((row: { storage_path: string }) => row.storage_path),
+      ...newImages.map((image) => image.storagePath),
+    ]
+    return {
+      ok: true,
+      data: {
+        imageUrls: orderedPaths
+          .map((storagePath) => projectImageDisplayUrl(storagePath, input.projectId))
+          .filter((url): url is string => Boolean(url)),
+      },
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof AuthzError ? err.message : err instanceof Error ? err.message : "Could not save project gallery images.",
+    }
+  }
+}
+
 export async function attachProjectImage(input: {
   projectId: string
   storagePath: string
@@ -335,38 +475,15 @@ export async function attachProjectImage(input: {
   sizeBytes: number
 }): Promise<ActionResult<{ imageUrl: string }>> {
   try {
-    const validationError = validateProjectImageFile({
-      name: input.originalFilename,
-      size: input.sizeBytes,
-      type: input.mimeType,
-    })
-    if (validationError) return { ok: false, error: validationError }
-
     const actorId = await assertProjectAdmin(input.projectId)
-    const expectedPrefix = `${input.projectId}/${actorId}/cover/`
-    if (!input.storagePath.startsWith(expectedPrefix) || input.storagePath.includes("..")) {
-      return { ok: false, error: "The uploaded project image does not belong to this project." }
-    }
-
     const admin = createAdminClient()
-    const { data: uploadedFile, error: downloadError } = await admin.storage
-      .from(PROJECT_IMAGE_BUCKET)
-      .download(input.storagePath)
-    if (downloadError || !uploadedFile) {
-      return { ok: false, error: downloadError?.message || "The uploaded project image could not be found in Storage." }
-    }
-
-    const actualSize = uploadedFile.size
-    const detectedType = detectProjectImageMimeType(new Uint8Array(await uploadedFile.arrayBuffer()))
-    if (
-      actualSize <= 0 ||
-      actualSize > PROJECT_IMAGE_MAX_SIZE_BYTES ||
-      !detectedType ||
-      !isAllowedProjectImageType(detectedType)
-    ) {
-      await admin.storage.from(PROJECT_IMAGE_BUCKET).remove([input.storagePath]).catch(() => undefined)
-      return { ok: false, error: "The uploaded file is not a valid JPG, PNG, or WEBP project image." }
-    }
+    await validateStoredProjectGalleryImage(
+      admin,
+      input.projectId,
+      actorId,
+      { ...input, orderIndex: 0 },
+      "cover",
+    )
 
     const imageUrl = projectImageDisplayUrl(input.storagePath, input.projectId) ?? "/placeholder.svg"
     const [{ data: project, error: lookupError }, { data: currentImage, error: currentImageError }] = await Promise.all([
@@ -375,28 +492,39 @@ export async function attachProjectImage(input: {
         .select("image, supervising_organization_id")
         .eq("id", input.projectId)
         .maybeSingle(),
-      admin.from("project_images").select("storage_path").eq("project_id", input.projectId).maybeSingle(),
+      admin
+        .from("project_images")
+        .select("id, storage_path, order_index")
+        .eq("project_id", input.projectId)
+        .order("order_index", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
     ])
     if (lookupError) throw lookupError
     if (currentImageError) throw currentImageError
     if (!project) return { ok: false, error: "Project not found." }
 
-    const { error: assignmentError } = await admin.from("project_images").upsert(
-      {
+    if (currentImage?.id) {
+      const { error: assignmentError } = await admin
+        .from("project_images")
+        .update({
+          storage_path: input.storagePath,
+          order_index: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", currentImage.id)
+        .eq("project_id", input.projectId)
+      if (assignmentError) throw assignmentError
+    } else {
+      const { error: assignmentError } = await admin.from("project_images").insert({
         project_id: input.projectId,
         storage_path: input.storagePath,
         created_by: actorId,
+        order_index: 0,
         updated_at: new Date().toISOString(),
-      },
-      { onConflict: "project_id" },
-    )
-    if (assignmentError) throw assignmentError
-
-    const { error: legacyUpdateError } = await admin
-      .from("projects")
-      .update({ image: input.storagePath, updated_at: new Date().toISOString() })
-      .eq("id", input.projectId)
-    if (legacyUpdateError) throw legacyUpdateError
+      })
+      if (assignmentError) throw assignmentError
+    }
 
     const previousPath = projectImageStoragePath(currentImage?.storage_path ?? project.image, input.projectId)
     if (previousPath && previousPath !== input.storagePath) {
@@ -411,15 +539,16 @@ export async function attachProjectImage(input: {
       organizationId: project.supervising_organization_id,
       projectId: input.projectId,
       metadata: { storagePath: input.storagePath, originalFilename: input.originalFilename },
-    })
+    }).catch(() => undefined)
     revalidatePath("/", "layout")
     revalidatePath("/projects")
     revalidatePath(`/projects/${input.projectId}`)
+    revalidatePath(`/projects/${input.projectId}/gallery`)
     return { ok: true, data: { imageUrl } }
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof AuthzError ? err.message : "Could not save the project image.",
+      error: err instanceof AuthzError ? err.message : err instanceof Error ? err.message : "Could not save the project image.",
     }
   }
 }

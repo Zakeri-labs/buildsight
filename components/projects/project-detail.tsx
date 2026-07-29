@@ -15,7 +15,9 @@ import {
   UserRound,
   BriefcaseBusiness,
   FileText,
+  Images,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ProjectStatusBadge } from "@/components/status-badge"
 import { DonutChart } from "@/components/dashboard/donut-chart"
@@ -104,6 +106,7 @@ export function ProjectDetail({
         completion: "الإنجاز المتوقع",
         progress: "التقدم",
         description: "وصف المشروع",
+        viewGallery: "عرض معرض المشروع",
       }
     : {
         details: "Project Details",
@@ -117,6 +120,7 @@ export function ProjectDetail({
         completion: "Expected Completion",
         progress: "Progress",
         description: "Project Description",
+        viewGallery: "View Project Gallery",
       }
 
   return (
@@ -133,26 +137,37 @@ export function ProjectDetail({
           </CardHeader>
           <CardContent className="p-5 sm:p-6">
             <div className="grid gap-5 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)]">
-              <ProjectImageDisplay
-                src={projectImage}
-                projectId={project.id}
-                alt={project.name}
-                className="aspect-[4/3] w-full rounded-xl border md:aspect-[5/4]"
-              >
-                {canManageImages ? (
-                  <div className="absolute bottom-3 end-3">
-                    <ProjectImageManagementDialog
-                      projectId={project.id}
-                      projectName={project.name}
-                      currentImage={projectImage}
-                      onSaved={(imageUrl) => {
-                        setProjectImage(imageUrl)
-                        router.refresh()
-                      }}
-                    />
-                  </div>
-                ) : null}
-              </ProjectImageDisplay>
+              <div className="space-y-2">
+                <ProjectImageDisplay
+                  src={projectImage}
+                  projectId={project.id}
+                  alt={project.name}
+                  className="aspect-[4/3] w-full rounded-xl border md:aspect-[5/4]"
+                >
+                  {canManageImages ? (
+                    <div className="absolute bottom-3 end-3">
+                      <ProjectImageManagementDialog
+                        projectId={project.id}
+                        projectName={project.name}
+                        currentImage={projectImage}
+                        onSaved={(imageUrl) => {
+                          setProjectImage(imageUrl)
+                          router.refresh()
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                </ProjectImageDisplay>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  render={<Link href={`/projects/${project.id}/gallery`} />}
+                >
+                  <Images className="size-4" />
+                  {labels.viewGallery}
+                </Button>
+              </div>
 
               <div className="min-w-0 space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

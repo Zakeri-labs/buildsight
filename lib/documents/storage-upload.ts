@@ -24,6 +24,7 @@ export async function uploadStorageAsset(
   accessToken: string,
   onProgress: (progress: number) => void,
   bucket = DOCUMENT_ASSET_BUCKET,
+  upsert = false,
   timeoutMs = DEFAULT_UPLOAD_TIMEOUT_MS,
 ): Promise<void> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -50,7 +51,7 @@ export async function uploadStorageAsset(
     request.setRequestHeader("Authorization", `Bearer ${accessToken}`)
     request.setRequestHeader("apikey", anonKey)
     request.setRequestHeader("Content-Type", file.type || "application/octet-stream")
-    request.setRequestHeader("x-upsert", "false")
+    request.setRequestHeader("x-upsert", upsert ? "true" : "false")
 
     request.upload.onloadstart = () => onProgress(1)
     request.upload.onprogress = (event) => {
@@ -88,5 +89,5 @@ export async function uploadDocumentAsset(
   onProgress: (progress: number) => void,
   timeoutMs = DEFAULT_UPLOAD_TIMEOUT_MS,
 ): Promise<void> {
-  return uploadStorageAsset(file, path, accessToken, onProgress, DOCUMENT_ASSET_BUCKET, timeoutMs)
+  return uploadStorageAsset(file, path, accessToken, onProgress, DOCUMENT_ASSET_BUCKET, false, timeoutMs)
 }

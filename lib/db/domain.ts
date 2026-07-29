@@ -129,7 +129,7 @@ export async function getOrgProjects(orgId: string): Promise<DomainProject[]> {
   const projectRows = data ?? []
   const projectIds = projectRows.map((project: any) => project.id)
   const { data: imageRows } = projectIds.length
-    ? await admin.from("project_images").select("project_id, storage_path").in("project_id", projectIds)
+    ? await admin.from("project_images").select("project_id, storage_path").in("project_id", projectIds).eq("order_index", 0)
     : { data: [] as Array<{ project_id: string; storage_path: string }> }
   const imageByProject = new Map(
     (imageRows ?? []).map((image: any) => [image.project_id as string, image.storage_path as string]),

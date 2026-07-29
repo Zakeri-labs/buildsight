@@ -9,13 +9,17 @@ import {
   Building2,
   Camera,
   Check,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
   ClipboardList,
   FileText,
   FileUp,
   ImageIcon,
+  Images,
   Loader2,
   MapPin,
+  Star,
   Trash2,
   UsersRound,
 } from "lucide-react"
@@ -37,7 +41,7 @@ import {
   type ProjectDocumentSelections,
 } from "@/components/projects/project-document-upload-step"
 import {
-  attachProjectImage,
+  attachProjectGalleryImages,
   attachProjectOwnerIdCards,
   createProject,
   type OwnerIdCardUploadInput,
@@ -78,6 +82,8 @@ type OwnerDetails = {
   idCardFile: File | null
 }
 
+type ProjectImageDraft = { id: string; file: File }
+
 type ContractorOrganization = { id: string; name: string }
 type UserOption = {
   id: string
@@ -112,7 +118,7 @@ export function ProjectCreateForm({
   const [supervisionType, setSupervisionType] = useState<SupervisionTypeValue | "">("")
   const [location, setLocation] = useState<ProjectLocationValue>(EMPTY_PROJECT_LOCATION)
   const [description, setDescription] = useState("")
-  const [projectImageFile, setProjectImageFile] = useState<File | null>(null)
+  const [projectImages, setProjectImages] = useState<ProjectImageDraft[]>([])
   const [assignedUserId, setAssignedUserId] = useState("")
   const [assignedSupervisorId, setAssignedSupervisorId] = useState("")
   const [owners, setOwners] = useState<OwnerDetails[]>([emptyOwner()])
@@ -133,7 +139,7 @@ export function ProjectCreateForm({
   const [createdOwnerIds, setCreatedOwnerIds] = useState<string[]>([])
   const [ownerIdCardsUploaded, setOwnerIdCardsUploaded] = useState(false)
   const [documentsUploaded, setDocumentsUploaded] = useState(false)
-  const [projectImageUploaded, setProjectImageUploaded] = useState(false)
+  const [projectImagesUploaded, setProjectImagesUploaded] = useState(false)
   const submissionLockRef = useRef(false)
 
   const selectedDocumentCount = useMemo(
@@ -144,7 +150,7 @@ export function ProjectCreateForm({
     () => owners.reduce((total, owner) => total + (owner.idCardFile ? 1 : 0), 0),
     [owners],
   )
-  const selectedUploadCount = selectedDocumentCount + selectedOwnerIdCardCount + (projectImageFile ? 1 : 0)
+  const selectedUploadCount = selectedDocumentCount + selectedOwnerIdCardCount + projectImages.length
 
   const copy = isArabic
     ? {
@@ -171,12 +177,15 @@ export function ProjectCreateForm({
         assignUserPlaceholder: "اختر مستخدم المشروع",
         assignSupervisor: "تعيين مشرف",
         assignSupervisorPlaceholder: "اختر مشرف المشروع",
-        projectImage: "صورة المشروع",
-        projectImageHelp: "اختياري. JPG أو PNG أو WebP بحد أقصى 10 ميجابايت.",
-        chooseProjectImage: "اختيار صورة",
-        changeProjectImage: "تغيير الصورة",
-        removeProjectImage: "إزالة الصورة",
-        noProjectImage: "لم يتم اختيار صورة للمشروع",
+        projectImages: "صور المشروع",
+        projectImagesHelp: "أضف صور JPG أو PNG أو WebP بحد أقصى 10 ميجابايت لكل صورة. الصورة الأولى هي الغلاف.",
+        addProjectImages: "إضافة صور",
+        coverImage: "صورة الغلاف",
+        setAsCover: "تعيين كغلاف",
+        removeProjectImage: "إزالة",
+        noProjectImages: "لم تتم إضافة صور للمشروع",
+        moveImageEarlier: "تحريك الصورة إلى اليسار",
+        moveImageLater: "تحريك الصورة إلى اليمين",
         description: "وصف المشروع",
         descriptionPlaceholder: "نبذة مختصرة عن نطاق المشروع وأهدافه",
         ownerCount: "عدد المالكين",
@@ -239,12 +248,15 @@ export function ProjectCreateForm({
         assignUserPlaceholder: "Select a project user",
         assignSupervisor: "Assign Supervisor",
         assignSupervisorPlaceholder: "Select a project supervisor",
-        projectImage: "Project Image",
-        projectImageHelp: "Optional. JPG, PNG, or WebP up to 10 MB.",
-        chooseProjectImage: "Choose Image",
-        changeProjectImage: "Change Image",
-        removeProjectImage: "Remove Image",
-        noProjectImage: "No project image selected",
+        projectImages: "Project Images",
+        projectImagesHelp: "Add JPG, PNG, or WebP images up to 10 MB each. The first image is the project cover.",
+        addProjectImages: "Add Images",
+        coverImage: "Cover Image",
+        setAsCover: "Set as Cover",
+        removeProjectImage: "Remove",
+        noProjectImages: "No project images selected",
+        moveImageEarlier: "Move image earlier",
+        moveImageLater: "Move image later",
         description: "Project Description",
         descriptionPlaceholder: "Briefly describe the project scope and objectives",
         ownerCount: "Number of Owners",
@@ -309,8 +321,8 @@ export function ProjectCreateForm({
 
   function validateStep(targetStep: number): string | null {
     if (targetStep === 1) {
-      if (projectImageFile) {
-        const imageValidationError = validateProjectImageFile(projectImageFile)
+      for (const image of projectImages) {
+        const imageValidationError = validateProjectImageFile(image.file)
         if (imageValidationError) return imageValidationError
       }
       if (
@@ -368,38 +380,69 @@ export function ProjectCreateForm({
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  async function uploadProjectImage(projectId: string) {
-    if (!projectImageFile) return
-    const validationError = validateProjectImageFile(projectImageFile)
-    if (validationError) throw new Error(validationError)
+  async function uploadProjectImages(projectId: string) {
+    if (projectImages.length === 0) return
 
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) throw new Error("Your session has expired. Sign in again.")
 
-    const progressLabel = isArabic ? "جارٍ رفع صورة المشروع…" : "Uploading project image…"
-    setSubmissionMessage(progressLabel)
-    setUploadingFile(progressLabel)
-    const storagePath = `${projectId}/${session.user.id}/cover/${crypto.randomUUID()}-${sanitizeStorageFileName(projectImageFile.name)}`
+    const totalBytes = projectImages.reduce((total, image) => total + image.file.size, 0)
+    let completedBytes = 0
+    const uploadedPaths: string[] = []
+    const records: Array<{
+      storagePath: string
+      originalFilename: string
+      mimeType: string
+      sizeBytes: number
+      orderIndex: number
+    }> = []
 
     try {
-      await uploadStorageAsset(
-        projectImageFile,
-        storagePath,
-        session.access_token,
-        setUploadProgress,
-        PROJECT_IMAGE_BUCKET,
-      )
-      const result = await attachProjectImage({
-        projectId,
-        storagePath,
-        originalFilename: projectImageFile.name,
-        mimeType: projectImageFile.type,
-        sizeBytes: projectImageFile.size,
-      })
+      for (const [index, image] of projectImages.entries()) {
+        const file = image.file
+        const validationError = validateProjectImageFile(file)
+        if (validationError) throw new Error(validationError)
+
+        const progressLabel = isArabic
+          ? `جارٍ رفع صورة المشروع ${index + 1}/${projectImages.length}: ${file.name}`
+          : `Uploading project image ${index + 1}/${projectImages.length}: ${file.name}`
+        setSubmissionMessage(progressLabel)
+        setUploadingFile(progressLabel)
+
+        const storagePath = `${projectId}/${session.user.id}/gallery/${image.id}-${sanitizeStorageFileName(file.name)}`
+        await uploadStorageAsset(
+          file,
+          storagePath,
+          session.access_token,
+          (fileProgress) => {
+            const uploadedForCurrent = (fileProgress / 100) * file.size
+            setUploadProgress(Math.round(((completedBytes + uploadedForCurrent) / Math.max(totalBytes, 1)) * 100))
+          },
+          PROJECT_IMAGE_BUCKET,
+          true,
+        )
+        completedBytes += file.size
+        uploadedPaths.push(storagePath)
+        records.push({
+          storagePath,
+          originalFilename: file.name,
+          mimeType: file.type,
+          sizeBytes: file.size,
+          orderIndex: index,
+        })
+      }
+
+      const savingMessage = isArabic ? "جارٍ حفظ معرض صور المشروع…" : "Saving project gallery…"
+      setSubmissionMessage(savingMessage)
+      setUploadingFile(savingMessage)
+      const result = await attachProjectGalleryImages({ projectId, images: records })
       if (!result.ok) throw new Error(result.error)
+      setUploadProgress(100)
     } catch (uploadError) {
-      void supabase.storage.from(PROJECT_IMAGE_BUCKET).remove([storagePath]).then(() => undefined, () => undefined)
+      if (uploadedPaths.length) {
+        await supabase.storage.from(PROJECT_IMAGE_BUCKET).remove(uploadedPaths).catch(() => undefined)
+      }
       throw uploadError
     }
   }
@@ -580,10 +623,10 @@ export function ProjectCreateForm({
         setCreatedOwnerIds(ownerIds)
       }
 
-      if (projectImageFile && !projectImageUploaded) {
+      if (projectImages.length > 0 && !projectImagesUploaded) {
         setUploadProgress(0)
-        await uploadProjectImage(projectId)
-        setProjectImageUploaded(true)
+        await uploadProjectImages(projectId)
+        setProjectImagesUploaded(true)
       }
 
       if (selectedOwnerIdCardCount > 0 && !ownerIdCardsUploaded) {
@@ -767,30 +810,36 @@ export function ProjectCreateForm({
                   />
                 </div>
 
-                <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.65fr)]">
-                  <Field label={`${copy.description} (${copy.optional})`} htmlFor="new-project-description">
-                    <textarea
-                      id="new-project-description"
-                      value={description}
-                      onChange={(event) => setDescription(event.target.value)}
-                      placeholder={copy.descriptionPlaceholder}
-                      disabled={pending}
-                      rows={5}
-                      className="min-h-32 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                    />
-                  </Field>
-                  <ProjectImageField
-                    file={projectImageFile}
-                    onChange={setProjectImageFile}
+                <Field label={`${copy.description} (${copy.optional})`} htmlFor="new-project-description">
+                  <textarea
+                    id="new-project-description"
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    placeholder={copy.descriptionPlaceholder}
                     disabled={pending}
-                    label={`${copy.projectImage} (${copy.optional})`}
-                    help={copy.projectImageHelp}
-                    chooseLabel={copy.chooseProjectImage}
-                    changeLabel={copy.changeProjectImage}
-                    removeLabel={copy.removeProjectImage}
-                    emptyLabel={copy.noProjectImage}
+                    rows={4}
+                    className="min-h-28 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
                   />
-                </div>
+                </Field>
+
+                <ProjectGalleryField
+                  images={projectImages}
+                  onChange={(nextImages) => {
+                    setProjectImages(nextImages)
+                    setProjectImagesUploaded(false)
+                    setError(null)
+                  }}
+                  disabled={pending}
+                  label={`${copy.projectImages} (${copy.optional})`}
+                  help={copy.projectImagesHelp}
+                  addLabel={copy.addProjectImages}
+                  coverLabel={copy.coverImage}
+                  setCoverLabel={copy.setAsCover}
+                  removeLabel={copy.removeProjectImage}
+                  emptyLabel={copy.noProjectImages}
+                  moveEarlierLabel={copy.moveImageEarlier}
+                  moveLaterLabel={copy.moveImageLater}
+                />
 
                 <div className="grid gap-5 md:grid-cols-2">
                   <Field label={copy.assignUser} required>
@@ -1066,109 +1115,210 @@ function Field({
   )
 }
 
-function ProjectImageField({
-  file,
+function ProjectGalleryField({
+  images,
   onChange,
   disabled,
   label,
   help,
-  chooseLabel,
-  changeLabel,
+  addLabel,
+  coverLabel,
+  setCoverLabel,
   removeLabel,
   emptyLabel,
+  moveEarlierLabel,
+  moveLaterLabel,
 }: {
-  file: File | null
-  onChange: (file: File | null) => void
+  images: ProjectImageDraft[]
+  onChange: (images: ProjectImageDraft[]) => void
   disabled: boolean
   label: string
   help: string
-  chooseLabel: string
-  changeLabel: string
+  addLabel: string
+  coverLabel: string
+  setCoverLabel: string
   removeLabel: string
   emptyLabel: string
+  moveEarlierLabel: string
+  moveLaterLabel: string
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [localError, setLocalError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!file) {
-      setPreviewUrl(null)
-      return
-    }
-    const objectUrl = URL.createObjectURL(file)
-    setPreviewUrl(objectUrl)
-    return () => URL.revokeObjectURL(objectUrl)
-  }, [file])
+  function addFiles(files: FileList | null) {
+    if (!files?.length) return
+    const accepted: ProjectImageDraft[] = []
+    const errors: string[] = []
 
-  function selectFile(nextFile: File | null) {
-    if (!nextFile) return
-    const validationError = validateProjectImageFile(nextFile)
-    if (validationError) {
-      setLocalError(validationError)
-      if (inputRef.current) inputRef.current.value = ""
-      return
+    for (const file of Array.from(files)) {
+      const validationError = validateProjectImageFile(file)
+      if (validationError) errors.push(`${file.name}: ${validationError}`)
+      else accepted.push({ id: crypto.randomUUID(), file })
     }
-    setLocalError(null)
-    onChange(nextFile)
+
+    if (accepted.length > 0) onChange([...images, ...accepted])
+    setLocalError(errors.length > 0 ? errors.join(" ") : null)
     if (inputRef.current) inputRef.current.value = ""
   }
 
+  function moveImage(index: number, direction: -1 | 1) {
+    const nextIndex = index + direction
+    if (nextIndex < 0 || nextIndex >= images.length) return
+    const next = images.slice()
+    const [moved] = next.splice(index, 1)
+    next.splice(nextIndex, 0, moved)
+    onChange(next)
+  }
+
+  function setCover(index: number) {
+    if (index === 0) return
+    const next = images.slice()
+    const [cover] = next.splice(index, 1)
+    next.unshift(cover)
+    onChange(next)
+  }
+
   return (
-    <div className="space-y-2">
-      <Label htmlFor="project-image-input">{label}</Label>
-      <input
-        ref={inputRef}
-        id="project-image-input"
-        type="file"
-        accept={PROJECT_IMAGE_ACCEPT}
-        className="sr-only"
-        disabled={disabled}
-        onChange={(event) => selectFile(event.target.files?.[0] ?? null)}
-      />
-      <div className="overflow-hidden rounded-xl border bg-background">
-        <div className="aspect-[16/9] w-full bg-muted/30">
-          {previewUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={previewUrl} alt={file?.name || label} className="size-full object-cover" />
-          ) : (
-            <div className="flex size-full flex-col items-center justify-center gap-2 text-muted-foreground">
-              <ImageIcon className="size-8" />
-              <span className="px-3 text-center text-xs">{emptyLabel}</span>
-            </div>
-          )}
+    <section className="space-y-3 rounded-2xl border bg-muted/10 p-4 sm:p-5" aria-labelledby="project-images-label">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <Label id="project-images-label" htmlFor="project-images-input">{label}</Label>
+          <p className="mt-1 text-xs text-muted-foreground">{help}</p>
         </div>
-        <div className="space-y-3 border-t p-3">
-          {file ? (
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{file.name}</p>
-              <p className="text-xs text-muted-foreground">{(file.size / (1024 * 1024)).toFixed(1)} MB</p>
-            </div>
-          ) : null}
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={disabled}>
-              <FileUp className="size-4" />
-              {file ? changeLabel : chooseLabel}
+        <input
+          ref={inputRef}
+          id="project-images-input"
+          type="file"
+          multiple
+          accept={`${PROJECT_IMAGE_ACCEPT},.jpg,.jpeg,.png,.webp`}
+          className="sr-only"
+          disabled={disabled}
+          onChange={(event) => addFiles(event.target.files)}
+        />
+        <Button type="button" variant="outline" onClick={() => inputRef.current?.click()} disabled={disabled}>
+          <Images className="size-4" data-icon="inline-start" />
+          {addLabel}
+        </Button>
+      </div>
+
+      {images.length > 0 ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {images.map((image, index) => (
+            <ProjectImageDraftCard
+              key={image.id}
+              image={image}
+              index={index}
+              count={images.length}
+              disabled={disabled}
+              coverLabel={coverLabel}
+              setCoverLabel={setCoverLabel}
+              removeLabel={removeLabel}
+              moveEarlierLabel={moveEarlierLabel}
+              moveLaterLabel={moveLaterLabel}
+              onSetCover={() => setCover(index)}
+              onMove={(direction) => moveImage(index, direction)}
+              onRemove={() => onChange(images.filter((item) => item.id !== image.id))}
+            />
+          ))}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={disabled}
+          className="flex min-h-36 w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-background/70 px-4 text-center text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:pointer-events-none disabled:opacity-50"
+        >
+          <ImageIcon className="size-9" />
+          <span className="text-sm font-medium">{emptyLabel}</span>
+          <span className="text-xs">{addLabel}</span>
+        </button>
+      )}
+
+      {localError ? <p role="alert" className="text-xs text-destructive">{localError}</p> : null}
+    </section>
+  )
+}
+
+function ProjectImageDraftCard({
+  image,
+  index,
+  count,
+  disabled,
+  coverLabel,
+  setCoverLabel,
+  removeLabel,
+  moveEarlierLabel,
+  moveLaterLabel,
+  onSetCover,
+  onMove,
+  onRemove,
+}: {
+  image: ProjectImageDraft
+  index: number
+  count: number
+  disabled: boolean
+  coverLabel: string
+  setCoverLabel: string
+  removeLabel: string
+  moveEarlierLabel: string
+  moveLaterLabel: string
+  onSetCover: () => void
+  onMove: (direction: -1 | 1) => void
+  onRemove: () => void
+}) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    const objectUrl = URL.createObjectURL(image.file)
+    setPreviewUrl(objectUrl)
+    return () => URL.revokeObjectURL(objectUrl)
+  }, [image.file])
+
+  return (
+    <article className="group overflow-hidden rounded-xl border bg-background shadow-xs">
+      <div className="relative aspect-[4/3] bg-muted/30">
+        {previewUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={previewUrl} alt={image.file.name} className="size-full object-cover" />
+        ) : null}
+        <span className="absolute start-2 top-2 rounded-full bg-background/90 px-2 py-1 text-[11px] font-semibold shadow-sm backdrop-blur">
+          {index + 1}
+        </span>
+        {index === 0 ? (
+          <span className="absolute end-2 top-2 inline-flex items-center gap-1 rounded-full bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground shadow-sm">
+            <Star className="size-3 fill-current" />
+            {coverLabel}
+          </span>
+        ) : null}
+      </div>
+      <div className="space-y-2 p-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{image.file.name}</p>
+          <p className="text-xs text-muted-foreground">{(image.file.size / (1024 * 1024)).toFixed(1)} MB</p>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex gap-1">
+            <Button type="button" variant="outline" size="icon-xs" aria-label={moveEarlierLabel} title={moveEarlierLabel} onClick={() => onMove(-1)} disabled={disabled || index === 0}>
+              <ChevronLeft className="size-3.5 rtl:rotate-180" />
             </Button>
-            {file ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => { setLocalError(null); onChange(null) }}
-                disabled={disabled}
-                className="text-destructive hover:text-destructive"
-              >
-                <Trash2 className="size-4" />
-                {removeLabel}
+            <Button type="button" variant="outline" size="icon-xs" aria-label={moveLaterLabel} title={moveLaterLabel} onClick={() => onMove(1)} disabled={disabled || index === count - 1}>
+              <ChevronRight className="size-3.5 rtl:rotate-180" />
+            </Button>
+          </div>
+          <div className="flex gap-1">
+            {index !== 0 ? (
+              <Button type="button" variant="ghost" size="xs" onClick={onSetCover} disabled={disabled}>
+                <Star className="size-3.5" />
+                {setCoverLabel}
               </Button>
             ) : null}
+            <Button type="button" variant="ghost" size="icon-xs" aria-label={removeLabel} title={removeLabel} onClick={onRemove} disabled={disabled} className="text-destructive hover:text-destructive">
+              <Trash2 className="size-3.5" />
+            </Button>
           </div>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">{help}</p>
-      {localError ? <p role="alert" className="text-xs text-destructive">{localError}</p> : null}
-    </div>
+    </article>
   )
 }
 
