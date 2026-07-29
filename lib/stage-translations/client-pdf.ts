@@ -1933,11 +1933,22 @@ function measureBlockHeight(doc: JsPdfDocument, block: PdfBlock | undefined, wid
     const lineHeight = 4.6
     return Math.max(lineHeight, lines.length * lineHeight) + 2.5
   }
+  if (block.type === "list") {
+    setLanguage(doc, rtl, 9, false)
+    let totalH = 0
+    for (let index = 0; index < block.items.length; index += 1) {
+      const itemText = block.items[index] || ""
+      const available = width - 2 - 6
+      const lines = textLines(doc, itemText, available)
+      const lineHeight = 4.6
+      totalH += Math.max(lineHeight, lines.length * lineHeight) + 1.5
+    }
+    return Math.max(6, totalH) + 2
+  }
   if (block.type === "table") {
     const rows = (block && Array.isArray(block.rows)) ? block.rows : []
     const headers = (block && Array.isArray(block.headers)) ? block.headers : []
     const rowCount = rows.length + (headers.length ? 1 : 0)
-    // Estimate an average of 1.5 lines per cell for bilingual narrow columns
     const avgCellLines = 1.5
     return rowCount * (avgCellLines * 4.2 + 4) + 6
   }
@@ -2062,8 +2073,8 @@ async function buildNativeBilingualPdfBlob(input: {
       const rowY = flow.y
 
       // Render both columns at the same Y using shallow sub-flows that do NOT add pages
-      const leftSub: Flow = { ...flow, x: flow.x, width: colWidth, y: rowY, rtl: false, bottom: 99999 }
-      const rightSub: Flow = { ...flow, x: flow.x + colWidth + gap, width: colWidth, y: rowY, rtl: true, bottom: 99999 }
+      const leftSub: Flow = { ...flow, x: flow.x, width: colWidth, y: rowY, rtl: false, bottom: flow.bottom }
+      const rightSub: Flow = { ...flow, x: flow.x + colWidth + gap, width: colWidth, y: rowY, rtl: true, bottom: flow.bottom }
 
       if (engBlock) await renderBlocks(leftSub, [engBlock], engSection.key)
       if (arBlock) await renderBlocks(rightSub, [arBlock], engSection.key)
