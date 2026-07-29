@@ -1570,40 +1570,44 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     doc.setDrawColor(226, 232, 240)
     doc.line(margin, height - 12, width - margin, height - 12)
 
-    // Left info (Phones, Website, Email)
-    const leftText = [
-      org.phones ? `Tel: ${org.phones}` : "",
-      [org.website, org.email].filter(Boolean).join(" · "),
+    // Left info (Address split into 2 lines)
+    const addressLines = rtl ? [
+      `س.ت: ${org.crNumber} | ص.ب: ${org.poBox} | ر.ب: ${org.postalCode}`,
+      org.addressAr,
+    ].filter(Boolean) : [
+      `C.R. No.: ${org.crNumber}, P.O. Box: ${org.poBox}, Postal Code: ${org.postalCode}`,
+      org.addressEn,
     ].filter(Boolean)
-
-    if (leftText.length) {
-      setLanguage(doc, false, 6.8, false)
-      doc.setTextColor(100, 116, 139)
-      writePdfText(
-        doc,
-        leftText,
-        rtl ? width - margin : margin,
-        height - 8.5,
-        { align: rtl ? "right" : "left", lineHeightFactor: 1.15 },
-        false,
-      )
-    }
-
-    // Right info (C.R. No, P.O. Box, Postal Code, Address)
-    const arReg = `س.ت: ${org.crNumber} | ص.ب: ${org.poBox} | ر.ب: ${org.postalCode} | ${org.addressAr}`
-    const enReg = `C.R. No.: ${org.crNumber}, P.O. Box: ${org.poBox}, Postal Code: ${org.postalCode} · ${org.addressEn}`
-    const rightText = [rtl ? arReg : enReg]
 
     setLanguage(doc, rtl, 6.8, false)
     doc.setTextColor(100, 116, 139)
     writePdfText(
       doc,
-      rightText,
-      rtl ? margin : width - margin,
+      addressLines,
+      rtl ? width - margin : margin,
       height - 8.5,
-      { align: rtl ? "left" : "right", lineHeightFactor: 1.15 },
+      { align: rtl ? "right" : "left", lineHeightFactor: 1.15 },
       rtl,
     )
+
+    // Right info (Phones, Website, Email)
+    const contactLines = [
+      org.phones ? `Tel: ${org.phones}` : "",
+      [org.website, org.email].filter(Boolean).join(" · "),
+    ].filter(Boolean)
+
+    if (contactLines.length) {
+      setLanguage(doc, false, 6.8, false)
+      doc.setTextColor(100, 116, 139)
+      writePdfText(
+        doc,
+        contactLines,
+        rtl ? margin : width - margin,
+        height - 8.5,
+        { align: rtl ? "left" : "right", lineHeightFactor: 1.15 },
+        false,
+      )
+    }
 
     // Footer Page Number
     setLanguage(doc, false, 7, false)
