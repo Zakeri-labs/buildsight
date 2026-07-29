@@ -100,7 +100,8 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
   const totals = useMemo(() => {
     const terms = data.stages.flatMap((stage) => stage.terms)
     const completed = terms.filter(isComplete).length
-    return { total: terms.length, completed, remaining: Math.max(0, terms.length - completed) }
+    const percentage = terms.length ? Math.round((completed / terms.length) * 100) : 0
+    return { total: terms.length, completed, remaining: Math.max(0, terms.length - completed), percentage }
   }, [data.stages])
 
   return (
@@ -117,7 +118,7 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
         <div className="grid min-w-[270px] grid-cols-3 gap-3">
           <Metric value={totals.total} label={copy.complete === "complete" ? "Reports" : "التقارير"} />
           <Metric value={totals.completed} label={copy.completed} />
-          <Metric value={totals.remaining} label={copy.remaining} />
+          <Metric value={`${totals.percentage}%`} label={locale === "ar" ? "نسبة الإنجاز" : "Progress"} />
         </div>
       </div>
 
