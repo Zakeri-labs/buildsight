@@ -238,17 +238,24 @@ function TermRow({
           </div>
 
           <div className="flex min-w-0 items-center gap-2 text-sm">
-            {term.responsibleUser ? (
-              <>
-                <Avatar size="sm">
-                  {term.responsibleUser.avatarUrl ? <AvatarImage src={profileAvatarDisplayUrl(term.responsibleUser.avatarUrl)} alt="" /> : null}
-                  <AvatarFallback>{initials(term.responsibleUser.name)}</AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{term.responsibleUser.name}</p>
-                  <p className="truncate text-xs text-muted-foreground">{term.responsibleOrganization?.name ?? copy.responsible}</p>
-                </div>
-              </>
+            {term.response?.createdBy || term.responsibleUser ? (
+              (() => {
+                const user = term.response?.createdBy ?? term.responsibleUser!
+                return (
+                  <>
+                    <Avatar size="sm">
+                      {user.avatarUrl ? <AvatarImage src={profileAvatarDisplayUrl(user.avatarUrl)} alt="" /> : null}
+                      <AvatarFallback>{initials(user.name)}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{user.name}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {term.responsibleOrganization?.name ?? (term.response ? (locale === "ar" ? "مُنشئ التقرير" : "Author") : copy.responsible)}
+                      </p>
+                    </div>
+                  </>
+                )
+              })()
             ) : term.responsibleOrganization ? (
               <>
                 <Building2 className="size-4 text-muted-foreground" />
