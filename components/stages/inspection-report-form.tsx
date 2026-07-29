@@ -270,8 +270,14 @@ export function InspectionReportForm({
   }, [])
 
   useEffect(() => {
-    setApprovalHistory(response?.approvals ?? [])
-  }, [response?.approvals])
+    if (response) {
+      setResponseId(response.id)
+      setReportNumber(response.reportNumber)
+      setStatus(response.status)
+      setExistingAttachments(response.attachments ?? [])
+      setApprovalHistory(response.approvals ?? [])
+    }
+  }, [response])
 
   const evidenceImages = existingAttachments.filter((item) => item.attachmentKind === "evidence_image")
   const documentAttachments = existingAttachments.filter((item) => item.attachmentKind === "document")
@@ -310,10 +316,21 @@ export function InspectionReportForm({
       for (let index = 0; index < files.length; index += 1) {
         const item = files[index]
         const folder = kind === "evidence_image" ? "evidence" : "documents"
-        const path = `${project.id}/${id}/${folder}/${crypto.randomUUID()}-${sanitizeEvidenceFileName(item.file.name)}`
-        const mimeType = kind === "document"
-          ? resolveStageDocumentMimeType(item.file) ?? "application/octet-stream"
-          : item.file.type || "application/octet-stream"
+        const safeName = sanitizeEvidenceFileName(item.file.name)
+        const path = `${project.id}/${id}/${folder}/${crypto.randomUUID()}-${safeName}`
+        let mimeType = item.file.type
+        if (kind === "evidence_image") {
+          if (!mimeType || !mimeType.startsWith("image/")) {
+            const ext = item.file.name.toLowerCase().match(/\.[^.]+$/)?.[0]
+            if (ext === ".jpg" || ext === ".jpeg") mimeType = "image/jpeg"
+            else if (ext === ".png") mimeType = "image/png"
+            else if (ext === ".webp") mimeType = "image/webp"
+            else if (ext === ".gif") mimeType = "image/gif"
+            else mimeType = "image/jpeg"
+          }
+        } else {
+          mimeType = resolveStageDocumentMimeType(item.file) ?? "application/octet-stream"
+        }
         await uploadStageEvidence(item.file, path, session.access_token, (progress) => {
           const update = (rows: PendingFile[]) => rows.map((row) => row.id === item.id ? { ...row, progress } : row)
           if (kind === "evidence_image") setPendingImages(update)
@@ -331,25 +348,27 @@ export function InspectionReportForm({
       }
       const registered = await registerResponseAttachmentsAction({ projectId: project.id, responseId: id, attachments: registrations })
       if (!registered.ok) throw new Error(registered.error)
-      setExistingAttachments((current) => [
-        ...current,
-        ...registrations.map((item, index) => ({
-          id: registered.data.ids[index] ?? crypto.randomUUID(),
-          storagePath: item.storagePath,
-          originalFilename: item.originalFilename,
-          mimeType: item.mimeType,
-          sizeBytes: item.sizeBytes,
-          attachmentKind: item.attachmentKind,
-          sortOrder: item.sortOrder ?? index,
-          createdAt: new Date().toISOString(),
-        })),
-      ])
+      const newAttachments: ProjectStageAttachment[] = registrations.map((item, index) => ({
+        id: registered.data.ids[index] ?? crypto.randomUUID(),
+        storagePath: item.storagePath,
+        originalFilename: item.originalFilename,
+        mimeType: item.mimeType,
+        sizeBytes: item.sizeBytes,
+        attachmentKind: item.attachmentKind,
+        sortOrder: item.sortOrder ?? index,
+        createdAt: new Date().toISOString(),
+      }))
+      setExistingAttachments((current) => [...current, ...newAttachments])
       if (kind === "evidence_image") {
-        pendingImages.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl))
-        setPendingImages([])
-      } else setPendingDocuments([])
+        files.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl))
+        setPendingImages((current) => current.filter((row) => !files.some((f) => f.id === row.id)))
+      } else {
+        setPendingDocuments((current) => current.filter((row) => !files.some((f) => f.id === row.id)))
+      }
     } catch (uploadError) {
-      if (uploadedPaths.length) await supabase.storage.from("project-stage-evidence").remove(uploadedPaths)
+      if (uploadedPaths.length) {
+        await supabase.storage.from("project-stage-evidence").remove(uploadedPaths).catch(() => undefined)
+      }
       throw uploadError
     }
   }
