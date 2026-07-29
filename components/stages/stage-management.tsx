@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   ArrowDown,
@@ -15,6 +15,7 @@ import {
   Plus,
   ShieldCheck,
   Trash2,
+  X,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -229,9 +230,11 @@ export function StageManagement({
   const c = COPY[locale]
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(data.stages.map((stage) => stage.id)))
   const [stageDialog, setStageDialog] = useState<StageDialogState | null>(null)
+  const stageDialogVersion = useRef(0)
   const [termDialog, setTermDialog] = useState<TermDialogState | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null)
+  const [stageSubmitting, setStageSubmitting] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   const totalReports = data.stages.reduce((sum, stage) => sum + stage.terms.length, 0)
@@ -239,6 +242,16 @@ export function StageManagement({
     (sum, stage) => sum + stage.terms.filter((term) => term.required).length,
     0,
   )
+
+  function openStageDialog(dialog: StageDialogState) {
+    stageDialogVersion.current += 1
+    setStageDialog(dialog)
+  }
+
+  function closeStageDialog() {
+    stageDialogVersion.current += 1
+    setStageDialog(null)
+  }
 
   function execute(action: () => Promise<{ ok: boolean; error?: string }>, onSuccess?: () => void) {
     setFeedback(null)
@@ -252,6 +265,35 @@ export function StageManagement({
       setFeedback({ tone: "success", message: c.success })
       router.refresh()
     })
+  }
+
+  async function submitStage(values: { name: string; description: string }) {
+    const currentDialog = stageDialog
+    if (!currentDialog || stageSubmitting) return
+    const dialogVersion = stageDialogVersion.current
+
+    setFeedback(null)
+    setStageSubmitting(true)
+    try {
+      const result = await (currentDialog.mode === "create"
+        ? createStage({ organizationId: organization.id, ...values })
+        : updateStage({ stageId: currentDialog.stage.id, ...values }))
+
+      if (!result.ok) {
+        setFeedback({ tone: "error", message: result.error || "Something went wrong." })
+        return
+      }
+
+      // Close immediately as a normal state update. Refreshing the server data is
+      // intentionally scheduled afterwards so it cannot keep the dialog mounted.
+      if (stageDialogVersion.current === dialogVersion) closeStageDialog()
+      setFeedback({ tone: "success", message: c.success })
+      startTransition(() => router.refresh())
+    } catch {
+      setFeedback({ tone: "error", message: "Something went wrong." })
+    } finally {
+      setStageSubmitting(false)
+    }
   }
 
   function toggleStage(stageId: string) {
@@ -271,7 +313,7 @@ export function StageManagement({
           <h2 className="mt-1 text-xl font-semibold tracking-tight">{organization.name}</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{c.intro}</p>
         </div>
-        <Button type="button" size="lg" onClick={() => setStageDialog({ mode: "create", stage: null })}>
+        <Button type="button" size="lg" onClick={() => openStageDialog({ mode: "create", stage: null })}>
           <Plus data-icon="inline-start" />
           {c.addStage}
         </Button>
@@ -304,7 +346,7 @@ export function StageManagement({
             </span>
             <h3 className="mt-4 text-lg font-semibold">{c.emptyTitle}</h3>
             <p className="mt-1 max-w-md text-sm text-muted-foreground">{c.emptyDescription}</p>
-            <Button className="mt-5" onClick={() => setStageDialog({ mode: "create", stage: null })}>
+            <Button className="mt-5" onClick={() => openStageDialog({ mode: "create", stage: null })}>
               <Plus data-icon="inline-start" />
               {c.addStage}
             </Button>
@@ -389,7 +431,7 @@ export function StageManagement({
                             <Plus />
                             {c.addReport}
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setStageDialog({ mode: "edit", stage })}>
+                          <DropdownMenuItem onClick={() => openStageDialog({ mode: "edit", stage })}>
                             <Pencil />
                             {c.editStage}
                           </DropdownMenuItem>
@@ -584,22 +626,16 @@ export function StageManagement({
         </div>
       )}
 
-      <StageEditorDialog
-        state={stageDialog}
-        pending={isPending}
-        labels={c}
-        onClose={() => setStageDialog(null)}
-        onSubmit={(values) => {
-          if (!stageDialog) return
-          execute(
-            () =>
-              stageDialog.mode === "create"
-                ? createStage({ organizationId: organization.id, ...values })
-                : updateStage({ stageId: stageDialog.stage.id, ...values }),
-            () => setStageDialog(null),
-          )
-        }}
-      />
+      {stageDialog ? (
+        <StageEditorDialog
+          key={`${stageDialog.mode}-${stageDialog.stage?.id ?? "new"}`}
+          state={stageDialog}
+          pending={stageSubmitting}
+          labels={c}
+          onClose={closeStageDialog}
+          onSubmit={submitStage}
+        />
+      ) : null}
 
       <TermEditorDialog
         key={termDialog ? `${termDialog.mode}-${termDialog.term?.id ?? termDialog.stage.id}` : "closed"}
@@ -726,19 +762,37 @@ function StageEditorDialog({
   onClose,
   onSubmit,
 }: {
-  state: StageDialogState | null
+  state: StageDialogState
   pending: boolean
   labels: (typeof COPY)["en"] | (typeof COPY)["ar"]
   onClose: () => void
   onSubmit: (values: { name: string; description: string }) => void
 }) {
-  const key = state ? `${state.mode}-${state.stage?.id ?? "new"}` : "closed"
+  const formRef = useRef<HTMLFormElement>(null)
+
+  function closeDialog() {
+    formRef.current?.reset()
+    onClose()
+  }
+
   return (
-    <Dialog open={state != null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent key={key}>
+    <Dialog open onOpenChange={(open) => !open && closeDialog()}>
+      <DialogContent showCloseButton={false}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={labels.cancel}
+          className="absolute right-2 top-2"
+          onClick={closeDialog}
+        >
+          <X className="size-4" />
+        </Button>
         <form
+          ref={formRef}
           onSubmit={(event) => {
             event.preventDefault()
+            if (pending) return
             const form = new FormData(event.currentTarget)
             onSubmit({
               name: String(form.get("name") ?? ""),
@@ -748,7 +802,7 @@ function StageEditorDialog({
           className="contents"
         >
           <DialogHeader>
-            <DialogTitle>{state?.mode === "edit" ? labels.editStageTitle : labels.createStageTitle}</DialogTitle>
+            <DialogTitle>{state.mode === "edit" ? labels.editStageTitle : labels.createStageTitle}</DialogTitle>
             <DialogDescription>{labels.stageDialogDescription}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -760,7 +814,7 @@ function StageEditorDialog({
                 required
                 minLength={2}
                 autoFocus
-                defaultValue={state?.stage?.name ?? ""}
+                defaultValue={state.stage?.name ?? ""}
               />
             </div>
             <div className="space-y-1.5">
@@ -769,18 +823,18 @@ function StageEditorDialog({
                 id="stage-description"
                 name="description"
                 rows={4}
-                defaultValue={state?.stage?.description ?? ""}
+                defaultValue={state.stage?.description ?? ""}
                 placeholder={labels.descriptionPlaceholder}
                 className="w-full resize-y rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={pending} onClick={onClose}>
+            <Button type="button" variant="outline" onClick={closeDialog}>
               {labels.cancel}
             </Button>
             <Button type="submit" disabled={pending}>
-              {state?.mode === "edit" ? labels.save : labels.create}
+              {state.mode === "edit" ? labels.save : labels.create}
             </Button>
           </DialogFooter>
         </form>
