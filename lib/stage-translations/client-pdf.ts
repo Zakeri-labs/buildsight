@@ -1033,10 +1033,9 @@ function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "tabl
         flow.doc.roundedRect(boxX, boxY, boxSize, boxSize, 0.6, 0.6, "FD")
       }
 
-      const shaped = shapeArabicText(flow.doc, lines)
       setLanguage(flow.doc, true, 8.5, false)
       flow.doc.setTextColor(15, 23, 42)
-      writePdfText(flow.doc, shaped, textX, flow.y + 3, { align: "right", lineHeightFactor: 1.15 }, true)
+      writePdfText(flow.doc, lines, textX, flow.y + 3, { align: "right", lineHeightFactor: 1.15 }, true)
     } else {
       const boxX = flow.x
       const textX = boxX + boxSize + gap
@@ -1071,33 +1070,46 @@ function renderNativeVectorTable(flow: Flow, headers: string[], rows: string[][]
   if (!colCount) return
 
   const colWidth = flow.width / colCount
-  const rowHeight = 6.5
-  const padding = 2
+  const padding = 1.5
+  const textW = colWidth - padding * 2
+  const lineH = 4.2
 
   for (let r = 0; r < rows.length; r += 1) {
-    ensureSpace(flow, rowHeight + 2)
     const row = rows[r]
+    const cellLinesList: string[][] = []
+    let maxLines = 1
 
     for (let c = 0; c < colCount; c += 1) {
       const cellText = row[c] || ""
+      setLanguage(flow.doc, flow.rtl, 8, false)
+      const lines = textLines(flow.doc, cellText, textW)
+      cellLinesList.push(lines)
+      if (lines.length > maxLines) maxLines = lines.length
+    }
+
+    const rowHeight = Math.max(6.5, maxLines * lineH + 2.5)
+    ensureSpace(flow, rowHeight)
+
+    for (let c = 0; c < colCount; c += 1) {
+      const lines = cellLinesList[c]
       const x = flow.x + c * colWidth
 
       setLanguage(flow.doc, flow.rtl, 8, false)
       flow.doc.setTextColor(51, 65, 85)
 
       if (flow.rtl) {
-        writePdfText(flow.doc, cellText, x + colWidth - padding, flow.y + 4.5, { align: "right" }, true)
+        writePdfText(flow.doc, lines, x + colWidth - padding, flow.y + 3.5, { align: "right", lineHeightFactor: 1.15 }, true)
       } else {
-        writePdfText(flow.doc, cellText, x + padding, flow.y + 4.5, { align: "left" }, false)
+        writePdfText(flow.doc, lines, x + padding, flow.y + 3.5, { align: "left", lineHeightFactor: 1.15 }, false)
       }
     }
 
     flow.y += rowHeight
     flow.doc.setDrawColor(226, 232, 240)
     flow.doc.setLineWidth(0.15)
-    flow.doc.line(flow.x, flow.y, flow.x + flow.width, flow.y)
+    flow.doc.line(flow.x, flow.y - 0.5, flow.x + flow.width, flow.y - 0.5)
   }
-  flow.y += 4
+  flow.y += 3
 }
 
 function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>, sectionKey?: string) {
@@ -1112,56 +1124,15 @@ function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>, se
   ensureSpace(flow, 16)
   setLanguage(flow.doc, flow.rtl, 8.5, false)
 
-  const headers = block.headers ? block.headers.map((h) => flow.rtl ? shapeArabicText(flow.doc, h) : h) : []
-  const rows = rawRows.map((row) => row.map((cell) => flow.rtl ? shapeArabicText(flow.doc, cell) : cell))
+  const rawHeaders = block.headers ? [...block.headers] : []
+  const rawBodyRows = rawRows.map((row) => [...row])
 
   if (flow.rtl) {
-    if (headers.length) headers.reverse()
-    rows.forEach((r) => r.reverse())
+    if (rawHeaders.length) rawHeaders.reverse()
+    rawBodyRows.forEach((r) => r.reverse())
   }
 
-  try {
-    if (typeof flow.doc.autoTable === "function") {
-      const options: Record<string, unknown> = {
-        startY: flow.y,
-        ...(headers.length ? { head: [headers] } : {}),
-        showHead: "never",
-        body: rows,
-        theme: "horizontal",
-        tableWidth: flow.width,
-        margin: { top: 17, left: flow.x, right: flow.pageWidth - flow.x - flow.width, bottom: PAGE.footer + 5 },
-        styles: {
-          font: flow.rtl ? ARABIC_FONT_FAMILY : LATIN_FONT_FAMILY,
-          fontStyle: "normal",
-          fontSize: 8,
-          textColor: [51, 65, 85],
-          lineColor: [226, 232, 240],
-          lineWidth: 0.15,
-          cellPadding: 2,
-          halign: flow.rtl ? "right" : "left",
-          valign: "middle",
-          overflow: "linebreak",
-        },
-        didDrawPage: () => {
-          const currentPage = flow.doc.internal.getCurrentPageInfo?.().pageNumber ?? flow.doc.internal.getNumberOfPages()
-          if (currentPage > flow.pageNumber) {
-            flow.pageNumber = currentPage
-            drawContinuationHeader(flow)
-          }
-        },
-      }
-      flow.doc.autoTable(options)
-      const finalY = Number(flow.doc.lastAutoTable?.finalY ?? flow.y + 10)
-      flow.pageNumber = flow.doc.internal.getNumberOfPages()
-      flow.y = finalY + 4
-      if (flow.y > flow.bottom) addFlowPage(flow)
-      return
-    }
-  } catch (autotableError) {
-    console.warn("jsPDF autoTable failed, falling back to native vector table renderer:", autotableError)
-  }
-
-  renderNativeVectorTable(flow, headers, rows)
+  renderNativeVectorTable(flow, rawHeaders, rawBodyRows)
 }
 
 async function renderImageBlock(flow: Flow, block: Extract<PdfBlock, { type: "image" }>, preferredWidth?: number) {
