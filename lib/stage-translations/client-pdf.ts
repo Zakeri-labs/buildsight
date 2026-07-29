@@ -28,9 +28,13 @@ const AUTOTABLE_SCRIPT_URLS = [
   "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js",
   "https://unpkg.com/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js",
 ]
-const ARABIC_FONT_FILENAME = "NotoNaskhArabic-Regular.ttf"
-const ARABIC_FONT_FAMILY = "NotoNaskhArabic"
-const ARABIC_FONT_URL = "/api/stage-translations/font"
+const ARABIC_FONT_FILENAME = "Vazirmatn-Regular.ttf"
+const ARABIC_FONT_FAMILY = "Vazirmatn"
+const ARABIC_FONT_URL = "/fonts/Vazirmatn-Regular.ttf"
+
+const LATIN_FONT_FILENAME = "calibri.ttf"
+const LATIN_FONT_FAMILY = "calibri"
+const LATIN_FONT_URL = "/fonts/calibri.ttf"
 
 const TRANSLATION_BUCKET = "project-stage-translations"
 const MAX_PDF_BYTES = 60 * 1024 * 1024
@@ -160,34 +164,53 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
   return window.btoa(binary)
 }
 
-async function loadArabicFontBase64() {
-  if (arabicFontPromise) return arabicFontPromise
-  arabicFontPromise = (async () => {
-    const response = await fetch(ARABIC_FONT_URL, { cache: "force-cache", credentials: "same-origin" })
+let arabicFontPromise: Promise<string> | null = null
+let latinFontPromise: Promise<string> | null = null
+
+async function loadFontBase64(url: string, isArabic: boolean) {
+  const cache = isArabic ? arabicFontPromise : latinFontPromise
+  if (cache) return cache
+
+  const promise = (async () => {
+    const response = await fetch(url, { cache: "force-cache" })
     if (!response.ok) {
-      const details = await response.text().catch(() => "")
-      throw new Error(details || `Arabic font request failed with status ${response.status}.`)
+      throw new Error(`Font request failed with status ${response.status} for ${url}`)
     }
     const bytes = await response.arrayBuffer()
-    if (bytes.byteLength < 20_000) throw new Error("Arabic font response is invalid.")
+    if (bytes.byteLength < 20000) throw new Error(`Invalid font bytes for ${url}`)
     return arrayBufferToBase64(bytes)
   })().catch((error) => {
-    arabicFontPromise = null
+    if (isArabic) arabicFontPromise = null
+    else latinFontPromise = null
     throw error
   })
-  return arabicFontPromise
+
+  if (isArabic) arabicFontPromise = promise
+  else latinFontPromise = promise
+  return promise
 }
 
-async function installArabicFont(doc: JsPdfDocument) {
-  const base64 = await loadArabicFontBase64()
-  if (!doc.existsFileInVFS?.(ARABIC_FONT_FILENAME)) doc.addFileToVFS(ARABIC_FONT_FILENAME, base64)
+async function installFonts(doc: JsPdfDocument) {
+  const [arBase64, laBase64] = await Promise.all([
+    loadFontBase64(ARABIC_FONT_URL, true),
+    loadFontBase64(LATIN_FONT_URL, false),
+  ])
+
+  if (!doc.existsFileInVFS?.(ARABIC_FONT_FILENAME)) {
+    doc.addFileToVFS(ARABIC_FONT_FILENAME, arBase64)
+  }
+  if (!doc.existsFileInVFS?.(LATIN_FONT_FILENAME)) {
+    doc.addFileToVFS(LATIN_FONT_FILENAME, laBase64)
+  }
+
   const fontList = doc.getFontList?.() as Record<string, string[]> | undefined
   if (!fontList?.[ARABIC_FONT_FAMILY]) {
     doc.addFont(ARABIC_FONT_FILENAME, ARABIC_FONT_FAMILY, "normal")
   }
-  doc.setFont(ARABIC_FONT_FAMILY, "normal")
-  doc.setLanguage?.("ar-SA")
-  doc.setR2L?.(false)
+  if (!fontList?.[LATIN_FONT_FAMILY]) {
+    doc.addFont(LATIN_FONT_FILENAME, LATIN_FONT_FAMILY, "normal")
+    doc.addFont(LATIN_FONT_FILENAME, LATIN_FONT_FAMILY, "bold")
+  }
 
   if (typeof doc.processArabic !== "function") {
     throw new Error("The PDF library does not include Arabic glyph shaping support.")
@@ -474,7 +497,7 @@ function setLanguage(doc: JsPdfDocument, rtl: boolean, fontSize = 10, bold = fal
   // the Arabic parser and reordered by the BiDi text options per text run.
   doc.setR2L?.(false)
   doc.setLanguage?.(rtl ? "ar-SA" : "en-GB")
-  doc.setFont(rtl ? ARABIC_FONT_FAMILY : "helvetica", rtl ? "normal" : bold ? "bold" : "normal")
+  doc.setFont(rtl ? ARABIC_FONT_FAMILY : LATIN_FONT_FAMILY, rtl ? "normal" : bold ? "bold" : "normal")
   doc.setFontSize(fontSize)
   doc.setCharSpace?.(0)
 }
@@ -501,7 +524,7 @@ function writePdfText(
     : containsArabic(text)
 
   if (rtl && !containsAnyArabic) {
-    doc.setFont("helvetica", "normal")
+    doc.setFont(LATIN_FONT_FAMILY, "normal")
     doc.text(text, x, y, options)
     doc.setFont(ARABIC_FONT_FAMILY, "normal")
     return
@@ -1016,7 +1039,7 @@ function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
     tableWidth: flow.width,
     margin: { top: 17, left: flow.x, right: flow.pageWidth - flow.x - flow.width, bottom: PAGE.footer + 5 },
     styles: {
-      font: flow.rtl ? ARABIC_FONT_FAMILY : "helvetica",
+      font: flow.rtl ? ARABIC_FONT_FAMILY : LATIN_FONT_FAMILY,
       fontStyle: "normal",
       fontSize: 8.5,
       textColor: [51, 65, 85],
@@ -1030,7 +1053,7 @@ function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
     headStyles: {
       fillColor: [226, 232, 240],
       textColor: [15, 23, 42],
-      font: flow.rtl ? ARABIC_FONT_FAMILY : "helvetica",
+      font: flow.rtl ? ARABIC_FONT_FAMILY : LATIN_FONT_FAMILY,
       fontStyle: "normal",
       halign: flow.rtl ? "right" : "left",
     },
@@ -1504,8 +1527,8 @@ async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
     compress: true,
     putOnlyUsedFonts: true,
   })
+  await installFonts(doc)
   if (template.language === "ar") {
-    await installArabicFont(doc)
     doc.viewerPreferences?.({ Direction: "R2L", DisplayDocTitle: true })
   }
   const flow: Flow = {
@@ -1608,7 +1631,7 @@ function drawPageImage(doc: JsPdfDocument, dataUrl: string | undefined, x: numbe
   doc.setFillColor(255, 255, 255)
   doc.rect(x, y, width, height, "FD")
   if (!dataUrl) {
-    doc.setFont("helvetica", "normal")
+    doc.setFont(LATIN_FONT_FAMILY, "normal")
     doc.setFontSize(10)
     doc.setTextColor(100, 116, 139)
     doc.text(empty, x + width / 2, y + height / 2, { align: "center" })
@@ -1731,7 +1754,7 @@ async function buildBilingualPdfBlob(input: {
     openPdfBlob(input.arabicBlob),
   ])
   const doc = new JsPdf({ unit: "mm", format: "a4", orientation: "landscape", compress: true })
-  await installArabicFont(doc)
+  await installFonts(doc)
   const total = Math.max(englishSource.documentProxy.numPages, arabicSource.documentProxy.numPages, 1)
   const renderWidth = total > 30 ? 700 : 850
   const margin = 9
