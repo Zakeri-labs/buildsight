@@ -25,6 +25,7 @@ import {
 import {
   CONSTRUCTION_DOCUMENT_TYPES,
   getConstructionDocumentType,
+  getConstructionDocumentTypeLabel,
   getDocumentDetailsTemplate,
   isConstructionDocumentType,
   type ConstructionDocumentTypeValue,
@@ -330,7 +331,9 @@ export function CreateDocumentDialog({
                     <Label htmlFor="construction-document-type">Document Type <span className="text-destructive">*</span></Label>
                     <Select value={documentType || null} onValueChange={handleDocumentTypeChange} disabled={submitting || Boolean(createdDocumentId)}>
                       <SelectTrigger id="construction-document-type" className="h-11 w-full rounded-lg px-3">
-                        <SelectValue placeholder="Select document type" />
+                        <SelectValue placeholder="Select document type">
+                          {(value) => getConstructionDocumentTypeLabel(value) ?? "Select document type"}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent align="start">
                         {CONSTRUCTION_DOCUMENT_TYPES.map((type) => (

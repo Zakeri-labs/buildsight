@@ -25,6 +25,7 @@ import {
 import { createConstructionDocumentAction } from "@/lib/actions/documents"
 import {
   CONSTRUCTION_DOCUMENT_TYPES,
+  getConstructionDocumentTypeLabel,
   getDocumentDetailsTemplate,
   isConstructionDocumentType,
   type ConstructionDocumentTypeValue,
@@ -128,7 +129,9 @@ export function DocumentCreateFlow({ project }: { project: ProjectSummary }) {
               disabled={submitting}
             >
               <SelectTrigger id="document-type" className="h-11 w-full rounded-lg px-3">
-                <SelectValue placeholder="Select document type" />
+                <SelectValue placeholder="Select document type">
+                  {(value) => getConstructionDocumentTypeLabel(value) ?? "Select document type"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent align="start">
                 {CONSTRUCTION_DOCUMENT_TYPES.map((type) => (

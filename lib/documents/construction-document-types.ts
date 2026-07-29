@@ -1,14 +1,30 @@
 import type { DocumentTypeValue } from "@/lib/documents/document-types"
 
+export const CONSTRUCTION_DOCUMENT_TYPE_LABELS: Readonly<Record<string, string>> = {
+  ncr: "NCR - Non-Conformance Report",
+  non_conformance_report: "NCR - Non-Conformance Report",
+  request_for_information: "RFI - Request for Information",
+  wir_ir: "WIR / IR - Work Inspection Request",
+  work_inspection_request: "WIR / IR - Work Inspection Request",
+  material_inspection_request: "MIR - Material Inspection Request",
+  ipc: "IPC - Interim Payment Certificate",
+  interim_payment_certificate: "IPC - Interim Payment Certificate",
+  variation_order: "VO - Variation Order",
+  inspection_report: "Inspection",
+  inspection: "Inspection",
+  other: "General Documents",
+  general_document: "General Documents",
+}
+
 export const CONSTRUCTION_DOCUMENT_TYPES = [
-  { value: "ncr", label: "NCR - Non-Conformance Report", shortLabel: "NCR" },
-  { value: "request_for_information", label: "RFI - Request for Information", shortLabel: "RFI" },
-  { value: "wir_ir", label: "WIR / IR - Work Inspection Request", shortLabel: "WIR / IR" },
-  { value: "material_inspection_request", label: "MIR - Material Inspection Request", shortLabel: "MIR" },
-  { value: "ipc", label: "IPC - Interim Payment Certificate", shortLabel: "IPC" },
-  { value: "variation_order", label: "VO - Variation Order", shortLabel: "VO" },
-  { value: "inspection_report", label: "Inspection", shortLabel: "Inspection" },
-  { value: "other", label: "General Documents", shortLabel: "General" },
+  { value: "ncr", label: CONSTRUCTION_DOCUMENT_TYPE_LABELS.ncr, shortLabel: "NCR" },
+  { value: "request_for_information", label: CONSTRUCTION_DOCUMENT_TYPE_LABELS.request_for_information, shortLabel: "RFI" },
+  { value: "wir_ir", label: CONSTRUCTION_DOCUMENT_TYPE_LABELS.wir_ir, shortLabel: "WIR / IR" },
+  { value: "material_inspection_request", label: CONSTRUCTION_DOCUMENT_TYPE_LABELS.material_inspection_request, shortLabel: "MIR" },
+  { value: "ipc", label: CONSTRUCTION_DOCUMENT_TYPE_LABELS.ipc, shortLabel: "IPC" },
+  { value: "variation_order", label: CONSTRUCTION_DOCUMENT_TYPE_LABELS.variation_order, shortLabel: "VO" },
+  { value: "inspection_report", label: CONSTRUCTION_DOCUMENT_TYPE_LABELS.inspection_report, shortLabel: "Inspection" },
+  { value: "other", label: CONSTRUCTION_DOCUMENT_TYPE_LABELS.other, shortLabel: "General" },
 ] as const satisfies ReadonlyArray<{ value: DocumentTypeValue; label: string; shortLabel: string }>
 
 export type ConstructionDocumentTypeValue = (typeof CONSTRUCTION_DOCUMENT_TYPES)[number]["value"]
@@ -22,6 +38,11 @@ export function isConstructionDocumentType(value: unknown): value is Constructio
 
 export function getConstructionDocumentType(value: unknown) {
   return isConstructionDocumentType(value) ? BY_VALUE.get(value)! : null
+}
+
+export function getConstructionDocumentTypeLabel(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  return CONSTRUCTION_DOCUMENT_TYPE_LABELS[value] ?? null
 }
 
 export const DOCUMENT_DETAIL_TEMPLATES: Record<ConstructionDocumentTypeValue, string> = {

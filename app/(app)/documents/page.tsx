@@ -58,6 +58,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
       reference: row.reference,
       title: row.title,
       documentType: type,
+      sourceDocumentType: typeof row.document_type === "string" ? row.document_type : null,
       projectName: projectNames.get(row.project_id) ?? "Project",
       createdBy: { name: creatorName, avatar: profile?.avatar_url ?? null, initials: initials(creatorName) },
       status: row.status === "published" ? "published" : "draft",

@@ -37,7 +37,6 @@ import {
 import { Input } from "@/components/ui/input"
 import {
   getDocumentTypeDefinition,
-  type DocumentTypeGroup,
   type DocumentTypeIconKey,
   type DocumentTypeValue,
 } from "@/lib/documents/document-types"
@@ -51,6 +50,7 @@ export type DocumentListItem = {
   reference: string
   title: string
   documentType: DocumentTypeValue
+  sourceDocumentType: string | null
   projectName: string
   createdBy: {
     name: string
@@ -65,35 +65,85 @@ export type DocumentListItem = {
   simpleUploadCategory: SimpleUploadCategoryValue | null
 }
 
-type Category = "all" | DocumentTypeGroup
+type Category =
+  | "all"
+  | "ncr"
+  | "rfi"
+  | "wir_ir"
+  | "mir"
+  | "ipc"
+  | "vo"
+  | "inspection"
+  | "general"
+  | "other"
 
 const categoryLabels: Record<Category, string> = {
   all: "All",
-  inspection: "Inspections",
-  quality: "Quality",
-  safety: "Safety",
-  report: "Reports",
-  drawing: "Drawings",
-  submittal: "Submittals",
-  commercial: "Commercial",
-  communication: "Communication",
-  management: "Management",
+  ncr: "NCR",
+  rfi: "RFI",
+  wir_ir: "WIR / IR",
+  mir: "MIR",
+  ipc: "IPC",
+  vo: "VO",
+  inspection: "Inspection",
+  general: "General Documents",
   other: "Other",
 }
 
 const categoryOrder: Category[] = [
   "all",
+  "ncr",
+  "rfi",
+  "wir_ir",
+  "mir",
+  "ipc",
+  "vo",
   "inspection",
-  "quality",
-  "safety",
-  "report",
-  "drawing",
-  "submittal",
-  "commercial",
-  "communication",
-  "management",
+  "general",
   "other",
 ]
+
+const documentCategoryAliases: Readonly<Record<string, Exclude<Category, "all" | "other">>> = {
+  ncr: "ncr",
+  non_conformance_report: "ncr",
+  "non conformance report": "ncr",
+  request_for_information: "rfi",
+  rfi: "rfi",
+  "request for information": "rfi",
+  wir_ir: "wir_ir",
+  work_inspection_request: "wir_ir",
+  wir: "wir_ir",
+  "wir / ir": "wir_ir",
+  "work inspection request": "wir_ir",
+  material_inspection_request: "mir",
+  mir: "mir",
+  "material inspection request": "mir",
+  ipc: "ipc",
+  interim_payment_certificate: "ipc",
+  "interim payment certificate": "ipc",
+  variation_order: "vo",
+  vo: "vo",
+  "variation order": "vo",
+  inspection_report: "inspection",
+  inspection: "inspection",
+  "inspection report": "inspection",
+  other: "general",
+  general_document: "general",
+  general: "general",
+  "general document": "general",
+  "general documents": "general",
+}
+
+function getDocumentCategory(value: unknown): Exclude<Category, "all"> {
+  if (typeof value !== "string") return "other"
+
+  const raw = value.trim().toLowerCase()
+  if (!raw) return "other"
+
+  const underscored = raw.replace(/[\s-]+/g, "_")
+  const readable = raw.replaceAll("_", " ").replaceAll("-", " ").replace(/\s+/g, " ")
+  return documentCategoryAliases[raw] ?? documentCategoryAliases[underscored] ?? documentCategoryAliases[readable] ?? "other"
+}
 
 export function DocumentsList({
   documents,
@@ -115,21 +165,11 @@ export function DocumentsList({
     [documents],
   )
 
-  const categoryCounts = useMemo(() => {
-    const counts = new Map<DocumentTypeGroup, number>()
-    for (const document of documents) {
-      const group = getDocumentTypeDefinition(document.documentType).group
-      counts.set(group, (counts.get(group) ?? 0) + 1)
-    }
-    return counts
-  }, [documents])
-
-  const filteredDocuments = useMemo(() => {
+  const documentsMatchingFilters = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
     return documents.filter((document) => {
       const type = getDocumentTypeDefinition(document.documentType)
       const simpleCategory = getSimpleUploadCategory(document.simpleUploadCategory)
-      if (activeTab !== "all" && type.group !== activeTab) return false
       if (typeFilter && document.documentType !== typeFilter) return false
       if (statusFilter !== "all" && document.status !== statusFilter) return false
       if (projectFilter !== "all" && document.projectName !== projectFilter) return false
@@ -143,7 +183,23 @@ export function DocumentsList({
       ) return false
       return true
     })
-  }, [activeTab, documents, projectFilter, searchQuery, statusFilter, typeFilter])
+  }, [documents, projectFilter, searchQuery, statusFilter, typeFilter])
+
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<Exclude<Category, "all">, number>()
+    for (const document of documentsMatchingFilters) {
+      const category = getDocumentCategory(document.sourceDocumentType)
+      counts.set(category, (counts.get(category) ?? 0) + 1)
+    }
+    return counts
+  }, [documentsMatchingFilters])
+
+  const filteredDocuments = useMemo(() => {
+    if (activeTab === "all") return documentsMatchingFilters
+    return documentsMatchingFilters.filter(
+      (document) => getDocumentCategory(document.sourceDocumentType) === activeTab,
+    )
+  }, [activeTab, documentsMatchingFilters])
 
   const draftCount = documents.filter((document) => document.status === "draft").length
   const publishedCount = documents.filter((document) => document.status === "published").length
@@ -153,7 +209,7 @@ export function DocumentsList({
   const tabs = categoryOrder.map((key) => ({
     key,
     label: categoryLabels[key],
-    count: key === "all" ? documents.length : categoryCounts.get(key) ?? 0,
+    count: key === "all" ? documentsMatchingFilters.length : categoryCounts.get(key) ?? 0,
   }))
 
   return (
@@ -188,7 +244,7 @@ export function DocumentsList({
       </div>
 
       <div className="border-b border-slate-200/80 dark:border-slate-800">
-        <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           {tabs.map((tab) => {
             const active = tab.key === activeTab
             return (
@@ -235,7 +291,7 @@ export function DocumentsList({
           value={typeFilter}
           onValueChange={(value) => {
             setTypeFilter(value)
-            if (value) setActiveTab(getDocumentTypeDefinition(value).group)
+            if (value) setActiveTab(getDocumentCategory(value))
           }}
           allowClear
           clearLabel="All document types"
