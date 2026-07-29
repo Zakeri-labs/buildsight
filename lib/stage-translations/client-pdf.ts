@@ -394,6 +394,25 @@ function htmlToBlocks(html: string): PdfBlock[] {
   return blocks
 }
 
+function flattenPdfBlocks(blocks: PdfBlock[]): PdfBlock[] {
+  const flattened: PdfBlock[] = []
+  for (const block of blocks) {
+    if (block.type === "list") {
+      for (let i = 0; i < block.items.length; i += 1) {
+        flattened.push({
+          type: "paragraph",
+          text: block.items[i],
+          bullet: block.ordered ? `${i + 1}.` : "•",
+          indent: 2,
+        } as any)
+      }
+    } else {
+      flattened.push(block)
+    }
+  }
+  return flattened
+}
+
 function imageTemplateBlock(image: NonNullable<PdfSectionTemplate["images"]>[number]): PdfBlock {
   return {
     type: "image",
@@ -1191,7 +1210,7 @@ async function renderImageBlock(flow: Flow, block: Extract<PdfBlock, { type: "im
 async function renderBlocks(flow: Flow, blocks: PdfBlock[], sectionKey?: string) {
   for (const block of blocks) {
     if (block.type === "heading") renderHeading(flow, block)
-    else if (block.type === "paragraph") renderParagraph(flow, block.text)
+    else if (block.type === "paragraph") renderParagraph(flow, block.text, { indent: (block as any).indent, bullet: (block as any).bullet })
     else if (block.type === "list") {
       for (let index = 0; index < block.items.length; index += 1) {
         renderParagraph(flow, block.items[index], { indent: 2, bullet: block.ordered ? `${index + 1}.` : "•" })
@@ -1953,12 +1972,12 @@ function measureBlockHeight(doc: JsPdfDocument, block: PdfBlock | undefined, wid
   }
   if (block.type === "paragraph") {
     setLanguage(doc, rtl, 9, false)
-    const indent = block.indent ?? 0
-    const bulletW = block.bullet ? 6 : 0
+    const indent = (block as any).indent ?? block.indent ?? 0
+    const bulletW = (block as any).bullet ? 6 : block.bullet ? 6 : 0
     const available = width - indent - bulletW
     const lines = textLines(doc, block.text, available)
-    const lineHeight = 4.6
-    return Math.max(lineHeight, lines.length * lineHeight) + 2.5
+    const lineHeight = 4.4
+    return Math.max(lineHeight, lines.length * lineHeight) + 1.2
   }
   if (block.type === "list") {
     setLanguage(doc, rtl, 9, false)
@@ -2035,14 +2054,17 @@ async function buildNativeBilingualPdfBlob(input: {
 
     const arSection = arSectionMap.get(engSection.key)
 
-    const engBlocks = engSection.html !== undefined ? htmlToBlocks(engSection.html) : []
+    const rawEngBlocks = engSection.html !== undefined ? htmlToBlocks(engSection.html) : []
     if (engSection.table && Array.isArray(engSection.table.rows) && engSection.table.rows.length > 0) {
-      engBlocks.push({ type: "table", ...engSection.table })
+      rawEngBlocks.push({ type: "table", ...engSection.table })
     }
-    const arBlocks = arSection?.html !== undefined ? htmlToBlocks(arSection.html) : []
+    const rawArBlocks = arSection?.html !== undefined ? htmlToBlocks(arSection.html) : []
     if (arSection?.table && Array.isArray(arSection.table.rows) && arSection.table.rows.length > 0) {
-      arBlocks.push({ type: "table", ...arSection.table })
+      rawArBlocks.push({ type: "table", ...arSection.table })
     }
+
+    const engBlocks = flattenPdfBlocks(rawEngBlocks)
+    const arBlocks = flattenPdfBlocks(rawArBlocks)
 
     const galleryImages = (engSection.images ?? []).filter((i) => i.flowTarget !== "section" && i.flowTarget !== "documents")
     const hasContent = engBlocks.length > 0 || arBlocks.length > 0 || galleryImages.length > 0
