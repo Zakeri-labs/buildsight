@@ -1591,12 +1591,15 @@ function textLengthFromHtml(html: string | undefined) {
 
 function templateInventory(template: LanguagePdfTemplate) {
   return template.sections.reduce((inventory, section) => {
-    inventory.tables += section.table ? 1 : 0
+    const hasTable = Boolean(section.table && Array.isArray(section.table.rows) && section.table.rows.length > 0)
+    inventory.tables += hasTable ? 1 : 0
     inventory.tables += countHtmlTables(section.html) + countHtmlTables(section.documentsHtml)
     inventory.images += section.images?.length ?? 0
-    inventory.text += section.title.length
+    inventory.text += section.title ? section.title.length : 0
     inventory.text += textLengthFromHtml(section.html) + textLengthFromHtml(section.documentsHtml)
-    inventory.text += section.table?.rows.flat().join(" ").length ?? 0
+    if (hasTable && section.table?.rows) {
+      inventory.text += section.table.rows.flat().join(" ").length
+    }
     return inventory
   }, { sections: template.sections.length, tables: 0, images: 0, text: 0 })
 }
@@ -1701,7 +1704,9 @@ async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
     const sectionFlowImages = (section.images ?? []).filter((image) => image.flowTarget === "section")
     const galleryImages = (section.images ?? []).filter((image) => image.flowTarget !== "section" && image.flowTarget !== "documents")
     const contentBlocks = section.html !== undefined ? htmlToBlocks(section.html) : []
-    if (section.table) contentBlocks.push({ type: "table", ...section.table })
+    if (section.table && Array.isArray(section.table.rows) && section.table.rows.length > 0) {
+      contentBlocks.push({ type: "table", ...section.table })
+    }
     const flowedContent = interleaveFlowImages(contentBlocks, sectionFlowImages)
 
     const sourceDocumentBlocks = section.documentsTitle ? htmlToBlocks(section.sourceDocumentHtml ?? section.documentsHtml ?? "") : []
@@ -1963,9 +1968,13 @@ async function buildNativeBilingualPdfBlob(input: {
     const arSection = arSectionMap.get(engSection.key)
 
     const engBlocks = engSection.html !== undefined ? htmlToBlocks(engSection.html) : []
-    if (engSection.table) engBlocks.push({ type: "table", ...engSection.table })
+    if (engSection.table && Array.isArray(engSection.table.rows) && engSection.table.rows.length > 0) {
+      engBlocks.push({ type: "table", ...engSection.table })
+    }
     const arBlocks = arSection?.html !== undefined ? htmlToBlocks(arSection.html) : []
-    if (arSection?.table) arBlocks.push({ type: "table", ...arSection.table })
+    if (arSection?.table && Array.isArray(arSection.table.rows) && arSection.table.rows.length > 0) {
+      arBlocks.push({ type: "table", ...arSection.table })
+    }
 
     const galleryImages = (engSection.images ?? []).filter((i) => i.flowTarget !== "section" && i.flowTarget !== "documents")
     const hasContent = engBlocks.length > 0 || arBlocks.length > 0 || galleryImages.length > 0

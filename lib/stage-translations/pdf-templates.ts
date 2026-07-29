@@ -577,7 +577,10 @@ export function validateLanguagePdfTemplate(template: LanguagePdfTemplate) {
     throw new Error("PDF document model contains an unexpected number of sections.")
   }
   const hasStructuredContent = template.sections.some((section) =>
-    Boolean(section.html?.trim()) || Boolean(section.table?.rows.length) || Boolean(section.images?.length) || Boolean(section.documentsHtml?.trim()),
+    Boolean(section.html?.trim()) ||
+    Boolean(section.table && Array.isArray(section.table.rows) && section.table.rows.length > 0) ||
+    Boolean(section.images?.length) ||
+    Boolean(section.documentsHtml?.trim()),
   )
   if (!hasStructuredContent) throw new Error("The structured report contains no exportable content.")
 }
