@@ -253,7 +253,7 @@ export async function loadProjectStageExecution(projectId: string, userId: strin
         name: profile.full_name?.trim() || profile.email || "Project member",
         email: profile.email,
         avatarUrl: profile.avatar_url,
-        role: rawRole ? roleLabel(rawRole) : "Organization Admin",
+        role: rawRole ? roleLabel(rawRole) : "Admin",
       },
     ]
   }))

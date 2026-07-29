@@ -241,7 +241,7 @@ function TermRow({
             {term.response?.createdBy || term.responsibleUser ? (
               (() => {
                 const user = term.response?.createdBy ?? term.responsibleUser!
-                const roleText = user.role || "Organization Admin"
+                const roleText = user.role || "Admin"
                 return (
                   <>
                     <Avatar size="sm">

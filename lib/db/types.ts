@@ -83,9 +83,9 @@ export const PROJECT_ACCESS_ROLES: ProjectAccessRole[] = [
 ]
 
 export const ROLE_LABELS: Record<string, string> = {
-  org_admin: "Organization Admin",
-  org_manager: "Organization Manager",
-  org_member: "Organization Member",
+  org_admin: "Admin",
+  org_manager: "Manager",
+  org_member: "Member",
   viewer: "Viewer",
   consultant: "Consultant",
   client: "Client",

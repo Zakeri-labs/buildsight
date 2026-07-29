@@ -22,7 +22,7 @@ import { useI18n } from "@/lib/i18n"
 export function AppTopbar({ activeProjectName }: { activeProjectName?: string | null }) {
   const pathname = usePathname()
   const currentUser = useCurrentUser()
-  const userRoleLabel = currentUser.role ? roleLabel(currentUser.role) : "Organization Admin"
+  const userRoleLabel = currentUser.role ? roleLabel(currentUser.role) : "Admin"
   const { t } = useI18n()
 
   const titleMap: Record<string, { title: string; subtitle: string }> = {
