@@ -7,6 +7,7 @@ export const CONSTRUCTION_DOCUMENT_TYPES = [
   { value: "material_inspection_request", label: "MIR - Material Inspection Request", shortLabel: "MIR" },
   { value: "ipc", label: "IPC - Interim Payment Certificate", shortLabel: "IPC" },
   { value: "variation_order", label: "VO - Variation Order", shortLabel: "VO" },
+  { value: "inspection_report", label: "Inspection", shortLabel: "Inspection" },
   { value: "other", label: "General Documents", shortLabel: "General" },
 ] as const satisfies ReadonlyArray<{ value: DocumentTypeValue; label: string; shortLabel: string }>
 
@@ -158,6 +159,37 @@ Approval status:
 Additional remarks:
 
 [write remarks].`,
+  inspection_report: `Inspection Report
+
+Project / Location:
+[Enter project name or location]
+
+Inspection Date:
+[Enter inspection date]
+
+Inspection Type:
+[Enter type of inspection]
+
+Inspected By:
+[Enter inspector name]
+
+Inspection Findings:
+[Describe inspection observations and findings]
+
+Non-Conformities Identified:
+[Describe any non-conformance or issues found]
+
+Required Actions:
+[Describe required corrective actions]
+
+Recommendations:
+[Enter recommendations]
+
+Inspection Status:
+[Open / Under Review / Closed]
+
+Additional Comments:
+[Add any additional notes]`,
   other: `This document relates to:
 
 [describe document purpose].

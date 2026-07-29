@@ -311,8 +311,8 @@ export function CreateDocumentDialog({
                 <CardHeader className="border-b px-5 py-4 sm:px-6">
                   <CardTitle className="text-base">Document Information</CardTitle>
                 </CardHeader>
-                <CardContent className="grid gap-5 px-5 py-5 sm:grid-cols-2 sm:px-6">
-                  <div className="space-y-2">
+                <CardContent className="grid gap-5 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:px-6">
+                  <div className="min-w-0 space-y-2">
                     <Label htmlFor="construction-document-title">Document Title <span className="text-destructive">*</span></Label>
                     <Input
                       id="construction-document-title"
@@ -322,11 +322,11 @@ export function CreateDocumentDialog({
                       disabled={submitting || Boolean(createdDocumentId)}
                       onChange={(event: ChangeEvent<HTMLInputElement>) => setTitle(event.target.value)}
                       placeholder="Enter document title"
-                      className="h-11"
+                      className="h-11 w-full"
                     />
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="min-w-0 space-y-2">
                     <Label htmlFor="construction-document-type">Document Type <span className="text-destructive">*</span></Label>
                     <Select value={documentType || null} onValueChange={handleDocumentTypeChange} disabled={submitting || Boolean(createdDocumentId)}>
                       <SelectTrigger id="construction-document-type" className="h-11 w-full rounded-lg px-3">
