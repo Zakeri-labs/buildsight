@@ -550,35 +550,60 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   doc.setFillColor(30, 58, 138)
   doc.rect(0, 0, pageWidth, 1.5, "F")
 
-  // ── 3-COLUMN LAYOUT: [Logo] | [Company Name] | [Date / Doc No / Page] ────
+  // ── 3-COLUMN LAYOUT: [Date/Doc/Page] | [Company Name] | [Logo] ────
   const totalW = pageWidth - margin * 2  // 182 mm
-  const col1W = 42   // Left  – Logo
-  const col3W = 55   // Right – Date / Doc / Page (3 rows)
+  const col1W = 55   // Left  – Date / Doc / Page (3 rows)
+  const col3W = 42   // Right – Logo
   const col2W = totalW - col1W - col3W   // Center – Company names (85 mm)
   const col1X = margin
   const col2X = margin + col1W
   const col3X = margin + col1W + col2W
 
+  // ── LEFT COLUMN: Date / Document No. / Page (Left-aligned) ─────────────
+  const rawDate = template.createdAt || ""
+  const formattedDate = (() => {
+    try {
+      if (!rawDate) return "—"
+      const d = new Date(rawDate)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+    } catch {
+      return rawDate.split("T")[0] || "—"
+    }
+  })()
 
+  const rtl = flow.rtl
+  const infoRows = [
+    { label: rtl ? "التاريخ:" : "Date:",    value: formattedDate },
+    { label: rtl ? "رقم المستند:" : "Doc No.:", value: template.reportNumber || "—" },
+    { label: rtl ? "الصفحة:" : "Page:",    value: String(flow.pageNumber) },
+  ]
+  const labelX  = col1X + 2.5
+  const rightX  = col1X + col1W - 2.5
+  const rowH    = (headerH - 2) / 3
 
-  // ── LEFT COLUMN: Logo (Left-aligned) ────────────────────────────────────
-  if (logoImage) {
-    const maxH = headerH - 5
-    const maxW = col1W - 5
-    const ratio = Math.min(maxW / logoImage.width, maxH / logoImage.height)
-    const w = logoImage.width * ratio
-    const h = logoImage.height * ratio
-    doc.addImage(
-      logoImage.dataUrl, "PNG",
-      col1X + 2.5,   // Left-aligned
-      1.5 + (headerH - 1.5 - h) / 2,
-      w, h, undefined, "FAST",
-    )
-  } else {
-    setLanguage(doc, false, 10, true)
-    doc.setTextColor(30, 58, 138)
-    doc.text("BONYAN", col1X + 2.5, headerH / 2 + 2, { align: "left" })
-  }
+  infoRows.forEach(({ label, value }, i) => {
+    const y = 1.5 + i * rowH + rowH * 0.62
+
+    // Label: left edge of column, muted
+    const labelIsArabic = containsArabic(label)
+    setLanguage(doc, labelIsArabic, 6.5, false)
+    doc.setTextColor(100, 116, 139)
+    if (labelIsArabic) {
+      writePdfText(doc, label, rightX, y, { align: "right" }, true)
+    } else {
+      doc.text(label, labelX, y)
+    }
+
+    // Value: right edge of left column, dark
+    const valIsArabic = containsArabic(value)
+    setLanguage(doc, valIsArabic, 7.5, true)
+    doc.setTextColor(15, 23, 42)
+    if (valIsArabic) {
+      writePdfText(doc, value, rightX, y + 0.3, { align: "right" }, true)
+    } else {
+      doc.text(value, rightX, y + 0.3, { align: "right" })
+    }
+  })
 
   // ── CENTER COLUMN: Company Name (EN + AR) Bold Center-aligned ─────────────
   const nameEn = org.nameEn || "BONYAN CONSTRUCTION FOR ENGINEERING CONSULTANCY"
@@ -607,51 +632,24 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   doc.setTextColor(30, 58, 138)
   writePdfText(doc, nameAr, cx, midY + 3.5, { align: "center" }, true)
 
-  // ── RIGHT COLUMN: Date / Document No. / Page (Right-aligned) ─────────────
-  const rawDate = template.createdAt || ""
-  const formattedDate = (() => {
-    try {
-      if (!rawDate) return "—"
-      const d = new Date(rawDate)
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-    } catch {
-      return rawDate.split("T")[0] || "—"
-    }
-  })()
-
-  const rtl = flow.rtl
-  const infoRows = [
-    { label: rtl ? "التاريخ:" : "Date:",    value: formattedDate },
-    { label: rtl ? "رقم المستند:" : "Doc No.:", value: template.reportNumber || "—" },
-    { label: rtl ? "الصفحة:" : "Page:",    value: String(flow.pageNumber) },
-  ]
-  const labelX  = col3X + 2.5
-  const rightX  = col3X + col3W - 2.5
-  const rowH    = (headerH - 2) / 3
-
-  infoRows.forEach(({ label, value }, i) => {
-    const y = 1.5 + i * rowH + rowH * 0.62
-
-    // Label: left edge of column, muted
-    const labelIsArabic = containsArabic(label)
-    setLanguage(doc, labelIsArabic, 6.5, false)
-    doc.setTextColor(100, 116, 139)
-    if (labelIsArabic) {
-      writePdfText(doc, label, rightX, y, { align: "right" }, true)
-    } else {
-      doc.text(label, labelX, y)
-    }
-
-    // Value: right edge of column, dark
-    const valIsArabic = containsArabic(value)
-    setLanguage(doc, valIsArabic, 7.5, true)
-    doc.setTextColor(15, 23, 42)
-    if (valIsArabic) {
-      writePdfText(doc, value, rightX, y + 0.3, { align: "right" }, true)
-    } else {
-      doc.text(value, rightX, y + 0.3, { align: "right" })
-    }
-  })
+  // ── RIGHT COLUMN: Logo (Right-aligned) ──────────────────────────────────
+  if (logoImage) {
+    const maxH = headerH - 5
+    const maxW = col3W - 5
+    const ratio = Math.min(maxW / logoImage.width, maxH / logoImage.height)
+    const w = logoImage.width * ratio
+    const h = logoImage.height * ratio
+    doc.addImage(
+      logoImage.dataUrl, "PNG",
+      col3X + col3W - w - 2.5,   // Right-aligned in right column
+      1.5 + (headerH - 1.5 - h) / 2,
+      w, h, undefined, "FAST",
+    )
+  } else {
+    setLanguage(doc, false, 10, true)
+    doc.setTextColor(30, 58, 138)
+    doc.text("BONYAN", col3X + col3W - 2.5, headerH / 2 + 2, { align: "right" })
+  }
 
   // Bottom separator
   doc.setDrawColor(226, 232, 240)
@@ -679,12 +677,12 @@ function ensureSpace(flow: Flow, required: number) {
 
 function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: string, value: string) {
   const { doc, rtl } = flow
-  // Clean white card with subtle border
+  // Light gray card background with subtle border (matching reference screenshot)
   doc.setDrawColor(226, 232, 240)
-  doc.setFillColor(255, 255, 255)
+  doc.setFillColor(248, 250, 252)   // light gray slate fill
   doc.rect(x, y, width, 14, "FD")
 
-  setLanguage(doc, rtl, 6.5, true)
+  setLanguage(doc, rtl, 6.5, false)
   doc.setTextColor(100, 116, 139)
   writePdfText(doc, label,
     rtl ? x + width - 3 : x + 3,
@@ -694,7 +692,7 @@ function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: st
   )
 
   const valHasArabic = containsArabic(value)
-  setLanguage(doc, valHasArabic, 9, false)
+  setLanguage(doc, valHasArabic, 9, true)   // BOLD value
   doc.setTextColor(15, 23, 42)
   const lines = textLines(doc, value, width - 6).slice(0, 2)
   writePdfText(
@@ -1351,23 +1349,23 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
   for (let page = 1; page <= pages; page += 1) {
     doc.setPage(page)
 
-    // ── Update Header Page Number (Right Column, Row 3) ─────────────────
-    const headerH = 17   // must match drawHeaderColumns headerH
+    // ── Update Header Page Number (Left Column, Row 3) ─────────────────
+    const headerH = 17
     const totalW = width - margin * 2
-    const col1W = 42
-    const col3W = 55
+    const col1W = 55
+    const col3W = 42
     const col2W = totalW - col1W - col3W
-    const col3X = margin + col1W + col2W
-    const rightX = col3X + col3W - 2.5
-    const labelX  = col3X + 2.5
+    const col1X = margin
+    const rightX = col1X + col1W - 2.5
+    const labelX  = col1X + 2.5
     const rowH = (headerH - 2) / 3
     const pageY = 1.5 + 2 * rowH + rowH * 0.62
 
-    // Blank out old row 3 in column 3 area (white fill)
+    // Blank out old row 3 in column 1 area (white fill)
     doc.setFillColor(255, 255, 255)
-    doc.rect(col3X + 0.5, pageY - 4, col3W - 1, 5.5, "F")
+    doc.rect(col1X + 0.5, pageY - 4, col1W - 1, 5.5, "F")
 
-    // Page label: left of column, muted
+    // Page label: left of column 1, muted
     const pageLabel = rtl ? "الصفحة:" : "Page:"
     const labelIsAr = rtl
     setLanguage(doc, labelIsAr, 6.5, false)
@@ -1378,11 +1376,11 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
       doc.text(pageLabel, labelX, pageY)
     }
 
-    // Page value: right-aligned, dark
+    // Page value: right edge of column 1, dark
     const pageStr = `${page} / ${pages}`
-    setLanguage(doc, false, 8, false)
+    setLanguage(doc, false, 7.5, true)
     doc.setTextColor(15, 23, 42)
-    doc.text(pageStr, rightX, pageY + 0.5, { align: "right" })
+    doc.text(pageStr, rightX, pageY + 0.3, { align: "right" })
 
     // ── Footer Lines & Contact Details ──────────────────────────────────
     doc.setDrawColor(226, 232, 240)
