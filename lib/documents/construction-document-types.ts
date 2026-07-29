@@ -30,89 +30,144 @@ The issue was identified at [location / area] on [date].
 
 The affected work activity is [describe activity].
 
-The required corrective action is [describe required action].
+The details of the non-conformance are:
+[describe the observed issue].
 
-The responsible party for corrective action is [company / person].
+The required corrective action is:
+[describe required corrective action].
 
-The target completion date is [date].
+The responsible party for corrective action is:
+[company / person].
 
-Current status of this NCR is [open / under review / closed].`,
-  request_for_information: `This Request for Information (RFI) has been raised regarding [subject].
+The target completion date is:
+[date].
+
+Current status of this NCR is:
+[Open / Under Review / Closed].`,
+  request_for_information: `This Request for Information (RFI) has been raised regarding:
+[describe the subject].
 
 The clarification required is:
-[describe the question or required information].
 
-The request was submitted by [name / company] on [date].
+[write the question or required information].
 
-The required response date is [date].
+This request was submitted by:
+[name / company].
 
-The received response / clarification is:
+Submission date:
+[date].
+
+Required response date:
+[date].
+
+Received response / clarification:
+
 [write response].
 
-Current status is [open / answered / closed].`,
-  wir_ir: `This Work Inspection Request is submitted for inspection of [work activity].
+Current status:
+[Open / Answered / Closed].`,
+  wir_ir: `This Work Inspection Request is submitted for inspection of:
+[describe work activity].
 
-The inspection location is [location].
+Inspection location:
+[location].
 
-The inspection date is [date].
+Inspection date:
+[date].
 
 The inspected works include:
+
 [describe inspected works].
 
 Inspection result:
-[approved / rejected / approved with comments].
 
-Additional comments:
-[write comments].`,
-  material_inspection_request: `This Material Inspection Request is submitted for approval of [material name].
+[Approved / Rejected / Approved with Comments].
 
-The supplier / manufacturer is [company name].
+Inspection comments:
+
+[write comments].
+
+Current status:
+[status].`,
+  material_inspection_request: `This Material Inspection Request is submitted for approval of:
+
+[material name].
+
+Supplier / Manufacturer:
+
+[company name].
 
 Material details and specifications:
-[write details].
 
-The delivery date is [date].
+[write material details].
+
+Delivery date:
+
+[date].
 
 Inspection result:
-[approved / rejected / approved with comments].
+
+[Approved / Rejected / Approved with Comments].
 
 Additional remarks:
+
 [write remarks].`,
-  ipc: `This Interim Payment Certificate relates to payment period [period].
+  ipc: `This Interim Payment Certificate relates to payment period:
 
-The submitted amount is [amount].
+[period].
 
-The certified amount is [amount].
+Submitted amount:
 
-The works completed during this period include:
+[amount].
+
+Certified amount:
+
+[amount].
+
+The completed works during this period include:
+
 [describe completed works].
 
-The certification status is [approved / under review / rejected].
+Certification status:
+
+[Approved / Under Review / Rejected].
 
 Additional remarks:
+
 [write remarks].`,
-  variation_order: `This Variation Order relates to [describe variation].
+  variation_order: `This Variation Order relates to:
+
+[describe variation].
 
 The reason for this variation is:
+
 [explain reason].
 
 The impact on project cost is:
+
 [describe cost impact].
 
 The impact on project schedule is:
+
 [describe time impact].
 
 Approval status:
-[approved / pending / rejected].
+
+[Approved / Pending / Rejected].
 
 Additional remarks:
+
 [write remarks].`,
-  other: `This document relates to [describe document purpose].
+  other: `This document relates to:
+
+[describe document purpose].
 
 The document contains information regarding:
-[write details].
+
+[write document details].
 
 Additional notes:
+
 [write notes].`,
 }
 

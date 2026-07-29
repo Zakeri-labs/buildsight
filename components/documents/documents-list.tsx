@@ -40,6 +40,7 @@ import {
   type DocumentTypeIconKey,
   type DocumentTypeValue,
 } from "@/lib/documents/document-types"
+import { getConstructionDocumentType } from "@/lib/documents/construction-document-types"
 import { getSimpleUploadCategory, type SimpleUploadCategoryValue } from "@/lib/documents/simple-upload"
 import { cn } from "@/lib/utils"
 import { profileAvatarDisplayUrl } from "@/lib/profile-avatar"
@@ -156,6 +157,31 @@ export function DocumentsList({
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300">
+              <Files className="size-5" />
+            </span>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-950 dark:text-white">Documents</h1>
+              <p className="mt-0.5 text-sm text-muted-foreground">Create and manage construction documents, details, files and site images.</p>
+            </div>
+          </div>
+        </div>
+        {selectedProjectId ? (
+          <Link href="/documents/new" className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-blue-700">
+            <Plus className="size-4" />
+            Create Document
+          </Link>
+        ) : (
+          <button type="button" disabled title="Select a project first" className="inline-flex h-10 cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-slate-300 px-4 text-sm font-semibold text-white dark:bg-slate-700">
+            <Plus className="size-4" />
+            Create Document
+          </button>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard icon={Files} label="Total Documents" value={documents.length} tone="blue" />
         <MetricCard icon={FileClock} label="Drafts" value={draftCount} tone="amber" />
@@ -163,7 +189,7 @@ export function DocumentsList({
         <MetricCard icon={FilePlus2} label="New This Week" value={newThisWeek} tone="violet" />
       </div>
 
-      <div className="flex flex-col gap-4 border-b border-slate-200/80 dark:border-slate-800 sm:flex-row sm:items-end sm:justify-between">
+      <div className="border-b border-slate-200/80 dark:border-slate-800">
         <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
           {tabs.map((tab) => {
             const active = tab.key === activeTab
@@ -186,20 +212,6 @@ export function DocumentsList({
               </button>
             )
           })}
-        </div>
-
-        <div className="pb-3">
-          {selectedProjectId ? (
-            <Link href="/documents/new" className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-blue-700">
-              <Plus className="size-4" />
-              Create Document
-            </Link>
-          ) : (
-            <button type="button" disabled title="Select a project first" className="inline-flex h-10 cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-slate-300 px-4 text-sm font-semibold text-white dark:bg-slate-700">
-              <Plus className="size-4" />
-              Create Document
-            </button>
-          )}
         </div>
       </div>
 
@@ -259,7 +271,7 @@ export function DocumentsList({
               <tr className="border-b border-slate-200/80 bg-slate-50/80 text-xs font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-400">
                 <th className="px-5 py-3.5 text-start">Reference</th>
                 <th className="px-4 py-3.5 text-start">Title</th>
-                <th className="px-4 py-3.5 text-start">Type</th>
+                <th className="px-4 py-3.5 text-start">Document Type</th>
                 <th className="px-4 py-3.5 text-start">Project</th>
                 <th className="px-4 py-3.5 text-start">Created By</th>
                 <th className="px-4 py-3.5 text-start">Status</th>
@@ -271,7 +283,9 @@ export function DocumentsList({
               {filteredDocuments.map((document) => {
                 const type = getDocumentTypeDefinition(document.documentType)
                 const simpleCategory = getSimpleUploadCategory(document.simpleUploadCategory)
-                const displayType = simpleCategory?.label ?? type.shortLabel
+                const constructionType = getConstructionDocumentType(document.documentType)
+                const displayType = simpleCategory?.label ?? constructionType?.shortLabel ?? type.shortLabel
+                const displayTypeDescription = constructionType?.label ?? type.label
                 return (
                   <tr key={document.id} className="transition-colors hover:bg-slate-50/70 dark:hover:bg-slate-800/30">
                     <td className="whitespace-nowrap px-5 py-4">
@@ -283,8 +297,11 @@ export function DocumentsList({
                         <Link href={`/documents/${document.id}`} className="font-medium text-slate-900 hover:text-blue-600 dark:text-slate-100 dark:hover:text-blue-400">{document.title}</Link>
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-4">
-                      <span title={simpleCategory ? `${simpleCategory.label} · ${type.label}` : type.label} className={cn("inline-flex rounded-md px-2.5 py-1 text-xs font-medium", type.badgeClassName)}>{displayType}</span>
+                    <td className="px-4 py-4">
+                      <div className="flex min-w-[180px] flex-col items-start gap-1">
+                        <span title={simpleCategory ? `${simpleCategory.label} · ${type.label}` : displayTypeDescription} className={cn("inline-flex rounded-md px-2.5 py-1 text-xs font-semibold", type.badgeClassName)}>{displayType}</span>
+                        <span className="max-w-[220px] truncate text-[11px] text-slate-500 dark:text-slate-400" title={displayTypeDescription}>{displayTypeDescription}</span>
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-4 text-xs text-slate-600 dark:text-slate-400">{document.projectName}</td>
                     <td className="whitespace-nowrap px-4 py-4">
