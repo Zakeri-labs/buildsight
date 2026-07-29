@@ -503,8 +503,14 @@ function setLanguage(doc: JsPdfDocument, rtl: boolean, fontSize = 10, bold = fal
 
 function shapeArabicText(doc: JsPdfDocument, text: string | string[]) {
   const shape = (value: string) => {
-    if (!containsArabic(value)) return value
-    return String(doc.processArabic(value.normalize("NFC")))
+    if (!value || !containsArabic(value)) return value
+    try {
+      const clean = normalizeText(value).replace(/[^\u0000-\uFFFF]/g, "")
+      const shaped = String(doc.processArabic(clean.normalize("NFC")))
+      return shaped.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    } catch {
+      return value
+    }
   }
   return Array.isArray(text) ? text.map(shape) : shape(text)
 }
@@ -989,6 +995,11 @@ function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
   // Shape Arabic text inside table headers and cells if RTL
   const headers = block.headers.map((h) => flow.rtl ? shapeArabicText(flow.doc, h) : h)
   const rows = rawRows.map((row) => row.map((cell) => flow.rtl ? shapeArabicText(flow.doc, cell) : cell))
+
+  if (flow.rtl) {
+    headers.reverse()
+    rows.forEach((r) => r.reverse())
+  }
 
   const options: Record<string, unknown> = {
     startY: flow.y,
@@ -1870,57 +1881,65 @@ async function buildNativeBilingualPdfBlob(input: {
 
     if (!hasContent) continue
 
-    const startY = flow.y
+    // 1. Render Section Titles side-by-side (synchronized Y)
+    ensureSpace(flow, 24)
+    flow.y += 3
 
-    // Left Column (English): Helvetica font, LTR
-    const leftFlow: Flow = {
-      ...flow,
-      x: flow.x,
-      width: colWidth,
-      y: startY,
-      rtl: false,
-    }
+    const iconSize = 3.5
+    // Left title (English)
+    setLanguage(flow.doc, false, 11, true)
+    flow.doc.setFillColor(37, 99, 235)
+    flow.doc.rect(flow.x, flow.y - 3, iconSize, iconSize, "F")
+    flow.doc.setTextColor(15, 23, 42)
+    flow.doc.text(engSection.title, flow.x + iconSize + 2, flow.y)
 
-    // Right Column (Arabic): Greta Arabic font, RTL
-    const rightFlow: Flow = {
-      ...flow,
-      x: flow.x + colWidth + gap,
-      width: colWidth,
-      y: startY,
-      rtl: true,
-    }
-
-    // Render Section Titles side-by-side
-    renderSectionTitle(leftFlow, engSection.title)
+    // Right title (Arabic)
     if (arSection) {
-      renderSectionTitle(rightFlow, arSection.title)
+      setLanguage(flow.doc, true, 11, true)
+      const rx = flow.x + flow.width
+      flow.doc.setFillColor(37, 99, 235)
+      flow.doc.rect(rx - iconSize, flow.y - 3, iconSize, iconSize, "F")
+      flow.doc.setTextColor(15, 23, 42)
+      writePdfText(flow.doc, arSection.title, rx - iconSize - 2, flow.y, { align: "right" }, true)
     }
 
-    // Synchronize Y offset after section titles
-    const titleEndY = Math.max(leftFlow.y, rightFlow.y)
-    leftFlow.y = titleEndY
-    rightFlow.y = titleEndY
+    flow.y += 3
+    flow.doc.setDrawColor(226, 232, 240)
+    flow.doc.setLineWidth(0.3)
+    flow.doc.line(flow.x, flow.y, flow.x + flow.width, flow.y)
+    flow.doc.setLineWidth(0.2)
+    flow.y += 5
 
-    // Render Blocks in Left (English) and Right (Arabic) columns
-    if (engBlocks.length) {
-      await renderBlocks(leftFlow, engBlocks)
-    }
-    if (arBlocks.length) {
-      await renderBlocks(rightFlow, arBlocks)
+    // 2. Render Blocks in Parallel Rows (Synchronized Paragraph by Paragraph)
+    const maxBlocks = Math.max(engBlocks.length, arBlocks.length)
+    for (let b = 0; b < maxBlocks; b += 1) {
+      const engBlock = engBlocks[b]
+      const arBlock = arBlocks[b]
+
+      const leftSub: Flow = { ...flow, x: flow.x, width: colWidth, rtl: false }
+      const rightSub: Flow = { ...flow, x: flow.x + colWidth + gap, width: colWidth, rtl: true }
+
+      const yBefore = flow.y
+      leftSub.y = yBefore
+      rightSub.y = yBefore
+
+      if (engBlock) await renderBlocks(leftSub, [engBlock])
+      if (arBlock) await renderBlocks(rightSub, [arBlock])
+
+      const yAfter = Math.max(leftSub.y, rightSub.y)
+      flow.pageNumber = Math.max(leftSub.pageNumber, rightSub.pageNumber)
+      flow.y = yAfter
     }
 
-    // Render gallery images if present
+    // 3. Render Gallery Images across FULL page width (Not split into 2 narrow columns)
     if (galleryImages.length) {
-      const imgY = Math.max(leftFlow.y, rightFlow.y)
-      leftFlow.y = imgY
-      rightFlow.y = imgY
-      await renderImageGrid(leftFlow, galleryImages, false)
+      if (engSection.imageTitle) {
+        renderHeading(flow, { type: "heading", level: 3, text: engSection.imageTitle })
+      }
+      await renderImageGrid(flow, galleryImages, false)
     }
 
-    // Update flow.y and page number to taller column
-    const endY = Math.max(leftFlow.y, rightFlow.y)
-    flow.pageNumber = Math.max(leftFlow.pageNumber, rightFlow.pageNumber)
-    flow.y = endY + 4
+    flow.y += 4
   }
 
   addPageNumbers(doc, false)
