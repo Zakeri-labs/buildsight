@@ -1819,6 +1819,23 @@ function addBilingualPageNumbers(doc: JsPdfDocument) {
   }
 }
 
+function measureBlockHeight(doc: JsPdfDocument, block: PdfBlock | undefined, width: number, rtl: boolean): number {
+  if (!block) return 0
+  if (block.type === "heading") return 10
+  if (block.type === "paragraph") {
+    setLanguage(doc, rtl, 9, false)
+    const lines = textLines(doc, block.text, width)
+    const lineHeight = 4.6
+    return Math.max(lineHeight, lines.length * lineHeight) + 2
+  }
+  if (block.type === "table") {
+    const rowCount = block.rows.length + (block.headers.length ? 1 : 0)
+    return rowCount * 7.5 + 6
+  }
+  if (block.type === "spacer") return block.height
+  return 18
+}
+
 async function buildNativeBilingualPdfBlob(input: {
   data: StageTranslationPageData
   translation: StageTranslationRecord
@@ -1916,19 +1933,29 @@ async function buildNativeBilingualPdfBlob(input: {
       const engBlock = engBlocks[b]
       const arBlock = arBlocks[b]
 
-      const leftSub: Flow = { ...flow, x: flow.x, width: colWidth, rtl: false }
-      const rightSub: Flow = { ...flow, x: flow.x + colWidth + gap, width: colWidth, rtl: true }
+      const hEng = measureBlockHeight(flow.doc, engBlock, colWidth, false)
+      const hAr = measureBlockHeight(flow.doc, arBlock, colWidth, true)
+      const rowHeight = Math.max(hEng, hAr)
 
-      const yBefore = flow.y
-      leftSub.y = yBefore
-      rightSub.y = yBefore
+      // Pre-check if row exceeds remaining space on current page
+      if (flow.y + rowHeight > flow.bottom) {
+        addFlowPage(flow)
+      }
+
+      const rowY = flow.y
+
+      const leftSub: Flow = { ...flow, x: flow.x, width: colWidth, y: rowY, rtl: false }
+      const rightSub: Flow = { ...flow, x: flow.x + colWidth + gap, width: colWidth, y: rowY, rtl: true }
 
       if (engBlock) await renderBlocks(leftSub, [engBlock])
       if (arBlock) await renderBlocks(rightSub, [arBlock])
 
-      const yAfter = Math.max(leftSub.y, rightSub.y)
-      flow.pageNumber = Math.max(leftSub.pageNumber, rightSub.pageNumber)
-      flow.y = yAfter
+      if (leftSub.pageNumber > flow.pageNumber || rightSub.pageNumber > flow.pageNumber) {
+        flow.pageNumber = Math.max(leftSub.pageNumber, rightSub.pageNumber)
+        flow.y = Math.max(leftSub.y, rightSub.y)
+      } else {
+        flow.y = Math.max(leftSub.y, rightSub.y)
+      }
     }
 
     // 3. Render Gallery Images across FULL page width (Not split into 2 narrow columns)
