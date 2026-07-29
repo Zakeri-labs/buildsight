@@ -1566,53 +1566,62 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
       doc.text(pageStr, rightX, pageY, { align: "right" })
     }
 
-    // ── Footer Lines & Contact Details ──────────────────────────────────
-    doc.setDrawColor(226, 232, 240)
-    doc.line(margin, height - 12, width - margin, height - 12)
+    // ── Footer Top Accent Line ──────────────────────────────────────────
+    doc.setFillColor(37, 99, 235)
+    doc.rect(margin, height - 17.5, width - margin * 2, 0.6, "F")
 
-    // Left info (Address split into 2 lines)
-    const addressLines = rtl ? [
-      `س.ت: ${org.crNumber} | ص.ب: ${org.poBox} | ر.ب: ${org.postalCode}`,
-      org.addressAr,
-    ].filter(Boolean) : [
-      `C.R. No.: ${org.crNumber}, P.O. Box: ${org.poBox}, Postal Code: ${org.postalCode}`,
-      org.addressEn,
-    ].filter(Boolean)
-
-    setLanguage(doc, rtl, 6.8, false)
-    doc.setTextColor(100, 116, 139)
-    writePdfText(
-      doc,
-      addressLines,
-      rtl ? width - margin : margin,
-      height - 8.5,
-      { align: rtl ? "right" : "left", lineHeightFactor: 1.15 },
-      rtl,
-    )
-
-    // Right info (Phones, Website, Email)
+    // Left Column: Phones, Social/Website, Email
     const contactLines = [
       org.phones ? `Tel: ${org.phones}` : "",
-      [org.website, org.email].filter(Boolean).join(" · "),
+      org.website ? (org.website.startsWith("@") ? org.website : `@${org.website}`) : "",
+      org.email ? org.email : "",
     ].filter(Boolean)
 
     if (contactLines.length) {
-      setLanguage(doc, false, 6.8, false)
-      doc.setTextColor(100, 116, 139)
+      setLanguage(doc, false, 6.5, false)
+      doc.setTextColor(71, 85, 105)
       writePdfText(
         doc,
         contactLines,
-        rtl ? margin : width - margin,
-        height - 8.5,
-        { align: rtl ? "left" : "right", lineHeightFactor: 1.15 },
+        margin,
+        height - 14,
+        { align: "left", lineHeightFactor: 1.15 },
         false,
       )
     }
 
-    // Footer Page Number
-    setLanguage(doc, false, 7, false)
+    // Right Column: Bilingual Address & Registration Details
+    const arAddressLine = `س.ت : ${org.crNumber || "—"} ، ص.ب : ${org.poBox || "—"} ، ر.ب : ${org.postalCode || "—"} ، ${org.addressAr}`
+    const enAddressLine1 = `C.R. No.: ${org.crNumber || "—"}, P.O. Box : ${org.poBox || "—"}, Postal Code : ${org.postalCode || "—"}`
+    const enAddressLine2 = org.addressEn || ""
+
+    // Draw Line 1 (Arabic - right aligned)
+    setLanguage(doc, true, 6.8, true)
+    doc.setTextColor(15, 23, 42)
+    writePdfText(doc, arAddressLine, width - margin, height - 14, { align: "right" }, true)
+
+    // Draw Line 2 (English CR/PO - right aligned)
+    setLanguage(doc, false, 6.2, false)
+    doc.setTextColor(100, 116, 139)
+    doc.text(enAddressLine1, width - margin, height - 10.5, { align: "right" })
+
+    // Draw Line 3 (English Address - right aligned)
+    if (enAddressLine2) {
+      doc.text(enAddressLine2, width - margin, height - 7.2, { align: "right" })
+    }
+
+    // Sub-Footer Divider Line
+    doc.setDrawColor(241, 245, 249)
+    doc.setLineWidth(0.15)
+    doc.line(margin, height - 4.8, width - margin, height - 4.8)
+
+    // Sub-Footer Left: Company Name
+    setLanguage(doc, false, 6, false)
     doc.setTextColor(148, 163, 184)
-    doc.text(pageStr, width / 2, height - 3, { align: "center" })
+    doc.text((org.nameEn || org.nameAr).toUpperCase(), margin, height - 2.2, { align: "left" })
+
+    // Sub-Footer Right: Page Number
+    doc.text(`Page ${page} / ${pages}`, width - margin, height - 2.2, { align: "right" })
   }
   if (rtl) setLanguage(doc, true, 8, false)
 }
