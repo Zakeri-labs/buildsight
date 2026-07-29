@@ -334,7 +334,10 @@ function htmlToBlocks(html: string): PdfBlock[] {
     const tag = node.tagName.toLowerCase()
     if (/^h[1-6]$/.test(tag)) {
       const text = normalizeText(node.textContent || "")
-      if (text) blocks.push({ type: "heading", level: Number(tag.slice(1)), text })
+      const lower = text.toLowerCase()
+      if (text && !lower.includes("project information") && !text.includes("معلومات المشروع")) {
+        blocks.push({ type: "heading", level: Number(tag.slice(1)), text })
+      }
       return
     }
     if (tag === "p" || tag === "blockquote") {
@@ -644,7 +647,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
       const shapedLabel = String(shapeArabicText(doc, label))
       doc.text(shapedLabel, rightX, y, { align: "right" })
 
-      setLanguage(doc, false, 7.5, true)
+      setLanguage(doc, false, 7.5, false)
       doc.setTextColor(15, 23, 42)
       doc.text(value, labelX, y, { align: "left" })
     } else {
@@ -653,7 +656,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
       doc.setTextColor(100, 116, 139)
       doc.text(label, labelX, y, { align: "left" })
 
-      setLanguage(doc, false, 7.5, true)
+      setLanguage(doc, false, 7.5, false)
       doc.setTextColor(15, 23, 42)
       doc.text(value, rightX, y, { align: "right" })
     }
