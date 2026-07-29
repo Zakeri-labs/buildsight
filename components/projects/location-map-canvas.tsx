@@ -25,9 +25,11 @@ const MARKER_ICON = new Icon({
 
 function MapLifecycle({
   centerRequest,
+  resizeRequest,
   onReady,
 }: {
   centerRequest: MapCenterRequest | null
+  resizeRequest: number
   onReady: () => void
 }) {
   const map = useMap()
@@ -66,6 +68,17 @@ function MapLifecycle({
   }, [map, onReady])
 
   useEffect(() => {
+    const frame = window.requestAnimationFrame(() => map.invalidateSize({ animate: false }))
+    const first = window.setTimeout(() => map.invalidateSize({ animate: false }), 100)
+    const second = window.setTimeout(() => map.invalidateSize({ animate: false }), 320)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.clearTimeout(first)
+      window.clearTimeout(second)
+    }
+  }, [map, resizeRequest])
+
+  useEffect(() => {
     if (!centerRequest) return
     map.setView(
       [centerRequest.latitude, centerRequest.longitude],
@@ -92,6 +105,7 @@ export function LocationMapCanvas({
   initialZoom,
   marker,
   centerRequest,
+  resizeRequest = 0,
   tileUrl,
   tileAttribution,
   markerTitle,
@@ -104,6 +118,7 @@ export function LocationMapCanvas({
   initialZoom: number
   marker: MapPoint | null
   centerRequest: MapCenterRequest | null
+  resizeRequest?: number
   tileUrl: string
   tileAttribution: string
   markerTitle: string
@@ -147,7 +162,7 @@ export function LocationMapCanvas({
         eventHandlers={tileHandlers}
       />
       <MapClickHandler onSelect={onSelect} />
-      <MapLifecycle centerRequest={centerRequest} onReady={onReady} />
+      <MapLifecycle centerRequest={centerRequest} resizeRequest={resizeRequest} onReady={onReady} />
       {marker && (
         <Marker
           position={[marker.latitude, marker.longitude]}

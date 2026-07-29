@@ -31,6 +31,8 @@ const labels = {
     geolocationDenied: "Location permission was denied or is unavailable.",
     markerHelp: "Click anywhere on the map or drag the marker to refine the exact position.",
     close: "Close",
+    enterFullscreen: "Open map fullscreen",
+    exitFullscreen: "Exit fullscreen",
   },
   ar: {
     location: "الموقع",
@@ -62,6 +64,8 @@ const labels = {
     geolocationDenied: "تم رفض إذن الموقع أو أن الخدمة غير متاحة.",
     markerHelp: "انقر في أي مكان على الخريطة أو اسحب العلامة لضبط الموقع بدقة.",
     close: "إغلاق",
+    enterFullscreen: "فتح الخريطة بملء الشاشة",
+    exitFullscreen: "الخروج من ملء الشاشة",
   },
 } as const
 

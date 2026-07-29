@@ -168,13 +168,13 @@ export async function getOrgProjects(orgId: string): Promise<DomainProject[]> {
   }))
 }
 
-// Resolve the set of project ids in scope. When `projectId` is provided and
-// belongs to the org, scope narrows to it; otherwise all org projects.
+// Resolve the set of project ids in scope. A selected project is never
+// allowed to fall back to organisation-wide data when it is missing or stale.
 async function resolveScopedProjects(orgId: string, projectId: string | null) {
   const projects = await getOrgProjects(orgId)
   const scoped = projectId ? projects.filter((p) => p.id === projectId) : projects
-  const ids = (scoped.length ? scoped : projects).map((p) => p.id)
-  return { projects, scoped: scoped.length ? scoped : projects, ids }
+  const ids = scoped.map((p) => p.id)
+  return { projects, scoped, ids }
 }
 
 function nameMap(projects: DomainProject[]) {

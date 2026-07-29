@@ -263,7 +263,7 @@ function CreateProjectDialog({
           </Button>
         }
       />
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>Create a project</DialogTitle>
           <DialogDescription className="text-pretty">
@@ -272,30 +272,35 @@ function CreateProjectDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="project-name">Project name</Label>
-            <Input
-              id="project-name"
-              placeholder="e.g. Marina West Residences"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="project-code">Project code</Label>
-            <Input
-              id="project-code"
-              placeholder="e.g. PRJ-009"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-            />
-          </div>
           <ProjectLocationField
             id="project-location"
             value={location}
             onChange={setLocation}
             disabled={pending}
-          />
+          >
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="project-name">Project name</Label>
+                <Input
+                  id="project-name"
+                  placeholder="e.g. Marina West Residences"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  disabled={pending}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="project-code">Project code</Label>
+                <Input
+                  id="project-code"
+                  placeholder="e.g. PRJ-009"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  disabled={pending}
+                />
+              </div>
+            </div>
+          </ProjectLocationField>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
         <DialogFooter>
@@ -374,7 +379,7 @@ function EditProjectDialog({ project }: { project: ProjectRow }) {
           </Button>
         }
       />
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>Edit project</DialogTitle>
           <DialogDescription>
@@ -382,30 +387,33 @@ function EditProjectDialog({ project }: { project: ProjectRow }) {
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor={`project-name-${project.id}`}>Project name</Label>
-            <Input
-              id={`project-name-${project.id}`}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              disabled={pending}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={`project-code-${project.id}`}>Project code</Label>
-            <Input
-              id={`project-code-${project.id}`}
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-              disabled={pending}
-            />
-          </div>
           <ProjectLocationField
             id={`project-location-${project.id}`}
             value={location}
             onChange={setLocation}
             disabled={pending}
-          />
+          >
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor={`project-name-${project.id}`}>Project name</Label>
+                <Input
+                  id={`project-name-${project.id}`}
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  disabled={pending}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`project-code-${project.id}`}>Project code</Label>
+                <Input
+                  id={`project-code-${project.id}`}
+                  value={code}
+                  onChange={(event) => setCode(event.target.value)}
+                  disabled={pending}
+                />
+              </div>
+            </div>
+          </ProjectLocationField>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
         <DialogFooter>

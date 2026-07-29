@@ -21,7 +21,13 @@ const roleBadge: Record<string, string> = {
   Client: "bg-indigo-50 text-indigo-700",
 }
 
-export function ProjectsOverview({ projects }: { projects: ProjectOverviewRow[] }) {
+export function ProjectsOverview({
+  projects,
+  selectedProjectId,
+}: {
+  projects: ProjectOverviewRow[]
+  selectedProjectId?: string | null
+}) {
   return (
     <div className="flex flex-col rounded-xl border border-border bg-card p-5">
       <h2 className="text-base font-semibold text-foreground">Projects Overview</h2>
@@ -100,10 +106,10 @@ export function ProjectsOverview({ projects }: { projects: ProjectOverviewRow[] 
       </div>
 
       <Link
-        href="/projects"
+        href={selectedProjectId ? `/projects/${selectedProjectId}` : "/projects"}
         className="mt-4 flex items-center justify-between border-t border-border pt-4 text-sm font-medium text-primary hover:underline"
       >
-        View all projects
+        {selectedProjectId ? "View project overview" : "View all projects"}
         <ChevronRight className="size-4 flip-rtl" />
       </Link>
     </div>

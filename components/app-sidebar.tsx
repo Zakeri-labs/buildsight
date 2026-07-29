@@ -108,9 +108,21 @@ export function AppSidebar({
         }
       : null
 
+  const projectNavigationItem = contextProjectId
+    ? {
+        label: locale === "ar" ? "المشروع" : "Project",
+        href: `/projects/${contextProjectId}`,
+        icon: FolderKanban,
+      }
+    : {
+        label: t.projects.title,
+        href: "/projects",
+        icon: FolderKanban,
+      }
+
   const moduleItems = [
     { label: t.nav.dashboard, href: "/", icon: Home },
-    { label: t.projects.title, href: "/projects", icon: FolderKanban },
+    projectNavigationItem,
     ...(stageNavigationItem ? [stageNavigationItem] : []),
     { label: t.nav.documents, href: "/documents", icon: Files },
     ...(contextProjectId ? [{ label: t.nav.aiSummary, href: "/ai-summary", icon: Sparkles }] : []),
@@ -139,7 +151,7 @@ export function AppSidebar({
     window.dispatchEvent(new Event(NAVIGATION_START_EVENT))
     startTransition(async () => {
       await selectProject(value)
-      router.push("/")
+      router.push(value === "all" ? "/projects" : "/")
       router.refresh()
     })
   }
@@ -254,8 +266,10 @@ export function AppSidebar({
               item.href === "/"
                 ? pathname === "/"
                 : item.href === "/projects"
-                  ? pathname === "/projects" || pathname === "/projects/new" || /^\/projects\/[^/]+$/.test(pathname)
-                  : pathname.startsWith(item.href)
+                  ? pathname === "/projects" || pathname === "/projects/new"
+                  : contextProjectId && item.href === `/projects/${contextProjectId}`
+                    ? pathname === item.href || pathname.startsWith(`${item.href}/gallery`)
+                    : pathname.startsWith(item.href)
             }
           />
         ))}

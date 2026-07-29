@@ -23,6 +23,7 @@ import {
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { ProjectImageDisplay } from "@/components/projects/project-image-display"
+import { ProjectLocationField } from "@/components/projects/project-location-field"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import {
@@ -41,6 +42,7 @@ import {
 } from "@/components/ui/dialog"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import type { ProjectLocationValue } from "@/lib/locations/types"
 import {
   deleteProject,
   getProjectDeletionImpact,
@@ -740,7 +742,13 @@ function ProjectEditDialog({
 }) {
   const [name, setName] = useState(project.name)
   const [code, setCode] = useState(project.code === "—" ? "" : project.code)
-  const [address, setAddress] = useState(project.address === "—" ? "" : project.address)
+  const [location, setLocation] = useState<ProjectLocationValue>({
+    address: project.address === "—" ? "" : project.address,
+    latitude: project.latitude ?? null,
+    longitude: project.longitude ?? null,
+    verified: project.latitude != null && project.longitude != null,
+    source: project.latitude != null && project.longitude != null ? "map" : "manual",
+  })
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -751,9 +759,9 @@ function ProjectEditDialog({
         projectId: project.id,
         name,
         code,
-        location: address,
-        latitude: project.latitude ?? null,
-        longitude: project.longitude ?? null,
+        location: location.address,
+        latitude: location.latitude,
+        longitude: location.longitude,
       })
       if (!result.ok) {
         setError(result.error)
@@ -763,14 +771,16 @@ function ProjectEditDialog({
         ...project,
         name: name.trim(),
         code: code.trim() || "—",
-        address: address.trim() || "—",
+        address: location.address.trim() || "—",
+        latitude: location.latitude,
+        longitude: location.longitude,
       })
     })
   }
 
   return (
     <Dialog open onOpenChange={(open) => !open && !pending && onClose()}>
-      <DialogContent className="sm:max-w-lg" showCloseButton={!pending}>
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-6xl" showCloseButton={!pending}>
         <DialogHeader>
           <DialogTitle>{locale === "ar" ? "تعديل المشروع" : "Edit Project"}</DialogTitle>
           <DialogDescription>
@@ -780,33 +790,33 @@ function ProjectEditDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor={`project-list-name-${project.id}`}>{locale === "ar" ? "اسم المشروع" : "Project name"}</Label>
-            <Input
-              id={`project-list-name-${project.id}`}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              disabled={pending}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={`project-list-code-${project.id}`}>{locale === "ar" ? "رمز المشروع" : "Project code"}</Label>
-            <Input
-              id={`project-list-code-${project.id}`}
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-              disabled={pending}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={`project-list-address-${project.id}`}>{locale === "ar" ? "العنوان" : "Address"}</Label>
-            <Input
-              id={`project-list-address-${project.id}`}
-              value={address}
-              onChange={(event) => setAddress(event.target.value)}
-              disabled={pending}
-            />
-          </div>
+          <ProjectLocationField
+            id={`project-list-location-${project.id}`}
+            value={location}
+            onChange={setLocation}
+            disabled={pending}
+          >
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor={`project-list-name-${project.id}`}>{locale === "ar" ? "اسم المشروع" : "Project name"}</Label>
+                <Input
+                  id={`project-list-name-${project.id}`}
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  disabled={pending}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`project-list-code-${project.id}`}>{locale === "ar" ? "رمز المشروع" : "Project code"}</Label>
+                <Input
+                  id={`project-list-code-${project.id}`}
+                  value={code}
+                  onChange={(event) => setCode(event.target.value)}
+                  disabled={pending}
+                />
+              </div>
+            </div>
+          </ProjectLocationField>
           {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
         </div>
         <DialogFooter>

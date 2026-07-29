@@ -4,16 +4,9 @@ import { StatusDonutCard } from "@/components/dashboard/status-donut-card"
 import { ActivityFeed } from "@/components/dashboard/activity-feed"
 import { ProjectsOverview } from "@/components/dashboard/projects-overview"
 import { MyTasks } from "@/components/dashboard/my-tasks"
-import { ProjectDetail } from "@/components/projects/project-detail"
-import type { ProjectDocument } from "@/components/projects/project-documents"
 import { requireOnboarded } from "@/lib/auth/session"
-import { canAdministerProject } from "@/lib/auth/guards"
 import { getSelectedProjectId } from "@/lib/project-scope"
-import { getDashboardData, getOrgProjects, type DashboardData, type DomainProject } from "@/lib/db/domain"
-import { getProjectParticipants } from "@/lib/db/project-participants"
-import { normalizeDocumentType } from "@/lib/documents/document-types"
-import { toProjectRecord } from "@/lib/projects/project-record"
-import { createClient } from "@/lib/supabase/server"
+import { getDashboardData, type DashboardData } from "@/lib/db/domain"
 
 // Deterministic upward sparkline that lands on `value`.
 function spark(value: number): number[] {
@@ -22,113 +15,20 @@ function spark(value: number): number[] {
   return Array.from({ length: n }, (_, i) => Math.round(start + ((value - start) * i) / (n - 1)))
 }
 
-type DashboardDocumentRow = {
-  id: string
-  reference: string
-  title: string
-  document_type: string
-  status: string
-  created_by: string
-  updated_at: string
-  file_storage_path: string | null
-  original_filename: string | null
-}
-
-type DashboardDocumentProfile = {
-  id: string
-  full_name: string | null
-  email: string | null
-  avatar_url: string | null
-}
-
-function personInitials(name: string): string {
-  return name.split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U"
-}
-
-function displayDocumentDate(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "—"
-  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date)
-}
-
-async function getProjectDocuments(projectId: string, currentUserId: string, currentUserEmail: string): Promise<ProjectDocument[]> {
-  const supabase = await createClient()
-  const { data: documents } = await supabase
-    .from("documents")
-    .select("id, reference, title, document_type, status, created_by, updated_at, file_storage_path, original_filename")
-    .eq("project_id", projectId)
-    .order("updated_at", { ascending: false })
-    .limit(5)
-
-  const documentRows = (documents ?? []) as DashboardDocumentRow[]
-  const creatorIds = Array.from(new Set(documentRows.map((document) => document.created_by)))
-  const { data: profiles } = creatorIds.length
-    ? await supabase.from("profiles").select("id, full_name, email, avatar_url").in("id", creatorIds)
-    : { data: [] as DashboardDocumentProfile[] }
-  const profileRows = (profiles ?? []) as DashboardDocumentProfile[]
-  const profileMap = new Map<string, DashboardDocumentProfile>(profileRows.map((profile) => [profile.id, profile]))
-
-  return documentRows.map((document) => {
-    const profile = profileMap.get(document.created_by)
-    const name = profile?.full_name?.trim() || profile?.email || (document.created_by === currentUserId ? currentUserEmail : "Project member")
-    return {
-      id: document.id,
-      reference: document.reference,
-      title: document.title,
-      type: normalizeDocumentType(document.document_type),
-      uploadedBy: { name, initials: personInitials(name), avatar: profile?.avatar_url ?? undefined },
-      lastUpdated: displayDocumentDate(document.updated_at),
-      status: document.status === "published" ? "Published" : "Draft",
-      fileStoragePath: document.file_storage_path ?? null,
-      originalFilename: document.original_filename ?? null,
-    }
-  })
+const emptyDashboard: DashboardData = {
+  kpis: { totalProjects: 0, openNcrs: 0, openInspections: 0, openRfis: 0 },
+  ncrDonut: [],
+  inspectionDonut: [],
+  activity: [],
+  projects: [],
+  tasks: [],
+  scopeName: null,
 }
 
 export default async function DashboardPage() {
   const [session, projectId] = await Promise.all([requireOnboarded(), getSelectedProjectId()])
   const orgId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id ?? null
-
-  let data: DashboardData
-  let orgProjects: DomainProject[]
-
-  if (orgId) {
-    const result = await Promise.all([getDashboardData(orgId, projectId), getOrgProjects(orgId)])
-    data = result[0]
-    orgProjects = result[1]
-  } else {
-    data = {
-      kpis: { totalProjects: 0, openNcrs: 0, openInspections: 0, openRfis: 0 },
-      ncrDonut: [],
-      inspectionDonut: [],
-      activity: [],
-      projects: [],
-      tasks: [],
-      scopeName: null,
-    }
-    orgProjects = []
-  }
-
-  if (projectId) {
-    const selectedProject = orgProjects.find((project) => project.id === projectId)
-    if (selectedProject) {
-      const projectCounts = data.projects.find((project) => project.id === projectId)
-      const [documents, participants, canManageImages] = await Promise.all([
-        getProjectDocuments(projectId, session.userId, session.email),
-        getProjectParticipants(projectId),
-        canAdministerProject(projectId),
-      ])
-      return (
-        <ProjectDetail
-          key={selectedProject.id}
-          project={toProjectRecord(selectedProject, projectCounts)}
-          documents={documents}
-          participants={participants}
-          canManageImages={canManageImages}
-        />
-      )
-    }
-  }
+  const data = orgId ? await getDashboardData(orgId, projectId) : emptyDashboard
 
   const kpis: KpiCardData[] = [
     {
@@ -187,7 +87,7 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <ProjectsOverview projects={data.projects} />
+          <ProjectsOverview projects={data.projects} selectedProjectId={projectId} />
         </div>
         <MyTasks tasks={data.tasks} />
       </div>

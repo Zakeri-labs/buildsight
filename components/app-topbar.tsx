@@ -45,6 +45,12 @@ export function AppTopbar({ activeProjectName }: { activeProjectName?: string | 
     if (p === "/" && activeProjectName) {
       return {
         title: activeProjectName,
+        subtitle: "Project dashboard, progress, and activity",
+      }
+    }
+    if (activeProjectName && /^\/projects\/[^/]+$/.test(p)) {
+      return {
+        title: activeProjectName,
         subtitle: "Project overview, participants, and core documents",
       }
     }

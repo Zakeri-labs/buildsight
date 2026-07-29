@@ -3,20 +3,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import {
-  MapPin,
-  ArrowLeft,
-  Building2,
-  CalendarDays,
-  ClipboardList,
-  AlertTriangle,
-  Hash,
-  Layers3,
-  UserRound,
-  BriefcaseBusiness,
-  FileText,
-  Images,
-} from "lucide-react"
+import { AlertTriangle, ArrowLeft, ClipboardList, Images } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ProjectStatusBadge } from "@/components/status-badge"
@@ -61,14 +48,11 @@ function projectDocuments(project: ProjectRecord): ProjectDocument[] {
   ]
 }
 
-function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
+function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex min-w-0 items-start gap-3 rounded-lg border bg-muted/10 px-3 py-2.5">
-      <span className="mt-0.5 shrink-0 text-muted-foreground">{icon}</span>
-      <div className="min-w-0">
-        <span className="block text-xs text-muted-foreground">{label}</span>
-        <span className="mt-0.5 block truncate text-sm font-medium">{value}</span>
-      </div>
+    <div className="grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)] items-start gap-3 py-1.5">
+      <dt className="text-xs font-medium leading-5 text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words text-sm font-semibold leading-5 text-foreground">{value}</dd>
     </div>
   )
 }
@@ -95,7 +79,8 @@ export function ProjectDetail({
   const isArabic = locale === "ar"
   const labels = isArabic
     ? {
-        details: "تفاصيل المشروع",
+        details: "١. تفاصيل المشروع",
+        name: "اسم المشروع",
         code: "رقم / رمز المشروع",
         owner: "المالك / العميل",
         role: "دور الجهة",
@@ -109,7 +94,8 @@ export function ProjectDetail({
         viewGallery: "عرض معرض المشروع",
       }
     : {
-        details: "Project Details",
+        details: "1. Project Details",
+        name: "Project Name",
         code: "Project Code / Number",
         owner: "Owner / Client",
         role: "Organization Role",
@@ -123,6 +109,8 @@ export function ProjectDetail({
         viewGallery: "View Project Gallery",
       }
 
+  const progress = Math.max(0, Math.min(100, project.progress.actual))
+
   return (
     <div className="flex flex-col gap-6">
       <Link href="/projects" className="inline-flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
@@ -132,74 +120,70 @@ export function ProjectDetail({
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <Card className="gap-0 overflow-hidden py-0">
-          <CardHeader className="border-b px-5 py-4 sm:px-6">
-            <CardTitle className="text-base">{labels.details}</CardTitle>
+          <CardHeader className="border-b px-5 py-3.5 sm:px-6">
+            <CardTitle className="text-base font-semibold tracking-tight">{labels.details}</CardTitle>
           </CardHeader>
-          <CardContent className="p-5 sm:p-6">
-            <div className="grid gap-5 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)]">
-              <div className="space-y-2">
-                <ProjectImageDisplay
-                  src={projectImage}
-                  projectId={project.id}
-                  alt={project.name}
-                  className="aspect-[4/3] w-full rounded-xl border md:aspect-[5/4]"
-                >
-                  {canManageImages ? (
-                    <div className="absolute bottom-3 end-3">
-                      <ProjectImageManagementDialog
-                        projectId={project.id}
-                        projectName={project.name}
-                        currentImage={projectImage}
-                        onSaved={(imageUrl) => {
-                          setProjectImage(imageUrl)
-                          router.refresh()
-                        }}
-                      />
-                    </div>
-                  ) : null}
-                </ProjectImageDisplay>
+          <CardContent className="p-4 sm:p-5">
+            <div className="grid gap-5 lg:grid-cols-[250px_minmax(0,1fr)] 2xl:grid-cols-[260px_minmax(0,1fr)_190px]">
+              <ProjectImageDisplay
+                src={projectImage}
+                projectId={project.id}
+                alt={project.name}
+                className="h-[260px] w-full rounded-lg border bg-muted/40 shadow-sm sm:h-[300px] lg:h-[260px]"
+                imageClassName="object-cover"
+                iconClassName="size-10"
+              />
+
+              <div className="min-w-0 py-0.5">
+                <dl className="grid min-w-0 gap-x-7 md:grid-cols-2">
+                  <DetailField label={labels.name} value={project.name} />
+                  <DetailField label={labels.type} value={project.projectType} />
+                  <DetailField label={labels.code} value={project.code} />
+                  <DetailField label={labels.status} value={<ProjectStatusBadge statusKey={project.statusKey} />} />
+                  <DetailField label={labels.owner} value={project.client} />
+                  <DetailField label={labels.start} value={project.startDate} />
+                  <DetailField label={labels.role} value={project.organizationRole} />
+                  <DetailField label={labels.completion} value={project.targetHandover} />
+                  <DetailField label={labels.location} value={project.location} />
+                  <DetailField label={labels.progress} value={`${progress}%`} />
+                </dl>
+
+                <div className="mt-3 border-t pt-3">
+                  <p className="text-xs font-medium text-muted-foreground">{labels.description}</p>
+                  <p className="mt-1.5 whitespace-pre-wrap text-sm leading-6 text-foreground/90">{project.description}</p>
+                </div>
+
+                <div className="mt-4 flex items-center gap-3" aria-label={`${labels.progress}: ${progress}%`}>
+                  <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${progress}%` }} />
+                  </div>
+                  <span className="shrink-0 text-xs font-semibold tabular-nums text-muted-foreground">{progress}%</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 border-t pt-4 lg:col-span-2 2xl:col-span-1 2xl:border-s 2xl:border-t-0 2xl:ps-5 2xl:pt-1">
+                {canManageImages ? (
+                  <div className="[&>button]:w-full [&>button]:justify-center [&>button]:bg-primary [&>button]:text-primary-foreground [&>button]:shadow-none [&>button]:hover:bg-primary/90">
+                    <ProjectImageManagementDialog
+                      projectId={project.id}
+                      projectName={project.name}
+                      currentImage={projectImage}
+                      onSaved={(imageUrl) => {
+                        setProjectImage(imageUrl)
+                        router.refresh()
+                      }}
+                    />
+                  </div>
+                ) : null}
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full"
+                  className="w-full justify-center"
                   render={<Link href={`/projects/${project.id}/gallery`} />}
                 >
                   <Images className="size-4" />
                   {labels.viewGallery}
                 </Button>
-              </div>
-
-              <div className="min-w-0 space-y-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <h1 className="truncate text-xl font-semibold tracking-tight">{project.name}</h1>
-                    <p className="mt-1 flex items-start gap-1.5 text-sm text-muted-foreground">
-                      <MapPin className="mt-0.5 size-4 shrink-0" />
-                      <span>{project.location}</span>
-                    </p>
-                  </div>
-                  <ProjectStatusBadge statusKey={project.statusKey} />
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  <InfoRow icon={<Hash className="size-4" />} label={labels.code} value={project.code} />
-                  <InfoRow icon={<UserRound className="size-4" />} label={labels.owner} value={project.client} />
-                  <InfoRow icon={<BriefcaseBusiness className="size-4" />} label={labels.role} value={project.organizationRole} />
-                  <InfoRow icon={<MapPin className="size-4" />} label={labels.location} value={project.location} />
-                  <InfoRow icon={<Layers3 className="size-4" />} label={labels.type} value={project.projectType} />
-                  <InfoRow icon={<Building2 className="size-4" />} label={labels.status} value={<ProjectStatusBadge statusKey={project.statusKey} />} />
-                  <InfoRow icon={<CalendarDays className="size-4" />} label={labels.start} value={project.startDate} />
-                  <InfoRow icon={<CalendarDays className="size-4" />} label={labels.completion} value={project.targetHandover} />
-                  <InfoRow icon={<ClipboardList className="size-4" />} label={labels.progress} value={`${project.progress.actual}%`} />
-                </div>
-
-                <div className="rounded-xl border bg-muted/10 px-4 py-3">
-                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                    <FileText className="size-4" />
-                    {labels.description}
-                  </div>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground/90">{project.description}</p>
-                </div>
               </div>
             </div>
           </CardContent>

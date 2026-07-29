@@ -744,70 +744,70 @@ export function ProjectCreateForm({
                   <span className="font-medium">{copy.org}:</span> {supervisingOrg.name}
                 </div>
 
-                <div className="grid gap-5 md:grid-cols-2">
-                  <Field label={copy.name} htmlFor="new-project-name" required>
-                    <Input
-                      id="new-project-name"
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
-                      placeholder={copy.namePlaceholder}
-                      autoComplete="organization"
-                      minLength={2}
-                      disabled={pending}
-                      className="h-10"
-                    />
-                  </Field>
-                  <Field label={copy.code} htmlFor="new-project-code" required>
-                    <Input
-                      id="new-project-code"
-                      value={code}
-                      onChange={(event) => setCode(event.target.value)}
-                      placeholder={copy.codePlaceholder}
-                      disabled={pending}
-                      className="h-10"
-                    />
-                  </Field>
-                  <Field label={copy.projectType} required>
-                    <Select value={projectType || null} onValueChange={(value) => setProjectType((value as ProjectTypeValue | null) ?? "")} disabled={pending}>
-                      <SelectTrigger className="h-10 w-full">
-                        <SelectValue placeholder={copy.projectTypePlaceholder}>
-                          {(value) => {
-                            if (!value) return copy.projectTypePlaceholder
-                            const option = PROJECT_TYPES.find((item) => item.value === String(value))
-                            return option ? (isArabic ? option.labelAr : option.label) : humanizeMachineValue(String(value))
-                          }}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PROJECT_TYPES.map((option) => <SelectItem key={option.value} value={option.value}>{isArabic ? option.labelAr : option.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field label={copy.supervisionType} required>
-                    <Select value={supervisionType || null} onValueChange={(value) => setSupervisionType((value as SupervisionTypeValue | null) ?? "")} disabled={pending}>
-                      <SelectTrigger className="h-10 w-full">
-                        <SelectValue placeholder={copy.supervisionTypePlaceholder}>
-                          {(value) => {
-                            if (!value) return copy.supervisionTypePlaceholder
-                            const option = SUPERVISION_TYPES.find((item) => item.value === String(value))
-                            return option ? (isArabic ? option.labelAr : option.label) : humanizeMachineValue(String(value))
-                          }}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {SUPERVISION_TYPES.map((option) => <SelectItem key={option.value} value={option.value}>{isArabic ? option.labelAr : option.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                </div>
-
-                <div className="rounded-2xl border bg-muted/15 p-4 sm:p-5">
+                <div className="rounded-2xl border bg-muted/15 p-4 sm:p-5 lg:p-6">
                   <ProjectLocationField
                     id="new-project-location"
                     value={location}
                     onChange={setLocation}
                     disabled={pending}
-                  />
+                  >
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
+                      <Field label={copy.name} htmlFor="new-project-name" required>
+                        <Input
+                          id="new-project-name"
+                          value={name}
+                          onChange={(event) => setName(event.target.value)}
+                          placeholder={copy.namePlaceholder}
+                          autoComplete="organization"
+                          minLength={2}
+                          disabled={pending}
+                          className="h-10"
+                        />
+                      </Field>
+                      <Field label={copy.code} htmlFor="new-project-code" required>
+                        <Input
+                          id="new-project-code"
+                          value={code}
+                          onChange={(event) => setCode(event.target.value)}
+                          placeholder={copy.codePlaceholder}
+                          disabled={pending}
+                          className="h-10"
+                        />
+                      </Field>
+                      <Field label={copy.projectType} required>
+                        <Select value={projectType || null} onValueChange={(value) => setProjectType((value as ProjectTypeValue | null) ?? "")} disabled={pending}>
+                          <SelectTrigger className="h-10 w-full">
+                            <SelectValue placeholder={copy.projectTypePlaceholder}>
+                              {(value) => {
+                                if (!value) return copy.projectTypePlaceholder
+                                const option = PROJECT_TYPES.find((item) => item.value === String(value))
+                                return option ? (isArabic ? option.labelAr : option.label) : humanizeMachineValue(String(value))
+                              }}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PROJECT_TYPES.map((option) => <SelectItem key={option.value} value={option.value}>{isArabic ? option.labelAr : option.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                      <Field label={copy.supervisionType} required>
+                        <Select value={supervisionType || null} onValueChange={(value) => setSupervisionType((value as SupervisionTypeValue | null) ?? "")} disabled={pending}>
+                          <SelectTrigger className="h-10 w-full">
+                            <SelectValue placeholder={copy.supervisionTypePlaceholder}>
+                              {(value) => {
+                                if (!value) return copy.supervisionTypePlaceholder
+                                const option = SUPERVISION_TYPES.find((item) => item.value === String(value))
+                                return option ? (isArabic ? option.labelAr : option.label) : humanizeMachineValue(String(value))
+                              }}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SUPERVISION_TYPES.map((option) => <SelectItem key={option.value} value={option.value}>{isArabic ? option.labelAr : option.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                    </div>
+                  </ProjectLocationField>
                 </div>
 
                 <Field label={`${copy.description} (${copy.optional})`} htmlFor="new-project-description">
