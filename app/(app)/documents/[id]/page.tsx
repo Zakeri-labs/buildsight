@@ -22,7 +22,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { requireOnboarded } from "@/lib/auth/session"
-import { getConstructionDocumentType } from "@/lib/documents/construction-document-types"
+import { getConstructionDocumentType, getDocumentDetailsTemplate } from "@/lib/documents/construction-document-types"
 import { getDocumentTypeDefinition } from "@/lib/documents/document-types"
 import { isRichTextDocument, richTextHasContent, EMPTY_RICH_TEXT_DOCUMENT } from "@/lib/documents/rich-text"
 import { formatFileSize, getSimpleUploadCategory } from "@/lib/documents/simple-upload"
@@ -112,7 +112,7 @@ export default async function DocumentDetailsPage({
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href="/documents" className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+        <Link href={`/documents?project=${encodeURIComponent(document.project_id)}`} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
           <ArrowLeft className="size-4" />
           Back to Documents
         </Link>
@@ -190,7 +190,7 @@ export default async function DocumentDetailsPage({
       <ConstructionDocumentWorkspace
         documentId={document.id}
         projectId={document.project_id}
-        initialDetails={document.document_details ?? ""}
+        initialDetails={document.document_details ?? (constructionType ? getDocumentDetailsTemplate(constructionType.value) : "")}
         attachments={attachments}
       />
 

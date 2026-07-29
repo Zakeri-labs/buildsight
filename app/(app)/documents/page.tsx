@@ -9,7 +9,7 @@ function initials(name: string) {
   return name.split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U"
 }
 
-export default async function DocumentsPage({ searchParams }: { searchParams: Promise<{ uploaded?: string }> }) {
+export default async function DocumentsPage({ searchParams }: { searchParams: Promise<{ uploaded?: string; project?: string }> }) {
   const [session, queryParams, selectedProjectId, supabase] = await Promise.all([
     requireOnboarded(),
     searchParams,
@@ -17,12 +17,24 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
     createClient(),
   ])
 
+  const requestedProjectId = queryParams.project?.trim() || null
+  let effectiveProjectId = selectedProjectId
+
+  if (requestedProjectId) {
+    const { data: requestedProject } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", requestedProjectId)
+      .maybeSingle()
+    if (requestedProject) effectiveProjectId = requestedProject.id
+  }
+
   let query = supabase
     .from("documents")
     .select("id, project_id, reference, title, document_type, status, created_by, created_at, updated_at, file_storage_path, original_filename, simple_upload_category")
     .order("updated_at", { ascending: false })
 
-  if (selectedProjectId) query = query.eq("project_id", selectedProjectId)
+  if (effectiveProjectId) query = query.eq("project_id", effectiveProjectId)
   const { data: rows } = await query
 
   const documents = rows ?? []
@@ -58,5 +70,5 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
   })
 
   const uploadedCount = Number.parseInt(queryParams.uploaded ?? "", 10)
-  return <DocumentsList documents={items} selectedProjectId={selectedProjectId} uploadedCount={Number.isFinite(uploadedCount) && uploadedCount > 0 ? uploadedCount : 0} />
+  return <DocumentsList documents={items} selectedProjectId={effectiveProjectId} uploadedCount={Number.isFinite(uploadedCount) && uploadedCount > 0 ? uploadedCount : 0} />
 }

@@ -157,6 +157,28 @@ export function DocumentsList({
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300">
+              <Files className="size-5" />
+            </span>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-950 dark:text-white">Documents</h1>
+              <p className="mt-0.5 text-sm text-muted-foreground">Create and manage construction documents, details, files and site images.</p>
+            </div>
+          </div>
+        </div>
+        {selectedProjectId ? (
+          <CreateDocumentDialog projectId={selectedProjectId} />
+        ) : (
+          <button type="button" disabled title="Select a project first" className="inline-flex h-10 cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-slate-300 px-4 text-sm font-semibold text-white dark:bg-slate-700">
+            <Plus className="size-4" />
+            Create Document
+          </button>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard icon={Files} label="Total Documents" value={documents.length} tone="blue" />
         <MetricCard icon={FileClock} label="Drafts" value={draftCount} tone="amber" />
@@ -164,7 +186,7 @@ export function DocumentsList({
         <MetricCard icon={FilePlus2} label="New This Week" value={newThisWeek} tone="violet" />
       </div>
 
-      <div className="flex flex-col gap-4 border-b border-slate-200/80 dark:border-slate-800 sm:flex-row sm:items-end sm:justify-between">
+      <div className="border-b border-slate-200/80 dark:border-slate-800">
         <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
           {tabs.map((tab) => {
             const active = tab.key === activeTab
@@ -187,17 +209,6 @@ export function DocumentsList({
               </button>
             )
           })}
-        </div>
-
-        <div className="pb-3">
-          {selectedProjectId ? (
-            <CreateDocumentDialog projectId={selectedProjectId} />
-          ) : (
-            <button type="button" disabled title="Select a project first" className="inline-flex h-10 cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-slate-300 px-4 text-sm font-semibold text-white dark:bg-slate-700">
-              <Plus className="size-4" />
-              Create Document
-            </button>
-          )}
         </div>
       </div>
 

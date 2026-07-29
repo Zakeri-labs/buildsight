@@ -11,6 +11,7 @@ import {
   type ConstructionDocumentTypeValue,
 } from "@/lib/documents/construction-document-types"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import {
   Dialog,
   DialogContent,
@@ -29,7 +30,17 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-export function CreateDocumentDialog({ projectId }: { projectId: string }) {
+export function CreateDocumentDialog({
+  projectId,
+  triggerLabel = "Create Document",
+  triggerVariant = "default",
+  triggerClassName,
+}: {
+  projectId: string
+  triggerLabel?: string
+  triggerVariant?: "default" | "outline"
+  triggerClassName?: string
+}) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState("")
@@ -69,6 +80,7 @@ export function CreateDocumentDialog({ projectId }: { projectId: string }) {
         setSubmitting(false)
         return
       }
+      setSubmitting(false)
       setOpen(false)
       reset()
       router.push(`/documents/${result.documentId}?created=construction`)
@@ -83,11 +95,16 @@ export function CreateDocumentDialog({ projectId }: { projectId: string }) {
     <>
       <Button
         size="lg"
-        className="h-10 rounded-xl bg-blue-600 px-4 font-semibold text-white shadow-xs hover:bg-blue-700"
+        variant={triggerVariant}
+        className={cn(
+          "h-10 rounded-xl px-4 font-semibold shadow-xs",
+          triggerVariant === "default" && "bg-blue-600 text-white hover:bg-blue-700",
+          triggerClassName,
+        )}
         onClick={() => setOpen(true)}
       >
         <Plus className="size-4" />
-        Create Document
+        {triggerLabel}
       </Button>
 
       <Dialog

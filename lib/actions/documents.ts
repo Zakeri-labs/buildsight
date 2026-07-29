@@ -114,12 +114,6 @@ export async function updateDocumentAction(
   input: DocumentWriteInput & { documentId: string },
 ): Promise<SaveDocumentResult> {
   const session = await requireOnboarded()
-  const selectedProjectId = await getSelectedProjectId()
-
-  if (selectedProjectId && selectedProjectId !== input.projectId) {
-    return { ok: false, error: "The active project does not match this document. Return to Documents and select the correct project." }
-  }
-
   const validation = validateDocumentInput(input)
   if (!validation.ok) return validation
 
@@ -269,11 +263,6 @@ export async function createConstructionDocumentAction(input: {
   shortDescription?: string
 }): Promise<SaveDocumentResult> {
   const session = await requireOnboarded()
-  const selectedProjectId = await getSelectedProjectId()
-  if (!selectedProjectId || selectedProjectId !== input.projectId) {
-    return { ok: false, error: "Select the correct project before creating a document." }
-  }
-
   const title = input.title.trim()
   const shortDescription = input.shortDescription?.trim() ?? ""
   if (!title) return { ok: false, error: "Document title is required." }
