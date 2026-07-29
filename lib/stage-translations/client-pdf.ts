@@ -631,23 +631,24 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   infoRows.forEach(({ label, value }, i) => {
     const y = startY + i * stepY
 
-    // Label: left edge of right column (col3X + 2.5), muted
-    const labelIsArabic = containsArabic(label)
-    setLanguage(doc, labelIsArabic, 6.5, false)
-    doc.setTextColor(100, 116, 139)
-    if (labelIsArabic) {
-      writePdfText(doc, label, labelX, y, { align: "left" }, true)
-    } else {
-      doc.text(label, labelX, y)
-    }
+    if (rtl) {
+      // Arabic (RTL): Label on Right edge, Value on Left edge
+      setLanguage(doc, true, 6.5, false)
+      doc.setTextColor(100, 116, 139)
+      const shapedLabel = String(shapeArabicText(doc, label))
+      doc.text(shapedLabel, rightX, y, { align: "right" })
 
-    // Value: right edge of right column (col3X + col3W - 2.5), dark bold
-    const valIsArabic = containsArabic(value)
-    setLanguage(doc, valIsArabic, 7.5, true)
-    doc.setTextColor(15, 23, 42)
-    if (valIsArabic) {
-      writePdfText(doc, value, rightX, y, { align: "right" }, true)
+      setLanguage(doc, false, 7.5, true)
+      doc.setTextColor(15, 23, 42)
+      doc.text(value, labelX, y, { align: "left" })
     } else {
+      // English (LTR): Label on Left edge, Value on Right edge
+      setLanguage(doc, false, 6.5, false)
+      doc.setTextColor(100, 116, 139)
+      doc.text(label, labelX, y, { align: "left" })
+
+      setLanguage(doc, false, 7.5, true)
+      doc.setTextColor(15, 23, 42)
       doc.text(value, rightX, y, { align: "right" })
     }
   })
@@ -1425,22 +1426,28 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     doc.setFillColor(255, 255, 255)
     doc.rect(col3X + 0.5, pageY - 3, col3W - 1, 4.5, "F")
 
-    // Page label: left edge of column 3, muted
-    const pageLabel = rtl ? "الصفحة:" : "Page:"
-    const labelIsAr = rtl
-    setLanguage(doc, labelIsAr, 6.5, false)
-    doc.setTextColor(100, 116, 139)
-    if (labelIsAr) {
-      writePdfText(doc, pageLabel, labelX, pageY, { align: "left" }, true)
-    } else {
-      doc.text(pageLabel, labelX, pageY)
-    }
-
-    // Page value: right edge of column 3, dark bold
     const pageStr = `${page} / ${pages}`
-    setLanguage(doc, false, 7.5, true)
-    doc.setTextColor(15, 23, 42)
-    doc.text(pageStr, rightX, pageY, { align: "right" })
+
+    if (rtl) {
+      // Arabic (RTL): Label on Right edge, Page number on Left edge
+      setLanguage(doc, true, 6.5, false)
+      doc.setTextColor(100, 116, 139)
+      const shapedPageLabel = String(shapeArabicText(doc, "الصفحة:"))
+      doc.text(shapedPageLabel, rightX, pageY, { align: "right" })
+
+      setLanguage(doc, false, 7.5, true)
+      doc.setTextColor(15, 23, 42)
+      doc.text(pageStr, labelX, pageY, { align: "left" })
+    } else {
+      // English (LTR): Label on Left edge, Page number on Right edge
+      setLanguage(doc, false, 6.5, false)
+      doc.setTextColor(100, 116, 139)
+      doc.text("Page:", labelX, pageY, { align: "left" })
+
+      setLanguage(doc, false, 7.5, true)
+      doc.setTextColor(15, 23, 42)
+      doc.text(pageStr, rightX, pageY, { align: "right" })
+    }
 
     // ── Footer Lines & Contact Details ──────────────────────────────────
     doc.setDrawColor(226, 232, 240)

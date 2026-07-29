@@ -236,19 +236,7 @@ function projectInformationSection(
   return {
     key: "projectInformation",
     title: labels.projectInformation,
-    table: {
-      headers: [labels.field, labels.value],
-      rows: [
-        [labels.project, data.project.name],
-        [labels.projectReference, data.project.code || "—"],
-        [labels.stage, content.stageName || data.stage.name],
-        [labels.term, content.termName || data.term.name],
-        [labels.reportNumber, data.response.reportNumber],
-        [labels.visitNumber, String(data.response.visitNumber)],
-        [labels.reportDate, data.response.createdAt],
-        [labels.reportStatus, statusLabel(data.response.status as any, language)],
-      ],
-    },
+    html: "", // Redundant; top 8 cards already contain this information
   }
 }
 
