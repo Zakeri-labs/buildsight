@@ -284,7 +284,7 @@ export function InspectionReportForm({
 
   const evidenceImages = existingAttachments.filter((item) => item.attachmentKind === "evidence_image")
   const documentAttachments = existingAttachments.filter((item) => item.attachmentKind === "document")
-  const isLocked = status === "submitted" || status === "under_review" || status === "approved" || status === "completed"
+  const isLocked = status === "approved" || status === "completed"
 
   const updateSection = useCallback((key: ReportSectionKey, value: string) => {
     setContent((current) => ({ ...current, [key]: value }))
@@ -496,21 +496,24 @@ export function InspectionReportForm({
   }
 
   const decide = async (decision: "approved" | "rejected") => {
-    if (!responseId) return
     setError(null)
     setSuccess(null)
     setBusy(decision === "approved" ? "approve" : "reject")
-    const result = await decideTermResponseAction({ projectId: project.id, responseId, decision, comments: reviewComments })
-    if (!result.ok) {
-      setError(result.error)
+    try {
+      const id = responseId ?? await ensureResponse("draft")
+      await uploadFiles(id, pendingImages, "evidence_image")
+      await uploadFiles(id, pendingDocuments, "document")
+      const result = await decideTermResponseAction({ projectId: project.id, responseId: id, decision, comments: reviewComments })
+      if (!result.ok) throw new Error(result.error)
+      setStatus(decision)
+      setReviewComments("")
+      setSuccess(decision === "approved" ? (locale === "ar" ? "تم اعتماد التقرير بنجاح." : "Report approved successfully.") : (locale === "ar" ? "تم رفض التقرير مع ملاحظات." : "Report rejected with comments."))
+      router.refresh()
+    } catch (decideError) {
+      setError(decideError instanceof Error ? decideError.message : "Unable to record review decision.")
+    } finally {
       setBusy(null)
-      return
     }
-    setStatus(decision)
-    setReviewComments("")
-    setSuccess(decision === "approved" ? "Report approved." : "Report rejected with comments.")
-    setBusy(null)
-    router.refresh()
   }
 
   return (
@@ -643,7 +646,32 @@ export function InspectionReportForm({
 
       {!isLocked ? (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur md:start-64 md:px-8">
-          <div className="mx-auto flex max-w-7xl flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <div className="mx-auto flex max-w-7xl flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+            {canReview ? (
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  disabled={busy !== null}
+                  className="border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+                  onClick={() => void decide("rejected")}
+                >
+                  {busy === "reject" ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
+                  {locale === "ar" ? "رفض التقرير" : "Reject Report"}
+                </Button>
+                <Button
+                  type="button"
+                  size="lg"
+                  disabled={busy !== null}
+                  className="bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600"
+                  onClick={() => void decide("approved")}
+                >
+                  {busy === "approve" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                  {locale === "ar" ? "اعتماد التقرير" : "Approve Report"}
+                </Button>
+              </div>
+            ) : null}
             <Button variant="outline" size="lg" disabled={busy !== null} onClick={() => void save("draft")}>{busy === "draft" ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}{copy.saveDraft}</Button>
             <Button variant="outline" size="lg" disabled={busy !== null} onClick={() => void save("progress")}>{busy === "progress" ? <Loader2 className="size-4 animate-spin" /> : <ClipboardCheck className="size-4" />}{copy.saveProgress}</Button>
             <Button size="lg" disabled={busy !== null} onClick={() => void save("submit")}>{busy === "submit" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}{copy.submit}</Button>

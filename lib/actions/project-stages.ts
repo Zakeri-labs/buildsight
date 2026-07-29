@@ -86,9 +86,9 @@ export async function saveTermResponseAction(input: {
       .maybeSingle()
     if (existingError) throw existingError
 
-    const lockedStatuses = new Set(["submitted", "under_review", "approved", "completed"])
+    const lockedStatuses = new Set(["approved", "completed"])
     if (existing && lockedStatuses.has(existing.status)) {
-      return { ok: false, error: "This report is locked while it is under review or completed." }
+      return { ok: false, error: "This report is finalized and cannot be modified." }
     }
 
     const nextStatus = input.submit
@@ -184,8 +184,8 @@ export async function registerResponseAttachmentsAction(input: {
       .maybeSingle()
     if (responseError) throw responseError
     if (!response) return { ok: false, error: "Report response not found." }
-    if (["submitted", "under_review", "approved", "completed"].includes(response.status)) {
-      return { ok: false, error: "Attachments cannot be changed while this report is under review or completed." }
+    if (["approved", "completed"].includes(response.status)) {
+      return { ok: false, error: "Attachments cannot be changed while this report is finalized." }
     }
 
     const prefix = `${input.projectId}/${input.responseId}/`
@@ -247,8 +247,8 @@ export async function deleteResponseAttachmentAction(input: {
       .maybeSingle()
     if (responseError) throw responseError
     if (!response) return { ok: false, error: "Report response not found." }
-    if (["submitted", "under_review", "approved", "completed"].includes(response.status)) {
-      return { ok: false, error: "Attachments cannot be changed while this report is under review or completed." }
+    if (["approved", "completed"].includes(response.status)) {
+      return { ok: false, error: "Attachments cannot be changed while this report is finalized." }
     }
     if (attachment.uploaded_by !== actorId) await assertProjectAdmin(input.projectId)
     const { error } = await admin.from("response_attachments").delete().eq("id", input.attachmentId)
@@ -282,8 +282,8 @@ export async function decideTermResponseAction(input: {
       .maybeSingle()
     if (lookupError) throw lookupError
     if (!response) return { ok: false, error: "Report response not found." }
-    if (response.status !== "submitted" && response.status !== "under_review") {
-      return { ok: false, error: "Only submitted reports can be approved or rejected." }
+    if (response.status === "approved" || response.status === "completed") {
+      return { ok: false, error: "This report has already been finalized." }
     }
 
     const { error: decisionError } = await admin.rpc("decide_project_stage_response", {
