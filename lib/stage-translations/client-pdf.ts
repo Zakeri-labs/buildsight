@@ -28,9 +28,9 @@ const AUTOTABLE_SCRIPT_URLS = [
   "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js",
   "https://unpkg.com/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js",
 ]
-const ARABIC_FONT_FILENAME = "Vazirmatn-Regular.ttf"
-const ARABIC_FONT_FAMILY = "Vazirmatn"
-const ARABIC_FONT_URL = "/fonts/Vazirmatn-Regular.ttf"
+const ARABIC_FONT_FILENAME = "NotoNaskhArabic-Regular.ttf"
+const ARABIC_FONT_FAMILY = "NotoNaskhArabic"
+const ARABIC_FONT_URL = "/api/stage-translations/font"
 
 const LATIN_FONT_FILENAME = "calibri.ttf"
 const LATIN_FONT_FAMILY = "calibri"
@@ -89,7 +89,6 @@ type Flow = {
 }
 
 let pdfToolsPromise: Promise<JsPdfConstructor> | null = null
-let arabicFontPromise: Promise<string> | null = null
 const imageCache = new Map<string, Promise<LoadedImage | null>>()
 
 function loadScript(id: string, src: string) {
@@ -702,24 +701,34 @@ function drawFirstPageHeader(flow: Flow) {
   }
 
   // ── CENTER COLUMN: Company Name (EN + AR) ────────────────────────────────
-  const nameEn = org.nameEn || "BONYAN Engineering Consultancy"
-  const nameAr = org.nameAr || "بنيان للاستشارات الهندسية"
+  const nameEn = org.nameEn || "BONYAN CONSTRUCTION FOR ENGINEERING CONSULTANCY"
+  const nameAr = org.nameAr || "بنيان للاستشارات الهندسية الإنشائية"
   const cx = col2X + col2W / 2
 
-  // English name – bold
-  setLanguage(doc, false, 10, true)
+  // English name – bold, Calibri
+  setLanguage(doc, false, 9.5, true)
   doc.setTextColor(15, 23, 42)
   doc.text(nameEn, cx, headerH / 2 - 1, { align: "center" })
 
-  // Arabic name – regular Arabic font, blue accent
+  // Arabic name – NotoNaskhArabic shaped correctly
   setLanguage(doc, true, 10, false)
   doc.setTextColor(30, 58, 138)
   writePdfText(doc, nameAr, cx, headerH / 2 + 6, { align: "center" }, true)
 
   // ── RIGHT COLUMN: Date / Document No. / Page ─────────────────────────────
-  // Labels on the left of column, values right-aligned
+  // Format date from ISO string to readable format
+  const rawDate = template.createdAt || ""
+  const formattedDate = (() => {
+    try {
+      if (!rawDate) return "—"
+      const d = new Date(rawDate)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+    } catch {
+      return rawDate.split("T")[0] || "—"
+    }
+  })()
   const infoRows = [
-    { label: rtl ? "التاريخ:" : "Date:",    value: template.createdAt || "—" },
+    { label: rtl ? "التاريخ:" : "Date:",    value: formattedDate },
     { label: rtl ? "رقم المستند:" : "Doc No.:", value: template.reportNumber || "—" },
     { label: rtl ? "الصفحة:" : "Page:",    value: "1" },
   ]

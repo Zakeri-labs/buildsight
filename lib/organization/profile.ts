@@ -12,8 +12,8 @@ export type OrganizationProfile = {
 }
 
 export const DEFAULT_ORG_PROFILE: OrganizationProfile = {
-  nameEn: "Bonyan Engineering Consultancy",
-  nameAr: "بنيان للاستشارات الهندسية",
+  nameEn: "BONYAN CONSTRUCTION FOR ENGINEERING CONSULTANCY",
+  nameAr: "بنيان للاستشارات الهندسية الإنشائية",
   crNumber: "1241340",
   poBox: "1015",
   postalCode: "132",
