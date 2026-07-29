@@ -539,76 +539,134 @@ function textLines(doc: JsPdfDocument, text: string, width: number) {
   return Array.isArray(split) ? split : [String(split)]
 }
 
-function drawContinuationHeader(flow: Flow) {
-  const { doc, template, pageWidth, logoImage } = flow
+function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
+  const { template, pageWidth, logoImage } = flow
   const org = getOrganizationProfile()
   const margin = PAGE.margin
-  const headerH = 18   // compact height for continuation pages
 
-  // White background with thin navy top line
+  // White background, thin navy top
   doc.setFillColor(255, 255, 255)
   doc.rect(0, 0, pageWidth, headerH, "F")
   doc.setFillColor(30, 58, 138)
-  doc.rect(0, 0, pageWidth, 1, "F")
+  doc.rect(0, 0, pageWidth, 1.5, "F")
 
-  // ── 3-COLUMN LAYOUT ──────────────────────────────────────────────────────
+  // ── 3-COLUMN LAYOUT: [Logo] | [Company Name] | [Date / Doc No / Page] ────
   const totalW = pageWidth - margin * 2  // 182 mm
-  const col1W = 40   // Left  – Logo
-  const col3W = 52   // Right – Date / Doc / Page
-  const col2W = totalW - col1W - col3W  // Center – Company name
+  const col1W = 42   // Left  – Logo
+  const col3W = 55   // Right – Date / Doc / Page (3 rows)
+  const col2W = totalW - col1W - col3W   // Center – Company names (85 mm)
   const col1X = margin
   const col2X = margin + col1W
   const col3X = margin + col1W + col2W
 
-  // Subtle column dividers
+  // Column dividers spanning full header height
   doc.setDrawColor(226, 232, 240)
-  doc.setLineWidth(0.2)
+  doc.setLineWidth(0.25)
   doc.line(col2X, 2, col2X, headerH - 1)
   doc.line(col3X, 2, col3X, headerH - 1)
+  doc.setLineWidth(0.2)
 
-  // LEFT – Logo
+  // ── LEFT COLUMN: Logo ────────────────────────────────────────────────────
   if (logoImage) {
-    const maxH = headerH - 4
-    const maxW = col1W - 4
+    const maxH = headerH - 5
+    const maxW = col1W - 5
     const ratio = Math.min(maxW / logoImage.width, maxH / logoImage.height)
     const w = logoImage.width * ratio
     const h = logoImage.height * ratio
-    doc.addImage(logoImage.dataUrl, "PNG", col1X + (col1W - w) / 2, 1 + (headerH - 1 - h) / 2, w, h, undefined, "FAST")
+    doc.addImage(
+      logoImage.dataUrl, "PNG",
+      col1X + (col1W - w) / 2,
+      1.5 + (headerH - 1.5 - h) / 2,
+      w, h, undefined, "FAST",
+    )
   } else {
-    setLanguage(doc, false, 8, true)
+    setLanguage(doc, false, 10, true)
     doc.setTextColor(30, 58, 138)
-    doc.text("BONYAN", col1X + col1W / 2, headerH / 2 + 1.5, { align: "center" })
+    doc.text("BONYAN", col1X + col1W / 2, headerH / 2 + 2, { align: "center" })
   }
 
-  // CENTER – Company name (English only for slim header)
-  const nameEn = org.nameEn || "BONYAN Engineering Consultancy"
-  setLanguage(doc, false, 8.5, true)
-  doc.setTextColor(15, 23, 42)
-  doc.text(nameEn, col2X + col2W / 2, headerH / 2 + 1.5, { align: "center" })
+  // ── CENTER COLUMN: Company Name (EN + AR) with auto-scaling ──────────────
+  const nameEn = org.nameEn || "BONYAN CONSTRUCTION FOR ENGINEERING CONSULTANCY"
+  const nameAr = org.nameAr || "بنيان الإنشائية للاستشارات الهندسية"
+  const cx = col2X + col2W / 2
 
-  // RIGHT – Report name + current page
+  // Auto-scale English name if needed so it never overflows col2W
+  let enSize = 9
+  setLanguage(doc, false, enSize, true)
+  while (doc.getTextWidth(nameEn) > col2W - 4 && enSize > 5) {
+    enSize -= 0.3
+    setLanguage(doc, false, enSize, true)
+  }
+  doc.setTextColor(15, 23, 42)
+  doc.text(nameEn, cx, headerH / 2 - 1.5, { align: "center" })
+
+  // Auto-scale Arabic name if needed
+  let arSize = 9.5
+  setLanguage(doc, true, arSize, false)
+  const shapedAr = String(shapeArabicText(doc, nameAr))
+  while (doc.getTextWidth(shapedAr) > col2W - 4 && arSize > 5) {
+    arSize -= 0.3
+    setLanguage(doc, true, arSize, false)
+  }
+  doc.setTextColor(30, 58, 138)
+  writePdfText(doc, nameAr, cx, headerH / 2 + 5.5, { align: "center" }, true)
+
+  // ── RIGHT COLUMN: Date / Document No. / Page ─────────────────────────────
+  const rawDate = template.createdAt || ""
+  const formattedDate = (() => {
+    try {
+      if (!rawDate) return "—"
+      const d = new Date(rawDate)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+    } catch {
+      return rawDate.split("T")[0] || "—"
+    }
+  })()
+
+  const rtl = flow.rtl
   const infoRows = [
-    { label: "Report:", value: template.termName || template.title },
-    { label: "Page:",   value: String(flow.pageNumber) },
+    { label: rtl ? "التاريخ:" : "Date:",    value: formattedDate },
+    { label: rtl ? "رقم المستند:" : "Doc No.:", value: template.reportNumber || "—" },
+    { label: rtl ? "الصفحة:" : "Page:",    value: String(flow.pageNumber) },
   ]
-  const labelX = col3X + 2
-  const valueX  = col3X + col3W - 2
-  const rowH   = (headerH - 2) / 2
+  const labelX  = col3X + 2.5
+  const valueX  = col3X + col3W - 2.5
+  const rowH    = (headerH - 2) / 3
+
   infoRows.forEach(({ label, value }, i) => {
-    const y = 2 + i * rowH + rowH * 0.7
-    setLanguage(doc, false, 6, false)
+    const y = 2 + i * rowH + rowH * 0.65
+
+    // Label
+    const labelIsArabic = containsArabic(label)
+    setLanguage(doc, labelIsArabic, 6.5, false)
     doc.setTextColor(100, 116, 139)
-    doc.text(label, labelX, y)
-    setLanguage(doc, false, 7, false)
+    if (labelIsArabic) {
+      writePdfText(doc, label, valueX, y, { align: "right" }, true)
+    } else {
+      doc.text(label, labelX, y)
+    }
+
+    // Value
+    const valIsArabic = containsArabic(value)
+    setLanguage(doc, valIsArabic, 8, false)
     doc.setTextColor(15, 23, 42)
-    doc.text(value, valueX, y, { align: "right" })
+    if (valIsArabic) {
+      writePdfText(doc, value, valueX, y + 0.5, { align: "right" }, true)
+    } else {
+      doc.text(value, labelIsArabic ? labelX : valueX, y + 0.5, { align: labelIsArabic ? "left" : "right" })
+    }
   })
 
   // Bottom separator
   doc.setDrawColor(226, 232, 240)
-  doc.setLineWidth(0.3)
+  doc.setLineWidth(0.4)
   doc.line(0, headerH, pageWidth, headerH)
   doc.setLineWidth(0.2)
+}
+
+function drawContinuationHeader(flow: Flow) {
+  const headerH = 26
+  drawHeaderColumns(flow.doc, flow, headerH)
   flow.y = headerH + 4
 }
 
@@ -654,117 +712,11 @@ function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: st
 }
 
 function drawFirstPageHeader(flow: Flow) {
-  const { doc, template, pageWidth, rtl, logoImage } = flow
-  const org = getOrganizationProfile()
+  const { doc, template, pageWidth, rtl } = flow
   const margin = PAGE.margin
-  const headerH = 26   // full header height
+  const headerH = 26
 
-  // White background, thin navy top
-  doc.setFillColor(255, 255, 255)
-  doc.rect(0, 0, pageWidth, headerH, "F")
-  doc.setFillColor(30, 58, 138)
-  doc.rect(0, 0, pageWidth, 1.5, "F")
-
-  // ── 3-COLUMN LAYOUT: [Logo] | [Company Name] | [Date / Doc No / Page] ────
-  const totalW = pageWidth - margin * 2  // 182 mm
-  const col1W = 48   // Left  – Logo
-  const col3W = 56   // Right – Date / Doc / Page (3 rows)
-  const col2W = totalW - col1W - col3W   // Center – Company names
-  const col1X = margin
-  const col2X = margin + col1W
-  const col3X = margin + col1W + col2W
-
-  // Subtle column dividers spanning full header height
-  doc.setDrawColor(226, 232, 240)
-  doc.setLineWidth(0.25)
-  doc.line(col2X, 2, col2X, headerH - 1)
-  doc.line(col3X, 2, col3X, headerH - 1)
-  doc.setLineWidth(0.2)
-
-  // ── LEFT COLUMN: Logo ────────────────────────────────────────────────────
-  if (logoImage) {
-    const maxH = headerH - 6
-    const maxW = col1W - 6
-    const ratio = Math.min(maxW / logoImage.width, maxH / logoImage.height)
-    const w = logoImage.width * ratio
-    const h = logoImage.height * ratio
-    doc.addImage(
-      logoImage.dataUrl, "PNG",
-      col1X + (col1W - w) / 2,
-      1.5 + (headerH - 1.5 - h) / 2,
-      w, h, undefined, "FAST",
-    )
-  } else {
-    setLanguage(doc, false, 10, true)
-    doc.setTextColor(30, 58, 138)
-    doc.text("BONYAN", col1X + col1W / 2, headerH / 2 + 2, { align: "center" })
-  }
-
-  // ── CENTER COLUMN: Company Name (EN + AR) ────────────────────────────────
-  const nameEn = org.nameEn || "BONYAN CONSTRUCTION FOR ENGINEERING CONSULTANCY"
-  const nameAr = org.nameAr || "بنيان للاستشارات الهندسية الإنشائية"
-  const cx = col2X + col2W / 2
-
-  // English name – bold, Calibri
-  setLanguage(doc, false, 9.5, true)
-  doc.setTextColor(15, 23, 42)
-  doc.text(nameEn, cx, headerH / 2 - 1, { align: "center" })
-
-  // Arabic name – NotoNaskhArabic shaped correctly
-  setLanguage(doc, true, 10, false)
-  doc.setTextColor(30, 58, 138)
-  writePdfText(doc, nameAr, cx, headerH / 2 + 6, { align: "center" }, true)
-
-  // ── RIGHT COLUMN: Date / Document No. / Page ─────────────────────────────
-  // Format date from ISO string to readable format
-  const rawDate = template.createdAt || ""
-  const formattedDate = (() => {
-    try {
-      if (!rawDate) return "—"
-      const d = new Date(rawDate)
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-    } catch {
-      return rawDate.split("T")[0] || "—"
-    }
-  })()
-  const infoRows = [
-    { label: rtl ? "التاريخ:" : "Date:",    value: formattedDate },
-    { label: rtl ? "رقم المستند:" : "Doc No.:", value: template.reportNumber || "—" },
-    { label: rtl ? "الصفحة:" : "Page:",    value: "1" },
-  ]
-  const labelX  = col3X + 2.5
-  const valueX  = col3X + col3W - 2.5
-  const rowH    = (headerH - 2) / 3
-
-  infoRows.forEach(({ label, value }, i) => {
-    const y = 2 + i * rowH + rowH * 0.65
-
-    // Label
-    const labelIsArabic = containsArabic(label)
-    setLanguage(doc, labelIsArabic, 6.5, false)
-    doc.setTextColor(100, 116, 139)
-    if (labelIsArabic) {
-      writePdfText(doc, label, valueX, y, { align: "right" }, true)
-    } else {
-      doc.text(label, labelX, y)
-    }
-
-    // Value
-    const valIsArabic = containsArabic(value)
-    setLanguage(doc, valIsArabic, 8, false)
-    doc.setTextColor(15, 23, 42)
-    if (valIsArabic) {
-      writePdfText(doc, value, valueX, y + 0.5, { align: "right" }, true)
-    } else {
-      doc.text(value, labelIsArabic ? labelX : valueX, y + 0.5, { align: labelIsArabic ? "left" : "right" })
-    }
-  })
-
-  // ── BOTTOM SEPARATOR ─────────────────────────────────────────────────────
-  doc.setDrawColor(226, 232, 240)
-  doc.setLineWidth(0.4)
-  doc.line(0, headerH, pageWidth, headerH)
-  doc.setLineWidth(0.2)
+  drawHeaderColumns(doc, flow, headerH)
 
   // ── TITLE BLOCK (below the 3-column header) ───────────────────────────────
   const reportMainTitle = template.termName || template.title
@@ -1402,6 +1354,29 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
 
   for (let page = 1; page <= pages; page += 1) {
     doc.setPage(page)
+
+    // ── Update Header Page Number (Right Column, Row 3) ─────────────────
+    const headerH = 26
+    const totalW = width - margin * 2
+    const col1W = 42
+    const col3W = 55
+    const col2W = totalW - col1W - col3W
+    const col3X = margin + col1W + col2W
+    const valueX = col3X + col3W - 2.5
+    const rowH = (headerH - 2) / 3
+    const pageY = 2 + 2 * rowH + rowH * 0.65
+
+    // Blank out the old page number area (white fill)
+    doc.setFillColor(255, 255, 255)
+    doc.rect(valueX - 24, pageY - 3.5, 24, 4.5, "F")
+
+    // Print exact page string "1 / 7", "2 / 7", etc.
+    const pageStr = `${page} / ${pages}`
+    setLanguage(doc, false, 8, false)
+    doc.setTextColor(15, 23, 42)
+    doc.text(pageStr, valueX, pageY + 0.5, { align: "right" })
+
+    // ── Footer Lines & Contact Details ──────────────────────────────────
     doc.setDrawColor(226, 232, 240)
     doc.line(margin, height - 12, width - margin, height - 12)
 
@@ -1440,10 +1415,10 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
       rtl,
     )
 
-    // Page Number
+    // Footer Page Number
     setLanguage(doc, false, 7, false)
     doc.setTextColor(148, 163, 184)
-    doc.text(`${page} / ${pages}`, width / 2, height - 3, { align: "center" })
+    doc.text(pageStr, width / 2, height - 3, { align: "center" })
   }
   if (rtl) setLanguage(doc, true, 8, false)
 }
