@@ -518,52 +518,76 @@ function textLines(doc: JsPdfDocument, text: string, width: number) {
 }
 
 function drawContinuationHeader(flow: Flow) {
-  const { doc, template, pageWidth, rtl, logoImage } = flow
+  const { doc, template, pageWidth, logoImage } = flow
+  const org = getOrganizationProfile()
+  const margin = PAGE.margin
+  const headerH = 18   // compact height for continuation pages
 
-  // Thin navy top bar
-  doc.setFillColor(30, 58, 138)
-  doc.rect(0, 0, pageWidth, 1.5, "F")
-
-  // White background
+  // White background with thin navy top line
   doc.setFillColor(255, 255, 255)
-  doc.rect(0, 1.5, pageWidth, 10.5, "F")
+  doc.rect(0, 0, pageWidth, headerH, "F")
+  doc.setFillColor(30, 58, 138)
+  doc.rect(0, 0, pageWidth, 1, "F")
 
+  // ── 3-COLUMN LAYOUT ──────────────────────────────────────────────────────
+  const totalW = pageWidth - margin * 2  // 182 mm
+  const col1W = 40   // Left  – Logo
+  const col3W = 52   // Right – Date / Doc / Page
+  const col2W = totalW - col1W - col3W  // Center – Company name
+  const col1X = margin
+  const col2X = margin + col1W
+  const col3X = margin + col1W + col2W
+
+  // Subtle column dividers
+  doc.setDrawColor(226, 232, 240)
+  doc.setLineWidth(0.2)
+  doc.line(col2X, 2, col2X, headerH - 1)
+  doc.line(col3X, 2, col3X, headerH - 1)
+
+  // LEFT – Logo
   if (logoImage) {
-    const maxHeight = 5.5
-    const maxW = 25
-    const ratio = Math.min(maxW / logoImage.width, maxHeight / logoImage.height)
+    const maxH = headerH - 4
+    const maxW = col1W - 4
+    const ratio = Math.min(maxW / logoImage.width, maxH / logoImage.height)
     const w = logoImage.width * ratio
     const h = logoImage.height * ratio
-    const logoX = rtl ? pageWidth - PAGE.margin - w : PAGE.margin
-    doc.addImage(logoImage.dataUrl, "PNG", logoX, 3.5, w, h, undefined, "FAST")
+    doc.addImage(logoImage.dataUrl, "PNG", col1X + (col1W - w) / 2, 1 + (headerH - 1 - h) / 2, w, h, undefined, "FAST")
   } else {
     setLanguage(doc, false, 8, true)
     doc.setTextColor(30, 58, 138)
-    doc.text(
-      "BONYAN",
-      rtl ? pageWidth - PAGE.margin : PAGE.margin,
-      9,
-      { align: rtl ? "right" : "left" },
-    )
+    doc.text("BONYAN", col1X + col1W / 2, headerH / 2 + 1.5, { align: "center" })
   }
 
-  setLanguage(doc, rtl, 7.5, false)
-  doc.setTextColor(71, 85, 105)
-  writePdfText(
-    doc,
-    `${template.termName || template.title} · ${template.reportNumber}`,
-    rtl ? PAGE.margin : pageWidth - PAGE.margin,
-    9,
-    { align: rtl ? "left" : "right" },
-    rtl,
-  )
+  // CENTER – Company name (English only for slim header)
+  const nameEn = org.nameEn || "BONYAN Engineering Consultancy"
+  setLanguage(doc, false, 8.5, true)
+  doc.setTextColor(15, 23, 42)
+  doc.text(nameEn, col2X + col2W / 2, headerH / 2 + 1.5, { align: "center" })
 
-  // Thin separator line
+  // RIGHT – Report name + current page
+  const infoRows = [
+    { label: "Report:", value: template.termName || template.title },
+    { label: "Page:",   value: String(flow.pageNumber) },
+  ]
+  const labelX = col3X + 2
+  const valueX  = col3X + col3W - 2
+  const rowH   = (headerH - 2) / 2
+  infoRows.forEach(({ label, value }, i) => {
+    const y = 2 + i * rowH + rowH * 0.7
+    setLanguage(doc, false, 6, false)
+    doc.setTextColor(100, 116, 139)
+    doc.text(label, labelX, y)
+    setLanguage(doc, false, 7, false)
+    doc.setTextColor(15, 23, 42)
+    doc.text(value, valueX, y, { align: "right" })
+  })
+
+  // Bottom separator
   doc.setDrawColor(226, 232, 240)
   doc.setLineWidth(0.3)
-  doc.line(0, 12, pageWidth, 12)
+  doc.line(0, headerH, pageWidth, headerH)
   doc.setLineWidth(0.2)
-  flow.y = 17
+  flow.y = headerH + 4
 }
 
 function addFlowPage(flow: Flow) {
@@ -609,87 +633,137 @@ function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: st
 
 function drawFirstPageHeader(flow: Flow) {
   const { doc, template, pageWidth, rtl, logoImage } = flow
+  const org = getOrganizationProfile()
+  const margin = PAGE.margin
+  const headerH = 26   // full header height
 
-  // ── CLEAN WHITE HEADER (matching web UI) ──────────────────────────────────
-  // Thin navy top accent line
+  // White background, thin navy top
+  doc.setFillColor(255, 255, 255)
+  doc.rect(0, 0, pageWidth, headerH, "F")
   doc.setFillColor(30, 58, 138)
   doc.rect(0, 0, pageWidth, 1.5, "F")
 
-  // White header area
-  doc.setFillColor(255, 255, 255)
-  doc.rect(0, 1.5, pageWidth, 16, "F")
+  // ── 3-COLUMN LAYOUT: [Logo] | [Company Name] | [Date / Doc No / Page] ────
+  const totalW = pageWidth - margin * 2  // 182 mm
+  const col1W = 48   // Left  – Logo
+  const col3W = 56   // Right – Date / Doc / Page (3 rows)
+  const col2W = totalW - col1W - col3W   // Center – Company names
+  const col1X = margin
+  const col2X = margin + col1W
+  const col3X = margin + col1W + col2W
 
-  // Logo
-  if (logoImage) {
-    const maxHeight = 10
-    const maxW = 44
-    const ratio = Math.min(maxW / logoImage.width, maxHeight / logoImage.height)
-    const w = logoImage.width * ratio
-    const h = logoImage.height * ratio
-    const logoX = rtl ? pageWidth - PAGE.margin - w : PAGE.margin
-    doc.addImage(logoImage.dataUrl, "PNG", logoX, 5, w, h, undefined, "FAST")
-  } else {
-    setLanguage(doc, false, 11, true)
-    doc.setTextColor(30, 58, 138)
-    doc.text(
-      "BONYAN",
-      rtl ? pageWidth - PAGE.margin : PAGE.margin,
-      12,
-      { align: rtl ? "right" : "left" },
-    )
-  }
-
-  // Platform label (opposite side, muted)
-  setLanguage(doc, rtl, 7.5, false)
-  doc.setTextColor(100, 116, 139)
-  writePdfText(
-    doc,
-    rtl ? "منصة إشراف الإنشاءات" : "CONSTRUCTION SUPERVISION PLATFORM",
-    rtl ? PAGE.margin : pageWidth - PAGE.margin,
-    11,
-    { align: rtl ? "left" : "right" },
-    rtl,
-  )
-
-  // Thin separator below header logo zone
+  // Subtle column dividers spanning full header height
   doc.setDrawColor(226, 232, 240)
-  doc.setLineWidth(0.4)
-  doc.line(PAGE.margin, 17.5, pageWidth - PAGE.margin, 17.5)
+  doc.setLineWidth(0.25)
+  doc.line(col2X, 2, col2X, headerH - 1)
+  doc.line(col3X, 2, col3X, headerH - 1)
   doc.setLineWidth(0.2)
 
-  // ── TITLE BLOCK ──────────────────────────────────────────────────────────
+  // ── LEFT COLUMN: Logo ────────────────────────────────────────────────────
+  if (logoImage) {
+    const maxH = headerH - 6
+    const maxW = col1W - 6
+    const ratio = Math.min(maxW / logoImage.width, maxH / logoImage.height)
+    const w = logoImage.width * ratio
+    const h = logoImage.height * ratio
+    doc.addImage(
+      logoImage.dataUrl, "PNG",
+      col1X + (col1W - w) / 2,
+      1.5 + (headerH - 1.5 - h) / 2,
+      w, h, undefined, "FAST",
+    )
+  } else {
+    setLanguage(doc, false, 10, true)
+    doc.setTextColor(30, 58, 138)
+    doc.text("BONYAN", col1X + col1W / 2, headerH / 2 + 2, { align: "center" })
+  }
+
+  // ── CENTER COLUMN: Company Name (EN + AR) ────────────────────────────────
+  const nameEn = org.nameEn || "BONYAN Engineering Consultancy"
+  const nameAr = org.nameAr || "بنيان للاستشارات الهندسية"
+  const cx = col2X + col2W / 2
+
+  // English name – bold
+  setLanguage(doc, false, 10, true)
+  doc.setTextColor(15, 23, 42)
+  doc.text(nameEn, cx, headerH / 2 - 1, { align: "center" })
+
+  // Arabic name – regular Arabic font, blue accent
+  setLanguage(doc, true, 10, false)
+  doc.setTextColor(30, 58, 138)
+  writePdfText(doc, nameAr, cx, headerH / 2 + 6, { align: "center" }, true)
+
+  // ── RIGHT COLUMN: Date / Document No. / Page ─────────────────────────────
+  // Labels on the left of column, values right-aligned
+  const infoRows = [
+    { label: rtl ? "التاريخ:" : "Date:",    value: template.createdAt || "—" },
+    { label: rtl ? "رقم المستند:" : "Doc No.:", value: template.reportNumber || "—" },
+    { label: rtl ? "الصفحة:" : "Page:",    value: "1" },
+  ]
+  const labelX  = col3X + 2.5
+  const valueX  = col3X + col3W - 2.5
+  const rowH    = (headerH - 2) / 3
+
+  infoRows.forEach(({ label, value }, i) => {
+    const y = 2 + i * rowH + rowH * 0.65
+
+    // Label
+    const labelIsArabic = containsArabic(label)
+    setLanguage(doc, labelIsArabic, 6.5, false)
+    doc.setTextColor(100, 116, 139)
+    if (labelIsArabic) {
+      writePdfText(doc, label, valueX, y, { align: "right" }, true)
+    } else {
+      doc.text(label, labelX, y)
+    }
+
+    // Value
+    const valIsArabic = containsArabic(value)
+    setLanguage(doc, valIsArabic, 8, false)
+    doc.setTextColor(15, 23, 42)
+    if (valIsArabic) {
+      writePdfText(doc, value, valueX, y + 0.5, { align: "right" }, true)
+    } else {
+      doc.text(value, labelIsArabic ? labelX : valueX, y + 0.5, { align: labelIsArabic ? "left" : "right" })
+    }
+  })
+
+  // ── BOTTOM SEPARATOR ─────────────────────────────────────────────────────
+  doc.setDrawColor(226, 232, 240)
+  doc.setLineWidth(0.4)
+  doc.line(0, headerH, pageWidth, headerH)
+  doc.setLineWidth(0.2)
+
+  // ── TITLE BLOCK (below the 3-column header) ───────────────────────────────
   const reportMainTitle = template.termName || template.title
   setLanguage(doc, rtl, 16, true)
   doc.setTextColor(15, 23, 42)
   writePdfText(
-    doc,
-    reportMainTitle,
-    rtl ? pageWidth - PAGE.margin : PAGE.margin,
-    26,
+    doc, reportMainTitle,
+    rtl ? pageWidth - margin : margin,
+    headerH + 9,
     { align: rtl ? "right" : "left" },
     rtl,
   )
 
-  // Subtitle: Project Name · Report Number (muted, right side for LTR)
   setLanguage(doc, rtl, 8.5, false)
   doc.setTextColor(100, 116, 139)
-  const subtitle = `${template.projectName}  ·  ${template.reportNumber}`
   writePdfText(
     doc,
-    subtitle,
-    rtl ? PAGE.margin : pageWidth - PAGE.margin,
-    26,
+    `${template.projectName}  ·  ${template.reportNumber}`,
+    rtl ? margin : pageWidth - margin,
+    headerH + 9,
     { align: rtl ? "left" : "right" },
     rtl,
   )
 
-  // Subtle rule below title
+  // Thin rule below title
   doc.setDrawColor(226, 232, 240)
   doc.setLineWidth(0.3)
-  doc.line(PAGE.margin, 30, pageWidth - PAGE.margin, 30)
+  doc.line(margin, headerH + 13, pageWidth - margin, headerH + 13)
   doc.setLineWidth(0.2)
 
-  // ── METADATA GRID ────────────────────────────────────────────────────────
+  // ── METADATA GRID (2 rows × 4 cells) ─────────────────────────────────────
   const labels = rtl
     ? ["المشروع", "مرجع المشروع", "المرحلة", "البند", "رقم المستند", "رقم الزيارة", "النوع", "الموضوع"]
     : ["Project", "Project Reference", "Stage", "Term", "Document Number", "Visit Number", "Type", "Subject"]
@@ -704,21 +778,22 @@ function drawFirstPageHeader(flow: Flow) {
     template.subject,
   ]
   const gap = 2
-  const cellWidth = (pageWidth - PAGE.margin * 2 - gap * 3) / 4
+  const cellWidth = (pageWidth - margin * 2 - gap * 3) / 4
+  const gridTop = headerH + 15
   for (let index = 0; index < values.length; index += 1) {
     const row = Math.floor(index / 4)
     const logicalColumn = index % 4
     const physicalColumn = rtl ? 3 - logicalColumn : logicalColumn
     drawMetaCell(
       flow,
-      PAGE.margin + physicalColumn * (cellWidth + gap),
-      33 + row * 15.5,
+      margin + physicalColumn * (cellWidth + gap),
+      gridTop + row * 15.5,
       cellWidth,
       labels[index],
       values[index],
     )
   }
-  flow.y = 67
+  flow.y = gridTop + 2 * 15.5 + 4  // after both meta rows + spacing
 }
 
 function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>) {
