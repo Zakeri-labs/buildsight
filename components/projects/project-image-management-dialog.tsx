@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { ImageIcon, ImagePlus, Loader2, Trash2, Upload } from "lucide-react"
+import { Camera, ImageIcon, ImagePlus, Loader2, Trash2, Upload } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -26,11 +26,13 @@ export function ProjectImageManagementDialog({
   projectName,
   currentImage,
   onSaved,
+  triggerVariant = "default",
 }: {
   projectId: string
   projectName: string
   currentImage: string | null
   onSaved: (imageUrl: string | null) => void
+  triggerVariant?: "default" | "overlay"
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [open, setOpen] = useState(false)
@@ -154,10 +156,23 @@ export function ProjectImageManagementDialog({
     >
       <DialogTrigger
         render={
-          <Button type="button" size="sm" variant="secondary" className="shadow-sm">
-            <ImagePlus className="size-4" data-icon="inline-start" />
-            {storedImage ? "Edit cover" : "Add cover"}
-          </Button>
+          triggerVariant === "overlay" ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="secondary"
+              className="rounded-full border border-white/70 bg-background/90 text-foreground shadow-md backdrop-blur-sm hover:bg-background"
+              aria-label={storedImage ? "Edit project cover image" : "Add project cover image"}
+              title={storedImage ? "Edit project cover image" : "Add project cover image"}
+            >
+              <Camera className="size-4" />
+            </Button>
+          ) : (
+            <Button type="button" size="sm" variant="secondary" className="shadow-sm">
+              <ImagePlus className="size-4" data-icon="inline-start" />
+              {storedImage ? "Edit cover" : "Add cover"}
+            </Button>
+          )
         }
       />
       <DialogContent className="sm:max-w-lg">

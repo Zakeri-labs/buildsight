@@ -27,6 +27,13 @@ import { ProjectLocationField } from "@/components/projects/project-location-fie
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -43,6 +50,12 @@ import {
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import type { ProjectLocationValue } from "@/lib/locations/types"
+import {
+  PROJECT_TYPES,
+  SUPERVISION_TYPES,
+  type ProjectTypeValue,
+  type SupervisionTypeValue,
+} from "@/lib/projects/project-options"
 import {
   deleteProject,
   getProjectDeletionImpact,
@@ -62,6 +75,9 @@ export interface ProjectRow {
   orgRole: OrgRole
   address: string
   projectType: ProjectType | "—"
+  projectTypeValue?: ProjectTypeValue | null
+  supervisionType?: SupervisionTypeValue | null
+  description?: string
   status: ProjectStatus
   startDate: string
   progress: number
@@ -740,8 +756,12 @@ function ProjectEditDialog({
   onClose: () => void
   onSaved: (project: ProjectRow) => void
 }) {
+  const isArabic = locale === "ar"
   const [name, setName] = useState(project.name)
   const [code, setCode] = useState(project.code === "—" ? "" : project.code)
+  const [projectType, setProjectType] = useState<ProjectTypeValue | "">(project.projectTypeValue ?? "")
+  const [supervisionType, setSupervisionType] = useState<SupervisionTypeValue | "">(project.supervisionType ?? "")
+  const [description, setDescription] = useState(project.description ?? "")
   const [location, setLocation] = useState<ProjectLocationValue>({
     address: project.address === "—" ? "" : project.address,
     latitude: project.latitude ?? null,
@@ -759,6 +779,9 @@ function ProjectEditDialog({
         projectId: project.id,
         name,
         code,
+        projectType: projectType || undefined,
+        supervisionType: supervisionType || undefined,
+        description,
         location: location.address,
         latitude: location.latitude,
         longitude: location.longitude,
@@ -767,10 +790,16 @@ function ProjectEditDialog({
         setError(result.error)
         return
       }
+
+      const projectTypeOption = PROJECT_TYPES.find((option) => option.value === projectType)
       onSaved({
         ...project,
         name: name.trim(),
         code: code.trim() || "—",
+        projectType: (projectTypeOption?.label ?? project.projectType) as ProjectType | "—",
+        projectTypeValue: projectType || project.projectTypeValue || null,
+        supervisionType: supervisionType || project.supervisionType || null,
+        description: description.trim(),
         address: location.address.trim() || "—",
         latitude: location.latitude,
         longitude: location.longitude,
@@ -780,13 +809,13 @@ function ProjectEditDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && !pending && onClose()}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-6xl" showCloseButton={!pending}>
+      <DialogContent className="max-h-[94vh] overflow-y-auto sm:max-w-6xl" showCloseButton={!pending}>
         <DialogHeader>
-          <DialogTitle>{locale === "ar" ? "تعديل المشروع" : "Edit Project"}</DialogTitle>
+          <DialogTitle>{isArabic ? "تعديل المشروع" : "Edit Project"}</DialogTitle>
           <DialogDescription>
-            {locale === "ar"
-              ? "حدّث معلومات المشروع الأساسية."
-              : "Update the project's core information."}
+            {isArabic
+              ? "حدّث معلومات المشروع الأساسية وموقعه الدقيق."
+              : "Update the project's core information and precise map location."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -796,23 +825,86 @@ function ProjectEditDialog({
             onChange={setLocation}
             disabled={pending}
           >
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
+            <div className="flex h-full min-h-0 flex-col gap-4">
               <div className="space-y-2">
-                <Label htmlFor={`project-list-name-${project.id}`}>{locale === "ar" ? "اسم المشروع" : "Project name"}</Label>
+                <Label htmlFor={`project-list-name-${project.id}`}>{isArabic ? "اسم المشروع" : "Project Name"}</Label>
                 <Input
                   id={`project-list-name-${project.id}`}
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   disabled={pending}
+                  className="h-10"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor={`project-list-code-${project.id}`}>{locale === "ar" ? "رمز المشروع" : "Project code"}</Label>
+                <Label htmlFor={`project-list-code-${project.id}`}>{isArabic ? "رقم / رمز المشروع" : "Project Number / Code"}</Label>
                 <Input
                   id={`project-list-code-${project.id}`}
                   value={code}
                   onChange={(event) => setCode(event.target.value)}
                   disabled={pending}
+                  className="h-10"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{isArabic ? "نوع المشروع" : "Project Type"}</Label>
+                <Select
+                  value={projectType || null}
+                  onValueChange={(value) => setProjectType((value as ProjectTypeValue | null) ?? "")}
+                  disabled={pending}
+                >
+                  <SelectTrigger className="h-10 w-full">
+                    <SelectValue placeholder={isArabic ? "اختر نوع المشروع" : "Select project type"}>
+                      {(value) => {
+                        if (!value) return isArabic ? "اختر نوع المشروع" : "Select project type"
+                        const option = PROJECT_TYPES.find((item) => item.value === String(value))
+                        return option ? (isArabic ? option.labelAr : option.label) : String(value)
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PROJECT_TYPES.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {isArabic ? option.labelAr : option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>{isArabic ? "نوع الإشراف" : "Supervision Type"}</Label>
+                <Select
+                  value={supervisionType || null}
+                  onValueChange={(value) => setSupervisionType((value as SupervisionTypeValue | null) ?? "")}
+                  disabled={pending}
+                >
+                  <SelectTrigger className="h-10 w-full">
+                    <SelectValue placeholder={isArabic ? "اختر نوع الإشراف" : "Select supervision type"}>
+                      {(value) => {
+                        if (!value) return isArabic ? "اختر نوع الإشراف" : "Select supervision type"
+                        const option = SUPERVISION_TYPES.find((item) => item.value === String(value))
+                        return option ? (isArabic ? option.labelAr : option.label) : String(value)
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUPERVISION_TYPES.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {isArabic ? option.labelAr : option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex min-h-40 flex-1 flex-col gap-2">
+                <Label htmlFor={`project-list-description-${project.id}`}>{isArabic ? "وصف المشروع" : "Project Description"}</Label>
+                <textarea
+                  id={`project-list-description-${project.id}`}
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  disabled={pending}
+                  rows={6}
+                  className="min-h-32 flex-1 resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 lg:resize-none"
                 />
               </div>
             </div>
@@ -821,11 +913,11 @@ function ProjectEditDialog({
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" className="bg-transparent" disabled={pending} onClick={onClose}>
-            {locale === "ar" ? "إلغاء" : "Cancel"}
+            {isArabic ? "إلغاء" : "Cancel"}
           </Button>
           <Button type="button" disabled={pending || name.trim().length < 2} onClick={save}>
             {pending ? <Loader2 className="size-4 animate-spin" data-icon="inline-start" /> : null}
-            {locale === "ar" ? "حفظ التغييرات" : "Save changes"}
+            {isArabic ? "حفظ التغييرات" : "Save changes"}
           </Button>
         </DialogFooter>
       </DialogContent>

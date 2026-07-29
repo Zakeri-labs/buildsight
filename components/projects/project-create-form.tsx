@@ -751,7 +751,7 @@ export function ProjectCreateForm({
                     onChange={setLocation}
                     disabled={pending}
                   >
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
+                    <div className="flex h-full min-h-0 flex-col gap-4">
                       <Field label={copy.name} htmlFor="new-project-name" required>
                         <Input
                           id="new-project-name"
@@ -806,21 +806,21 @@ export function ProjectCreateForm({
                           </SelectContent>
                         </Select>
                       </Field>
+                      <div className="flex min-h-40 flex-1 flex-col gap-2">
+                        <Label htmlFor="new-project-description">{copy.description} ({copy.optional})</Label>
+                        <textarea
+                          id="new-project-description"
+                          value={description}
+                          onChange={(event) => setDescription(event.target.value)}
+                          placeholder={copy.descriptionPlaceholder}
+                          disabled={pending}
+                          rows={6}
+                          className="min-h-32 flex-1 resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 lg:resize-none"
+                        />
+                      </div>
                     </div>
                   </ProjectLocationField>
                 </div>
-
-                <Field label={`${copy.description} (${copy.optional})`} htmlFor="new-project-description">
-                  <textarea
-                    id="new-project-description"
-                    value={description}
-                    onChange={(event) => setDescription(event.target.value)}
-                    placeholder={copy.descriptionPlaceholder}
-                    disabled={pending}
-                    rows={4}
-                    className="min-h-28 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                  />
-                </Field>
 
                 <ProjectGalleryField
                   images={projectImages}

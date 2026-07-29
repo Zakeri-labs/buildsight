@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { ProjectParticipantView as ProjectParticipant } from "@/lib/projects/project-participant-types"
 import { cn } from "@/lib/utils"
+import { ProjectOverviewTableColumns } from "@/components/projects/project-overview-table-columns"
 
 export type { ProjectParticipantView as ProjectParticipant } from "@/lib/projects/project-participant-types"
 
@@ -108,7 +109,8 @@ export function ProjectParticipants({
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="min-w-[940px] w-full text-sm">
+            <table className="min-w-[980px] w-full table-fixed text-sm">
+              <ProjectOverviewTableColumns />
               <thead>
                 <tr className="border-b bg-muted/45 text-xs font-semibold text-muted-foreground">
                   <th className="px-5 py-3 text-start sm:px-6">Organization</th>

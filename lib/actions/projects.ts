@@ -11,7 +11,12 @@ import { PROJECT_ACCESS_ROLES, PROJECT_ORG_ROLES } from "@/lib/db/types"
 import type { ActionResult } from "@/lib/actions/invitations"
 import { coordinateLabel } from "@/lib/locations/types"
 import { SELECTED_PROJECT_COOKIE } from "@/lib/project-scope"
-import { isProjectTypeValue, isSupervisionTypeValue } from "@/lib/projects/project-options"
+import {
+  isProjectTypeValue,
+  isSupervisionTypeValue,
+  type ProjectTypeValue,
+  type SupervisionTypeValue,
+} from "@/lib/projects/project-options"
 import { validateOwnerIdCardFile } from "@/lib/projects/owner-id-card"
 import {
   detectProjectImageMimeType,
@@ -271,6 +276,9 @@ export async function updateProject(input: {
   projectId: string
   name: string
   code?: string
+  projectType?: ProjectTypeValue
+  supervisionType?: SupervisionTypeValue
+  description?: string
   location?: string
   latitude?: number | null
   longitude?: number | null
@@ -278,6 +286,12 @@ export async function updateProject(input: {
   try {
     const name = input.name.trim()
     if (name.length < 2) return { ok: false, error: "Project name is too short." }
+    if (input.projectType !== undefined && !isProjectTypeValue(input.projectType)) {
+      return { ok: false, error: "Select a valid project type." }
+    }
+    if (input.supervisionType !== undefined && !isSupervisionTypeValue(input.supervisionType)) {
+      return { ok: false, error: "Select a valid supervision type." }
+    }
     const coordinates = normalizeProjectCoordinates(input.latitude, input.longitude)
     if (!coordinates.ok) return { ok: false, error: coordinates.error }
     const location =
@@ -296,16 +310,21 @@ export async function updateProject(input: {
     if (lookupError) throw lookupError
     if (!project) return { ok: false, error: "Project not found." }
 
+    const updates: Record<string, unknown> = {
+      name,
+      code: input.code?.trim() || null,
+      location,
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
+      updated_at: new Date().toISOString(),
+    }
+    if (input.projectType !== undefined) updates.project_type = input.projectType
+    if (input.supervisionType !== undefined) updates.supervision_type = input.supervisionType
+    if (input.description !== undefined) updates.description = input.description.trim() || null
+
     const { error } = await admin
       .from("projects")
-      .update({
-        name,
-        code: input.code?.trim() || null,
-        location,
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq("id", input.projectId)
     if (error) throw error
 

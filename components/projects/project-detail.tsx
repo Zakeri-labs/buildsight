@@ -124,15 +124,42 @@ export function ProjectDetail({
             <CardTitle className="text-base font-semibold tracking-tight">{labels.details}</CardTitle>
           </CardHeader>
           <CardContent className="p-4 sm:p-5">
-            <div className="grid gap-5 lg:grid-cols-[250px_minmax(0,1fr)] 2xl:grid-cols-[260px_minmax(0,1fr)_190px]">
-              <ProjectImageDisplay
-                src={projectImage}
-                projectId={project.id}
-                alt={project.name}
-                className="h-[260px] w-full rounded-lg border bg-muted/40 shadow-sm sm:h-[300px] lg:h-[260px]"
-                imageClassName="object-cover"
-                iconClassName="size-10"
-              />
+            <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+              <div className="min-w-0">
+                <div className="relative">
+                  <ProjectImageDisplay
+                    src={projectImage}
+                    projectId={project.id}
+                    alt={project.name}
+                    className="h-[260px] w-full rounded-lg border bg-muted/40 shadow-sm sm:h-[300px] lg:h-[260px]"
+                    imageClassName="object-cover"
+                    iconClassName="size-10"
+                  />
+                  {canManageImages ? (
+                    <div className="absolute end-3 top-3 z-10">
+                      <ProjectImageManagementDialog
+                        projectId={project.id}
+                        projectName={project.name}
+                        currentImage={projectImage}
+                        triggerVariant="overlay"
+                        onSaved={(imageUrl) => {
+                          setProjectImage(imageUrl)
+                          router.refresh()
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3 w-full justify-center"
+                  render={<Link href={`/projects/${project.id}/gallery`} />}
+                >
+                  <Images className="size-4" />
+                  {labels.viewGallery}
+                </Button>
+              </div>
 
               <div className="min-w-0 py-0.5">
                 <dl className="grid min-w-0 gap-x-7 md:grid-cols-2">
@@ -161,30 +188,6 @@ export function ProjectDetail({
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2 border-t pt-4 lg:col-span-2 2xl:col-span-1 2xl:border-s 2xl:border-t-0 2xl:ps-5 2xl:pt-1">
-                {canManageImages ? (
-                  <div className="[&>button]:w-full [&>button]:justify-center [&>button]:bg-primary [&>button]:text-primary-foreground [&>button]:shadow-none [&>button]:hover:bg-primary/90">
-                    <ProjectImageManagementDialog
-                      projectId={project.id}
-                      projectName={project.name}
-                      currentImage={projectImage}
-                      onSaved={(imageUrl) => {
-                        setProjectImage(imageUrl)
-                        router.refresh()
-                      }}
-                    />
-                  </div>
-                ) : null}
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full justify-center"
-                  render={<Link href={`/projects/${project.id}/gallery`} />}
-                >
-                  <Images className="size-4" />
-                  {labels.viewGallery}
-                </Button>
-              </div>
             </div>
           </CardContent>
         </Card>

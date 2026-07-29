@@ -401,10 +401,12 @@ export function ProjectLocationField({
   }
 
   return (
-    <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(26rem,1.1fr)] lg:items-start xl:gap-6">
-      <div className="min-w-0 space-y-5">
-        {children ? <div className="space-y-4">{children}</div> : null}
+    <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(28rem,1.05fr)] lg:items-stretch xl:gap-6">
+      <div className="min-w-0">
+        {children ? <div className="h-full min-h-0">{children}</div> : null}
+      </div>
 
+      <div className="flex min-w-0 flex-col gap-3">
         <div className="space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Label htmlFor={inputId}>{labels.location}</Label>
@@ -460,90 +462,90 @@ export function ProjectLocationField({
             {message && <p className="text-xs text-amber-700 dark:text-amber-400">{message}</p>}
           </div>
         </div>
-      </div>
 
-      <div
-        ref={mapShellRef}
-        role="region"
-        aria-label={labels.mapTitle}
-        className={cn(
-          "relative isolate w-full min-w-0 overflow-hidden border bg-muted/30 shadow-sm",
-          isFullscreen
-            ? "fixed inset-0 z-[1200] h-screen max-h-none max-w-none rounded-none border-0 bg-background"
-            : "h-[20rem] rounded-2xl sm:h-[28rem] lg:h-auto lg:aspect-square lg:max-w-[38rem] lg:justify-self-end",
-        )}
-      >
-        <div className={cn("absolute overflow-hidden", isFullscreen ? "inset-3 rounded-xl border sm:inset-4" : "inset-0")}>
-          <MapErrorBoundary
-            key={`boundary-${mapAttempt}`}
-            resetKey={mapAttempt}
-            onError={() => setMapState("error")}
-          >
-            <DynamicLocationMapCanvas
-              key={`map-${mapAttempt}`}
-              initialCenter={initialMapView.center}
-              initialZoom={initialMapView.zoom}
-              marker={markerPoint}
-              centerRequest={centerRequest}
-              resizeRequest={resizeRequest}
-              tileUrl={MAP_TILE_URL}
-              tileAttribution={MAP_TILE_ATTRIBUTION}
-              markerTitle={labels.selectedLocation}
-              onSelect={(point) => placeMarker(point.latitude, point.longitude, { source: "map" })}
-              onMarkerMove={(point) =>
-                placeMarker(point.latitude, point.longitude, { center: false, source: "map" })
-              }
-              onReady={() => setMapState("ready")}
-              onTileError={() => setMessage((current) => current ?? labels.mapError)}
-            />
-          </MapErrorBoundary>
-
-          {disabled && <div className="absolute inset-0 z-[750] cursor-not-allowed bg-background/20" />}
-
-          {mapState !== "ready" && (
-            <div className="absolute inset-0 z-[800] flex items-center justify-center bg-background/92 p-6 text-center">
-              {mapState === "error" ? (
-                <div className="max-w-sm space-y-3">
-                  <MapPin className="mx-auto size-7 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground text-pretty">{labels.mapError}</p>
-                  <Button type="button" variant="outline" size="sm" onClick={retryMap} disabled={disabled}>
-                    <RefreshCw className="size-4" />
-                    {locale === "ar" ? "إعادة المحاولة" : "Try again"}
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
-                  {labels.mapLoading}
-                </div>
-              )}
-            </div>
+        <div
+          ref={mapShellRef}
+          role="region"
+          aria-label={labels.mapTitle}
+          className={cn(
+            "relative isolate w-full min-w-0 overflow-hidden border bg-muted/30 shadow-sm",
+            isFullscreen
+              ? "fixed inset-0 z-[1200] h-screen max-h-none max-w-none rounded-none border-0 bg-background"
+              : "h-[24rem] rounded-2xl sm:h-[32rem] lg:h-auto lg:aspect-square lg:max-h-[42rem] lg:min-h-[30rem]",
           )}
-        </div>
+        >
+          <div className={cn("absolute overflow-hidden", isFullscreen ? "inset-3 rounded-xl border sm:inset-4" : "inset-0")}>
+            <MapErrorBoundary
+              key={`boundary-${mapAttempt}`}
+              resetKey={mapAttempt}
+              onError={() => setMapState("error")}
+            >
+              <DynamicLocationMapCanvas
+                key={`map-${mapAttempt}`}
+                initialCenter={initialMapView.center}
+                initialZoom={initialMapView.zoom}
+                marker={markerPoint}
+                centerRequest={centerRequest}
+                resizeRequest={resizeRequest}
+                tileUrl={MAP_TILE_URL}
+                tileAttribution={MAP_TILE_ATTRIBUTION}
+                markerTitle={labels.selectedLocation}
+                onSelect={(point) => placeMarker(point.latitude, point.longitude, { source: "map" })}
+                onMarkerMove={(point) =>
+                  placeMarker(point.latitude, point.longitude, { center: false, source: "map" })
+                }
+                onReady={() => setMapState("ready")}
+                onTileError={() => setMessage((current) => current ?? labels.mapError)}
+              />
+            </MapErrorBoundary>
 
-        <div className={cn("absolute end-3 top-3 z-[900] flex items-center gap-2", isFullscreen && "end-6 top-6")}>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="h-9 bg-background/95 shadow-md backdrop-blur-sm hover:bg-background"
-            onClick={useCurrentLocation}
-            disabled={disabled || locating}
-          >
-            {locating ? <Loader2 className="size-4 animate-spin" /> : <LocateFixed className="size-4" />}
-            <span className="hidden sm:inline">{locating ? labels.locating : labels.useCurrentLocation}</span>
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            size="icon-sm"
-            className="size-9 bg-background/95 shadow-md backdrop-blur-sm hover:bg-background"
-            onClick={toggleFullscreen}
-            aria-label={isFullscreen ? labels.exitFullscreen : labels.enterFullscreen}
-            title={isFullscreen ? labels.exitFullscreen : labels.enterFullscreen}
-          >
-            {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-          </Button>
+            {disabled && <div className="absolute inset-0 z-[750] cursor-not-allowed bg-background/20" />}
+
+            {mapState !== "ready" && (
+              <div className="absolute inset-0 z-[800] flex items-center justify-center bg-background/92 p-6 text-center">
+                {mapState === "error" ? (
+                  <div className="max-w-sm space-y-3">
+                    <MapPin className="mx-auto size-7 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground text-pretty">{labels.mapError}</p>
+                    <Button type="button" variant="outline" size="sm" onClick={retryMap} disabled={disabled}>
+                      <RefreshCw className="size-4" />
+                      {locale === "ar" ? "إعادة المحاولة" : "Try again"}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" />
+                    {labels.mapLoading}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className={cn("absolute end-3 top-3 z-[900] flex items-center gap-2", isFullscreen && "end-6 top-6")}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-9 bg-background/95 shadow-md backdrop-blur-sm hover:bg-background"
+              onClick={useCurrentLocation}
+              disabled={disabled || locating}
+            >
+              {locating ? <Loader2 className="size-4 animate-spin" /> : <LocateFixed className="size-4" />}
+              <span className="hidden sm:inline">{locating ? labels.locating : labels.useCurrentLocation}</span>
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon-sm"
+              className="size-9 bg-background/95 shadow-md backdrop-blur-sm hover:bg-background"
+              onClick={toggleFullscreen}
+              aria-label={isFullscreen ? labels.exitFullscreen : labels.enterFullscreen}
+              title={isFullscreen ? labels.exitFullscreen : labels.enterFullscreen}
+            >
+              {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
