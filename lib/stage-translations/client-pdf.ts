@@ -480,7 +480,10 @@ function setLanguage(doc: JsPdfDocument, rtl: boolean, fontSize = 10, bold = fal
 }
 
 function shapeArabicText(doc: JsPdfDocument, text: string | string[]) {
-  const shape = (value: string) => String(doc.processArabic(value.normalize("NFC")))
+  const shape = (value: string) => {
+    if (!containsArabic(value)) return value
+    return String(doc.processArabic(value.normalize("NFC")))
+  }
   return Array.isArray(text) ? text.map(shape) : shape(text)
 }
 
@@ -492,6 +495,18 @@ function writePdfText(
   options: Record<string, unknown> = {},
   rtl = false,
 ) {
+  const isStringArray = Array.isArray(text)
+  const containsAnyArabic = isStringArray
+    ? text.some((item) => containsArabic(item))
+    : containsArabic(text)
+
+  if (rtl && !containsAnyArabic) {
+    doc.setFont("helvetica", "normal")
+    doc.text(text, x, y, options)
+    doc.setFont(ARABIC_FONT_FAMILY, "normal")
+    return
+  }
+
   const preparedText = rtl ? shapeArabicText(doc, text) : text
   doc.text(preparedText, x, y, rtl ? { ...options, ...ARABIC_TEXT_OPTIONS } : options)
 }
@@ -556,16 +571,18 @@ function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: st
   setLanguage(doc, rtl, 6.5, true)
   doc.setTextColor(100, 116, 139)
   writePdfText(doc, label, rtl ? x + width - 3 : x + 3, y + 4.2, { align: rtl ? "right" : "left" }, rtl)
-  setLanguage(doc, rtl, 8.5, false)
+
+  const valHasArabic = containsArabic(value)
+  setLanguage(doc, valHasArabic, 8.5, false)
   doc.setTextColor(15, 23, 42)
   const lines = textLines(doc, value, width - 6).slice(0, 2)
   writePdfText(
     doc,
     lines,
-    rtl ? x + width - 3 : x + 3,
+    rtl && valHasArabic ? x + width - 3 : x + 3,
     y + 8.5,
-    { align: rtl ? "right" : "left", lineHeightFactor: 1.1 },
-    rtl,
+    { align: rtl && valHasArabic ? "right" : "left", lineHeightFactor: 1.1 },
+    valHasArabic,
   )
 }
 
@@ -778,19 +795,20 @@ function drawRtlTableCells(input: {
 
     const logicalValue = cells[sourceIndex]?.join("\n") || "—"
     const numeric = isNumericCell(logicalValue)
-    setLanguage(flow.doc, !numeric, fontSize, false)
+    const cellHasArabic = containsArabic(logicalValue)
+    setLanguage(flow.doc, cellHasArabic, fontSize, false)
     flow.doc.setTextColor(...textColor)
     const lines = cells[sourceIndex]?.length ? cells[sourceIndex] : ["—"]
     writePdfText(
       flow.doc,
       lines,
-      numeric ? x + width / 2 : x + width - 2,
+      numeric ? x + width / 2 : cellHasArabic ? x + width - 2 : x + 2,
       y + 4.3,
       {
-        align: numeric ? "center" : "right",
+        align: numeric ? "center" : cellHasArabic ? "right" : "left",
         lineHeightFactor: 1.2,
       },
-      !numeric,
+      cellHasArabic,
     )
     x += width
   }
