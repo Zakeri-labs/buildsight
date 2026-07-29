@@ -550,8 +550,8 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   const org = getOrganizationProfile()
   const margin = PAGE.margin
 
-  // White background, thin navy top
-  doc.setFillColor(255, 255, 255)
+  // Light gray background, thin navy top
+  doc.setFillColor(248, 250, 252)
   doc.rect(0, 0, pageWidth, headerH, "F")
   doc.setFillColor(30, 58, 138)
   doc.rect(0, 0, pageWidth, 1.5, "F")
@@ -1433,8 +1433,8 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     const startY = 1.5 + (headerH - 1.5 - 2 * stepY) / 2
     const pageY = startY + 2 * stepY
 
-    // Blank out old row 3 in column 3 area (white fill)
-    doc.setFillColor(255, 255, 255)
+    // Blank out old row 3 in column 3 area (light gray fill)
+    doc.setFillColor(248, 250, 252)
     doc.rect(col3X + 0.5, pageY - 3, col3W - 1, 4.5, "F")
 
     const pageStr = `${page} / ${pages}`
