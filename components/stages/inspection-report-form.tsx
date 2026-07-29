@@ -573,10 +573,10 @@ export function InspectionReportForm({
       <Card className="gap-0 py-0">
         <CardHeader className="border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6"><CardTitle className="text-base font-semibold text-blue-950 dark:text-blue-100">{copy.basic}</CardTitle></CardHeader>
         <CardContent className="grid gap-5 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-4">
+          <div className="space-y-2 sm:col-span-2 lg:col-span-4"><Label htmlFor="report-title">{copy.title} <span className="text-destructive">*</span></Label><Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} /></div>
           <div className="space-y-2"><Label>{copy.type}</Label><Select value={reportType} onValueChange={(value) => setReportType(value as ReportTypeValue)} disabled={isLocked}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{REPORT_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{locale === "ar" ? item.labelAr : item.label}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-2"><Label htmlFor="visit-no">{copy.visitNo}</Label><Input id="visit-no" type="number" min={1} value={visitNumber} onChange={(event) => setVisitNumber(Math.max(1, Number(event.target.value) || 1))} disabled={isLocked} /></div>
-          <div className="space-y-2 sm:col-span-2"><Label htmlFor="report-subject">{copy.subject}</Label><Input id="report-subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Inspection location, package, activity, or reference" disabled={isLocked} /></div>
-          <div className="space-y-2 sm:col-span-2 lg:col-span-4"><Label htmlFor="report-title">{copy.title} <span className="text-destructive">*</span></Label><Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} /></div>
+          <div className="space-y-2 sm:col-span-2 lg:col-span-2"><Label htmlFor="report-subject">{copy.subject}</Label><Input id="report-subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Inspection location, package, activity, or reference" disabled={isLocked} /></div>
         </CardContent>
       </Card>
 
