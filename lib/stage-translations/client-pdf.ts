@@ -986,7 +986,7 @@ function renderRtlTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>)
 }
 
 function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
-  const rows = block.rows.length ? block.rows : []
+  const rows = (block && Array.isArray(block.rows)) ? block.rows : []
   if (!rows.length) return
 
   const boxSize = 3.8
@@ -1071,7 +1071,7 @@ function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>, se
     return
   }
 
-  const rawRows = block.rows.length ? block.rows : []
+  const rawRows = (block && Array.isArray(block.rows)) ? block.rows : []
   if (!rawRows.length) return
 
   ensureSpace(flow, 16)
@@ -1911,7 +1911,9 @@ function measureBlockHeight(doc: JsPdfDocument, block: PdfBlock | undefined, wid
     return Math.max(lineHeight, lines.length * lineHeight) + 2
   }
   if (block.type === "table") {
-    const rowCount = block.rows.length + (block.headers.length ? 1 : 0)
+    const rows = (block && Array.isArray(block.rows)) ? block.rows : []
+    const headers = (block && Array.isArray(block.headers)) ? block.headers : []
+    const rowCount = rows.length + (headers.length ? 1 : 0)
     return rowCount * 7.5 + 6
   }
   if (block.type === "spacer") return block.height

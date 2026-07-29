@@ -261,7 +261,7 @@ function reportDetailsSection(
 
 function checklistSection(content: TranslationReportContent, language: "en" | "ar"): PdfSectionTemplate {
   const labels = LABELS[language]
-  if (!content.checklist.length) {
+  if (!content?.checklist || !content.checklist.length) {
     return { key: "checklist", title: labels.checklist, html: "" }
   }
   return {
@@ -280,7 +280,7 @@ function checklistSection(content: TranslationReportContent, language: "en" | "a
 
 function approvalSection(content: TranslationReportContent, language: "en" | "ar"): PdfSectionTemplate {
   const labels = LABELS[language]
-  if (!content.approvals.length) {
+  if (!content?.approvals || !content.approvals.length) {
     return { key: "approvals", title: labels.approvals, html: "" }
   }
   return {
