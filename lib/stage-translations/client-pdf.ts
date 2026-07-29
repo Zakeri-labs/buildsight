@@ -669,7 +669,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
 function drawContinuationHeader(flow: Flow) {
   const headerH = 17   // compact height for 3 rows
   drawHeaderColumns(flow.doc, flow, headerH)
-  flow.y = headerH + 4
+  flow.y = headerH + 7
 }
 
 function addFlowPage(flow: Flow) {
@@ -779,7 +779,7 @@ function drawFirstPageHeader(flow: Flow) {
       values[index],
     )
   }
-  flow.y = gridTop + 2 * 15.5 + 4  // after both meta rows + spacing
+  flow.y = gridTop + 2 * 15.5 + 8  // after both meta rows + spacing
 }
 
 function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>) {
@@ -802,8 +802,8 @@ function renderParagraph(flow: Flow, text: string, options: { indent?: number; b
   const bulletWidth = options.bullet ? 6 : 0
   const available = flow.width - indent - bulletWidth
   const lines = textLines(flow.doc, text, available)
-  const lineHeight = 4.6
-  const height = Math.max(lineHeight, lines.length * lineHeight) + 1.5
+  const lineHeight = 4.4
+  const height = Math.max(lineHeight, lines.length * lineHeight) + 0.6
   ensureSpace(flow, height)
   flow.doc.setTextColor(51, 65, 85)
   if (options.bullet) {
@@ -1069,10 +1069,19 @@ function renderNativeVectorTable(flow: Flow, headers: string[], rows: string[][]
   const colCount = Math.max(headers.length, ...rows.map((r) => r.length))
   if (!colCount) return
 
-  const colWidth = flow.width / colCount
   const padding = 1.5
-  const textW = colWidth - padding * 2
   const lineH = 4.2
+
+  // Allocate 26% for label column and 74% for value column in 2-column key-value tables
+  const colWidths = colCount === 2
+    ? (flow.rtl ? [flow.width * 0.74, flow.width * 0.26] : [flow.width * 0.26, flow.width * 0.74])
+    : Array(colCount).fill(flow.width / colCount)
+
+  const getColX = (c: number) => {
+    let currentX = flow.x
+    for (let i = 0; i < c; i += 1) currentX += colWidths[i]
+    return currentX
+  }
 
   for (let r = 0; r < rows.length; r += 1) {
     const row = rows[r]
@@ -1081,24 +1090,26 @@ function renderNativeVectorTable(flow: Flow, headers: string[], rows: string[][]
 
     for (let c = 0; c < colCount; c += 1) {
       const cellText = row[c] || ""
+      const textW = colWidths[c] - padding * 2
       setLanguage(flow.doc, flow.rtl, 8, false)
       const lines = textLines(flow.doc, cellText, textW)
       cellLinesList.push(lines)
       if (lines.length > maxLines) maxLines = lines.length
     }
 
-    const rowHeight = Math.max(6.5, maxLines * lineH + 2.5)
+    const rowHeight = Math.max(6.5, maxLines * lineH + 2.2)
     ensureSpace(flow, rowHeight)
 
     for (let c = 0; c < colCount; c += 1) {
       const lines = cellLinesList[c]
-      const x = flow.x + c * colWidth
+      const x = getColX(c)
+      const w = colWidths[c]
 
       setLanguage(flow.doc, flow.rtl, 8, false)
       flow.doc.setTextColor(51, 65, 85)
 
       if (flow.rtl) {
-        writePdfText(flow.doc, lines, x + colWidth - padding, flow.y + 3.5, { align: "right", lineHeightFactor: 1.15 }, true)
+        writePdfText(flow.doc, lines, x + w - padding, flow.y + 3.5, { align: "right", lineHeightFactor: 1.15 }, true)
       } else {
         writePdfText(flow.doc, lines, x + padding, flow.y + 3.5, { align: "left", lineHeightFactor: 1.15 }, false)
       }
@@ -2067,7 +2078,7 @@ async function buildNativeBilingualPdfBlob(input: {
         flow.pageNumber += 1
         // Redraw the bilingual header on the new page
         drawBilingualHeader({ doc: flow.doc, data, margin: PAGE.margin, columnWidth: colWidth, gap, englishLabel: engSections[0]?.title, arabicLabel: arSections[0]?.title })
-        flow.y = 28  // below the bilingual header
+        flow.y = 31  // below the bilingual header with padding
       }
 
       const rowY = flow.y
