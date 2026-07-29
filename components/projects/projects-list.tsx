@@ -47,6 +47,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import type { ProjectLocationValue } from "@/lib/locations/types"
@@ -67,6 +72,8 @@ export type ProjectStatus = "In Progress" | "Planning" | "On Hold" | "Completed"
 export type OrgRole = "Consultant" | "Contractor" | "Client" | "Government" | "Third Party"
 export type ProjectType = "Residential" | "Commercial" | "Hospitality" | "Infrastructure" | "Industrial"
 
+const PROJECT_TABLE_COLUMN_WIDTHS = ["20%", "12%", "11%", "15%", "10%", "10%", "9%", "8%", "5%"] as const
+
 export interface ProjectRow {
   id: string
   code: string
@@ -85,6 +92,42 @@ export interface ProjectRow {
   latitude?: number | null
   longitude?: number | null
   canEdit?: boolean
+}
+
+function compactAddress(address: string) {
+  const normalized = address.replace(/\s+/g, " ").trim()
+  if (!normalized || normalized === "—") return "—"
+
+  const parts = normalized
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+
+  if (parts.length <= 2) return normalized
+  return `${parts[0]}, ${parts[1]}, …`
+}
+
+function TruncatedText({
+  children,
+  className,
+}: {
+  children: string
+  className?: string
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span className={cn("block min-w-0 truncate", className)} />
+        }
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipContent className="max-w-sm whitespace-normal text-pretty">
+        {children}
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
 const mockProjects: ProjectRow[] = [
@@ -448,19 +491,24 @@ export function ProjectsList({
 
       {/* Main Data Table */}
       <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900">
-        <div className="overflow-x-auto">
-          <table className="w-full text-start text-sm">
+        <div className="w-full overflow-hidden">
+          <table className="w-full table-fixed text-start text-sm">
+            <colgroup>
+              {PROJECT_TABLE_COLUMN_WIDTHS.map((width, index) => (
+                <col key={`${width}-${index}`} style={{ width }} />
+              ))}
+            </colgroup>
             <thead>
               <tr className="border-b border-slate-200/80 bg-slate-50/80 text-xs font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-400">
-                <th className="px-5 py-3.5 text-start font-semibold">Project</th>
-                <th className="px-4 py-3.5 text-start font-semibold">Owner / Client</th>
-                <th className="px-4 py-3.5 text-start font-semibold">Organization Role</th>
-                <th className="px-4 py-3.5 text-start font-semibold">Address</th>
-                <th className="px-4 py-3.5 text-start font-semibold">Project Type</th>
-                <th className="px-4 py-3.5 text-start font-semibold">Status</th>
-                <th className="px-4 py-3.5 text-start font-semibold">Start Date</th>
-                <th className="px-4 py-3.5 text-start font-semibold">Progress</th>
-                <th className="px-4 py-3.5 text-end font-semibold">Actions</th>
+                <th className="truncate px-3 py-3.5 text-start font-semibold">Project</th>
+                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Owner / Client</th>
+                <th className="truncate px-2.5 py-3.5 text-start font-semibold" title="Organization Role">Organization Role</th>
+                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Address</th>
+                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Project Type</th>
+                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Status</th>
+                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Start Date</th>
+                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Progress</th>
+                <th className="truncate px-2 py-3.5 text-end font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -474,8 +522,8 @@ export function ProjectsList({
               {filteredProjects.map((row) => (
                 <tr key={row.id} className="transition-colors hover:bg-slate-50/60 dark:hover:bg-slate-800/30">
                   {/* Project info with thumbnail */}
-                  <td className="whitespace-nowrap px-5 py-4">
-                    <div className="flex items-center gap-3">
+                  <td className="min-w-0 overflow-hidden px-3 py-4">
+                    <div className="flex min-w-0 items-center gap-2.5">
                       <ProjectImageDisplay
                         src={row.imageUrl}
                         projectId={row.id}
@@ -483,48 +531,63 @@ export function ProjectsList({
                         className="size-10 shrink-0 rounded-lg border border-slate-200 dark:border-slate-700"
                         iconClassName="size-4"
                       />
-                      <div className="flex flex-col">
-                        <span className="font-bold text-slate-900 dark:text-white text-sm hover:text-blue-600 cursor-pointer">
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <TruncatedText className="cursor-pointer text-sm font-bold text-slate-900 hover:text-blue-600 dark:text-white">
                           {row.name}
-                        </span>
-                        <span className="font-mono text-xs text-slate-400">{row.code}</span>
+                        </TruncatedText>
+                        <span className="block truncate font-mono text-xs text-slate-400" title={row.code}>{row.code}</span>
                       </div>
                     </div>
                   </td>
 
                   {/* Owner / Client */}
-                  <td className="whitespace-nowrap px-4 py-4 text-xs font-medium text-slate-700 dark:text-slate-300">
-                    {row.ownerClient}
+                  <td className="min-w-0 overflow-hidden px-2.5 py-4 text-xs font-medium text-slate-700 dark:text-slate-300">
+                    <TruncatedText>{row.ownerClient}</TruncatedText>
                   </td>
 
                   {/* Organization Role */}
-                  <td className="whitespace-nowrap px-4 py-4">
-                    <OrgRoleBadge role={row.orgRole} />
+                  <td className="min-w-0 overflow-hidden px-2.5 py-4">
+                    <div className="min-w-0 overflow-hidden">
+                      <OrgRoleBadge role={row.orgRole} />
+                    </div>
                   </td>
 
                   {/* Address */}
-                  <td className="whitespace-nowrap px-4 py-4 text-xs text-slate-600 dark:text-slate-400">
-                    {row.address}
+                  <td className="min-w-0 overflow-hidden px-2.5 py-4 text-xs text-slate-600 dark:text-slate-400">
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span className="block min-w-0 truncate" />
+                        }
+                      >
+                        {compactAddress(row.address)}
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-sm whitespace-normal text-pretty">
+                        {row.address}
+                      </TooltipContent>
+                    </Tooltip>
                   </td>
 
                   {/* Project Type */}
-                  <td className="whitespace-nowrap px-4 py-4 text-xs text-slate-600 dark:text-slate-400">
-                    {row.projectType}
+                  <td className="min-w-0 overflow-hidden px-2.5 py-4 text-xs text-slate-600 dark:text-slate-400">
+                    <TruncatedText>{row.projectType}</TruncatedText>
                   </td>
 
                   {/* Status Badge */}
-                  <td className="whitespace-nowrap px-4 py-4">
-                    <ProjectStatusBadge status={row.status} />
+                  <td className="min-w-0 overflow-hidden px-2.5 py-4">
+                    <div className="min-w-0 overflow-hidden">
+                      <ProjectStatusBadge status={row.status} />
+                    </div>
                   </td>
 
                   {/* Start Date */}
-                  <td className="whitespace-nowrap px-4 py-4 text-xs text-slate-600 dark:text-slate-400">
-                    {row.startDate}
+                  <td className="min-w-0 overflow-hidden px-2.5 py-4 text-xs text-slate-600 dark:text-slate-400">
+                    <TruncatedText>{row.startDate}</TruncatedText>
                   </td>
 
                   {/* Progress bar */}
-                  <td className="whitespace-nowrap px-4 py-4">
-                    <div className="flex flex-col gap-1.5 min-w-[100px]">
+                  <td className="min-w-0 overflow-hidden px-2.5 py-4">
+                    <div className="flex min-w-0 flex-col gap-1.5">
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                         {row.progress}%
                       </span>
@@ -538,7 +601,7 @@ export function ProjectsList({
                   </td>
 
                   {/* Actions */}
-                  <td className="whitespace-nowrap px-4 py-4 text-end">
+                  <td className="overflow-hidden px-2 py-4 text-end">
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         render={
