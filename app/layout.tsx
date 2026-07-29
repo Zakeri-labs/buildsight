@@ -1,6 +1,7 @@
 import { Analytics } from "@vercel/analytics/next"
 import type { Metadata, Viewport } from "next"
-import { Inter, Geist_Mono, Vazirmatn } from "next/font/google"
+import { Inter, Geist_Mono } from "next/font/google"
+import localFont from "next/font/local"
 import { I18nProvider } from "@/lib/i18n"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import "leaflet/dist/leaflet.css"
@@ -8,7 +9,22 @@ import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" })
-const vazirmatn = Vazirmatn({ subsets: ["arabic"], variable: "--font-arabic", weight: ["300", "400", "500", "600", "700", "800"] })
+const gretaArabic = localFont({
+  src: [
+    {
+      path: "../public/fonts/GretaArabic-Regular.ttf",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../public/fonts/GretaArabic-Bold.ttf",
+      weight: "700",
+      style: "normal",
+    },
+  ],
+  variable: "--font-arabic",
+  display: "swap",
+})
 
 export const metadata: Metadata = {
   title: "Provision Consultancy — Construction Supervision Platform",
@@ -30,7 +46,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" dir="ltr" className={`${inter.variable} ${geistMono.variable} ${vazirmatn.variable} bg-background`}>
+    <html lang="en" dir="ltr" className={`${inter.variable} ${geistMono.variable} ${gretaArabic.variable} bg-background`}>
       <body className="font-sans antialiased">
         <I18nProvider>
           <TooltipProvider>{children}</TooltipProvider>
