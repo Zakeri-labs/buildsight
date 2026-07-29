@@ -91,56 +91,66 @@ export function AppTopbar({ activeProjectName }: { activeProjectName?: string | 
           )}
         </button>
 
-        {/* User menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-muted"
-              >
-                <ProfileAvatar
-                  name={currentUser.name}
-                  email={currentUser.email}
-                  avatarUrl={currentUser.avatarUrl}
-                  size="md"
-                  fallbackClassName="bg-primary text-primary-foreground"
-                />
-                <span className="hidden flex-col items-start leading-tight lg:flex">
-                  <span className="text-sm font-semibold">{currentUser.name}</span>
-                  <span className="text-xs text-muted-foreground">{userRoleLabel}</span>
-                </span>
-                <ChevronDown className="hidden size-4 text-muted-foreground lg:block" />
-              </button>
-            }
-          />
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="flex flex-col">
-              <span>{currentUser.name}</span>
-              <span className="text-xs font-normal text-muted-foreground">{currentUser.email}</span>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem render={<Link href="/users">{t.settings.tabAccess}</Link>} />
-            <DropdownMenuItem render={<Link href="/settings">{t.settings.title}</Link>} />
-            <DropdownMenuItem
+        {/* User profile link & menu */}
+        <div className="flex items-center gap-1 rounded-xl p-0.5 hover:bg-muted/50">
+          <Link
+            href="/settings"
+            className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-muted"
+            title={t.settings.title}
+          >
+            <ProfileAvatar
+              name={currentUser.name}
+              email={currentUser.email}
+              avatarUrl={currentUser.avatarUrl}
+              size="md"
+              fallbackClassName="bg-primary text-primary-foreground"
+            />
+            <span className="hidden flex-col items-start leading-tight lg:flex">
+              <span className="text-sm font-semibold">{currentUser.name}</span>
+              <span className="text-xs text-muted-foreground">{userRoleLabel}</span>
+            </span>
+          </Link>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger
               render={
-                <Link href="/owner">
-                  <Lock className="size-4" data-icon="inline-start" />
-                  {t.owner.openPortal}
-                </Link>
+                <button
+                  type="button"
+                  aria-label="User Menu"
+                  className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <ChevronDown className="size-4" />
+                </button>
               }
             />
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => {
-                void signOut()
-              }}
-            >
-              <LogOut className="size-4" data-icon="inline-start" />
-              {t.nav.logOut}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="flex flex-col">
+                <span>{currentUser.name}</span>
+                <span className="text-xs font-normal text-muted-foreground">{currentUser.email}</span>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem render={<Link href="/settings">{t.settings.title}</Link>} />
+              <DropdownMenuItem render={<Link href="/users">{t.settings.tabAccess}</Link>} />
+              <DropdownMenuItem
+                render={
+                  <Link href="/owner">
+                    <Lock className="size-4" data-icon="inline-start" />
+                    {t.owner.openPortal}
+                  </Link>
+                }
+              />
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  void signOut()
+                }}
+              >
+                <LogOut className="size-4" data-icon="inline-start" />
+                {t.nav.logOut}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
     </header>
   )
