@@ -312,7 +312,7 @@ export function CreateDocumentDialog({
                   <CardTitle className="text-base">Document Information</CardTitle>
                 </CardHeader>
                 <CardContent className="grid gap-5 px-5 py-5 sm:grid-cols-2 sm:px-6">
-                  <div className="space-y-2 sm:col-span-2">
+                  <div className="space-y-2">
                     <Label htmlFor="construction-document-title">Document Title <span className="text-destructive">*</span></Label>
                     <Input
                       id="construction-document-title"
@@ -341,7 +341,7 @@ export function CreateDocumentDialog({
                     {selectedType ? <p className="text-xs font-medium text-blue-600 dark:text-blue-400">{selectedType.shortLabel}</p> : null}
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-2 sm:col-span-2">
                     <div className="flex items-center justify-between gap-3">
                       <Label htmlFor="construction-document-description">Short Description</Label>
                       <span className="text-xs tabular-nums text-muted-foreground">{description.length}/2000</span>
