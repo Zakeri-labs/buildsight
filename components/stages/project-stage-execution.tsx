@@ -244,7 +244,7 @@ function TermRow({
                 const roleText = user.role || "Admin"
                 return (
                   <>
-                    <Avatar size="lg">
+                    <Avatar>
                       {user.avatarUrl ? <AvatarImage src={profileAvatarDisplayUrl(user.avatarUrl)} alt="" /> : null}
                       <AvatarFallback>{initials(user.name)}</AvatarFallback>
                     </Avatar>
