@@ -631,17 +631,17 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   infoRows.forEach(({ label, value }, i) => {
     const y = startY + i * stepY
 
-    // Label: left edge of column, muted
+    // Label: left edge of right column (col3X + 2.5), muted
     const labelIsArabic = containsArabic(label)
     setLanguage(doc, labelIsArabic, 6.5, false)
     doc.setTextColor(100, 116, 139)
     if (labelIsArabic) {
-      writePdfText(doc, label, rightX, y, { align: "right" }, true)
+      writePdfText(doc, label, labelX, y, { align: "left" }, true)
     } else {
       doc.text(label, labelX, y)
     }
 
-    // Value: right edge of column, dark bold
+    // Value: right edge of right column (col3X + col3W - 2.5), dark bold
     const valIsArabic = containsArabic(value)
     setLanguage(doc, valIsArabic, 7.5, true)
     doc.setTextColor(15, 23, 42)
@@ -1425,13 +1425,13 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     doc.setFillColor(255, 255, 255)
     doc.rect(col3X + 0.5, pageY - 3, col3W - 1, 4.5, "F")
 
-    // Page label: left of column 3, muted
+    // Page label: left edge of column 3, muted
     const pageLabel = rtl ? "الصفحة:" : "Page:"
     const labelIsAr = rtl
     setLanguage(doc, labelIsAr, 6.5, false)
     doc.setTextColor(100, 116, 139)
     if (labelIsAr) {
-      writePdfText(doc, pageLabel, rightX, pageY, { align: "right" }, true)
+      writePdfText(doc, pageLabel, labelX, pageY, { align: "left" }, true)
     } else {
       doc.text(pageLabel, labelX, pageY)
     }
@@ -1597,7 +1597,8 @@ async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
   drawFirstPageHeader(flow)
   for (const section of template.sections) {
     // Skip redundant Project Information table since the 8 metadata cards at top already present this data
-    const isProjectInfoSection = section.key === "project-info"
+    const isProjectInfoSection = section.key === "projectInformation"
+      || section.key === "project-info"
       || section.title.toLowerCase().includes("project information")
       || section.title.includes("معلومات المشروع")
 
