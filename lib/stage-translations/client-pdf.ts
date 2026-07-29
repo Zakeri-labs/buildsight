@@ -553,8 +553,8 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   // ── 3-COLUMN LAYOUT: [Logo] | [Company Name] | [Date/Doc/Page] ────
   const totalW = pageWidth - margin * 2  // 182 mm
   const col1W = 42   // Left  – Logo
-  const col3W = 55   // Right – Date / Doc / Page (3 rows)
-  const col2W = totalW - col1W - col3W   // Center – Company names (85 mm)
+  const col3W = 44   // Right – Date / Doc / Page (3 rows) – compact width
+  const col2W = totalW - col1W - col3W   // Center – Company names (96 mm)
   const col1X = margin
   const col2X = margin + col1W
   const col3X = margin + col1W + col2W
@@ -678,29 +678,29 @@ function ensureSpace(flow: Flow, required: number) {
 
 function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: string, value: string) {
   const { doc, rtl } = flow
-  // Light gray card background with subtle border (matching reference screenshot)
+  // Light gray card background with subtle rounded corners & border
   doc.setDrawColor(226, 232, 240)
   doc.setFillColor(248, 250, 252)   // light gray slate fill
-  doc.rect(x, y, width, 14, "FD")
+  doc.roundedRect(x, y, width, 14, 1.2, 1.2, "FD")
 
   setLanguage(doc, rtl, 6.5, false)
   doc.setTextColor(100, 116, 139)
   writePdfText(doc, label,
     rtl ? x + width - 3 : x + 3,
-    y + 4.5,
+    y + 4.2,
     { align: rtl ? "right" : "left" },
     rtl,
   )
 
   const valHasArabic = containsArabic(value)
-  setLanguage(doc, valHasArabic, 9, true)   // BOLD value
+  setLanguage(doc, valHasArabic, 8, true)   // 8pt BOLD value (refined size)
   doc.setTextColor(15, 23, 42)
   const lines = textLines(doc, value, width - 6).slice(0, 2)
   writePdfText(
     doc,
     lines,
     rtl && valHasArabic ? x + width - 3 : x + 3,
-    y + 9.2,
+    y + 8.8,
     { align: rtl && valHasArabic ? "right" : "left", lineHeightFactor: 1.1 },
     valHasArabic,
   )
@@ -790,19 +790,19 @@ function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>
 }
 
 function renderParagraph(flow: Flow, text: string, options: { indent?: number; bullet?: string } = {}) {
-  setLanguage(flow.doc, flow.rtl, 10, false)
+  setLanguage(flow.doc, flow.rtl, 9, false)
   const indent = options.indent ?? 0
   const bulletWidth = options.bullet ? 6 : 0
   const available = flow.width - indent - bulletWidth
   const lines = textLines(flow.doc, text, available)
-  const lineHeight = 5.1
-  const height = Math.max(lineHeight, lines.length * lineHeight) + 2
+  const lineHeight = 4.6
+  const height = Math.max(lineHeight, lines.length * lineHeight) + 1.5
   ensureSpace(flow, height)
   flow.doc.setTextColor(51, 65, 85)
   if (options.bullet) {
     const bulletX = flow.rtl ? flow.x + flow.width - indent : flow.x + indent
     const bulletRtl = flow.rtl && containsArabic(options.bullet)
-    setLanguage(flow.doc, bulletRtl, 10, false)
+    setLanguage(flow.doc, bulletRtl, 9, false)
     writePdfText(
       flow.doc,
       options.bullet,
@@ -811,7 +811,7 @@ function renderParagraph(flow: Flow, text: string, options: { indent?: number; b
       { align: flow.rtl ? "right" : "left" },
       bulletRtl,
     )
-    setLanguage(flow.doc, flow.rtl, 10, false)
+    setLanguage(flow.doc, flow.rtl, 9, false)
   }
   const textX = flow.rtl
     ? flow.x + flow.width - indent - bulletWidth
@@ -821,7 +821,7 @@ function renderParagraph(flow: Flow, text: string, options: { indent?: number; b
     lines,
     textX,
     flow.y,
-    { align: flow.rtl ? "right" : "left", lineHeightFactor: 1.25 },
+    { align: flow.rtl ? "right" : "left", lineHeightFactor: 1.2 },
     flow.rtl,
   )
   flow.y += height
@@ -999,11 +999,11 @@ function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
     styles: {
       font: flow.rtl ? ARABIC_FONT_FAMILY : LATIN_FONT_FAMILY,
       fontStyle: "normal",
-      fontSize: 8.5,
+      fontSize: 8,
       textColor: [51, 65, 85],
       lineColor: [226, 232, 240],
       lineWidth: 0.2,
-      cellPadding: 2.5,
+      cellPadding: 2.2,
       halign: flow.rtl ? "right" : "left",
       valign: "top",
       overflow: "linebreak",
@@ -1013,6 +1013,7 @@ function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
       textColor: [15, 23, 42],
       font: flow.rtl ? ARABIC_FONT_FAMILY : LATIN_FONT_FAMILY,
       fontStyle: "bold",
+      fontSize: 8,
       halign: flow.rtl ? "right" : "left",
     },
     didDrawPage: () => {
@@ -1123,8 +1124,63 @@ async function renderImageGrid(flow: Flow, images: NonNullable<PdfSectionTemplat
     renderParagraph(flow, flow.rtl ? "لا توجد صور." : "No images recorded.")
     return
   }
-  for (const image of images) {
-    await renderImageBlock(flow, { type: "image", ...image }, sourceVisuals ? flow.width : undefined)
+  if (sourceVisuals) {
+    for (const image of images) {
+      await renderImageBlock(flow, { type: "image", ...image }, flow.width)
+    }
+    return
+  }
+
+  // 2-column side-by-side image grid
+  const gap = 4
+  const colWidth = (flow.width - gap) / 2
+  const maxImgH = 68
+
+  for (let i = 0; i < images.length; i += 2) {
+    const pair = images.slice(i, i + 2)
+    const loadedPair = await Promise.all(pair.map((img) => loadImage(img.src)))
+
+    let rowH = 0
+    const dimensions = loadedPair.map((img, idx) => {
+      if (!img) return { w: colWidth, h: 40 }
+      const ratio = Math.min(colWidth / img.width, maxImgH / img.height)
+      const w = img.width * ratio
+      const h = img.height * ratio
+      rowH = Math.max(rowH, h + (pair[idx].caption ? 7 : 0) + 3)
+      return { w, h }
+    })
+
+    ensureSpace(flow, rowH + 4)
+
+    for (let idx = 0; idx < pair.length; idx += 1) {
+      const img = loadedPair[idx]
+      const block = pair[idx]
+      const dim = dimensions[idx]
+      const col = flow.rtl ? (pair.length === 1 ? 0 : 1 - idx) : idx
+      const x = flow.x + col * (colWidth + gap)
+
+      if (!img) {
+        setLanguage(flow.doc, flow.rtl, 7.5, false)
+        flow.doc.setTextColor(100, 116, 139)
+        writePdfText(flow.doc, block.caption || (flow.rtl ? "تعذر تحميل الصورة." : "Image unavailable."), x, flow.y, { align: flow.rtl ? "right" : "left" }, flow.rtl)
+        continue
+      }
+
+      flow.doc.setDrawColor(226, 232, 240)
+      flow.doc.rect(x - 0.5, flow.y - 0.5, dim.w + 1, dim.h + 1)
+      flow.doc.addImage(img.dataUrl, "JPEG", x, flow.y, dim.w, dim.h, undefined, "FAST")
+
+      if (block.caption) {
+        setLanguage(flow.doc, flow.rtl, 7.5, false)
+        flow.doc.setTextColor(100, 116, 139)
+        const capLines = textLines(flow.doc, block.caption, dim.w)
+        writePdfText(flow.doc, capLines, flow.rtl ? x + dim.w : x, flow.y + dim.h + 2.5, {
+          align: flow.rtl ? "right" : "left",
+          lineHeightFactor: 1.1,
+        }, flow.rtl)
+      }
+    }
+    flow.y += rowH + 4
   }
 }
 
@@ -1356,7 +1412,7 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     const headerH = 17
     const totalW = width - margin * 2
     const col1W = 42
-    const col3W = 55
+    const col3W = 44
     const col2W = totalW - col1W - col3W
     const col3X = margin + col1W + col2W
     const rightX = col3X + col3W - 2.5
@@ -1540,6 +1596,15 @@ async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
   }
   drawFirstPageHeader(flow)
   for (const section of template.sections) {
+    // Skip redundant Project Information table since the 8 metadata cards at top already present this data
+    const isProjectInfoSection = section.key === "project-info"
+      || section.title.toLowerCase().includes("project information")
+      || section.title.includes("معلومات المشروع")
+
+    if (isProjectInfoSection) {
+      continue
+    }
+
     const sectionFlowImages = (section.images ?? []).filter((image) => image.flowTarget === "section")
     const galleryImages = (section.images ?? []).filter((image) => image.flowTarget !== "section" && image.flowTarget !== "documents")
     const contentBlocks = section.html !== undefined ? htmlToBlocks(section.html) : []
