@@ -612,7 +612,7 @@ export function InspectionReportForm({
       </div>
 
       <Card className="gap-0 py-0">
-        <CardHeader className="flex-row items-center justify-between border-b px-5 py-4 sm:px-6"><CardTitle className="text-lg">{copy.checklist}</CardTitle><Button type="button" variant="outline" size="sm" disabled={isLocked} onClick={() => setContent((current) => ({ ...current, checklist: [...current.checklist, { id: crypto.randomUUID(), label: "", checked: false }] }))}><Plus className="size-4" />{copy.addItem}</Button></CardHeader>
+        <div className="flex items-center justify-between border-b px-5 py-4 sm:px-6"><CardTitle className="text-lg">{copy.checklist}</CardTitle><Button type="button" variant="outline" size="sm" disabled={isLocked} onClick={() => setContent((current) => ({ ...current, checklist: [...current.checklist, { id: crypto.randomUUID(), label: "", checked: false }] }))}><Plus className="size-4" />{copy.addItem}</Button></div>
         <CardContent className="space-y-3 p-5 sm:p-6">
           {content.checklist.length ? content.checklist.map((item, index) => (
             <div key={item.id} className="grid gap-2 rounded-xl border bg-muted/20 p-3 sm:grid-cols-[auto_minmax(0,1fr)_minmax(180px,0.55fr)_auto] sm:items-center">
@@ -656,7 +656,7 @@ function HeaderCell({ label, value, person }: { label: string; value: string; pe
 function AttachmentCard({ title, description, icon, actionLabel, onAction, disabled, children }: { title: string; description: string; icon: ReactNode; actionLabel: string; onAction: () => void; disabled: boolean; children: ReactNode }) {
   return (
     <Card className="gap-0 py-0">
-      <CardHeader className="flex-row items-center justify-between gap-4 border-b px-5 py-4">
+      <div className="flex items-center justify-between gap-4 border-b px-5 py-4 sm:px-6">
         <div className="min-w-0 flex-1">
           <CardTitle className="flex items-center gap-2 text-lg">
             <span className="text-primary">{icon}</span>
@@ -675,7 +675,7 @@ function AttachmentCard({ title, description, icon, actionLabel, onAction, disab
         >
           <UploadCloud className="size-5 text-primary" />
         </Button>
-      </CardHeader>
+      </div>
       <CardContent className="p-5">{children}</CardContent>
     </Card>
   )
