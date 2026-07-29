@@ -569,12 +569,12 @@ function addSourcePdfImages(input: {
 export const PDF_UI_SECTION_KEYS = [
   "projectInformation",
   "reportDetails",
+  "checklist",
   "feedback",
   "observation",
   "findings",
   "recommendations",
   "correctiveActions",
-  "checklist",
   "approvals",
   "attachments",
 ] as const
@@ -612,15 +612,15 @@ export function buildLanguagePdfTemplate(input: {
   const sections: PdfSectionTemplate[] = [
     projectInformationSection(data, content, language),
     reportDetailsSection(data, content, language),
+    checklistSection(content, language),
     ...SECTION_LABELS.map((section) => ({
       key: section.key,
       title: language === "ar" ? section.ar : section.en,
       html: content.sections[section.key],
     })),
+    approvalSection(content, language),
+    attachmentsSection({ data, content, language, sourceDocument }),
   ]
-  sections.push(checklistSection(content, language))
-  sections.push(approvalSection(content, language))
-  sections.push(attachmentsSection({ data, content, language, sourceDocument }))
 
   if (sourceDocument) addSourcePdfImages({ data, translation, sourceDocument, language, sections })
 
