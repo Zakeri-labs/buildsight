@@ -1589,11 +1589,13 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     doc.setFillColor(37, 99, 235)
     doc.rect(margin, height - 17.5, width - margin * 2, 0.6, "F")
 
-    // Left Column: Phones, Social/Website, Email
+    // Left Column: Phones, Social/Website + Email on same line
+    const socialHandle = org.website ? (org.website.startsWith("@") ? org.website : `@${org.website}`) : ""
+    const socialAndEmail = [socialHandle, org.email].filter(Boolean).join(" · ")
+
     const contactLines = [
       org.phones ? `Tel: ${org.phones}` : "",
-      org.website ? (org.website.startsWith("@") ? org.website : `@${org.website}`) : "",
-      org.email ? org.email : "",
+      socialAndEmail,
     ].filter(Boolean)
 
     if (contactLines.length) {
@@ -1603,31 +1605,28 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
         doc,
         contactLines,
         margin,
-        height - 14,
-        { align: "left", lineHeightFactor: 1.15 },
+        height - 13.5,
+        { align: "left", lineHeightFactor: 1.2 },
         false,
       )
     }
 
-    // Right Column: Bilingual Address & Registration Details
-    const arAddressLine = `س.ت : ${org.crNumber || "—"} ، ص.ب : ${org.poBox || "—"} ، ر.ب : ${org.postalCode || "—"} ، ${org.addressAr}`
+    // Right Column: English Registration Details & Address
     const enAddressLine1 = `C.R. No.: ${org.crNumber || "—"}, P.O. Box : ${org.poBox || "—"}, Postal Code : ${org.postalCode || "—"}`
     const enAddressLine2 = org.addressEn || ""
 
-    // Draw Line 1 (Arabic - right aligned)
-    setLanguage(doc, true, 6.8, true)
+    // Draw Line 1 (English CR/PO - right aligned, bold dark)
+    setLanguage(doc, false, 6.5, true)
     doc.setTextColor(15, 23, 42)
-    writePdfText(doc, arAddressLine, width - margin, height - 14, { align: "right" }, true)
+    doc.text(enAddressLine1, width - margin, height - 13.5, { align: "right" })
 
-    // Draw Line 2 (English CR/PO - right aligned)
-    setLanguage(doc, false, 6.2, false)
-    doc.setTextColor(100, 116, 139)
-    doc.text(enAddressLine1, width - margin, height - 10.5, { align: "right" })
-
-    // Draw Line 3 (English Address - right aligned)
+    // Draw Line 2 (English Address - right aligned)
     if (enAddressLine2) {
-      doc.text(enAddressLine2, width - margin, height - 7.2, { align: "right" })
+      setLanguage(doc, false, 6.5, false)
+      doc.setTextColor(100, 116, 139)
+      doc.text(enAddressLine2, width - margin, height - 9.5, { align: "right" })
     }
+
 
     // Sub-Footer Divider Line
     doc.setDrawColor(241, 245, 249)

@@ -235,26 +235,17 @@ export function SettingsOrganization() {
                     {profile.phones}
                   </p>
                 ) : null}
-                {profile.website ? (
+                {profile.website || profile.email ? (
                   <p className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
                     <Globe className="size-3 text-purple-600 dark:text-purple-400" />
-                    {profile.website}
-                  </p>
-                ) : null}
-                {profile.email ? (
-                  <p className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
-                    <Mail className="size-3 text-sky-600 dark:text-sky-400" />
-                    {profile.email}
+                    {[profile.website, profile.email].filter(Boolean).join(" · ")}
                   </p>
                 ) : null}
               </div>
 
               {/* Right Column: CR, PO Box, Address */}
               <div className="space-y-1 text-start sm:text-end">
-                <p className="font-semibold text-slate-900 dark:text-slate-100">
-                  س.ت : {profile.crNumber || "—"} ، ص.ب : {profile.poBox || "—"} ، ر.ب : {profile.postalCode || "—"} ، {profile.addressAr}
-                </p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                <p className="text-[11px] font-semibold text-slate-900 dark:text-slate-100">
                   C.R. No.: {profile.crNumber || "—"}, P.O. Box : {profile.poBox || "—"}, Postal Code : {profile.postalCode || "—"}
                 </p>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
