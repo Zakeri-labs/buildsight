@@ -550,20 +550,20 @@ function ensureSpace(flow: Flow, required: number) {
 
 function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: string, value: string) {
   const { doc, rtl } = flow
-  doc.setDrawColor(203, 213, 225)
-  doc.setFillColor(255, 255, 255)
-  doc.roundedRect(x, y, width, 15, 1.5, 1.5, "FD")
-  setLanguage(doc, rtl, 7, true)
+  doc.setDrawColor(226, 232, 240)
+  doc.setFillColor(248, 250, 252)
+  doc.roundedRect(x, y, width, 14, 1, 1, "FD")
+  setLanguage(doc, rtl, 6.5, true)
   doc.setTextColor(100, 116, 139)
-  writePdfText(doc, label, rtl ? x + width - 3 : x + 3, y + 4.5, { align: rtl ? "right" : "left" }, rtl)
-  setLanguage(doc, rtl, 9, false)
+  writePdfText(doc, label, rtl ? x + width - 3 : x + 3, y + 4.2, { align: rtl ? "right" : "left" }, rtl)
+  setLanguage(doc, rtl, 8.5, false)
   doc.setTextColor(15, 23, 42)
   const lines = textLines(doc, value, width - 6).slice(0, 2)
   writePdfText(
     doc,
     lines,
     rtl ? x + width - 3 : x + 3,
-    y + 9,
+    y + 8.5,
     { align: rtl ? "right" : "left", lineHeightFactor: 1.1 },
     rtl,
   )
@@ -572,74 +572,70 @@ function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: st
 function drawFirstPageHeader(flow: Flow) {
   const { doc, template, pageWidth, rtl, logoImage } = flow
 
-  // 1. Top accent bar
-  doc.setFillColor(29, 78, 216)
-  doc.rect(0, 0, pageWidth, 3.5, "F")
+  // 1. Top accent line (Navy)
+  doc.setFillColor(30, 58, 138)
+  doc.rect(0, 0, pageWidth, 2.5, "F")
 
-  // 2. Banner background box
-  doc.setFillColor(248, 250, 252)
-  doc.rect(0, 3.5, pageWidth, 65, "F")
-
-  // 3. Header bar with LogoB.png logo
+  // 2. Header bar with LogoB.png logo
   if (logoImage) {
     const maxHeight = 9
-    const maxW = 42
+    const maxW = 40
     const ratio = Math.min(maxW / logoImage.width, maxHeight / logoImage.height)
     const w = logoImage.width * ratio
     const h = logoImage.height * ratio
     const logoX = rtl ? pageWidth - PAGE.margin - w : PAGE.margin
-    doc.addImage(logoImage.dataUrl, "PNG", logoX, 6.5, w, h, undefined, "FAST")
+    doc.addImage(logoImage.dataUrl, "PNG", logoX, 5.5, w, h, undefined, "FAST")
   } else {
-    setLanguage(doc, rtl, 10, true)
-    doc.setTextColor(29, 78, 216)
+    setLanguage(doc, rtl, 9.5, true)
+    doc.setTextColor(30, 58, 138)
     writePdfText(
       doc,
       rtl ? "روية للاستشارات" : "PROVISION CONSULTANCY",
       rtl ? pageWidth - PAGE.margin : PAGE.margin,
-      11.5,
+      10.5,
       { align: rtl ? "right" : "left" },
       rtl,
     )
   }
 
   // Header right side text (Platform Name)
-  setLanguage(doc, rtl, 8, true)
+  setLanguage(doc, rtl, 7.5, true)
   doc.setTextColor(100, 116, 139)
   writePdfText(
     doc,
     rtl ? "منصة إشراف الإنشاءات" : "CONSTRUCTION SUPERVISION PLATFORM",
     rtl ? PAGE.margin : pageWidth - PAGE.margin,
-    11.5,
+    10.5,
     { align: rtl ? "left" : "right" },
     rtl,
   )
 
   // Separator line under header logo
   doc.setDrawColor(226, 232, 240)
-  doc.line(PAGE.margin, 18.5, pageWidth - PAGE.margin, 18.5)
+  doc.line(PAGE.margin, 17, pageWidth - PAGE.margin, 17)
 
-  // Main Title: Report / Term Name (AI DOCUMENT TRANSLATION & English Original Document REMOVED!)
+  // Main Title: Report / Term Name
   const reportMainTitle = template.termName || template.title
-  setLanguage(doc, rtl, 17, true)
+  setLanguage(doc, rtl, 16, true)
   doc.setTextColor(15, 23, 42)
   writePdfText(
     doc,
     reportMainTitle,
     rtl ? pageWidth - PAGE.margin : PAGE.margin,
-    26,
+    24.5,
     { align: rtl ? "right" : "left" },
     rtl,
   )
 
   // Subtitle: Project Name · Report Number
-  setLanguage(doc, rtl, 9.5, false)
+  setLanguage(doc, rtl, 9, false)
   doc.setTextColor(71, 85, 105)
   const subtitle = `${template.projectName} · ${template.reportNumber}`
   writePdfText(
     doc,
     subtitle,
     rtl ? pageWidth - PAGE.margin : PAGE.margin,
-    32,
+    30,
     { align: rtl ? "right" : "left" },
     rtl,
   )
@@ -658,7 +654,7 @@ function drawFirstPageHeader(flow: Flow) {
     template.reportType,
     template.subject,
   ]
-  const gap = 3
+  const gap = 2.5
   const cellWidth = (pageWidth - PAGE.margin * 2 - gap * 3) / 4
   for (let index = 0; index < values.length; index += 1) {
     const row = Math.floor(index / 4)
@@ -667,13 +663,13 @@ function drawFirstPageHeader(flow: Flow) {
     drawMetaCell(
       flow,
       PAGE.margin + physicalColumn * (cellWidth + gap),
-      36 + row * 15,
+      34 + row * 15,
       cellWidth,
       labels[index],
       values[index],
     )
   }
-  flow.y = 72
+  flow.y = 68
 }
 
 function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>) {
@@ -982,23 +978,30 @@ async function renderBlocks(flow: Flow, blocks: PdfBlock[]) {
 }
 
 function renderSectionTitle(flow: Flow, title: string) {
-  // Keep a section heading with at least the first paragraph or table header.
-  // This prevents orphan headings and the large blank-page artefacts that the
-  // previous source-coordinate renderer produced.
-  ensureSpace(flow, 28)
-  setLanguage(flow.doc, flow.rtl, 13, true)
+  ensureSpace(flow, 24)
+  setLanguage(flow.doc, flow.rtl, 11.5, true)
   flow.doc.setTextColor(15, 23, 42)
+
+  // Accent pill bar next to section title
+  const barWidth = 1.5
+  const barHeight = 4.2
+  const barX = flow.rtl ? flow.x + flow.width - barWidth : flow.x
+  flow.doc.setFillColor(37, 99, 235)
+  flow.doc.rect(barX, flow.y - 3.2, barWidth, barHeight, "F")
+
+  const textX = flow.rtl ? flow.x + flow.width - 3.5 : flow.x + 3.5
   writePdfText(
     flow.doc,
     title,
-    flow.rtl ? flow.x + flow.width : flow.x,
+    textX,
     flow.y,
     { align: flow.rtl ? "right" : "left" },
     flow.rtl,
   )
-  flow.doc.setDrawColor(203, 213, 225)
-  flow.doc.line(flow.x, flow.y + 3, flow.x + flow.width, flow.y + 3)
-  flow.y += 9
+
+  flow.doc.setDrawColor(241, 245, 249)
+  flow.doc.line(flow.x, flow.y + 2.5, flow.x + flow.width, flow.y + 2.5)
+  flow.y += 8.5
 }
 
 async function renderImageGrid(flow: Flow, images: NonNullable<PdfSectionTemplate["images"]>, sourceVisuals: boolean) {
@@ -1387,36 +1390,45 @@ async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
   }
   drawFirstPageHeader(flow)
   for (const section of template.sections) {
-    renderSectionTitle(flow, section.title)
     const sectionFlowImages = (section.images ?? []).filter((image) => image.flowTarget === "section")
     const galleryImages = (section.images ?? []).filter((image) => image.flowTarget !== "section" && image.flowTarget !== "documents")
     const contentBlocks = section.html !== undefined ? htmlToBlocks(section.html) : []
     if (section.table) contentBlocks.push({ type: "table", ...section.table })
     const flowedContent = interleaveFlowImages(contentBlocks, sectionFlowImages)
-    if (flowedContent.length) await renderBlocks(flow, flowedContent)
-    else if (section.html !== undefined) renderParagraph(flow, flow.rtl ? "لا يوجد محتوى مسجل." : "No content recorded.")
 
-    if (section.documentsTitle) {
-      renderHeading(flow, { type: "heading", level: 3, text: section.documentsTitle })
-      const sourceDocumentBlocks = htmlToBlocks(section.sourceDocumentHtml ?? section.documentsHtml ?? "")
-      const sourceDocumentImages = (section.images ?? []).filter((image) => image.flowTarget === "documents")
-      const reconstructedSource = interleaveFlowImages(sourceDocumentBlocks, sourceDocumentImages)
-      const otherDocumentBlocks = htmlToBlocks(section.otherDocumentsHtml ?? "")
-      if (reconstructedSource.length || otherDocumentBlocks.length) {
-        if (reconstructedSource.length) await renderBlocks(flow, reconstructedSource)
-        if (otherDocumentBlocks.length) await renderBlocks(flow, otherDocumentBlocks)
-      } else {
-        renderParagraph(flow, flow.rtl ? "لا توجد مرفقات مرتبطة." : "No related attachments.")
-      }
+    const sourceDocumentBlocks = section.documentsTitle ? htmlToBlocks(section.sourceDocumentHtml ?? section.documentsHtml ?? "") : []
+    const sourceDocumentImages = section.documentsTitle ? (section.images ?? []).filter((image) => image.flowTarget === "documents") : []
+    const reconstructedSource = interleaveFlowImages(sourceDocumentBlocks, sourceDocumentImages)
+    const otherDocumentBlocks = section.documentsTitle ? htmlToBlocks(section.otherDocumentsHtml ?? "") : []
+    const hasDocuments = reconstructedSource.length > 0 || otherDocumentBlocks.length > 0
+    const hasGalleryImages = galleryImages.length > 0
+
+    const hasAnySectionContent = flowedContent.length > 0 || hasDocuments || hasGalleryImages
+
+    // Completely omit empty sections from generated PDF output
+    if (!hasAnySectionContent) {
+      continue
     }
 
-    if (section.imageTitle) {
-      renderHeading(flow, { type: "heading", level: 3, text: section.imageTitle })
-      if (galleryImages.length) await renderImageGrid(flow, galleryImages, false)
-      else renderParagraph(flow, flow.rtl ? "لا توجد صور مرفقة." : "No images attached.")
-    } else if (galleryImages.length) {
+    renderSectionTitle(flow, section.title)
+
+    if (flowedContent.length) {
+      await renderBlocks(flow, flowedContent)
+    }
+
+    if (section.documentsTitle && hasDocuments) {
+      renderHeading(flow, { type: "heading", level: 3, text: section.documentsTitle })
+      if (reconstructedSource.length) await renderBlocks(flow, reconstructedSource)
+      if (otherDocumentBlocks.length) await renderBlocks(flow, otherDocumentBlocks)
+    }
+
+    if (hasGalleryImages) {
+      if (section.imageTitle) {
+        renderHeading(flow, { type: "heading", level: 3, text: section.imageTitle })
+      }
       await renderImageGrid(flow, galleryImages, section.key === "source-visuals")
     }
+
     flow.y += 4
   }
 
