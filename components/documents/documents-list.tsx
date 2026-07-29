@@ -25,6 +25,7 @@ import {
   Send,
   ShieldAlert,
 } from "lucide-react"
+import { CreateDocumentDialog } from "@/components/documents/create-document-dialog"
 import { DocumentTypeSelect } from "@/components/documents/document-type-select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -190,10 +191,7 @@ export function DocumentsList({
 
         <div className="pb-3">
           {selectedProjectId ? (
-            <Link href="/documents/new" className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-blue-700">
-              <Plus className="size-4" />
-              Create Document
-            </Link>
+            <CreateDocumentDialog projectId={selectedProjectId} />
           ) : (
             <button type="button" disabled title="Select a project first" className="inline-flex h-10 cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-slate-300 px-4 text-sm font-semibold text-white dark:bg-slate-700">
               <Plus className="size-4" />

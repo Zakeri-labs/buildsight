@@ -35,6 +35,7 @@ set document_type = case
     'inspection_report',
     'site_inspection_request',
     'material_inspection_request',
+    'wir_ir',
     'request_for_inspection',
     'request_for_information',
     'method_statement',
