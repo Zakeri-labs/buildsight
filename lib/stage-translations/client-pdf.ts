@@ -2115,7 +2115,15 @@ async function buildNativeBilingualPdfBlob(input: {
         flow.doc.addPage("a4", "portrait")
         flow.pageNumber += 1
         // Redraw the bilingual header on the new page
-        drawBilingualHeader({ doc: flow.doc, data, margin: PAGE.margin, columnWidth: colWidth, gap, englishLabel: engSections[0]?.title, arabicLabel: arSections[0]?.title })
+        drawBilingualHeader({
+          doc: flow.doc,
+          data,
+          margin: PAGE.margin,
+          columnWidth: colWidth,
+          gap,
+          englishLabel: "English Original",
+          arabicLabel: "الترجمة العربية",
+        })
         flow.y = 31  // below the bilingual header with padding
       }
 
