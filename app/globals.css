@@ -169,6 +169,22 @@
   --sidebar-ring: oklch(0.62 0.16 259);
 }
 
+@font-face {
+  font-family: 'Greta Arabic';
+  src: url('/fonts/GretaArabic-Regular.ttf') format('truetype');
+  font-weight: 400 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Greta Arabic';
+  src: url('/fonts/GretaArabic-Bold.ttf') format('truetype');
+  font-weight: 600 700 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -179,14 +195,14 @@
   [dir='rtl'] .flip-rtl {
     transform: scaleX(-1);
   }
-  /* Switch to Vazirmatn when RTL is active */
+  /* Switch to Greta Arabic when RTL is active */
   [dir='rtl'] body,
   [dir='rtl'] .font-sans {
-    font-family: var(--font-arabic), 'Vazirmatn', ui-sans-serif, system-ui, sans-serif;
+    font-family: 'Greta Arabic', var(--font-arabic), 'Vazirmatn', ui-sans-serif, system-ui, sans-serif;
   }
-  /* Arabic text in language switch button always uses Vazirmatn font */
+  /* Arabic text in translate page & UI always uses Greta Arabic font */
   .font-arabic {
-    font-family: var(--font-arabic), 'Vazirmatn', ui-sans-serif, system-ui, sans-serif;
+    font-family: 'Greta Arabic', var(--font-arabic), 'Vazirmatn', ui-sans-serif, system-ui, sans-serif;
   }
 }
 

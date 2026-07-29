@@ -20,6 +20,23 @@ function isSupportedFont(bytes: Uint8Array) {
 
 async function fetchFont() {
   if (cachedFont) return cachedFont
+
+  // Check local public/fonts/GretaArabic-Regular.ttf first
+  try {
+    const fs = await import("fs")
+    const path = await import("path")
+    const localPath = path.join(process.cwd(), "public", "fonts", "GretaArabic-Regular.ttf")
+    if (fs.existsSync(localPath)) {
+      const bytes = fs.readFileSync(localPath)
+      if (isSupportedFont(bytes)) {
+        cachedFont = bytes
+        return bytes
+      }
+    }
+  } catch {
+    // Fallback to remote candidates
+  }
+
   const configured = process.env.ARABIC_PDF_FONT_URL?.trim()
   const candidates = configured ? [configured, ...DEFAULT_FONT_URLS] : DEFAULT_FONT_URLS
   let lastError = "No Arabic font source is available."

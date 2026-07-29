@@ -28,9 +28,9 @@ const AUTOTABLE_SCRIPT_URLS = [
   "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js",
   "https://unpkg.com/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js",
 ]
-const ARABIC_FONT_FILENAME = "NotoNaskhArabic-Regular.ttf"
-const ARABIC_FONT_FAMILY = "NotoNaskhArabic"
-const ARABIC_FONT_URL = "/api/stage-translations/font"
+const ARABIC_FONT_FILENAME = "GretaArabic-Regular.ttf"
+const ARABIC_FONT_FAMILY = "GretaArabic"
+const ARABIC_FONT_URL = "/fonts/GretaArabic-Regular.ttf"
 
 const LATIN_FONT_FILENAME = "calibri.ttf"
 const LATIN_FONT_FAMILY = "calibri"
