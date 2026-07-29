@@ -1,12 +1,10 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   ArrowDown,
   ArrowUp,
-  Building2,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
   CircleDot,
@@ -17,9 +15,7 @@ import {
   Plus,
   ShieldCheck,
   Trash2,
-  UserRound,
 } from "lucide-react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -72,11 +68,9 @@ import type {
   StageManagementData,
   StageRecord,
   StageTermRecord,
-  StageUserOption,
 } from "@/lib/db/stages"
-import { DUE_DATE_RULES, dueDateRuleLabel, type StageTermStatus } from "@/lib/stages/config"
+import { type StageTermStatus } from "@/lib/stages/config"
 import { useI18n } from "@/lib/i18n"
-import { profileAvatarDisplayUrl } from "@/lib/profile-avatar"
 
 const COPY = {
   en: {
@@ -100,18 +94,11 @@ const COPY = {
     moveDown: "Move down",
     reportName: "Term Name",
     requirement: "Required / Optional",
-    organization: "Responsible organization",
-    user: "Responsible user",
-    dueDate: "Due date rule",
     approval: "Approval",
-    template: "Template",
     status: "Status",
     actions: "Actions",
     optional: "Optional",
     approvalRequired: "Required",
-    noApproval: "Not required",
-    unassigned: "Unassigned",
-    noTemplate: "No template",
     editReport: "Edit Term",
     disableReport: "Disable Term",
     enableReport: "Enable Term",
@@ -127,13 +114,9 @@ const COPY = {
     save: "Save changes",
     addReportTitle: "Add Term",
     editReportTitle: "Edit Term",
-    termDialogDescription: "Configure responsibility, timing, approval, and template details for this term.",
+    termDialogDescription: "Set the term name, requirement, approval, and status.",
     requiredToggle: "Required / Optional",
     approvalToggle: "Approval is required",
-    selectOrganization: "Select organization",
-    selectUser: "Select user",
-    selectRule: "Select rule",
-    templatePlaceholder: "Template name or reference (optional)",
     deleteTitle: "Confirm deletion",
     deleteStageDescription: "Deleting this stage also deletes all terms inside it. This action cannot be undone.",
     deleteTermDescription: "Deleting this term cannot be undone.",
@@ -164,18 +147,11 @@ const COPY = {
     moveDown: "تحريك لأسفل",
     reportName: "اسم البند",
     requirement: "إلزامي / اختياري",
-    organization: "الجهة المسؤولة",
-    user: "المستخدم المسؤول",
-    dueDate: "قاعدة تاريخ الاستحقاق",
     approval: "الموافقة",
-    template: "القالب",
     status: "الحالة",
     actions: "الإجراءات",
     optional: "اختياري",
     approvalRequired: "مطلوبة",
-    noApproval: "غير مطلوبة",
-    unassigned: "غير معيّن",
-    noTemplate: "لا يوجد قالب",
     editReport: "تعديل البند",
     disableReport: "تعطيل البند",
     enableReport: "تفعيل البند",
@@ -191,13 +167,9 @@ const COPY = {
     save: "حفظ التغييرات",
     addReportTitle: "إضافة بند",
     editReportTitle: "تعديل البند",
-    termDialogDescription: "حدّد المسؤولية والتوقيت والموافقة وتفاصيل القالب لهذا البند.",
+    termDialogDescription: "حدّد اسم البند ومتطلباته والموافقة والحالة.",
     requiredToggle: "إلزامي / اختياري",
     approvalToggle: "الموافقة مطلوبة",
-    selectOrganization: "اختر الجهة",
-    selectUser: "اختر المستخدم",
-    selectRule: "اختر القاعدة",
-    templatePlaceholder: "اسم القالب أو مرجعه (اختياري)",
     deleteTitle: "تأكيد الحذف",
     deleteStageDescription: "سيؤدي حذف المرحلة إلى حذف جميع البنود بداخلها. لا يمكن التراجع عن هذا الإجراء.",
     deleteTermDescription: "لا يمكن التراجع عن حذف هذا البند.",
@@ -217,16 +189,6 @@ type DeleteTarget =
   | { kind: "stage"; id: string; name: string }
   | { kind: "term"; id: string; name: string }
 
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase()
-}
-
 function SummaryCard({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: number }) {
   return (
     <Card size="sm">
@@ -243,21 +205,15 @@ function SummaryCard({ icon: Icon, label, value }: { icon: React.ElementType; la
   )
 }
 
-function ResponsibleUser({ user, fallback }: { user: StageUserOption | undefined; fallback: string }) {
-  if (!user) return <span className="text-muted-foreground">{fallback}</span>
+function TermTableColumns() {
   return (
-    <div className="flex items-center gap-2">
-      <Avatar size="sm">
-        {user.avatarUrl ? <AvatarImage src={profileAvatarDisplayUrl(user.avatarUrl)} alt="" /> : null}
-        <AvatarFallback>{initials(user.name)}</AvatarFallback>
-      </Avatar>
-      <div className="min-w-0">
-        <p className="max-w-40 truncate font-medium">{user.name}</p>
-        {user.organizationName ? (
-          <p className="max-w-40 truncate text-xs text-muted-foreground">{user.organizationName}</p>
-        ) : null}
-      </div>
-    </div>
+    <colgroup>
+      <col style={{ width: "45%" }} />
+      <col style={{ width: "15%" }} />
+      <col style={{ width: "15%" }} />
+      <col style={{ width: "15%" }} />
+      <col style={{ width: "10%" }} />
+    </colgroup>
   )
 }
 
@@ -278,11 +234,6 @@ export function StageManagement({
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  const userById = useMemo(() => new Map(data.users.map((user) => [user.id, user])), [data.users])
-  const organizationById = useMemo(
-    () => new Map(data.organizations.map((item) => [item.id, item.name])),
-    [data.organizations],
-  )
   const totalReports = data.stages.reduce((sum, stage) => sum + stage.terms.length, 0)
   const requiredReports = data.stages.reduce(
     (sum, stage) => sum + stage.terms.filter((term) => term.required).length,
@@ -313,8 +264,8 @@ export function StageManagement({
   }
 
   return (
-    <div className="space-y-6">
-      <section className="flex flex-col gap-4 rounded-2xl border bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto w-full max-w-5xl space-y-5">
+      <section className="flex flex-col gap-4 rounded-2xl border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="max-w-3xl">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">{c.eyebrow}</p>
           <h2 className="mt-1 text-xl font-semibold tracking-tight">{organization.name}</h2>
@@ -360,12 +311,12 @@ export function StageManagement({
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {data.stages.map((stage, stageIndex) => {
             const isExpanded = expanded.has(stage.id)
             return (
-              <Card key={stage.id} className={!stage.active ? "opacity-75" : undefined}>
-                <CardHeader className="border-b pb-4">
+              <Card key={stage.id} className={`!gap-0 !py-0${!stage.active ? " opacity-75" : ""}`}>
+                <CardHeader className="border-b !px-4 !py-3">
                   <div className="flex min-w-0 items-start gap-3">
                     <button
                       type="button"
@@ -381,7 +332,7 @@ export function StageManagement({
                         <span className="flex size-6 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
                           {stageIndex + 1}
                         </span>
-                        <CardTitle className="text-lg">{stage.name}</CardTitle>
+                        <CardTitle className="text-base">{stage.name}</CardTitle>
                         <Badge variant={stage.active ? "secondary" : "outline"}>
                           {stage.active ? c.active : c.disabled}
                         </Badge>
@@ -413,6 +364,7 @@ export function StageManagement({
                       </Button>
                       <Button
                         type="button"
+                        size="sm"
                         variant="outline"
                         className="hidden sm:inline-flex"
                         onClick={() => setTermDialog({ mode: "create", stage, term: null })}
@@ -464,7 +416,7 @@ export function StageManagement({
                 </CardHeader>
 
                 {isExpanded ? (
-                  <CardContent className="px-0 pb-0">
+                  <CardContent className="!px-0 !pb-0">
                     {stage.terms.length === 0 ? (
                       <div className="flex flex-col items-center px-4 py-10 text-center">
                         <FileText className="size-7 text-muted-foreground" />
@@ -480,74 +432,55 @@ export function StageManagement({
                       </div>
                     ) : (
                       <>
-                        <div className="hidden lg:block">
-                          <Table>
+                        <div className="hidden md:block">
+                          <Table className="table-fixed">
+                            <TermTableColumns />
                             <TableHeader>
-                              <TableRow>
-                                <TableHead className="ps-4">{c.reportName}</TableHead>
-                                <TableHead>{c.requirement}</TableHead>
-                                <TableHead>{c.organization}</TableHead>
-                                <TableHead>{c.user}</TableHead>
-                                <TableHead>{c.dueDate}</TableHead>
-                                <TableHead>{c.approval}</TableHead>
-                                <TableHead>{c.template}</TableHead>
-                                <TableHead>{c.status}</TableHead>
-                                <TableHead className="pe-4 text-end">{c.actions}</TableHead>
+                              <TableRow className="bg-muted/35 hover:bg-muted/35">
+                                <TableHead className="h-9 px-3 text-start text-xs font-semibold">{c.reportName}</TableHead>
+                                <TableHead className="h-9 px-3 text-start text-xs font-semibold">{c.requirement}</TableHead>
+                                <TableHead className="h-9 px-3 text-start text-xs font-semibold">{c.approval}</TableHead>
+                                <TableHead className="h-9 px-3 text-start text-xs font-semibold">{c.status}</TableHead>
+                                <TableHead className="h-9 px-3 text-end text-xs font-semibold">{c.actions}</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {stage.terms.map((term, termIndex) => (
                                 <TableRow key={term.id} className={term.status === "disabled" ? "opacity-60" : undefined}>
-                                  <TableCell className="ps-4 font-medium">
-                                    <div className="flex items-center gap-2">
-                                      <span className="flex size-6 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
+                                  <TableCell className="px-3 py-2.5 align-middle font-medium whitespace-normal">
+                                    <div className="flex min-w-0 items-center gap-2">
+                                      <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
                                         {termIndex + 1}
                                       </span>
-                                      <span className="max-w-64 whitespace-normal">{term.reportName}</span>
+                                      <span className="min-w-0 break-words leading-5">{term.reportName}</span>
                                     </div>
                                   </TableCell>
-                                  <TableCell>
-                                    <Badge variant={term.required ? "default" : "outline"}>
+                                  <TableCell className="px-3 py-2.5 align-middle">
+                                    <Badge
+                                      variant={term.required ? "default" : "outline"}
+                                      className="h-6 min-w-16 justify-center px-2 text-xs"
+                                    >
                                       {term.required ? c.required : c.optional}
                                     </Badge>
                                   </TableCell>
-                                  <TableCell>
-                                    <span className="inline-flex max-w-44 items-center gap-1.5 whitespace-normal">
-                                      <Building2 className="size-3.5 shrink-0 text-muted-foreground" />
-                                      {term.responsibleOrganizationId
-                                        ? organizationById.get(term.responsibleOrganizationId) ?? c.unassigned
-                                        : c.unassigned}
-                                    </span>
+                                  <TableCell className="px-3 py-2.5 align-middle">
+                                    {term.approvalRequired ? (
+                                      <Badge variant="outline" className="h-6 min-w-16 justify-center px-2 text-xs">
+                                        {c.approvalRequired}
+                                      </Badge>
+                                    ) : (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
                                   </TableCell>
-                                  <TableCell>
-                                    <ResponsibleUser user={userById.get(term.responsibleUserId ?? "")} fallback={c.unassigned} />
-                                  </TableCell>
-                                  <TableCell>
-                                    <span className="max-w-40 whitespace-normal text-muted-foreground">
-                                      {dueDateRuleLabel(term.dueDateRule, locale)}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell>
-                                    <span className="inline-flex items-center gap-1.5">
-                                      {term.approvalRequired ? (
-                                        <CheckCircle2 className="size-4 text-emerald-600" />
-                                      ) : (
-                                        <CircleDot className="size-4 text-muted-foreground" />
-                                      )}
-                                      {term.approvalRequired ? c.approvalRequired : c.noApproval}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell>
-                                    <span className="max-w-40 whitespace-normal text-muted-foreground">
-                                      {term.templateReference || c.noTemplate}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant={term.status === "active" ? "secondary" : "outline"}>
+                                  <TableCell className="px-3 py-2.5 align-middle">
+                                    <Badge
+                                      variant={term.status === "active" ? "secondary" : "outline"}
+                                      className="h-6 min-w-16 justify-center px-2 text-xs"
+                                    >
                                       {term.status === "active" ? c.active : c.disabled}
                                     </Badge>
                                   </TableCell>
-                                  <TableCell className="pe-4 text-end">
+                                  <TableCell className="px-3 py-2.5 text-end align-middle">
                                     <TermActions
                                       term={term}
                                       termIndex={termIndex}
@@ -577,20 +510,15 @@ export function StageManagement({
                           </Table>
                         </div>
 
-                        <div className="divide-y lg:hidden">
+                        <div className="divide-y md:hidden">
                           {stage.terms.map((term, termIndex) => (
-                            <div key={term.id} className="space-y-3 p-4">
+                            <div key={term.id} className="space-y-3 px-4 py-3">
                               <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="font-medium">{term.reportName}</p>
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    <Badge variant={term.required ? "default" : "outline"}>
-                                      {term.required ? c.required : c.optional}
-                                    </Badge>
-                                    <Badge variant={term.status === "active" ? "secondary" : "outline"}>
-                                      {term.status === "active" ? c.active : c.disabled}
-                                    </Badge>
-                                  </div>
+                                <div className="flex min-w-0 items-start gap-2">
+                                  <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
+                                    {termIndex + 1}
+                                  </span>
+                                  <p className="min-w-0 break-words font-medium leading-5">{term.reportName}</p>
                                 </div>
                                 <TermActions
                                   term={term}
@@ -615,28 +543,32 @@ export function StageManagement({
                                   }
                                 />
                               </div>
-                              <dl className="grid gap-3 text-sm sm:grid-cols-2">
-                                <div>
-                                  <dt className="text-xs text-muted-foreground">{c.organization}</dt>
+                              <dl className="grid grid-cols-3 gap-2 text-sm">
+                                <div className="min-w-0">
+                                  <dt className="truncate text-[11px] text-muted-foreground">{c.requirement}</dt>
                                   <dd className="mt-1">
-                                    {term.responsibleOrganizationId
-                                      ? organizationById.get(term.responsibleOrganizationId) ?? c.unassigned
-                                      : c.unassigned}
+                                    <Badge variant={term.required ? "default" : "outline"} className="h-6 px-2 text-xs">
+                                      {term.required ? c.required : c.optional}
+                                    </Badge>
                                   </dd>
                                 </div>
-                                <div>
-                                  <dt className="text-xs text-muted-foreground">{c.user}</dt>
+                                <div className="min-w-0">
+                                  <dt className="truncate text-[11px] text-muted-foreground">{c.approval}</dt>
                                   <dd className="mt-1">
-                                    <ResponsibleUser user={userById.get(term.responsibleUserId ?? "")} fallback={c.unassigned} />
+                                    {term.approvalRequired ? (
+                                      <Badge variant="outline" className="h-6 px-2 text-xs">{c.approvalRequired}</Badge>
+                                    ) : (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
                                   </dd>
                                 </div>
-                                <div>
-                                  <dt className="text-xs text-muted-foreground">{c.dueDate}</dt>
-                                  <dd className="mt-1">{dueDateRuleLabel(term.dueDateRule, locale)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="text-xs text-muted-foreground">{c.approval}</dt>
-                                  <dd className="mt-1">{term.approvalRequired ? c.approvalRequired : c.noApproval}</dd>
+                                <div className="min-w-0">
+                                  <dt className="truncate text-[11px] text-muted-foreground">{c.status}</dt>
+                                  <dd className="mt-1">
+                                    <Badge variant={term.status === "active" ? "secondary" : "outline"} className="h-6 px-2 text-xs">
+                                      {term.status === "active" ? c.active : c.disabled}
+                                    </Badge>
+                                  </dd>
                                 </div>
                               </dl>
                             </div>
@@ -674,17 +606,28 @@ export function StageManagement({
         state={termDialog}
         pending={isPending}
         labels={c}
-        locale={locale}
-        organizations={data.organizations}
-        users={data.users}
         onClose={() => setTermDialog(null)}
         onSubmit={(values) => {
           if (!termDialog) return
           execute(
             () =>
               termDialog.mode === "create"
-                ? createStageTerm({ stageId: termDialog.stage.id, ...values })
-                : updateStageTerm({ termId: termDialog.term.id, ...values }),
+                ? createStageTerm({
+                    stageId: termDialog.stage.id,
+                    ...values,
+                    responsibleOrganizationId: null,
+                    responsibleUserId: null,
+                    dueDateRule: "none",
+                    templateReference: "",
+                  })
+                : updateStageTerm({
+                    termId: termDialog.term.id,
+                    ...values,
+                    responsibleOrganizationId: termDialog.term.responsibleOrganizationId,
+                    responsibleUserId: termDialog.term.responsibleUserId,
+                    dueDateRule: termDialog.term.dueDateRule,
+                    templateReference: termDialog.term.templateReference ?? "",
+                  }),
             () => setTermDialog(null),
           )
         }}
@@ -863,11 +806,7 @@ function StageEditorDialog({
 type TermFormValues = {
   reportName: string
   required: boolean
-  responsibleOrganizationId: string | null
-  responsibleUserId: string | null
-  dueDateRule: string
   approvalRequired: boolean
-  templateReference: string
   status: StageTermStatus
 }
 
@@ -875,32 +814,23 @@ function TermEditorDialog({
   state,
   pending,
   labels,
-  locale,
-  organizations,
-  users,
   onClose,
   onSubmit,
 }: {
   state: TermDialogState | null
   pending: boolean
   labels: (typeof COPY)["en"] | (typeof COPY)["ar"]
-  locale: "en" | "ar"
-  organizations: StageManagementData["organizations"]
-  users: StageUserOption[]
   onClose: () => void
   onSubmit: (values: TermFormValues) => void
 }) {
   const initial = state?.term
   const [required, setRequired] = useState(initial?.required ?? true)
   const [approvalRequired, setApprovalRequired] = useState(initial?.approvalRequired ?? false)
-  const [responsibleOrganizationId, setResponsibleOrganizationId] = useState(initial?.responsibleOrganizationId ?? "none")
-  const [responsibleUserId, setResponsibleUserId] = useState(initial?.responsibleUserId ?? "none")
-  const [dueDateRule, setDueDateRule] = useState(initial?.dueDateRule ?? "none")
   const [status, setStatus] = useState<StageTermStatus>(initial?.status ?? "active")
 
   return (
     <Dialog open={state != null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[48rem]">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[36rem]">
         <form
           onSubmit={(event) => {
             event.preventDefault()
@@ -908,12 +838,7 @@ function TermEditorDialog({
             onSubmit({
               reportName: String(form.get("reportName") ?? ""),
               required,
-              responsibleOrganizationId:
-                responsibleOrganizationId === "none" ? null : responsibleOrganizationId,
-              responsibleUserId: responsibleUserId === "none" ? null : responsibleUserId,
-              dueDateRule,
               approvalRequired,
-              templateReference: String(form.get("templateReference") ?? ""),
               status,
             })
           }}
@@ -939,90 +864,7 @@ function TermEditorDialog({
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label>{labels.organization}</Label>
-              <Select
-                value={responsibleOrganizationId}
-                onValueChange={(value) => {
-                  setResponsibleOrganizationId((value as string | null) ?? "none")
-                  if (value && value !== "none") {
-                    const selectedUser = users.find((user) => user.id === responsibleUserId)
-                    if (selectedUser && selectedUser.organizationId !== value) setResponsibleUserId("none")
-                  }
-                }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue>
-                    {(value) =>
-                      value === "none"
-                        ? labels.unassigned
-                        : organizations.find((item) => item.id === value)?.name ?? labels.selectOrganization
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{labels.unassigned}</SelectItem>
-                  {organizations.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>{labels.user}</Label>
-              <Select value={responsibleUserId} onValueChange={(value) => setResponsibleUserId((value as string | null) ?? "none")}>
-                <SelectTrigger className="w-full">
-                  <SelectValue>
-                    {(value) =>
-                      value === "none"
-                        ? labels.unassigned
-                        : users.find((user) => user.id === value)?.name ?? labels.selectUser
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{labels.unassigned}</SelectItem>
-                  {users
-                    .filter(
-                      (user) =>
-                        responsibleOrganizationId === "none" || user.organizationId === responsibleOrganizationId,
-                    )
-                    .map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        <span className="flex flex-col">
-                          <span>{user.name}</span>
-                          {user.organizationName ? (
-                            <span className="text-xs text-muted-foreground">{user.organizationName}</span>
-                          ) : null}
-                        </span>
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>{labels.dueDate}</Label>
-              <Select value={dueDateRule} onValueChange={(value) => setDueDateRule((value as string | null) ?? "none")}>
-                <SelectTrigger className="w-full">
-                  <SelectValue>
-                    {(value) => dueDateRuleLabel(String(value ?? ""), locale)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {DUE_DATE_RULES.map((rule) => (
-                    <SelectItem key={rule.value} value={rule.value}>
-                      {locale === "ar" ? rule.labelAr : rule.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 sm:col-span-2">
               <Label>{labels.status}</Label>
               <Select value={status} onValueChange={(value) => setStatus((value as StageTermStatus | null) ?? "active")}>
                 <SelectTrigger className="w-full">
@@ -1035,17 +877,7 @@ function TermEditorDialog({
               </Select>
             </div>
 
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="term-template">{labels.template}</Label>
-              <Input
-                id="term-template"
-                name="templateReference"
-                defaultValue={initial?.templateReference ?? ""}
-                placeholder={labels.templatePlaceholder}
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-4 rounded-xl border p-3">
+            <div className="flex min-h-20 items-center justify-between gap-4 rounded-xl border p-3">
               <div className="flex min-w-0 items-center gap-2">
                 <FileText className="size-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
@@ -1060,9 +892,9 @@ function TermEditorDialog({
               <Switch id="term-required" checked={required} onCheckedChange={setRequired} />
             </div>
 
-            <div className="flex items-center justify-between rounded-xl border p-3">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="size-4 text-muted-foreground" />
+            <div className="flex min-h-20 items-center justify-between gap-4 rounded-xl border p-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <ShieldCheck className="size-4 shrink-0 text-muted-foreground" />
                 <Label htmlFor="term-approval" className="cursor-pointer">
                   {labels.approvalToggle}
                 </Label>

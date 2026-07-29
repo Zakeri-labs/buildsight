@@ -122,8 +122,6 @@ export type StageRecord = {
 
 export type StageManagementData = {
   stages: StageRecord[]
-  organizations: StageOrganizationOption[]
-  users: StageUserOption[]
 }
 
 export async function canManageStageTemplates(organizationId: string, userId: string): Promise<boolean> {
@@ -166,70 +164,25 @@ export async function canManageStageTemplates(organizationId: string, userId: st
 export async function loadStageManagement(organizationId: string): Promise<StageManagementData> {
   const admin = createAdminClient()
 
-  const [{ data: stageRows, error: stageError }, { data: termRows, error: termError }, { data: projects }] =
-    await Promise.all([
-      admin
-        .from("stages")
-        .select("id, organization_id, name, description, is_active, sort_order, created_at, updated_at")
-        .eq("organization_id", organizationId)
-        .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: true }),
-      admin
-        .from("stage_terms")
-        .select(
-          "id, stage_id, report_name, is_required, responsible_organization_id, responsible_user_id, due_date_rule, approval_required, template_reference, status, sort_order, created_at, updated_at, stages!inner(organization_id)",
-        )
-        .eq("stages.organization_id", organizationId)
-        .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: true }),
-      admin.from("projects").select("id").eq("supervising_organization_id", organizationId),
-    ])
+  const [{ data: stageRows, error: stageError }, { data: termRows, error: termError }] = await Promise.all([
+    admin
+      .from("stages")
+      .select("id, organization_id, name, description, is_active, sort_order, created_at, updated_at")
+      .eq("organization_id", organizationId)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true }),
+    admin
+      .from("stage_terms")
+      .select(
+        "id, stage_id, report_name, is_required, responsible_organization_id, responsible_user_id, due_date_rule, approval_required, template_reference, status, sort_order, created_at, updated_at, stages!inner(organization_id)",
+      )
+      .eq("stages.organization_id", organizationId)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true }),
+  ])
 
   if (stageError) throw stageError
   if (termError) throw termError
-
-  const projectIds = (projects ?? []).map((project: any) => project.id as string)
-  let participantOrganizationIds: string[] = []
-  let projectUserRows: any[] = []
-
-  if (projectIds.length > 0) {
-    const [{ data: participantRows }, { data: projectUsers }] = await Promise.all([
-      admin
-        .from("project_organization_memberships")
-        .select("organization_id")
-        .in("project_id", projectIds)
-        .eq("status", "active"),
-      admin
-        .from("project_user_memberships")
-        .select("user_id, organization_id")
-        .in("project_id", projectIds)
-        .eq("status", "active"),
-    ])
-    participantOrganizationIds = (participantRows ?? []).map((row: any) => row.organization_id)
-    projectUserRows = projectUsers ?? []
-  }
-
-  const organizationIds = Array.from(new Set([organizationId, ...participantOrganizationIds]))
-  const [{ data: organizationRows }, { data: orgMemberRows }] = await Promise.all([
-    admin.from("organizations").select("id, name, type").in("id", organizationIds).order("name"),
-    admin
-      .from("organization_memberships")
-      .select("user_id, organization_id")
-      .in("organization_id", organizationIds)
-      .eq("status", "active"),
-  ])
-
-  const allUserMemberships = [...(orgMemberRows ?? []), ...projectUserRows]
-  const userIds = Array.from(new Set(allUserMemberships.map((row: any) => row.user_id as string)))
-  const { data: profileRows } = userIds.length
-    ? await admin.from("profiles").select("id, full_name, email, avatar_url").in("id", userIds)
-    : { data: [] as any[] }
-
-  const orgNameById = new Map((organizationRows ?? []).map((org: any) => [org.id, org.name]))
-  const membershipByUser = new Map<string, string>()
-  for (const row of allUserMemberships) {
-    if (!membershipByUser.has(row.user_id)) membershipByUser.set(row.user_id, row.organization_id)
-  }
 
   const termsByStage = new Map<string, StageTermRecord[]>()
   for (const term of termRows ?? []) {
@@ -265,23 +218,5 @@ export async function loadStageManagement(organizationId: string): Promise<Stage
       updatedAt: stage.updated_at,
       terms: termsByStage.get(stage.id) ?? [],
     })),
-    organizations: (organizationRows ?? []).map((organization: any) => ({
-      id: organization.id,
-      name: organization.name,
-      type: organization.type,
-    })),
-    users: (profileRows ?? [])
-      .map((profile: any) => {
-        const userOrganizationId = membershipByUser.get(profile.id) ?? null
-        return {
-          id: profile.id,
-          name: profile.full_name?.trim() || profile.email || "Unnamed user",
-          email: profile.email,
-          avatarUrl: profile.avatar_url,
-          organizationId: userOrganizationId,
-          organizationName: userOrganizationId ? orgNameById.get(userOrganizationId) ?? null : null,
-        }
-      })
-      .sort((a, b) => a.name.localeCompare(b.name)),
   }
 }
