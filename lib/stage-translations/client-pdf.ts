@@ -979,17 +979,19 @@ function renderRtlTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>)
 }
 
 function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
-  const rows = block.rows.length ? block.rows : []
-  if (!block.headers.length && !rows.length) return
-  if (flow.rtl) {
-    renderRtlTable(flow, block)
-    return
-  }
+  const rawRows = block.rows.length ? block.rows : []
+  if (!block.headers.length && !rawRows.length) return
+
   ensureSpace(flow, 18)
   setLanguage(flow.doc, flow.rtl, 8.5, false)
+
+  // Shape Arabic text inside table headers and cells if RTL
+  const headers = block.headers.map((h) => flow.rtl ? shapeArabicText(flow.doc, h) : h)
+  const rows = rawRows.map((row) => row.map((cell) => flow.rtl ? shapeArabicText(flow.doc, cell) : cell))
+
   const options: Record<string, unknown> = {
     startY: flow.y,
-    head: block.headers.length ? [block.headers] : [],
+    head: headers.length ? [headers] : [],
     body: rows,
     theme: "grid",
     tableWidth: flow.width,
@@ -999,9 +1001,9 @@ function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
       fontStyle: "normal",
       fontSize: 8.5,
       textColor: [51, 65, 85],
-      lineColor: [148, 163, 184],
+      lineColor: [226, 232, 240],
       lineWidth: 0.2,
-      cellPadding: 2,
+      cellPadding: 2.5,
       halign: flow.rtl ? "right" : "left",
       valign: "top",
       overflow: "linebreak",
@@ -1010,7 +1012,7 @@ function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
       fillColor: [226, 232, 240],
       textColor: [15, 23, 42],
       font: flow.rtl ? ARABIC_FONT_FAMILY : LATIN_FONT_FAMILY,
-      fontStyle: "normal",
+      fontStyle: "bold",
       halign: flow.rtl ? "right" : "left",
     },
     didDrawPage: () => {
