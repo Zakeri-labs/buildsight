@@ -647,7 +647,7 @@ export function InspectionReportForm({
       {!isLocked ? (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur md:start-64 md:px-8">
           <div className="mx-auto flex max-w-7xl flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
-            {canReview ? (
+            {canReview && (status === "submitted" || status === "under_review") ? (
               <div className="flex items-center gap-2">
                 <Button
                   type="button"

@@ -282,8 +282,8 @@ export async function decideTermResponseAction(input: {
       .maybeSingle()
     if (lookupError) throw lookupError
     if (!response) return { ok: false, error: "Report response not found." }
-    if (response.status === "approved" || response.status === "completed") {
-      return { ok: false, error: "This report has already been finalized." }
+    if (response.status !== "submitted" && response.status !== "under_review") {
+      return { ok: false, error: "Only submitted reports can be approved or rejected." }
     }
 
     const { error: decisionError } = await admin.rpc("decide_project_stage_response", {
