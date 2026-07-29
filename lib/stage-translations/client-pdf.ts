@@ -14,6 +14,7 @@ import {
 import { getSourcePdfAttachment } from "@/lib/stage-translations/source-document"
 import type { StageTranslationPageData, StageTranslationRecord } from "@/lib/stage-translations/types"
 import { createClient as createSupabaseClient } from "@/lib/supabase/client"
+import { getOrganizationProfile } from "@/lib/organization/profile"
 
 const JSPDF_SCRIPT_ID = "buildsight-jspdf"
 const JSPDF_SCRIPT_URLS = [
@@ -1229,31 +1230,52 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
   const width = doc.internal.pageSize.getWidth()
   const height = doc.internal.pageSize.getHeight()
   const margin = PAGE.margin
+  const org = getOrganizationProfile()
 
   for (let page = 1; page <= pages; page += 1) {
     doc.setPage(page)
     doc.setDrawColor(226, 232, 240)
-    doc.line(margin, height - 9, width - margin, height - 9)
+    doc.line(margin, height - 12, width - margin, height - 12)
 
-    setLanguage(doc, rtl, 7.5, false)
+    // Left info (Phones, Website, Email)
+    const leftText = [
+      org.phones ? `Tel: ${org.phones}` : "",
+      [org.website, org.email].filter(Boolean).join(" · "),
+    ].filter(Boolean)
+
+    if (leftText.length) {
+      setLanguage(doc, false, 6.8, false)
+      doc.setTextColor(100, 116, 139)
+      writePdfText(
+        doc,
+        leftText,
+        rtl ? width - margin : margin,
+        height - 8.5,
+        { align: rtl ? "right" : "left", lineHeightFactor: 1.15 },
+        false,
+      )
+    }
+
+    // Right info (C.R. No, P.O. Box, Postal Code, Address)
+    const arReg = `س.ت: ${org.crNumber} | ص.ب: ${org.poBox} | ر.ب: ${org.postalCode} | ${org.addressAr}`
+    const enReg = `C.R. No.: ${org.crNumber}, P.O. Box: ${org.poBox}, Postal Code: ${org.postalCode} · ${org.addressEn}`
+    const rightText = [rtl ? arReg : enReg]
+
+    setLanguage(doc, rtl, 6.8, false)
     doc.setTextColor(100, 116, 139)
     writePdfText(
       doc,
-      rtl ? "روية للاستشارات · مستند سري" : "Provision Consultancy · Confidential Document",
-      rtl ? width - margin : margin,
-      height - 4.5,
-      { align: rtl ? "right" : "left" },
+      rightText,
+      rtl ? margin : width - margin,
+      height - 8.5,
+      { align: rtl ? "left" : "right", lineHeightFactor: 1.15 },
       rtl,
     )
 
-    setLanguage(doc, false, 7.5, false)
-    doc.setTextColor(100, 116, 139)
-    doc.text(
-      `${page} / ${pages}`,
-      rtl ? margin : width - margin,
-      height - 4.5,
-      { align: rtl ? "left" : "right" },
-    )
+    // Page Number
+    setLanguage(doc, false, 7, false)
+    doc.setTextColor(148, 163, 184)
+    doc.text(`${page} / ${pages}`, width / 2, height - 3, { align: "center" })
   }
   if (rtl) setLanguage(doc, true, 8, false)
 }
