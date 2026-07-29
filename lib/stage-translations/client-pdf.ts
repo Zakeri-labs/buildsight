@@ -1808,7 +1808,7 @@ function addBilingualPageNumbers(doc: JsPdfDocument) {
   }
 }
 
-async function buildBilingualPdfBlob(input: {
+async function buildNativeBilingualPdfBlob(input: {
   data: StageTranslationPageData
   translation: StageTranslationRecord
   englishTemplate: LanguagePdfTemplate
