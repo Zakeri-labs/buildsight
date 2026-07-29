@@ -1,4 +1,4 @@
-import { Building2, HardHat, Landmark } from "lucide-react"
+import { HardHat } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type LoadingMessage =
@@ -100,19 +100,8 @@ export function GlobalLoadingScreen({ message = "Loading workspace..." }: { mess
   return (
     <div className="route-loading-reveal fixed inset-0 z-[100] flex min-h-dvh items-center justify-center bg-slate-50/98 px-6 dark:bg-slate-950/98" role="status" aria-live="polite" aria-busy="true">
       <div className="flex max-w-sm flex-col items-center text-center">
-        <div className="relative mb-7 flex size-24 items-end justify-center">
-          <span className="absolute inset-0 rounded-3xl border border-blue-200 bg-white shadow-lg shadow-blue-900/5 dark:border-blue-900 dark:bg-slate-900" />
-          <span className="absolute bottom-5 left-5 h-10 w-5 rounded-t-sm border-2 border-blue-600/70 loading-building-left" />
-          <span className="absolute bottom-5 right-5 h-14 w-7 rounded-t-sm border-2 border-blue-600 loading-building-right" />
-          <span className="absolute bottom-5 h-px w-16 bg-slate-300 dark:bg-slate-700" />
-          <Building2 className="relative mb-5 size-10 text-blue-600 loading-building-icon" strokeWidth={1.7} />
-        </div>
-        <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
-          <Landmark className="size-5 text-amber-500" />
-          <p className="text-sm font-extrabold uppercase tracking-[0.18em]">Provision Consultancy</p>
-        </div>
-        <p className="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">{message}</p>
-        <div className="mt-5 h-1.5 w-48 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+        <p className="text-sm font-medium text-slate-600 dark:text-slate-300">{message}</p>
+        <div className="mt-4 h-1.5 w-48 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
           <span className="block h-full w-2/5 rounded-full bg-blue-600 loading-progress-line" />
         </div>
       </div>

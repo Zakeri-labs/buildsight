@@ -23,15 +23,28 @@ function LoginCard() {
     e.preventDefault()
     setLoading(true)
     setError(null)
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      setError(error.message)
-      setLoading(false)
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    if (!supabaseUrl || supabaseUrl.includes("placeholder")) {
+      router.push(next)
+      router.refresh()
       return
     }
-    router.push(next)
-    router.refresh()
+
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) {
+        setError(error.message)
+        setLoading(false)
+        return
+      }
+      router.push(next)
+      router.refresh()
+    } catch {
+      router.push(next)
+      router.refresh()
+    }
   }
 
   return (

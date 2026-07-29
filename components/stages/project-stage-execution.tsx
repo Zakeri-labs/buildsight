@@ -19,7 +19,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { StageTranslationActions } from "@/components/stages/stage-translation-actions"
 import type { ProjectStageExecutionData, ProjectStageTermExecution } from "@/lib/db/project-stages"
 import { statusLabel, statusTone } from "@/lib/stages/execution"
 import { cn } from "@/lib/utils"
@@ -281,16 +280,6 @@ function TermRow({
             <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5" />
           </div>
         </Link>
-
-        {translationAvailable && term.response && term.translation ? (
-          <StageTranslationActions
-            projectId={projectId}
-            stageId={stageId}
-            termId={term.id}
-            responseUpdatedAt={term.response.updatedAt}
-            translation={term.translation}
-          />
-        ) : null}
       </div>
     </div>
   )
