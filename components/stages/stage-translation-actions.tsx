@@ -41,18 +41,30 @@ export function StageTranslationActions({
   projectId,
   stageId,
   termId,
-  responseUpdatedAt,
+  responseUpdatedAt = new Date().toISOString(),
   translation: initialTranslation,
+  inHeader = false,
 }: {
   projectId: string
   stageId: string
   termId: string
-  responseUpdatedAt: string
-  translation: ProjectStageTranslationSummary
+  responseUpdatedAt?: string
+  translation?: ProjectStageTranslationSummary | null
+  inHeader?: boolean
 }) {
   const { locale } = useI18n()
   const copy = COPY[locale]
-  const [translation, setTranslation] = useState(initialTranslation)
+  const [translation, setTranslation] = useState<ProjectStageTranslationSummary>(
+    initialTranslation ?? {
+      id: "",
+      status: "pending",
+      generatedAt: null,
+      originalPdfPath: null,
+      arabicPdfPath: null,
+      bilingualPdfPath: null,
+      translatedContent: null,
+    },
+  )
   const [busy, setBusy] = useState<PdfKind | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -85,6 +97,10 @@ export function StageTranslationActions({
     })
     setTranslation((current) => ({
       ...current,
+      id: record.id,
+      status: record.status,
+      generatedAt: record.generatedAt,
+      translatedContent: record.translatedContent,
       originalPdfPath: kind === "original" ? storagePath : current.originalPdfPath,
       arabicPdfPath: kind === "arabic" ? storagePath : current.arabicPdfPath,
       bilingualPdfPath: kind === "bilingual" ? storagePath : current.bilingualPdfPath,
@@ -112,27 +128,33 @@ export function StageTranslationActions({
     }
   }
 
+  const btnSize = inHeader ? "sm" : "xs"
+  const translateBtnClass = inHeader ? "bg-white text-primary hover:bg-white/90 font-medium" : ""
+  const downloadBtnClass = inHeader
+    ? "border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+    : ""
+
   return (
-    <div className="flex min-w-0 flex-col items-end gap-2" onClick={(event) => event.stopPropagation()}>
-      <div className="flex flex-wrap items-center justify-end gap-1.5">
+    <div className={cn("flex min-w-0 flex-col gap-1.5", inHeader ? "items-start sm:items-end" : "items-end")} onClick={(event) => event.stopPropagation()}>
+      <div className="flex flex-wrap items-center gap-1.5">
         <Link
           href={`/projects/${projectId}/stages/${stageId}/terms/${termId}/translate`}
-          className={cn(buttonVariants({ size: "xs", variant: "secondary" }))}
+          className={cn(buttonVariants({ size: btnSize, variant: inHeader ? "secondary" : "secondary" }), translateBtnClass)}
         >
-          <Languages className="size-3" />{copy.translate}
+          <Languages className="size-4" />{copy.translate}
         </Link>
-        <Button size="xs" variant="outline" disabled={busy !== null} title={copy.english} onClick={() => void download("original")}>
-          {busy === "original" ? <Loader2 className="size-3 animate-spin" /> : <Download className="size-3" />}{copy.english}
+        <Button size={btnSize} variant="outline" className={downloadBtnClass} disabled={busy !== null} title={copy.english} onClick={() => void download("original")}>
+          {busy === "original" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.english}
         </Button>
-        <Button size="xs" variant="outline" disabled={busy !== null || stale} title={stale ? copy.stale : copy.arabic} onClick={() => void download("arabic")}>
-          {busy === "arabic" ? <Loader2 className="size-3 animate-spin" /> : <Download className="size-3" />}{copy.arabic}
+        <Button size={btnSize} variant="outline" className={downloadBtnClass} disabled={busy !== null || stale} title={stale ? copy.stale : copy.arabic} onClick={() => void download("arabic")}>
+          {busy === "arabic" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.arabic}
         </Button>
-        <Button size="xs" variant="outline" disabled={busy !== null || stale} title={stale ? copy.stale : copy.bilingual} onClick={() => void download("bilingual")}>
-          {busy === "bilingual" ? <Loader2 className="size-3 animate-spin" /> : <Download className="size-3" />}{copy.bilingual}
+        <Button size={btnSize} variant="outline" className={downloadBtnClass} disabled={busy !== null || stale} title={stale ? copy.stale : copy.bilingual} onClick={() => void download("bilingual")}>
+          {busy === "bilingual" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.bilingual}
         </Button>
       </div>
-      {error ? <p role="alert" className="max-w-md text-end text-[11px] text-red-600">{error}</p> : null}
-      {stale ? <p className="max-w-md text-end text-[11px] text-amber-700">{copy.stale}</p> : null}
+      {error ? <p role="alert" className={cn("max-w-md text-end text-[11px]", inHeader ? "text-amber-200" : "text-red-600")}>{error}</p> : null}
+      {stale ? <p className={cn("max-w-md text-end text-[11px]", inHeader ? "text-amber-200" : "text-amber-700")}>{copy.stale}</p> : null}
     </div>
   )
 }

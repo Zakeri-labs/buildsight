@@ -26,6 +26,7 @@ export default async function ProjectStageTermPage({
         status: data.term.status,
       }}
       response={data.term.response}
+      translation={data.term.translation}
       canReview={data.canReview}
     />
   )
