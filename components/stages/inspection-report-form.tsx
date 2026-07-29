@@ -590,7 +590,7 @@ export function InspectionReportForm({
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4">
             {evidenceImages.map((attachment) => <EvidenceTile key={attachment.id} src={`/api/stage-evidence?path=${encodeURIComponent(attachment.storagePath)}`} name={attachment.originalFilename} onRemove={isLocked ? undefined : () => void removeExisting(attachment)} />)}
             {pendingImages.map((item) => <EvidenceTile key={item.id} src={item.previewUrl ?? ""} name={item.file.name} progress={item.progress} onRemove={() => removePending("image", item.id)} />)}
-            {!evidenceImages.length && !pendingImages.length ? <EmptyAttachment text={copy.uploadImages} /> : null}
+            {!evidenceImages.length && !pendingImages.length ? <EmptyAttachment text={copy.uploadImages} onClick={() => imageInputRef.current?.click()} /> : null}
           </div>
         </AttachmentCard>
 
@@ -606,7 +606,7 @@ export function InspectionReportForm({
           <div className="space-y-2">
             {documentAttachments.map((attachment) => <DocumentRow key={attachment.id} name={attachment.originalFilename} href={`/api/stage-evidence?path=${encodeURIComponent(attachment.storagePath)}&download=1&filename=${encodeURIComponent(attachment.originalFilename)}`} onRemove={isLocked ? undefined : () => void removeExisting(attachment)} />)}
             {pendingDocuments.map((item) => <DocumentRow key={item.id} name={item.file.name} progress={item.progress} onRemove={() => removePending("document", item.id)} />)}
-            {!documentAttachments.length && !pendingDocuments.length ? <EmptyAttachment text={copy.addDocuments} compact /> : null}
+            {!documentAttachments.length && !pendingDocuments.length ? <EmptyAttachment text={copy.addDocuments} compact onClick={() => documentInputRef.current?.click()} /> : null}
           </div>
         </AttachmentCard>
       </div>
@@ -654,11 +654,49 @@ function HeaderCell({ label, value, person }: { label: string; value: string; pe
 }
 
 function AttachmentCard({ title, description, icon, actionLabel, onAction, disabled, children }: { title: string; description: string; icon: ReactNode; actionLabel: string; onAction: () => void; disabled: boolean; children: ReactNode }) {
-  return <Card className="gap-0 py-0"><CardHeader className="flex-row items-start justify-between gap-4 border-b px-5 py-4"><div><CardTitle className="flex items-center gap-2 text-lg"><span className="text-primary">{icon}</span>{title}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{description}</p></div><Button type="button" variant="outline" size="sm" onClick={onAction} disabled={disabled}><UploadCloud className="size-4" />{actionLabel}</Button></CardHeader><CardContent className="p-5">{children}</CardContent></Card>
+  return (
+    <Card className="gap-0 py-0">
+      <CardHeader className="flex-row items-center justify-between gap-4 border-b px-5 py-4">
+        <div className="min-w-0 flex-1">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <span className="text-primary">{icon}</span>
+            {title}
+          </CardTitle>
+          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onAction}
+          disabled={disabled}
+          title={actionLabel}
+          aria-label={actionLabel}
+          className="size-11 shrink-0 rounded-xl p-0 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+        >
+          <UploadCloud className="size-5 text-primary" />
+        </Button>
+      </CardHeader>
+      <CardContent className="p-5">{children}</CardContent>
+    </Card>
+  )
 }
 
-function EmptyAttachment({ text, compact = false }: { text: string; compact?: boolean }) {
-  return <div className={cn("flex items-center justify-center rounded-xl border border-dashed text-center text-xs text-muted-foreground", compact ? "min-h-20" : "col-span-full min-h-32")}><span><UploadCloud className="mx-auto mb-2 size-5" />{text}</span></div>
+function EmptyAttachment({ text, compact = false, onClick }: { text: string; compact?: boolean; onClick?: () => void }) {
+  return (
+    <div
+      onClick={onClick}
+      className={cn(
+        "flex items-center justify-center rounded-xl border border-dashed text-center text-xs text-muted-foreground transition-colors",
+        onClick && "cursor-pointer hover:border-primary/40 hover:bg-primary/5 hover:text-primary",
+        compact ? "min-h-20" : "col-span-full min-h-32",
+      )}
+    >
+      <span>
+        <UploadCloud className="mx-auto mb-2 size-5 text-primary/70" />
+        {text}
+      </span>
+    </div>
+  )
 }
 
 function EvidenceTile({ src, name, progress, onRemove }: { src: string; name: string; progress?: number; onRemove?: () => void }) {
