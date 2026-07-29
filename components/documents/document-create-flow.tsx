@@ -6,15 +6,11 @@ import { useRouter } from "next/navigation"
 import {
   AlertCircle,
   ArrowLeft,
-  FilePenLine,
   FilePlus2,
   Loader2,
   RotateCcw,
-  UploadCloud,
 } from "lucide-react"
-import { DocumentEditorForm } from "@/components/documents/document-editor-form"
 import { DocumentProjectHeader } from "@/components/documents/document-project-header"
-import { SimpleDocumentUploadForm } from "@/components/documents/simple-document-upload-form"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -33,11 +29,8 @@ import {
   isConstructionDocumentType,
   type ConstructionDocumentTypeValue,
 } from "@/lib/documents/construction-document-types"
-import { cn } from "@/lib/utils"
 
 type ProjectSummary = { id: string; name: string }
-type ExistingTool = "upload" | "rich-text" | null
-
 export function DocumentCreateFlow({ project }: { project: ProjectSummary }) {
   const router = useRouter()
   const [title, setTitle] = useState("")
@@ -46,7 +39,7 @@ export function DocumentCreateFlow({ project }: { project: ProjectSummary }) {
   const [documentDetails, setDocumentDetails] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [existingTool, setExistingTool] = useState<ExistingTool>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
   const handleDocumentTypeChange = (value: string | null) => {
     if (!isConstructionDocumentType(value)) {
@@ -61,6 +54,7 @@ export function DocumentCreateFlow({ project }: { project: ProjectSummary }) {
 
   const createDocument = async () => {
     setError(null)
+    setSuccess(null)
 
     if (!title.trim()) {
       setError("Document title is required.")
@@ -87,7 +81,12 @@ export function DocumentCreateFlow({ project }: { project: ProjectSummary }) {
         return
       }
 
-      router.push(`/documents/${result.documentId}?created=construction`)
+      setSuccess(`Document ${result.reference || "saved"} was created successfully.`)
+      setTitle("")
+      setDocumentType("")
+      setDescription("")
+      setDocumentDetails("")
+      setSubmitting(false)
       router.refresh()
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Unable to create the document.")
@@ -192,6 +191,12 @@ export function DocumentCreateFlow({ project }: { project: ProjectSummary }) {
         </CardContent>
       </Card>
 
+
+      {success ? (
+        <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+          {success}
+        </div>
+      ) : null}
       {error ? (
         <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
           <AlertCircle className="mt-0.5 size-4 shrink-0" />
@@ -210,41 +215,6 @@ export function DocumentCreateFlow({ project }: { project: ProjectSummary }) {
         </Button>
       </div>
 
-      <Card className="gap-0 py-0">
-        <CardHeader className="border-b px-5 py-4 sm:px-6">
-          <CardTitle className="text-base">Existing document tools</CardTitle>
-          <p className="mt-1 text-xs text-muted-foreground">The existing multi-file upload and rich-text document workflows remain available.</p>
-        </CardHeader>
-        <CardContent className="space-y-4 px-5 py-5 sm:px-6">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => setExistingTool(existingTool === "upload" ? null : "upload")}
-              className={cn(
-                "flex min-h-16 items-center gap-3 rounded-xl border px-4 py-3 text-start transition-colors",
-                existingTool === "upload" ? "border-blue-300 bg-blue-50 text-blue-950 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-100" : "hover:bg-muted/60",
-              )}
-            >
-              <UploadCloud className="size-5 shrink-0" />
-              <span><span className="block text-sm font-semibold">Upload existing files</span><span className="block text-xs text-muted-foreground">Fast multi-file document upload</span></span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setExistingTool(existingTool === "rich-text" ? null : "rich-text")}
-              className={cn(
-                "flex min-h-16 items-center gap-3 rounded-xl border px-4 py-3 text-start transition-colors",
-                existingTool === "rich-text" ? "border-blue-300 bg-blue-50 text-blue-950 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-100" : "hover:bg-muted/60",
-              )}
-            >
-              <FilePenLine className="size-5 shrink-0" />
-              <span><span className="block text-sm font-semibold">Rich-text document</span><span className="block text-xs text-muted-foreground">Use the existing structured editor</span></span>
-            </button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {existingTool === "upload" ? <SimpleDocumentUploadForm project={project} /> : null}
-      {existingTool === "rich-text" ? <DocumentEditorForm project={project} showProjectHeader={false} showAdvancedModeLabel /> : null}
     </div>
   )
 }
