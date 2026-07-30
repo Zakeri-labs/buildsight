@@ -11,6 +11,7 @@ import { DonutChart } from "@/components/dashboard/donut-chart"
 import { useI18n } from "@/lib/i18n"
 import type { ProjectRecord } from "@/lib/mock-data"
 import { ProjectParticipants, type ProjectParticipant } from "@/components/projects/project-participants"
+import type { ProjectParticipantUserOption } from "@/lib/projects/project-participant-types"
 import { ProjectDocuments, type ProjectDocument } from "@/components/projects/project-documents"
 import { ProjectImageManagementDialog } from "@/components/projects/project-image-management-dialog"
 import { ProjectImageDisplay } from "@/components/projects/project-image-display"
@@ -61,11 +62,13 @@ export function ProjectDetail({
   project,
   documents,
   participants,
+  participantUsers = [],
   canManageImages = false,
 }: {
   project: ProjectRecord
   documents?: ProjectDocument[]
   participants: ProjectParticipant[]
+  participantUsers?: ProjectParticipantUserOption[]
   canManageImages?: boolean
 }) {
   const { t, locale } = useI18n()
@@ -238,7 +241,13 @@ export function ProjectDetail({
         </Card>
       </div>
 
-      <ProjectParticipants projectId={project.id} participants={participants} canManageAvatars={canManageImages} />
+      <ProjectParticipants
+        projectId={project.id}
+        participants={participants}
+        participantUsers={participantUsers}
+        canManageParticipants={canManageImages}
+        canManageAvatars={canManageImages}
+      />
       <ProjectDocuments projectId={project.id} documents={documents ?? projectDocuments(project)} />
     </div>
   )
