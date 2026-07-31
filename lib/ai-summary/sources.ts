@@ -73,7 +73,7 @@ export async function loadAiSummarySources(projectId: string): Promise<AiSummary
 
   const [{ data: terms }, { data: attachments }, { data: approvals }] = await Promise.all([
     termIds.length
-      ? admin.from("project_stage_terms").select("id, project_stage_id, report_name").in("id", termIds)
+      ? admin.from("project_stage_terms").select("id, project_stage_id, report_name, is_active").in("id", termIds)
       : Promise.resolve({ data: [] as any[] }),
     responseIds.length
       ? admin.from("response_attachments").select("response_id, attachment_kind").in("response_id", responseIds)
@@ -85,13 +85,27 @@ export async function loadAiSummarySources(projectId: string): Promise<AiSummary
 
   const stageIds = Array.from(new Set((terms ?? []).map((row: any) => row.project_stage_id as string)))
   const { data: stages } = stageIds.length
-    ? await admin.from("project_stages").select("id, name").in("id", stageIds)
+    ? await admin.from("project_stages").select("id, name, status").in("id", stageIds)
     : { data: [] as any[] }
 
-  const termMap = new Map<string, { project_stage_id: string; report_name: string }>(
-    (terms ?? []).map((row: any) => [row.id, { project_stage_id: row.project_stage_id, report_name: row.report_name }]),
+  const termMap = new Map<string, { project_stage_id: string; report_name: string; is_active: boolean }>(
+    (terms ?? []).map((row: any) => [row.id, {
+      project_stage_id: row.project_stage_id,
+      report_name: row.report_name,
+      is_active: row.is_active !== false,
+    }]),
   )
-  const stageMap = new Map<string, string>((stages ?? []).map((row: any) => [row.id, row.name]))
+  const stageMap = new Map<string, { name: string; status: string }>(
+    (stages ?? []).map((row: any) => [row.id, { name: row.name, status: row.status }]),
+  )
+  const activeTermIds = new Set(
+    Array.from(termMap.entries())
+      .filter(([, term]) => {
+        const stage = stageMap.get(term.project_stage_id)
+        return term.is_active && Boolean(stage) && stage?.status !== "disabled"
+      })
+      .map(([termId]) => termId),
+  )
   const attachmentCounts = new Map<string, { images: number; documents: number }>()
   for (const row of attachments ?? []) {
     const current = attachmentCounts.get(row.response_id) ?? { images: 0, documents: 0 }
@@ -102,22 +116,24 @@ export async function loadAiSummarySources(projectId: string): Promise<AiSummary
   const approvalCounts = new Map<string, number>()
   for (const row of approvals ?? []) approvalCounts.set(row.response_id, (approvalCounts.get(row.response_id) ?? 0) + 1)
 
-  const inspectionSources: AiSummaryInspectionSource[] = responseRows.map((row: any) => {
-    const term = termMap.get(row.project_stage_term_id)
-    const counts = attachmentCounts.get(row.id) ?? { images: 0, documents: 0 }
-    return {
-      id: row.id,
-      termId: row.project_stage_term_id,
-      title: row.report_title || term?.report_name || "Inspection report",
-      reportNumber: row.report_number,
-      stageName: term ? stageMap.get(term.project_stage_id) ?? "Project stage" : "Project stage",
-      status: row.status,
-      updatedAt: row.updated_at,
-      imageCount: counts.images,
-      documentCount: counts.documents,
-      approvalCount: approvalCounts.get(row.id) ?? 0,
-    }
-  })
+  const inspectionSources: AiSummaryInspectionSource[] = responseRows
+    .filter((row: any) => activeTermIds.has(row.project_stage_term_id))
+    .map((row: any) => {
+      const term = termMap.get(row.project_stage_term_id)
+      const counts = attachmentCounts.get(row.id) ?? { images: 0, documents: 0 }
+      return {
+        id: row.id,
+        termId: row.project_stage_term_id,
+        title: row.report_title || term?.report_name || "Inspection report",
+        reportNumber: row.report_number,
+        stageName: term ? stageMap.get(term.project_stage_id)?.name ?? "Project stage" : "Project stage",
+        status: row.status,
+        updatedAt: row.updated_at,
+        imageCount: counts.images,
+        documentCount: counts.documents,
+        approvalCount: approvalCounts.get(row.id) ?? 0,
+      }
+    })
 
   const documentSources: AiSummaryDocumentSource[] = (documents ?? []).map((row: any) => {
     const type = getDocumentTypeDefinition(normalizeDocumentType(row.document_type))

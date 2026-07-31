@@ -129,12 +129,58 @@ export async function getOrgProjects(orgId: string): Promise<DomainProject[]> {
 
   const projectRows = data ?? []
   const projectIds = projectRows.map((project: any) => project.id)
-  const { data: imageRows } = projectIds.length
-    ? await admin.from("project_images").select("project_id, storage_path").in("project_id", projectIds).eq("order_index", 0)
-    : { data: [] as Array<{ project_id: string; storage_path: string }> }
+  const [{ data: imageRows }, { data: activeStageRows }] = projectIds.length
+    ? await Promise.all([
+        admin.from("project_images").select("project_id, storage_path").in("project_id", projectIds).eq("order_index", 0),
+        admin.from("project_stages").select("id, project_id").in("project_id", projectIds).neq("status", "disabled"),
+      ])
+    : [
+        { data: [] as Array<{ project_id: string; storage_path: string }> },
+        { data: [] as Array<{ id: string; project_id: string }> },
+      ]
+  const activeStageIds = (activeStageRows ?? []).map((stage: any) => stage.id as string)
+  const { data: progressTermRows } = activeStageIds.length
+    ? await admin
+        .from("project_stage_terms")
+        .select("id, project_stage_id, parent_term_id, is_required, status")
+        .in("project_stage_id", activeStageIds)
+        .eq("is_active", true)
+    : { data: [] as Array<{ id: string; project_stage_id: string; parent_term_id: string | null; is_required: boolean; status: string }> }
   const imageByProject = new Map(
     (imageRows ?? []).map((image: any) => [image.project_id as string, image.storage_path as string]),
   )
+  const termsByStage = new Map<string, any[]>()
+  for (const term of progressTermRows ?? []) {
+    const rows = termsByStage.get((term as any).project_stage_id) ?? []
+    rows.push(term)
+    termsByStage.set((term as any).project_stage_id, rows)
+  }
+  const calculatedProgress = new Map<string, number>()
+  for (const projectId of projectIds) {
+    const stageIds = (activeStageRows ?? []).filter((stage: any) => stage.project_id === projectId).map((stage: any) => stage.id as string)
+    const countedProjectTerms: any[] = []
+    for (const stageId of stageIds) {
+      const stageTerms = termsByStage.get(stageId) ?? []
+      const childrenByParent = new Map<string, any[]>()
+      for (const term of stageTerms) {
+        if (!term.parent_term_id) continue
+        const children = childrenByParent.get(term.parent_term_id) ?? []
+        children.push(term)
+        childrenByParent.set(term.parent_term_id, children)
+      }
+      const actionableStageTerms: any[] = []
+      for (const term of stageTerms.filter((row) => !row.parent_term_id)) {
+        const children = childrenByParent.get(term.id) ?? []
+        actionableStageTerms.push(...(children.length ? children : [term]))
+      }
+      const requiredStageTerms = actionableStageTerms.filter((term) => term.is_required)
+      countedProjectTerms.push(...(requiredStageTerms.length ? requiredStageTerms : actionableStageTerms))
+    }
+    if (countedProjectTerms.length) {
+      const completed = countedProjectTerms.filter((term) => term.status === "approved" || term.status === "completed").length
+      calculatedProgress.set(projectId, Math.round((completed / countedProjectTerms.length) * 100))
+    }
+  }
   const legacyImageCounts = new Map<string, number>()
   for (const project of projectRows as any[]) {
     const legacyImage = project.image?.trim()
@@ -165,7 +211,7 @@ export async function getOrgProjects(orgId: string): Promise<DomainProject[]> {
     targetHandover: p.target_handover,
     contractValue: p.contract_value,
     progressPlanned: p.progress_planned ?? 0,
-    progressActual: p.progress_actual ?? 0,
+    progressActual: calculatedProgress.get(p.id) ?? p.progress_actual ?? 0,
     progressDelay: p.progress_delay ?? 0,
   }))
 }

@@ -157,7 +157,7 @@ export async function generateAiSummary(rawInput: GenerateAiSummaryInput) {
   const responseRowIds = (responses ?? []).map((row: any) => row.id as string)
   const [{ data: terms }, { data: attachments }, { data: approvals }] = await Promise.all([
     termIds.length
-      ? admin.from("project_stage_terms").select("id, project_stage_id, report_name, is_required, approval_required").in("id", termIds)
+      ? admin.from("project_stage_terms").select("id, project_stage_id, report_name, is_required, approval_required, is_active").in("id", termIds)
       : Promise.resolve({ data: [] as any[] }),
     responseRowIds.length
       ? admin
@@ -178,19 +178,37 @@ export async function generateAiSummary(rawInput: GenerateAiSummaryInput) {
   const stageIds = Array.from(new Set((terms ?? []).map((row: any) => row.project_stage_id as string)))
   const reviewerIds = Array.from(new Set((approvals ?? []).map((row: any) => row.reviewer_id as string)))
   const [{ data: stages }, { data: reviewers }] = await Promise.all([
-    stageIds.length ? admin.from("project_stages").select("id, name").in("id", stageIds) : Promise.resolve({ data: [] as any[] }),
+    stageIds.length ? admin.from("project_stages").select("id, name, status").in("id", stageIds) : Promise.resolve({ data: [] as any[] }),
     reviewerIds.length ? admin.from("profiles").select("id, full_name, email").in("id", reviewerIds) : Promise.resolve({ data: [] as any[] }),
   ])
 
-  const termMap = new Map<string, { project_stage_id: string; report_name: string; is_required: boolean; approval_required: boolean }>(
+  const termMap = new Map<string, {
+    project_stage_id: string
+    report_name: string
+    is_required: boolean
+    approval_required: boolean
+    is_active: boolean
+  }>(
     (terms ?? []).map((row: any) => [row.id, {
       project_stage_id: row.project_stage_id,
       report_name: row.report_name,
       is_required: row.is_required === true,
       approval_required: row.approval_required === true,
+      is_active: row.is_active !== false,
     }]),
   )
-  const stageMap = new Map<string, string>((stages ?? []).map((row: any) => [row.id, row.name]))
+  const stageMap = new Map<string, { name: string; status: string }>(
+    (stages ?? []).map((row: any) => [row.id, { name: row.name, status: row.status }]),
+  )
+  const selectedInactiveTerm = termIds.some((termId) => {
+    const term = termMap.get(termId)
+    if (!term || !term.is_active) return true
+    const stage = stageMap.get(term.project_stage_id)
+    return !stage || stage.status === "disabled"
+  })
+  if (selectedInactiveTerm) {
+    throw new Error("One or more selected inspection reports belong to an inactive stage or term.")
+  }
   const reviewerMap = new Map<string, string>((reviewers ?? []).map((row: any) => [row.id, row.full_name?.trim() || row.email || "Reviewer"]))
   const attachmentsByResponse = new Map<string, any[]>()
   for (const row of attachments ?? []) {
@@ -221,7 +239,7 @@ export async function generateAiSummary(rawInput: GenerateAiSummaryInput) {
 
   for (const response of responses ?? []) {
     const term = termMap.get(response.project_stage_term_id)
-    const stageName = term ? stageMap.get(term.project_stage_id) ?? "Project stage" : "Project stage"
+    const stageName = term ? stageMap.get(term.project_stage_id)?.name ?? "Project stage" : "Project stage"
     const responseContent = safeObject(response.response_content)
     const approvalRows = approvalsByResponse.get(response.id) ?? []
     const approvalText = approvalRows.length

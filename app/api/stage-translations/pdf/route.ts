@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { assertProjectMember, audit, AuthzError } from "@/lib/auth/guards"
+import { assertProjectAdmin, assertProjectMember, audit, AuthzError } from "@/lib/auth/guards"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
@@ -50,6 +50,24 @@ async function loadTranslation(admin: ReturnType<typeof createAdminClient>, proj
   return data as TranslationRow | null
 }
 
+async function translationScopeIsActive(admin: ReturnType<typeof createAdminClient>, translation: TranslationRow) {
+  const { data: term, error: termError } = await admin
+    .from("project_stage_terms")
+    .select("is_active, project_stage_id")
+    .eq("id", translation.project_stage_term_id)
+    .maybeSingle()
+  if (termError) throw termError
+  if (!term || term.project_stage_id !== translation.project_stage_id) return false
+  const { data: stage, error: stageError } = await admin
+    .from("project_stages")
+    .select("status")
+    .eq("id", translation.project_stage_id)
+    .eq("project_id", translation.project_id)
+    .maybeSingle()
+  if (stageError) throw stageError
+  return Boolean(stage && stage.status !== "disabled" && term.is_active !== false)
+}
+
 function ensureTranslationReady(translation: TranslationRow, kind: PdfKind) {
   if (kind !== "original" && (translation.translation_status !== "completed" || !translation.translated_content)) {
     throw new Error("Generate the Arabic translation before storing this PDF.")
@@ -73,6 +91,7 @@ export async function GET(request: NextRequest) {
     const admin = createAdminClient()
     const translation = await loadTranslation(admin, projectId, translationId)
     if (!translation) return NextResponse.json({ error: "Translation record not found." }, { status: 404 })
+    if (!(await translationScopeIsActive(admin, translation))) await assertProjectAdmin(projectId)
     const storagePath = translation[PDF_COLUMNS[kind]]
     if (!storagePath) return NextResponse.json({ error: "The requested PDF has not been generated." }, { status: 404 })
 
@@ -103,6 +122,9 @@ export async function POST(request: NextRequest) {
     const admin = createAdminClient()
     const translation = await loadTranslation(admin, projectId, translationId)
     if (!translation) return NextResponse.json({ error: "Translation record not found." }, { status: 404 })
+    if (!(await translationScopeIsActive(admin, translation))) {
+      return NextResponse.json({ error: "This stage or term is inactive and cannot accept new documents." }, { status: 409 })
+    }
     ensureTranslationReady(translation, kind)
 
     if (action === "prepare") {

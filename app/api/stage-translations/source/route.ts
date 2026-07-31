@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { assertProjectMember } from "@/lib/auth/guards"
+import { assertProjectAdmin, assertProjectMember } from "@/lib/auth/guards"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { STAGE_EVIDENCE_BUCKET } from "@/lib/stages/execution"
+import { loadStageEvidenceAccess } from "@/lib/stages/evidence-access"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,6 +20,9 @@ export async function GET(request: NextRequest) {
 
   try {
     await assertProjectMember(projectId)
+    const access = await loadStageEvidenceAccess(projectId, path)
+    if (!access) return new NextResponse("Source document not found", { status: 404 })
+    if (!access.active) await assertProjectAdmin(projectId)
   } catch {
     return new NextResponse("Forbidden", { status: 403 })
   }

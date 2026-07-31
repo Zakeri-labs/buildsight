@@ -370,6 +370,27 @@ export async function generateStageTranslation(input: {
   const pageData = await loadStageTranslationPageData(input.projectId, input.stageId, input.termId, userId)
   if (!pageData) throw new Error("Save the inspection report before generating a translation.")
 
+  const admin = createAdminClient()
+  const [{ data: activeTerm, error: termError }, { data: activeStage, error: stageError }] = await Promise.all([
+    admin
+      .from("project_stage_terms")
+      .select("id")
+      .eq("id", input.termId)
+      .eq("project_stage_id", input.stageId)
+      .eq("is_active", true)
+      .maybeSingle(),
+    admin
+      .from("project_stages")
+      .select("id")
+      .eq("id", input.stageId)
+      .eq("project_id", input.projectId)
+      .neq("status", "disabled")
+      .maybeSingle(),
+  ])
+  if (termError) throw termError
+  if (stageError) throw stageError
+  if (!activeTerm || !activeStage) throw new Error("This stage or term is inactive and cannot accept new translations.")
+
   const apiKey = process.env.OPENAI_API_KEY?.trim()
   if (!apiKey) throw new Error("Document Translation is not configured. Add OPENAI_API_KEY to the server environment.")
 
@@ -439,7 +460,6 @@ export async function generateStageTranslation(input: {
     content.push({ type: "input_file", file_url: attachment.url })
   }
 
-  const admin = createAdminClient()
   let translationId = pageData.translation?.id ?? null
   if (translationId) {
     const { error } = await admin
