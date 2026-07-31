@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { STAGE_EVIDENCE_BUCKET } from "@/lib/stages/execution"
-import { assertProjectAdmin, assertProjectMember } from "@/lib/auth/guards"
+import { assertProjectMember, assertProjectReviewer } from "@/lib/auth/guards"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { loadStageEvidenceAccess } from "@/lib/stages/evidence-access"
 
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     await assertProjectMember(projectId)
     const access = await loadStageEvidenceAccess(projectId, path)
     if (!access) return new NextResponse("Evidence not found", { status: 404 })
-    if (!access.active) await assertProjectAdmin(projectId)
+    if (!access.active) await assertProjectReviewer(projectId)
   } catch {
     return new NextResponse("Forbidden", { status: 403 })
   }

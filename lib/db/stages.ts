@@ -81,13 +81,17 @@ export async function resolveStageManagementOrganization(
 export type StageTermRecord = {
   id: string
   stageId: string
+  parentTermId: string | null
   reportName: string
   required: boolean
   approvalRequired: boolean
+  responseType: import("@/lib/stages/execution").SubtermResponseType
+  instructions: string | null
   status: "active" | "disabled"
   sortOrder: number
   createdAt: string
   updatedAt: string
+  subterms: StageTermRecord[]
 }
 
 export type StageRecord = {
@@ -156,7 +160,7 @@ export async function loadStageManagement(organizationId: string): Promise<Stage
     admin
       .from("stage_terms")
       .select(
-        "id, stage_id, report_name, is_required, approval_required, status, sort_order, created_at, updated_at, stages!inner(organization_id)",
+        "id, stage_id, parent_term_id, report_name, is_required, approval_required, response_type, instructions, status, sort_order, created_at, updated_at, stages!inner(organization_id)",
       )
       .eq("stages.organization_id", organizationId)
       .order("sort_order", { ascending: true })
@@ -166,22 +170,43 @@ export async function loadStageManagement(organizationId: string): Promise<Stage
   if (stageError) throw stageError
   if (termError) throw termError
 
-  const termsByStage = new Map<string, StageTermRecord[]>()
+  const termMap = new Map<string, StageTermRecord>()
   for (const term of termRows ?? []) {
-    const mapped: StageTermRecord = {
+    termMap.set(term.id, {
       id: term.id,
       stageId: term.stage_id,
+      parentTermId: term.parent_term_id,
       reportName: term.report_name,
       required: term.is_required,
       approvalRequired: term.approval_required,
+      responseType: term.response_type ?? "combined",
+      instructions: typeof term.instructions === "string" && term.instructions.trim() ? term.instructions : null,
       status: term.status,
       sortOrder: term.sort_order,
       createdAt: term.created_at,
       updatedAt: term.updated_at,
-    }
-    const current = termsByStage.get(term.stage_id) ?? []
-    current.push(mapped)
-    termsByStage.set(term.stage_id, current)
+      subterms: [],
+    })
+  }
+
+  for (const term of termMap.values()) {
+    if (!term.parentTermId) continue
+    const parent = termMap.get(term.parentTermId)
+    if (parent && parent.stageId === term.stageId) parent.subterms.push(term)
+  }
+  for (const term of termMap.values()) {
+    term.subterms.sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName))
+  }
+
+  const termsByStage = new Map<string, StageTermRecord[]>()
+  for (const term of termMap.values()) {
+    if (term.parentTermId) continue
+    const current = termsByStage.get(term.stageId) ?? []
+    current.push(term)
+    termsByStage.set(term.stageId, current)
+  }
+  for (const terms of termsByStage.values()) {
+    terms.sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName))
   }
 
   return {

@@ -58,12 +58,22 @@ async function termScope(projectId: string, termId: string) {
     .maybeSingle()
   if (error) throw error
   if (!data) throw new Error("Project report term not found.")
-  return data
+  let parentActive = true
+  if (data.parent_term_id) {
+    const { data: parent, error: parentError } = await admin
+      .from("project_stage_terms")
+      .select("is_active")
+      .eq("id", data.parent_term_id)
+      .maybeSingle()
+    if (parentError) throw parentError
+    parentActive = parent?.is_active === true
+  }
+  return { ...data, parent_active: parentActive }
 }
 
 function assertActiveTermScope(term: any) {
   const stageScope = Array.isArray(term.project_stages) ? term.project_stages[0] : term.project_stages
-  if (!term.is_active || stageScope?.status === "disabled") {
+  if (!term.is_active || term.parent_active === false || stageScope?.status === "disabled") {
     throw new Error("This stage or term is inactive and cannot accept new work.")
   }
 }
@@ -375,7 +385,9 @@ export async function decideTermResponseAction(input: {
       .maybeSingle()
     if (lookupError) throw lookupError
     if (!response) return { ok: false, error: "Report response not found." }
-    assertActiveTermScope(await termScope(input.projectId, response.project_stage_term_id))
+    // Reviewers must be able to resolve already-submitted work even when the
+    // Stage, Term, or Sub-term is later disabled for new employee activity.
+    await termScope(input.projectId, response.project_stage_term_id)
     if (response.status !== "submitted" && response.status !== "under_review") {
       return { ok: false, error: "Only submitted reports can be approved or rejected." }
     }
@@ -405,39 +417,11 @@ export async function decideTermResponseAction(input: {
   }
 }
 
-const SUBTERM_NAME_MAX_LENGTH = 200
-const SUBTERM_INSTRUCTIONS_MAX_LENGTH = 5000
-
-function normalizedInstructions(value: string | undefined) {
-  const normalized = value?.trim() ?? ""
-  return normalized || null
-}
-
-function instructionsAreTooLong(value: string | undefined) {
-  return (value?.trim().length ?? 0) > SUBTERM_INSTRUCTIONS_MAX_LENGTH
-}
-
 type ProjectStageSelectionInput = {
   projectId: string
   selectedTemplateStageIds: string[]
-}
-
-function normalizedName(value: unknown) {
-  return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : ""
-}
-
-async function activeSiblingNameExists(parentTermId: string, name: string, excludeId?: string) {
-  const admin = createAdminClient()
-  let query = admin
-    .from("project_stage_terms")
-    .select("id, report_name")
-    .eq("parent_term_id", parentTermId)
-    .eq("is_active", true)
-  if (excludeId) query = query.neq("id", excludeId)
-  const { data, error } = await query
-  if (error) throw error
-  const normalized = name.toLowerCase()
-  return (data ?? []).some((row: any) => normalizedName(row.report_name).toLowerCase() === normalized)
+  selectedTemplateTermIds: string[]
+  selectedTemplateSubtermIds: string[]
 }
 
 function isUniqueViolation(error: unknown) {
@@ -448,7 +432,7 @@ async function projectOrganization(projectId: string) {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from("projects")
-    .select("id, supervising_organization_id")
+    .select("id, supervising_organization_id, created_at")
     .eq("id", projectId)
     .maybeSingle()
   if (error) throw error
@@ -474,294 +458,289 @@ async function deriveProjectStageStatus(projectStageId: string) {
   return "not_started"
 }
 
+function uniqueIds(value: unknown) {
+  if (!Array.isArray(value)) return null
+  return Array.from(new Set(value.filter((id): id is string => typeof id === "string" && id.length > 0)))
+}
+
+function dueDateFromRule(projectCreatedAt: string, rule: string) {
+  const date = new Date(projectCreatedAt)
+  if (!Number.isFinite(date.getTime())) return null
+  const days = rule === "within_3_days" ? 3 : rule === "within_7_days" ? 7 : rule === "within_14_days" ? 14 : 0
+  if (rule !== "stage_start" && days === 0) return null
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
 export async function saveProjectStageSelectionAction(
   input: ProjectStageSelectionInput,
 ): Promise<StageActionResult> {
   try {
     const actorId = await assertProjectAdmin(input.projectId)
     const project = await projectOrganization(input.projectId)
-    const admin = createAdminClient()
-    if (!Array.isArray(input.selectedTemplateStageIds)) {
-      return { ok: false, error: "Select valid project stages." }
+    const requestedStageIds = uniqueIds(input.selectedTemplateStageIds)
+    const requestedTermIds = uniqueIds(input.selectedTemplateTermIds)
+    const requestedSubtermIds = uniqueIds(input.selectedTemplateSubtermIds)
+    if (!requestedStageIds || !requestedTermIds || !requestedSubtermIds) {
+      return { ok: false, error: "Select a valid project workflow configuration." }
     }
-    const requestedIds = Array.from(new Set(input.selectedTemplateStageIds.filter((id): id is string => typeof id === "string" && Boolean(id))))
 
-    const { data: libraryStages, error: libraryError } = await admin
-      .from("stages")
-      .select("id, name, description, sort_order, is_active")
-      .eq("organization_id", project.supervising_organization_id)
-      .order("sort_order", { ascending: true })
-    if (libraryError) throw libraryError
+    const admin = createAdminClient()
+    const [
+      { data: libraryStages, error: libraryStageError },
+      { data: libraryTerms, error: libraryTermError },
+      { data: existingStages, error: existingStageError },
+    ] = await Promise.all([
+      admin
+        .from("stages")
+        .select("id, name, description, sort_order, is_active")
+        .eq("organization_id", project.supervising_organization_id)
+        .order("sort_order", { ascending: true }),
+      admin
+        .from("stage_terms")
+        .select("id, stage_id, parent_term_id, report_name, is_required, responsible_organization_id, responsible_user_id, due_date_rule, approval_required, template_reference, response_type, instructions, status, sort_order, stages!inner(organization_id)")
+        .eq("stages.organization_id", project.supervising_organization_id)
+        .order("sort_order", { ascending: true }),
+      admin
+        .from("project_stages")
+        .select("id, template_stage_id, status")
+        .eq("project_id", input.projectId),
+    ])
+    if (libraryStageError) throw libraryStageError
+    if (libraryTermError) throw libraryTermError
+    if (existingStageError) throw existingStageError
 
-    const { error: instantiateError } = await admin.rpc("instantiate_project_stages", {
-      target_project_id: input.projectId,
-    })
-    if (instantiateError) throw instantiateError
-
-    const { data: existingRows, error: existingError } = await admin
-      .from("project_stages")
-      .select("id, template_stage_id, status")
-      .eq("project_id", input.projectId)
-    if (existingError) throw existingError
-    const existingByTemplate = new Map<string, any>(
-      (existingRows ?? []).filter((row: any) => row.template_stage_id).map((row: any) => [row.template_stage_id as string, row]),
+    let projectStages = existingStages ?? []
+    const existingStageByTemplate = new Map<string, any>(
+      projectStages
+        .filter((stage: any) => stage.template_stage_id)
+        .map((stage: any) => [stage.template_stage_id as string, stage]),
     )
-    const allowed = new Map(
-      (libraryStages ?? [])
-        .filter((stage: any) => stage.is_active !== false || existingByTemplate.has(stage.id))
-        .map((stage: any) => [stage.id as string, stage]),
-    )
-    if (requestedIds.some((id) => !allowed.has(id))) {
+    const libraryStageById = new Map<string, any>((libraryStages ?? []).map((stage: any) => [stage.id as string, stage]))
+    const libraryTermById = new Map<string, any>((libraryTerms ?? []).map((term: any) => [term.id as string, term]))
+
+    const allRequestedDefinitionIds = [...requestedTermIds, ...requestedSubtermIds]
+    if (requestedStageIds.some((id) => !libraryStageById.has(id) || (libraryStageById.get(id)?.is_active === false && !existingStageByTemplate.has(id)))) {
       return { ok: false, error: "One or more selected stages are unavailable." }
     }
+    if (allRequestedDefinitionIds.some((id) => {
+      const definition = libraryTermById.get(id)
+      return !definition || (definition.status === "disabled" && !existingStageByTemplate.has(definition.stage_id))
+    })) {
+      return { ok: false, error: "One or more selected terms are unavailable." }
+    }
+    if (requestedTermIds.some((id) => libraryTermById.get(id)?.parent_term_id)) {
+      return { ok: false, error: "A Sub-term was submitted as a parent Term." }
+    }
+    if (requestedSubtermIds.some((id) => !libraryTermById.get(id)?.parent_term_id)) {
+      return { ok: false, error: "A parent Term was submitted as a Sub-term." }
+    }
 
-    for (const templateId of requestedIds) {
-      const existing = existingByTemplate.get(templateId)
-      if (!existing) throw new Error("Selected stage could not be instantiated.")
-      if (existing.status === "disabled") {
-        const restoredStatus = await deriveProjectStageStatus(existing.id)
+    const neededStageIds = new Set(requestedStageIds)
+    for (const id of allRequestedDefinitionIds) {
+      const definition = libraryTermById.get(id)
+      if (definition) neededStageIds.add(definition.stage_id)
+    }
+
+    const missingStageRows = Array.from(neededStageIds)
+      .filter((id) => !existingStageByTemplate.has(id))
+      .map((id) => {
+        const definition = libraryStageById.get(id)
+        if (!definition || definition.is_active === false) return null
+        return {
+          project_id: input.projectId,
+          template_stage_id: definition.id,
+          name: definition.name,
+          description: definition.description,
+          status: requestedStageIds.includes(definition.id) ? "not_started" : "disabled",
+          sort_order: definition.sort_order,
+        }
+      })
+      .filter(Boolean)
+    if (missingStageRows.length) {
+      const { error } = await admin.from("project_stages").insert(missingStageRows)
+      if (error && !isUniqueViolation(error)) throw error
+      const { data, error: reloadError } = await admin
+        .from("project_stages")
+        .select("id, template_stage_id, status")
+        .eq("project_id", input.projectId)
+      if (reloadError) throw reloadError
+      projectStages = data ?? []
+    }
+
+    const projectStageByTemplate = new Map<string, any>(
+      projectStages
+        .filter((stage: any) => stage.template_stage_id)
+        .map((stage: any) => [stage.template_stage_id as string, stage]),
+    )
+    const projectStageIds = projectStages.map((stage: any) => stage.id as string)
+    const { data: currentTerms, error: currentTermsError } = projectStageIds.length
+      ? await admin
+          .from("project_stage_terms")
+          .select("id, project_stage_id, template_term_id, parent_term_id, is_active")
+          .in("project_stage_id", projectStageIds)
+      : { data: [], error: null }
+    if (currentTermsError) throw currentTermsError
+    let projectTerms = currentTerms ?? []
+    let projectTermByTemplate = new Map<string, any>(
+      projectTerms
+        .filter((term: any) => term.template_term_id)
+        .map((term: any) => [term.template_term_id as string, term]),
+    )
+
+    const requiredParentTemplateIds = new Set(requestedTermIds)
+    for (const subtermId of requestedSubtermIds) {
+      const parentId = libraryTermById.get(subtermId)?.parent_term_id
+      if (parentId) requiredParentTemplateIds.add(parentId)
+    }
+
+    const missingParents = Array.from(requiredParentTemplateIds)
+      .filter((id) => !projectTermByTemplate.has(id))
+      .map((id) => {
+        const definition = libraryTermById.get(id)
+        const projectStage = definition ? projectStageByTemplate.get(definition.stage_id) : null
+        if (!definition || definition.parent_term_id || !projectStage || definition.status === "disabled") return null
+        return {
+          project_stage_id: projectStage.id,
+          template_term_id: definition.id,
+          parent_term_id: null,
+          report_name: definition.report_name,
+          is_required: definition.is_required,
+          responsible_organization_id: definition.responsible_organization_id,
+          responsible_user_id: definition.responsible_user_id,
+          due_date_rule: definition.due_date_rule,
+          due_date: dueDateFromRule(project.created_at, definition.due_date_rule),
+          approval_required: definition.approval_required,
+          template_reference: definition.template_reference,
+          response_type: isSubtermResponseType(definition.response_type) ? definition.response_type : "combined",
+          instructions: definition.instructions,
+          status: "not_started",
+          sort_order: definition.sort_order,
+          is_active: requestedTermIds.includes(definition.id),
+        }
+      })
+      .filter(Boolean)
+    if (missingParents.length) {
+      const { error } = await admin.from("project_stage_terms").insert(missingParents)
+      if (error && !isUniqueViolation(error)) throw error
+      const { data, error: reloadError } = await admin
+        .from("project_stage_terms")
+        .select("id, project_stage_id, template_term_id, parent_term_id, is_active")
+        .in("project_stage_id", projectStageIds)
+      if (reloadError) throw reloadError
+      projectTerms = data ?? []
+      projectTermByTemplate = new Map(
+        projectTerms
+          .filter((term: any) => term.template_term_id)
+          .map((term: any) => [term.template_term_id as string, term]),
+      )
+    }
+
+    const missingChildren = requestedSubtermIds
+      .filter((id) => !projectTermByTemplate.has(id))
+      .map((id) => {
+        const definition = libraryTermById.get(id)
+        const projectStage = definition ? projectStageByTemplate.get(definition.stage_id) : null
+        const projectParent = definition?.parent_term_id ? projectTermByTemplate.get(definition.parent_term_id) : null
+        if (!definition || !definition.parent_term_id || !projectStage || !projectParent || definition.status === "disabled") return null
+        return {
+          project_stage_id: projectStage.id,
+          template_term_id: definition.id,
+          parent_term_id: projectParent.id,
+          report_name: definition.report_name,
+          is_required: definition.is_required,
+          responsible_organization_id: definition.responsible_organization_id,
+          responsible_user_id: definition.responsible_user_id,
+          due_date_rule: definition.due_date_rule,
+          due_date: dueDateFromRule(project.created_at, definition.due_date_rule),
+          approval_required: definition.approval_required,
+          template_reference: definition.template_reference,
+          response_type: isSubtermResponseType(definition.response_type) ? definition.response_type : "combined",
+          instructions: definition.instructions,
+          status: "not_started",
+          sort_order: definition.sort_order,
+          is_active: true,
+        }
+      })
+      .filter(Boolean)
+    if (missingChildren.length) {
+      const { error } = await admin.from("project_stage_terms").insert(missingChildren)
+      if (error && !isUniqueViolation(error)) throw error
+      const { data, error: reloadError } = await admin
+        .from("project_stage_terms")
+        .select("id, project_stage_id, template_term_id, parent_term_id, is_active")
+        .in("project_stage_id", projectStageIds)
+      if (reloadError) throw reloadError
+      projectTerms = data ?? []
+      projectTermByTemplate = new Map(
+        projectTerms
+          .filter((term: any) => term.template_term_id)
+          .map((term: any) => [term.template_term_id as string, term]),
+      )
+    }
+
+    const selectedStageSet = new Set(requestedStageIds)
+    for (const projectStage of projectStages) {
+      if (!projectStage.template_stage_id) continue
+      const shouldEnable = selectedStageSet.has(projectStage.template_stage_id)
+      const nextStatus = shouldEnable
+        ? projectStage.status === "disabled" ? await deriveProjectStageStatus(projectStage.id) : projectStage.status
+        : "disabled"
+      if (nextStatus !== projectStage.status) {
         const { error } = await admin
           .from("project_stages")
-          .update({ status: restoredStatus })
-          .eq("id", existing.id)
+          .update({ status: nextStatus })
+          .eq("id", projectStage.id)
           .eq("project_id", input.projectId)
         if (error) throw error
       }
     }
 
-    const selected = new Set(requestedIds)
-    const disableIds = (existingRows ?? [])
-      .filter((row: any) => row.template_stage_id && !selected.has(row.template_stage_id) && row.status !== "disabled")
-      .map((row: any) => row.id as string)
-    if (disableIds.length) {
-      const { error } = await admin
-        .from("project_stages")
-        .update({ status: "disabled" })
-        .in("id", disableIds)
-        .eq("project_id", input.projectId)
+    const selectedTermSet = new Set(requestedTermIds)
+    const selectedSubtermSet = new Set(requestedSubtermIds)
+    const changedProjectTermIds: string[] = []
+    for (const projectTerm of projectTerms) {
+      if (!projectTerm.template_term_id) continue
+      const definition = libraryTermById.get(projectTerm.template_term_id)
+      if (!definition) continue
+      const shouldEnable = definition.parent_term_id
+        ? selectedSubtermSet.has(projectTerm.template_term_id)
+        : selectedTermSet.has(projectTerm.template_term_id)
+      if (projectTerm.is_active !== shouldEnable) {
+        const { error } = await admin
+          .from("project_stage_terms")
+          .update({ is_active: shouldEnable })
+          .eq("id", projectTerm.id)
+        if (error) throw error
+        changedProjectTermIds.push(projectTerm.id)
+      }
+    }
+
+    // Recalculate the existing parent/Stage rollups after visibility changes.
+    // The RPC ignores inactive hierarchy items while preserving all historical
+    // response and approval records. Sequential execution avoids competing
+    // updates when multiple changed Sub-terms share the same parent Term.
+    for (const termId of changedProjectTermIds) {
+      const { error } = await admin.rpc("refresh_project_stage_rollups", { target_term_id: termId })
       if (error) throw error
     }
 
     await audit({
       actorId,
-      action: "project_stages.selection_updated",
+      action: "project_stages.configuration_updated",
       entityType: "project",
       entityId: input.projectId,
       projectId: input.projectId,
-      metadata: { selectedTemplateStageIds: requestedIds },
+      metadata: {
+        selectedTemplateStageIds: requestedStageIds,
+        selectedTemplateTermIds: requestedTermIds,
+        selectedTemplateSubtermIds: requestedSubtermIds,
+      },
     })
     revalidateProjectStageViews(input.projectId)
     return { ok: true }
   } catch (error) {
-    return actionError(error, "Could not update project stages.")
+    return actionError(error, "Could not update the project workflow configuration.")
   }
 }
 
-async function parentTermScope(projectId: string, parentTermId: string) {
-  const admin = createAdminClient()
-  const { data, error } = await admin
-    .from("project_stage_terms")
-    .select("id, project_stage_id, parent_term_id, is_active, project_stages!inner(project_id, status)")
-    .eq("id", parentTermId)
-    .eq("project_stages.project_id", projectId)
-    .maybeSingle()
-  if (error) throw error
-  if (!data) throw new Error("Parent term not found.")
-  if (data.parent_term_id) throw new Error("A sub-term cannot contain another sub-term.")
-  if (!data.is_active) throw new Error("This parent term is inactive.")
-  const stage = Array.isArray(data.project_stages) ? data.project_stages[0] : data.project_stages
-  if (stage?.status === "disabled") throw new Error("This stage is inactive.")
-  return data
-}
-
-export async function createProjectSubtermAction(input: {
-  projectId: string
-  parentTermId: string
-  name: string
-  required: boolean
-  approvalRequired: boolean
-  responseType: SubtermResponseType
-  instructions?: string
-}): Promise<StageActionResult<{ id: string }>> {
-  try {
-    const actorId = await assertProjectAdmin(input.projectId)
-    const parent = await parentTermScope(input.projectId, input.parentTermId)
-    if (typeof input.required !== "boolean" || typeof input.approvalRequired !== "boolean" || !isSubtermResponseType(input.responseType)) {
-      return { ok: false, error: "Select valid Sub-term settings." }
-    }
-    if (instructionsAreTooLong(input.instructions)) {
-      return { ok: false, error: `Description / Instructions must be ${SUBTERM_INSTRUCTIONS_MAX_LENGTH} characters or fewer.` }
-    }
-    const name = normalizedName(input.name)
-    if (!name) return { ok: false, error: "Sub-term name is required." }
-    if (name.length > SUBTERM_NAME_MAX_LENGTH) return { ok: false, error: `Sub-term name must be ${SUBTERM_NAME_MAX_LENGTH} characters or fewer.` }
-    const admin = createAdminClient()
-    if (await activeSiblingNameExists(input.parentTermId, name)) {
-      return { ok: false, error: "A sub-term with this name already exists under the parent term." }
-    }
-
-    const { data: lastRows, error: orderError } = await admin
-      .from("project_stage_terms")
-      .select("sort_order")
-      .eq("parent_term_id", input.parentTermId)
-      .order("sort_order", { ascending: false })
-      .limit(1)
-    if (orderError) throw orderError
-    const sortOrder = ((lastRows?.[0] as any)?.sort_order ?? 0) + 10
-
-    const { data, error } = await admin
-      .from("project_stage_terms")
-      .insert({
-        project_stage_id: parent.project_stage_id,
-        parent_term_id: input.parentTermId,
-        report_name: name,
-        is_required: input.required,
-        approval_required: input.approvalRequired,
-        response_type: input.responseType,
-        instructions: normalizedInstructions(input.instructions),
-        due_date_rule: "none",
-        status: "not_started",
-        sort_order: sortOrder,
-        is_active: true,
-      })
-      .select("id")
-      .single()
-    if (error) {
-      if (isUniqueViolation(error)) return { ok: false, error: "A sub-term with this name already exists under the parent term." }
-      throw error
-    }
-    await audit({ actorId, action: "project_subterm.created", entityType: "project_stage_term", entityId: data.id, projectId: input.projectId, metadata: { parentTermId: input.parentTermId, name } })
-    revalidateProjectStageViews(input.projectId)
-    return { ok: true, data: { id: data.id } }
-  } catch (error) {
-    return actionError(error, "Could not add the sub-term.")
-  }
-}
-
-export async function updateProjectSubtermAction(input: {
-  projectId: string
-  subtermId: string
-  name: string
-  required: boolean
-  approvalRequired: boolean
-  responseType: SubtermResponseType
-  instructions?: string
-}): Promise<StageActionResult> {
-  try {
-    const actorId = await assertProjectAdmin(input.projectId)
-    const admin = createAdminClient()
-    const { data: subterm, error: lookupError } = await admin
-      .from("project_stage_terms")
-      .select("id, parent_term_id, project_stage_id, is_active, project_stages!inner(project_id)")
-      .eq("id", input.subtermId)
-      .eq("project_stages.project_id", input.projectId)
-      .maybeSingle()
-    if (lookupError) throw lookupError
-    if (!subterm?.parent_term_id) return { ok: false, error: "Sub-term not found." }
-    if (!subterm.is_active) return { ok: false, error: "Archived sub-terms must be restored before editing." }
-    await parentTermScope(input.projectId, subterm.parent_term_id)
-    if (typeof input.required !== "boolean" || typeof input.approvalRequired !== "boolean" || !isSubtermResponseType(input.responseType)) {
-      return { ok: false, error: "Select valid Sub-term settings." }
-    }
-    if (instructionsAreTooLong(input.instructions)) {
-      return { ok: false, error: `Description / Instructions must be ${SUBTERM_INSTRUCTIONS_MAX_LENGTH} characters or fewer.` }
-    }
-    const name = normalizedName(input.name)
-    if (!name) return { ok: false, error: "Sub-term name is required." }
-    if (name.length > SUBTERM_NAME_MAX_LENGTH) return { ok: false, error: `Sub-term name must be ${SUBTERM_NAME_MAX_LENGTH} characters or fewer.` }
-
-    if (await activeSiblingNameExists(subterm.parent_term_id, name, input.subtermId)) {
-      return { ok: false, error: "A sub-term with this name already exists under the parent term." }
-    }
-
-    const { error } = await admin
-      .from("project_stage_terms")
-      .update({
-        report_name: name,
-        is_required: input.required,
-        approval_required: input.approvalRequired,
-        response_type: input.responseType,
-        instructions: normalizedInstructions(input.instructions),
-      })
-      .eq("id", input.subtermId)
-    if (error) {
-      if (isUniqueViolation(error)) return { ok: false, error: "A sub-term with this name already exists under the parent term." }
-      throw error
-    }
-    await audit({ actorId, action: "project_subterm.updated", entityType: "project_stage_term", entityId: input.subtermId, projectId: input.projectId, metadata: { name } })
-    revalidateProjectStageViews(input.projectId)
-    revalidatePath(`/projects/${input.projectId}/stages/${subterm.project_stage_id}/terms/${input.subtermId}`)
-    return { ok: true }
-  } catch (error) {
-    return actionError(error, "Could not update the sub-term.")
-  }
-}
-
-export async function deleteProjectSubtermAction(input: {
-  projectId: string
-  subtermId: string
-}): Promise<StageActionResult<{ archived: boolean }>> {
-  try {
-    const actorId = await assertProjectAdmin(input.projectId)
-    const admin = createAdminClient()
-    const { data: subterm, error: lookupError } = await admin
-      .from("project_stage_terms")
-      .select("id, parent_term_id, project_stage_id, project_stages!inner(project_id)")
-      .eq("id", input.subtermId)
-      .eq("project_stages.project_id", input.projectId)
-      .maybeSingle()
-    if (lookupError) throw lookupError
-    if (!subterm?.parent_term_id) return { ok: false, error: "Sub-term not found." }
-    await parentTermScope(input.projectId, subterm.parent_term_id)
-    const { count, error: responseError } = await admin
-      .from("term_responses")
-      .select("id", { count: "exact", head: true })
-      .eq("project_stage_term_id", input.subtermId)
-    if (responseError) throw responseError
-    const archived = (count ?? 0) > 0
-    if (archived) {
-      const { error } = await admin.from("project_stage_terms").update({ is_active: false }).eq("id", input.subtermId)
-      if (error) throw error
-    } else {
-      const { error } = await admin.from("project_stage_terms").delete().eq("id", input.subtermId)
-      if (error) throw error
-    }
-    await audit({ actorId, action: archived ? "project_subterm.archived" : "project_subterm.deleted", entityType: "project_stage_term", entityId: input.subtermId, projectId: input.projectId })
-    revalidateProjectStageViews(input.projectId)
-    return { ok: true, data: { archived } }
-  } catch (error) {
-    return actionError(error, "Could not remove the sub-term.")
-  }
-}
-
-export async function restoreProjectSubtermAction(input: {
-  projectId: string
-  subtermId: string
-}): Promise<StageActionResult> {
-  try {
-    const actorId = await assertProjectAdmin(input.projectId)
-    const admin = createAdminClient()
-    const { data: subterm, error: lookupError } = await admin
-      .from("project_stage_terms")
-      .select("id, parent_term_id, report_name, project_stages!inner(project_id)")
-      .eq("id", input.subtermId)
-      .eq("project_stages.project_id", input.projectId)
-      .maybeSingle()
-    if (lookupError) throw lookupError
-    if (!subterm?.parent_term_id) return { ok: false, error: "Sub-term not found." }
-    await parentTermScope(input.projectId, subterm.parent_term_id)
-    if (await activeSiblingNameExists(subterm.parent_term_id, normalizedName(subterm.report_name), input.subtermId)) {
-      return { ok: false, error: "An active sub-term with this name already exists." }
-    }
-    const { error } = await admin.from("project_stage_terms").update({ is_active: true }).eq("id", input.subtermId)
-    if (error) {
-      if (isUniqueViolation(error)) return { ok: false, error: "An active sub-term with this name already exists." }
-      throw error
-    }
-    await audit({ actorId, action: "project_subterm.restored", entityType: "project_stage_term", entityId: input.subtermId, projectId: input.projectId })
-    revalidateProjectStageViews(input.projectId)
-    return { ok: true }
-  } catch (error) {
-    return actionError(error, "Could not restore the sub-term.")
-  }
-}

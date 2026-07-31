@@ -157,7 +157,7 @@ export async function generateAiSummary(rawInput: GenerateAiSummaryInput) {
   const responseRowIds = (responses ?? []).map((row: any) => row.id as string)
   const [{ data: terms }, { data: attachments }, { data: approvals }] = await Promise.all([
     termIds.length
-      ? admin.from("project_stage_terms").select("id, project_stage_id, report_name, is_required, approval_required, is_active").in("id", termIds)
+      ? admin.from("project_stage_terms").select("id, project_stage_id, parent_term_id, report_name, is_required, approval_required, is_active").in("id", termIds)
       : Promise.resolve({ data: [] as any[] }),
     responseRowIds.length
       ? admin
@@ -176,14 +176,18 @@ export async function generateAiSummary(rawInput: GenerateAiSummaryInput) {
   ])
 
   const stageIds = Array.from(new Set((terms ?? []).map((row: any) => row.project_stage_id as string)))
+  const parentIds = Array.from(new Set((terms ?? []).map((row: any) => row.parent_term_id).filter(Boolean))) as string[]
   const reviewerIds = Array.from(new Set((approvals ?? []).map((row: any) => row.reviewer_id as string)))
-  const [{ data: stages }, { data: reviewers }] = await Promise.all([
+  const [{ data: stages }, { data: reviewers }, { data: parents }] = await Promise.all([
     stageIds.length ? admin.from("project_stages").select("id, name, status").in("id", stageIds) : Promise.resolve({ data: [] as any[] }),
     reviewerIds.length ? admin.from("profiles").select("id, full_name, email").in("id", reviewerIds) : Promise.resolve({ data: [] as any[] }),
+    parentIds.length ? admin.from("project_stage_terms").select("id, is_active").in("id", parentIds) : Promise.resolve({ data: [] as any[] }),
   ])
+  const parentActive = new Map<string, boolean>((parents ?? []).map((row: any) => [row.id, row.is_active !== false]))
 
   const termMap = new Map<string, {
     project_stage_id: string
+    parent_term_id: string | null
     report_name: string
     is_required: boolean
     approval_required: boolean
@@ -191,6 +195,7 @@ export async function generateAiSummary(rawInput: GenerateAiSummaryInput) {
   }>(
     (terms ?? []).map((row: any) => [row.id, {
       project_stage_id: row.project_stage_id,
+      parent_term_id: row.parent_term_id,
       report_name: row.report_name,
       is_required: row.is_required === true,
       approval_required: row.approval_required === true,
@@ -202,7 +207,7 @@ export async function generateAiSummary(rawInput: GenerateAiSummaryInput) {
   )
   const selectedInactiveTerm = termIds.some((termId) => {
     const term = termMap.get(termId)
-    if (!term || !term.is_active) return true
+    if (!term || !term.is_active || (term.parent_term_id && parentActive.get(term.parent_term_id) !== true)) return true
     const stage = stageMap.get(term.project_stage_id)
     return !stage || stage.status === "disabled"
   })

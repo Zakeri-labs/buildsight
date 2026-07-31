@@ -31,6 +31,11 @@ export default async function ProjectStageTermPage({
       response={data.term.response}
       translation={data.term.translation}
       canReview={data.canReview}
+      workflowActive={
+        data.stage.status !== "disabled" &&
+        data.term.isActive &&
+        (!data.parentTerm || data.parentTerm.isActive)
+      }
     />
   )
 }

@@ -259,6 +259,7 @@ export function InspectionReportForm({
   response,
   translation,
   canReview,
+  workflowActive,
 }: {
   project: { id: string; name: string; code: string | null }
   stage: { id: string; name: string }
@@ -277,6 +278,7 @@ export function InspectionReportForm({
   response: InitialResponse
   translation?: ProjectStageTranslationSummary | null
   canReview: boolean
+  workflowActive: boolean
 }) {
   const router = useRouter()
   const { locale } = useI18n()
@@ -327,7 +329,8 @@ export function InspectionReportForm({
 
   const evidenceImages = existingAttachments.filter((item) => item.attachmentKind === "evidence_image")
   const documentAttachments = existingAttachments.filter((item) => item.attachmentKind === "document")
-  const isLocked = status === "approved" || status === "completed"
+  const statusLocked = status === "approved" || status === "completed"
+  const isLocked = statusLocked || !workflowActive
 
   const updateSection = useCallback((key: ReportSectionKey, value: string) => {
     setContent((current) => ({ ...current, [key]: value }))
@@ -758,10 +761,11 @@ export function InspectionReportForm({
         <ApprovalPanel canReview={canReview} status={status} comments={reviewComments} onComments={setReviewComments} onDecision={decide} busy={busy} approvals={approvalHistory} copy={copy} locale={locale} />
       ) : null}
 
+      {!workflowActive ? <div role="status" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100"><AlertCircle className="mt-0.5 size-4 shrink-0" />This workflow item is disabled for the project. Existing review history remains available, but new employee work is blocked.</div> : null}
       {error ? <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"><AlertCircle className="mt-0.5 size-4 shrink-0" />{error}</div> : null}
       {success ? <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"><CheckCircle2 className="mt-0.5 size-4 shrink-0" />{success}</div> : null}
 
-      {!isLocked ? (
+      {!statusLocked && (workflowActive || (canReview && (status === "submitted" || status === "under_review"))) ? (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur md:start-64 md:px-8">
           <div className="mx-auto flex max-w-7xl flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
             {canReview && (status === "submitted" || status === "under_review") ? (
@@ -789,9 +793,13 @@ export function InspectionReportForm({
                 </Button>
               </div>
             ) : null}
-            <Button variant="outline" size="lg" disabled={busy !== null} onClick={() => void save("draft")}>{busy === "draft" ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}{copy.saveDraft}</Button>
-            <Button variant="outline" size="lg" disabled={busy !== null} onClick={() => void save("progress")}>{busy === "progress" ? <Loader2 className="size-4 animate-spin" /> : <ClipboardCheck className="size-4" />}{copy.saveProgress}</Button>
-            <Button size="lg" disabled={busy !== null} onClick={() => void save("submit")}>{busy === "submit" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}{copy.submit}</Button>
+            {workflowActive ? (
+              <>
+                <Button variant="outline" size="lg" disabled={busy !== null} onClick={() => void save("draft")}>{busy === "draft" ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}{copy.saveDraft}</Button>
+                <Button variant="outline" size="lg" disabled={busy !== null} onClick={() => void save("progress")}>{busy === "progress" ? <Loader2 className="size-4 animate-spin" /> : <ClipboardCheck className="size-4" />}{copy.saveProgress}</Button>
+                <Button size="lg" disabled={busy !== null} onClick={() => void save("submit")}>{busy === "submit" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}{copy.submit}</Button>
+              </>
+            ) : null}
           </div>
         </div>
       ) : null}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { assertProjectAdmin, assertProjectMember, audit, AuthzError } from "@/lib/auth/guards"
+import { assertProjectMember, assertProjectReviewer, audit, AuthzError } from "@/lib/auth/guards"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
@@ -53,11 +53,21 @@ async function loadTranslation(admin: ReturnType<typeof createAdminClient>, proj
 async function translationScopeIsActive(admin: ReturnType<typeof createAdminClient>, translation: TranslationRow) {
   const { data: term, error: termError } = await admin
     .from("project_stage_terms")
-    .select("is_active, project_stage_id")
+    .select("is_active, project_stage_id, parent_term_id")
     .eq("id", translation.project_stage_term_id)
     .maybeSingle()
   if (termError) throw termError
   if (!term || term.project_stage_id !== translation.project_stage_id) return false
+  let parentActive = true
+  if (term.parent_term_id) {
+    const { data: parent, error: parentError } = await admin
+      .from("project_stage_terms")
+      .select("is_active")
+      .eq("id", term.parent_term_id)
+      .maybeSingle()
+    if (parentError) throw parentError
+    parentActive = parent?.is_active === true
+  }
   const { data: stage, error: stageError } = await admin
     .from("project_stages")
     .select("status")
@@ -65,7 +75,7 @@ async function translationScopeIsActive(admin: ReturnType<typeof createAdminClie
     .eq("project_id", translation.project_id)
     .maybeSingle()
   if (stageError) throw stageError
-  return Boolean(stage && stage.status !== "disabled" && term.is_active !== false)
+  return Boolean(stage && stage.status !== "disabled" && term.is_active !== false && parentActive)
 }
 
 function ensureTranslationReady(translation: TranslationRow, kind: PdfKind) {
@@ -91,7 +101,7 @@ export async function GET(request: NextRequest) {
     const admin = createAdminClient()
     const translation = await loadTranslation(admin, projectId, translationId)
     if (!translation) return NextResponse.json({ error: "Translation record not found." }, { status: 404 })
-    if (!(await translationScopeIsActive(admin, translation))) await assertProjectAdmin(projectId)
+    if (!(await translationScopeIsActive(admin, translation))) await assertProjectReviewer(projectId)
     const storagePath = translation[PDF_COLUMNS[kind]]
     if (!storagePath) return NextResponse.json({ error: "The requested PDF has not been generated." }, { status: 404 })
 

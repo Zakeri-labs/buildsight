@@ -374,7 +374,7 @@ export async function generateStageTranslation(input: {
   const [{ data: activeTerm, error: termError }, { data: activeStage, error: stageError }] = await Promise.all([
     admin
       .from("project_stage_terms")
-      .select("id")
+      .select("id, parent_term_id")
       .eq("id", input.termId)
       .eq("project_stage_id", input.stageId)
       .eq("is_active", true)
@@ -390,6 +390,17 @@ export async function generateStageTranslation(input: {
   if (termError) throw termError
   if (stageError) throw stageError
   if (!activeTerm || !activeStage) throw new Error("This stage or term is inactive and cannot accept new translations.")
+  if (activeTerm.parent_term_id) {
+    const { data: activeParent, error: parentError } = await admin
+      .from("project_stage_terms")
+      .select("id")
+      .eq("id", activeTerm.parent_term_id)
+      .eq("project_stage_id", input.stageId)
+      .eq("is_active", true)
+      .maybeSingle()
+    if (parentError) throw parentError
+    if (!activeParent) throw new Error("This parent Term is inactive and cannot accept new translations.")
+  }
 
   const apiKey = process.env.OPENAI_API_KEY?.trim()
   if (!apiKey) throw new Error("Document Translation is not configured. Add OPENAI_API_KEY to the server environment.")

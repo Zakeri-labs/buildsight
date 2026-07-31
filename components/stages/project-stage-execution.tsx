@@ -19,7 +19,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { ManageProjectStagesButton, ProjectTermAdminMenu } from "@/components/stages/project-stage-admin-controls"
+import { ManageProjectStagesButton } from "@/components/stages/project-stage-admin-controls"
 import type { ProjectStageExecutionData, ProjectStageTermExecution } from "@/lib/db/project-stages"
 import { statusLabel, statusTone, subtermResponseTypeLabel } from "@/lib/stages/execution"
 import { cn } from "@/lib/utils"
@@ -182,7 +182,7 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
                     {stage.terms.length ? (
                       <div className="divide-y">
                         {stage.terms.map((term) => (
-                          <TermGroup key={term.id} projectId={data.project.id} stageId={stage.id} term={term} canManage={data.canManage} copy={copy} locale={language} />
+                          <TermGroup key={term.id} projectId={data.project.id} stageId={stage.id} term={term} copy={copy} locale={language} />
                         ))}
                       </div>
                     ) : <p className="p-6 text-center text-sm text-muted-foreground">{copy.noTerms}</p>}
@@ -210,27 +210,24 @@ function TermGroup({
   projectId,
   stageId,
   term,
-  canManage,
   copy,
   locale,
 }: {
   projectId: string
   stageId: string
   term: ProjectStageTermExecution
-  canManage: boolean
   copy: (typeof COPY)["en"] | (typeof COPY)["ar"]
   locale: "en" | "ar"
 }) {
   const [open, setOpen] = useState(true)
   const activeSubterms = term.subterms.filter((subterm) => subterm.isActive)
-  const visibleSubterms = canManage ? term.subterms : activeSubterms
+  const visibleSubterms = activeSubterms
   const hasSubterms = visibleSubterms.length > 0
 
   if (!hasSubterms) {
     return (
       <div className="flex items-center gap-1 px-4 py-4 transition-colors hover:bg-muted/35 sm:px-5">
         <TermLink projectId={projectId} stageId={stageId} term={term} copy={copy} locale={locale} />
-        {canManage ? <ProjectTermAdminMenu projectId={projectId} term={term} kind="parent" /> : null}
       </div>
     )
   }
@@ -265,7 +262,6 @@ function TermGroup({
             {copy.parentRecord}
           </Link>
         ) : null}
-        {canManage ? <ProjectTermAdminMenu projectId={projectId} term={term} kind="parent" /> : null}
       </div>
       {open ? (
         <div className="border-t bg-muted/10 py-1 ps-6 sm:ps-10">
@@ -282,7 +278,6 @@ function TermGroup({
                   </div>
                 </div>
               )}
-              {canManage ? <ProjectTermAdminMenu projectId={projectId} term={subterm} kind="subterm" /> : null}
             </div>
           ))}
         </div>

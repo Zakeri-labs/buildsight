@@ -71,6 +71,7 @@ export type ProjectStageTranslationSummary = {
 export type ProjectStageTermExecution = {
   id: string
   projectStageId: string
+  templateTermId: string | null
   parentTermId: string | null
   reportName: string
   required: boolean
@@ -101,6 +102,20 @@ export type ProjectStageExecution = {
   terms: ProjectStageTermExecution[]
 }
 
+export type ProjectTermSelectionOption = {
+  templateTermId: string
+  projectTermId: string | null
+  parentTemplateTermId: string | null
+  name: string
+  required: boolean
+  responseType: SubtermResponseType
+  sortOrder: number
+  active: boolean
+  hasData: boolean
+  hasPendingReview: boolean
+  subterms: ProjectTermSelectionOption[]
+}
+
 export type ProjectStageSelectionOption = {
   templateStageId: string
   projectStageId: string | null
@@ -109,6 +124,8 @@ export type ProjectStageSelectionOption = {
   sortOrder: number
   active: boolean
   hasData: boolean
+  hasPendingReview: boolean
+  terms: ProjectTermSelectionOption[]
 }
 
 export type ProjectStageExecutionData = {
@@ -201,12 +218,20 @@ function derivedParentStatus(children: ProjectStageTermExecution[]): ProjectStag
   return "not_started"
 }
 
-export async function loadProjectStageExecution(projectId: string, userId: string): Promise<ProjectStageExecutionData | null> {
+export async function loadProjectStageExecution(
+  projectId: string,
+  userId: string,
+  includeInactiveForReview = false,
+): Promise<ProjectStageExecutionData | null> {
   const access = await projectAccess(projectId, userId)
   if (!access) return null
   const admin = createAdminClient()
 
-  const [{ data: allStages, error: stagesError }, { data: libraryStages, error: libraryError }] = await Promise.all([
+  const [
+    { data: allStages, error: stagesError },
+    { data: libraryStages, error: libraryError },
+    { data: libraryTerms, error: libraryTermsError },
+  ] = await Promise.all([
     admin
       .from("project_stages")
       .select("id, template_stage_id, name, description, status, sort_order")
@@ -217,16 +242,22 @@ export async function loadProjectStageExecution(projectId: string, userId: strin
       .select("id, name, description, sort_order, is_active")
       .eq("organization_id", access.project.supervising_organization_id)
       .order("sort_order", { ascending: true }),
+    admin
+      .from("stage_terms")
+      .select("id, stage_id, parent_term_id, report_name, is_required, response_type, status, sort_order, stages!inner(organization_id)")
+      .eq("stages.organization_id", access.project.supervising_organization_id)
+      .order("sort_order", { ascending: true }),
   ])
   if (stagesError) throw stagesError
   if (libraryError) throw libraryError
+  if (libraryTermsError) throw libraryTermsError
 
   const stageRows = allStages ?? []
   const stageIds = stageRows.map((stage: any) => stage.id as string)
   const { data: allTerms, error: termsError } = stageIds.length
     ? await admin
         .from("project_stage_terms")
-        .select("id, project_stage_id, parent_term_id, report_name, is_required, responsible_organization_id, responsible_user_id, due_date_rule, due_date, approval_required, template_reference, response_type, instructions, status, sort_order, is_active")
+        .select("id, project_stage_id, template_term_id, parent_term_id, report_name, is_required, responsible_organization_id, responsible_user_id, due_date_rule, due_date, approval_required, template_reference, response_type, instructions, status, sort_order, is_active")
         .in("project_stage_id", stageIds)
         .order("sort_order", { ascending: true })
     : { data: [], error: null }
@@ -346,6 +377,7 @@ export async function loadProjectStageExecution(projectId: string, userId: strin
     termMap.set(term.id, {
       id: term.id,
       projectStageId: term.project_stage_id,
+      templateTermId: term.template_term_id,
       parentTermId: term.parent_term_id,
       reportName: term.report_name,
       required: term.is_required,
@@ -377,8 +409,9 @@ export async function loadProjectStageExecution(projectId: string, userId: strin
     if (term.subterms.some((child) => child.isActive)) term.status = derivedParentStatus(term.subterms)
   }
 
-  const activeStages = stageRows.filter((stage: any) => stage.status !== "disabled")
-  const stages: ProjectStageExecution[] = activeStages.map((stage: any) => ({
+  const includeInactive = includeInactiveForReview && access.canReview
+  const visibleStages = includeInactive ? stageRows : stageRows.filter((stage: any) => stage.status !== "disabled")
+  const stages: ProjectStageExecution[] = visibleStages.map((stage: any) => ({
     id: stage.id,
     templateStageId: stage.template_stage_id,
     name: stage.name,
@@ -386,23 +419,86 @@ export async function loadProjectStageExecution(projectId: string, userId: strin
     status: stage.status,
     sortOrder: stage.sort_order,
     terms: Array.from(termMap.values())
-      .filter((term) => term.projectStageId === stage.id && !term.parentTermId && term.isActive)
+      .filter((term) => term.projectStageId === stage.id && !term.parentTermId && (includeInactive || term.isActive))
+      .map((term) => includeInactive ? term : { ...term, subterms: term.subterms.filter((subterm) => subterm.isActive) })
       .sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName)),
   }))
 
-  const projectStageByTemplate = new Map(stageRows.filter((stage: any) => stage.template_stage_id).map((stage: any) => [stage.template_stage_id as string, stage]))
-  const termCountByStage = new Map<string, number>()
-  for (const term of termRows) termCountByStage.set(term.project_stage_id, (termCountByStage.get(term.project_stage_id) ?? 0) + 1)
-  const responseTermIds = new Set((responses ?? []).map((response: any) => response.project_stage_term_id as string))
-  const responseCountByStage = new Map<string, number>()
-  for (const term of termRows) {
-    if (responseTermIds.has(term.id)) responseCountByStage.set(term.project_stage_id, (responseCountByStage.get(term.project_stage_id) ?? 0) + 1)
+  const projectStageByTemplate = new Map<string, any>(
+    stageRows
+      .filter((stage: any) => stage.template_stage_id)
+      .map((stage: any) => [stage.template_stage_id as string, stage]),
+  )
+  const projectTermByTemplate = new Map<string, any>(
+    termRows
+      .filter((term: any) => term.template_term_id)
+      .map((term: any) => [term.template_term_id as string, term]),
+  )
+  const responseByProjectTermId = new Map<string, any>(
+    (responses ?? []).map((response: any) => [response.project_stage_term_id as string, response]),
+  )
+  const libraryTermDefinitionById = new Map<string, any>(
+    (libraryTerms ?? []).map((definition: any) => [definition.id as string, definition]),
+  )
+
+  const libraryTermMap = new Map<string, ProjectTermSelectionOption>()
+  for (const definition of libraryTerms ?? []) {
+    const projectTerm = projectTermByTemplate.get(definition.id)
+    const response = projectTerm ? responseByProjectTermId.get(projectTerm.id) : null
+    libraryTermMap.set(definition.id, {
+      templateTermId: definition.id,
+      projectTermId: projectTerm?.id ?? null,
+      parentTemplateTermId: definition.parent_term_id,
+      name: definition.report_name,
+      required: definition.is_required,
+      responseType: isSubtermResponseType(definition.response_type) ? definition.response_type : "combined",
+      sortOrder: definition.sort_order,
+      active: Boolean(projectTerm && projectTerm.is_active !== false),
+      hasData: Boolean(response),
+      hasPendingReview: Boolean(response && (response.status === "submitted" || response.status === "under_review")),
+      subterms: [],
+    })
+  }
+
+  for (const term of libraryTermMap.values()) {
+    if (!term.parentTemplateTermId) continue
+    const parent = libraryTermMap.get(term.parentTemplateTermId)
+    const definition = libraryTermDefinitionById.get(term.templateTermId)
+    if (parent && (definition?.status !== "disabled" || Boolean(term.projectTermId))) {
+      parent.subterms.push(term)
+    }
+  }
+  for (const term of libraryTermMap.values()) {
+    term.subterms.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+  }
+
+  const libraryTermsByStage = new Map<string, ProjectTermSelectionOption[]>()
+  for (const definition of libraryTerms ?? []) {
+    if (definition.parent_term_id) continue
+    const mapped = libraryTermMap.get(definition.id)
+    if (!mapped || (definition.status === "disabled" && !mapped.projectTermId)) continue
+    const rows = libraryTermsByStage.get(definition.stage_id) ?? []
+    rows.push(mapped)
+    libraryTermsByStage.set(definition.stage_id, rows)
+  }
+  for (const rows of libraryTermsByStage.values()) {
+    rows.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
   }
 
   const availableStages: ProjectStageSelectionOption[] = (libraryStages ?? [])
     .filter((stage: any) => stage.is_active !== false || projectStageByTemplate.has(stage.id))
     .map((stage: any) => {
-      const projectStage = projectStageByTemplate.get(stage.id) as any
+      const projectStage = projectStageByTemplate.get(stage.id)
+      const terms = libraryTermsByStage.get(stage.id) ?? []
+      const legacyProjectTerms = projectStage
+        ? termRows.filter((term: any) => term.project_stage_id === projectStage.id && !term.template_term_id)
+        : []
+      const allItems = terms.flatMap((term) => [term, ...term.subterms])
+      const legacyHasData = legacyProjectTerms.some((term: any) => responseByProjectTermId.has(term.id))
+      const legacyHasPendingReview = legacyProjectTerms.some((term: any) => {
+        const response = responseByProjectTermId.get(term.id)
+        return response?.status === "submitted" || response?.status === "under_review"
+      })
       return {
         templateStageId: stage.id,
         projectStageId: projectStage?.id ?? null,
@@ -410,14 +506,20 @@ export async function loadProjectStageExecution(projectId: string, userId: strin
         description: stage.description,
         sortOrder: stage.sort_order,
         active: Boolean(projectStage && projectStage.status !== "disabled"),
-        hasData: Boolean(projectStage && ((termCountByStage.get(projectStage.id) ?? 0) > 0 || (responseCountByStage.get(projectStage.id) ?? 0) > 0 || projectStage.status === "in_progress" || projectStage.status === "completed")),
+        hasData:
+          allItems.some((item) => item.hasData) ||
+          legacyHasData ||
+          Boolean(projectStage && ["in_progress", "completed"].includes(projectStage.status)),
+        hasPendingReview: allItems.some((item) => item.hasPendingReview) || legacyHasPendingReview,
+        terms,
       }
     })
+
 
   return {
     project: { id: access.project.id, name: access.project.name, code: access.project.code },
     stages,
-    availableStages,
+    availableStages: access.canManage ? availableStages : [],
     canReview: access.canReview,
     canManage: access.canManage,
     currentUserId: userId,
@@ -425,12 +527,12 @@ export async function loadProjectStageExecution(projectId: string, userId: strin
 }
 
 export async function loadProjectStageTerm(projectId: string, termId: string, userId: string) {
-  const data = await loadProjectStageExecution(projectId, userId)
+  const data = await loadProjectStageExecution(projectId, userId, true)
   if (!data) return null
   for (const stage of data.stages) {
     for (const term of stage.terms) {
       if (term.id === termId) return { ...data, stage, term, parentTerm: null }
-      const subterm = term.subterms.find((item) => item.id === termId && (item.isActive || data.canManage))
+      const subterm = term.subterms.find((item) => item.id === termId && (item.isActive || data.canReview))
       if (subterm) return { ...data, stage, term: subterm, parentTerm: term }
     }
   }

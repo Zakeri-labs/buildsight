@@ -73,7 +73,7 @@ export async function loadAiSummarySources(projectId: string): Promise<AiSummary
 
   const [{ data: terms }, { data: attachments }, { data: approvals }] = await Promise.all([
     termIds.length
-      ? admin.from("project_stage_terms").select("id, project_stage_id, report_name, is_active").in("id", termIds)
+      ? admin.from("project_stage_terms").select("id, project_stage_id, parent_term_id, report_name, is_active").in("id", termIds)
       : Promise.resolve({ data: [] as any[] }),
     responseIds.length
       ? admin.from("response_attachments").select("response_id, attachment_kind").in("response_id", responseIds)
@@ -84,13 +84,21 @@ export async function loadAiSummarySources(projectId: string): Promise<AiSummary
   ])
 
   const stageIds = Array.from(new Set((terms ?? []).map((row: any) => row.project_stage_id as string)))
-  const { data: stages } = stageIds.length
-    ? await admin.from("project_stages").select("id, name, status").in("id", stageIds)
-    : { data: [] as any[] }
+  const parentIds = Array.from(new Set((terms ?? []).map((row: any) => row.parent_term_id).filter(Boolean))) as string[]
+  const [{ data: stages }, { data: parents }] = await Promise.all([
+    stageIds.length
+      ? admin.from("project_stages").select("id, name, status").in("id", stageIds)
+      : Promise.resolve({ data: [] as any[] }),
+    parentIds.length
+      ? admin.from("project_stage_terms").select("id, is_active").in("id", parentIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ])
+  const parentActive = new Map<string, boolean>((parents ?? []).map((row: any) => [row.id, row.is_active !== false]))
 
-  const termMap = new Map<string, { project_stage_id: string; report_name: string; is_active: boolean }>(
+  const termMap = new Map<string, { project_stage_id: string; parent_term_id: string | null; report_name: string; is_active: boolean }>(
     (terms ?? []).map((row: any) => [row.id, {
       project_stage_id: row.project_stage_id,
+      parent_term_id: row.parent_term_id,
       report_name: row.report_name,
       is_active: row.is_active !== false,
     }]),
@@ -102,7 +110,7 @@ export async function loadAiSummarySources(projectId: string): Promise<AiSummary
     Array.from(termMap.entries())
       .filter(([, term]) => {
         const stage = stageMap.get(term.project_stage_id)
-        return term.is_active && Boolean(stage) && stage?.status !== "disabled"
+        return term.is_active && (!term.parent_term_id || parentActive.get(term.parent_term_id) === true) && Boolean(stage) && stage?.status !== "disabled"
       })
       .map(([termId]) => termId),
   )

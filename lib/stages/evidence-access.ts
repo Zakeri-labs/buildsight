@@ -24,11 +24,22 @@ export async function loadStageEvidenceAccess(projectId: string, storagePath: st
 
   const { data: term, error: termError } = await admin
     .from("project_stage_terms")
-    .select("is_active, project_stage_id")
+    .select("is_active, project_stage_id, parent_term_id")
     .eq("id", response.project_stage_term_id)
     .maybeSingle()
   if (termError) throw termError
   if (!term) return null
+
+  let parentActive = true
+  if (term.parent_term_id) {
+    const { data: parent, error: parentError } = await admin
+      .from("project_stage_terms")
+      .select("is_active")
+      .eq("id", term.parent_term_id)
+      .maybeSingle()
+    if (parentError) throw parentError
+    parentActive = parent?.is_active === true
+  }
 
   const { data: stage, error: stageError } = await admin
     .from("project_stages")
@@ -39,5 +50,5 @@ export async function loadStageEvidenceAccess(projectId: string, storagePath: st
   if (stageError) throw stageError
   if (!stage) return null
 
-  return { active: term.is_active !== false && stage.status !== "disabled" }
+  return { active: term.is_active !== false && parentActive && stage.status !== "disabled" }
 }

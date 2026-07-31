@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { assertStageManager, audit, AuthzError } from "@/lib/auth/guards"
 import type { ActionResult } from "@/lib/actions/invitations"
 import { STAGE_TERM_STATUSES, type StageTermStatus } from "@/lib/stages/config"
+import { isSubtermResponseType, type SubtermResponseType } from "@/lib/stages/execution"
 
 function cleanText(value: string | null | undefined) {
   return value?.trim() || null
@@ -27,7 +28,7 @@ async function termScope(termId: string) {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from("stage_terms")
-    .select("id, stage_id, report_name, sort_order, stages!inner(organization_id)")
+    .select("id, stage_id, parent_term_id, report_name, sort_order, status, stages!inner(organization_id)")
     .eq("id", termId)
     .maybeSingle()
   if (error) throw error
@@ -152,11 +153,20 @@ export async function deleteStage(input: { stageId: string }): Promise<ActionRes
     const stage = await stageScope(input.stageId)
     const actorId = await assertStageManager(stage.organization_id)
     const admin = createAdminClient()
-    const { error } = await admin.from("stages").delete().eq("id", input.stageId)
+    const [{ count: termCount, error: termError }, { count: assignmentCount, error: assignmentError }] = await Promise.all([
+      admin.from("stage_terms").select("id", { count: "exact", head: true }).eq("stage_id", input.stageId),
+      admin.from("project_stages").select("id", { count: "exact", head: true }).eq("template_stage_id", input.stageId),
+    ])
+    if (termError) throw termError
+    if (assignmentError) throw assignmentError
+    const archive = (termCount ?? 0) > 0 || (assignmentCount ?? 0) > 0
+    const { error } = archive
+      ? await admin.from("stages").update({ is_active: false, updated_at: new Date().toISOString() }).eq("id", input.stageId)
+      : await admin.from("stages").delete().eq("id", input.stageId)
     if (error) throw error
     await audit({
       actorId,
-      action: "stage.deleted",
+      action: archive ? "stage.archived" : "stage.deleted",
       entityType: "stage",
       entityId: input.stageId,
       organizationId: stage.organization_id,
@@ -208,6 +218,34 @@ type TermInput = {
   status: StageTermStatus
 }
 
+type GlobalSubtermInput = {
+  name: string
+  required: boolean
+  approvalRequired: boolean
+  responseType: SubtermResponseType
+  instructions?: string
+  status: StageTermStatus
+}
+
+const GLOBAL_TERM_NAME_MAX_LENGTH = 200
+const GLOBAL_TERM_INSTRUCTIONS_MAX_LENGTH = 5000
+
+function normalizeName(value: string) {
+  return value.trim().replace(/\s+/g, " ")
+}
+
+function validateSubtermInput(input: GlobalSubtermInput): string | null {
+  const name = normalizeName(input.name)
+  if (!name) return "Sub-term name is required."
+  if (name.length > GLOBAL_TERM_NAME_MAX_LENGTH) return `Sub-term name must be ${GLOBAL_TERM_NAME_MAX_LENGTH} characters or fewer.`
+  if (!STAGE_TERM_STATUSES.includes(input.status)) return "Select a valid Sub-term status."
+  if (!isSubtermResponseType(input.responseType)) return "Select a valid response type."
+  if ((input.instructions?.trim().length ?? 0) > GLOBAL_TERM_INSTRUCTIONS_MAX_LENGTH) {
+    return `Description / Instructions must be ${GLOBAL_TERM_INSTRUCTIONS_MAX_LENGTH} characters or fewer.`
+  }
+  return null
+}
+
 function validateTermInput(input: TermInput): string | null {
   if (input.reportName.trim().length < 2) return "Term name must contain at least 2 characters."
   if (!STAGE_TERM_STATUSES.includes(input.status)) return "Select a valid term status."
@@ -232,6 +270,7 @@ export async function createStageTerm(input: TermInput & { stageId: string }): P
       .from("stage_terms")
       .insert({
         stage_id: input.stageId,
+        parent_term_id: null,
         report_name: input.reportName.trim(),
         is_required: input.required,
         responsible_organization_id: null,
@@ -239,6 +278,8 @@ export async function createStageTerm(input: TermInput & { stageId: string }): P
         due_date_rule: "none",
         approval_required: input.approvalRequired,
         template_reference: null,
+        response_type: "combined",
+        instructions: null,
         status: input.status,
         sort_order: (last?.sort_order ?? 0) + 1,
         created_by: actorId,
@@ -324,11 +365,21 @@ export async function deleteStageTerm(input: { termId: string }): Promise<Action
     const term = await termScope(input.termId)
     const actorId = await assertStageManager(term.organization_id)
     const admin = createAdminClient()
-    const { error } = await admin.from("stage_terms").delete().eq("id", input.termId)
+    const [{ count: assignmentCount, error: assignmentError }, { count: childCount, error: childError }] = await Promise.all([
+      admin.from("project_stage_terms").select("id", { count: "exact", head: true }).eq("template_term_id", input.termId),
+      admin.from("stage_terms").select("id", { count: "exact", head: true }).eq("parent_term_id", input.termId),
+    ])
+    if (assignmentError) throw assignmentError
+    if (childError) throw childError
+
+    const archive = (assignmentCount ?? 0) > 0 || (childCount ?? 0) > 0
+    const { error } = archive
+      ? await admin.from("stage_terms").update({ status: "disabled", updated_at: new Date().toISOString() }).eq("id", input.termId)
+      : await admin.from("stage_terms").delete().eq("id", input.termId)
     if (error) throw error
     await audit({
       actorId,
-      action: "stage_term.deleted",
+      action: archive ? "stage_term.archived" : "stage_term.deleted",
       entityType: "stage_term",
       entityId: input.termId,
       organizationId: term.organization_id,
@@ -337,7 +388,100 @@ export async function deleteStageTerm(input: { termId: string }): Promise<Action
     revalidatePath("/stages")
     return { ok: true }
   } catch (error) {
-    return actionError(error, "Could not delete the report term.")
+    return actionError(error, "Could not remove the Term or Sub-term.")
+  }
+}
+
+export async function createStageSubterm(
+  input: GlobalSubtermInput & { parentTermId: string },
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const validationError = validateSubtermInput(input)
+    if (validationError) return { ok: false, error: validationError }
+    const parent = await termScope(input.parentTermId)
+    if (parent.parent_term_id) return { ok: false, error: "A Sub-term cannot contain another Sub-term." }
+    if (parent.status !== "active") return { ok: false, error: "Enable the parent Term before adding a Sub-term." }
+    const actorId = await assertStageManager(parent.organization_id)
+    const admin = createAdminClient()
+    const { data: last, error: orderError } = await admin
+      .from("stage_terms")
+      .select("sort_order")
+      .eq("parent_term_id", input.parentTermId)
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (orderError) throw orderError
+    const { data, error } = await admin
+      .from("stage_terms")
+      .insert({
+        stage_id: parent.stage_id,
+        parent_term_id: input.parentTermId,
+        report_name: normalizeName(input.name),
+        is_required: input.required,
+        responsible_organization_id: null,
+        responsible_user_id: null,
+        due_date_rule: "none",
+        approval_required: input.approvalRequired,
+        template_reference: null,
+        response_type: input.responseType,
+        instructions: cleanText(input.instructions),
+        status: input.status,
+        sort_order: (last?.sort_order ?? 0) + 1,
+        created_by: actorId,
+      })
+      .select("id")
+      .single()
+    if (error) throw error
+    await audit({
+      actorId,
+      action: "stage_subterm.created",
+      entityType: "stage_term",
+      entityId: data.id,
+      organizationId: parent.organization_id,
+      metadata: { stageId: parent.stage_id, parentTermId: input.parentTermId, reportName: normalizeName(input.name) },
+    })
+    revalidatePath("/stages")
+    return { ok: true, data: { id: data.id } }
+  } catch (error) {
+    return actionError(error, "Could not add the Sub-term.")
+  }
+}
+
+export async function updateStageSubterm(
+  input: GlobalSubtermInput & { subtermId: string },
+): Promise<ActionResult> {
+  try {
+    const validationError = validateSubtermInput(input)
+    if (validationError) return { ok: false, error: validationError }
+    const subterm = await termScope(input.subtermId)
+    if (!subterm.parent_term_id) return { ok: false, error: "Sub-term not found." }
+    const actorId = await assertStageManager(subterm.organization_id)
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from("stage_terms")
+      .update({
+        report_name: normalizeName(input.name),
+        is_required: input.required,
+        approval_required: input.approvalRequired,
+        response_type: input.responseType,
+        instructions: cleanText(input.instructions),
+        status: input.status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.subtermId)
+    if (error) throw error
+    await audit({
+      actorId,
+      action: "stage_subterm.updated",
+      entityType: "stage_term",
+      entityId: input.subtermId,
+      organizationId: subterm.organization_id,
+      metadata: { stageId: subterm.stage_id, parentTermId: subterm.parent_term_id, reportName: normalizeName(input.name) },
+    })
+    revalidatePath("/stages")
+    return { ok: true }
+  } catch (error) {
+    return actionError(error, "Could not update the Sub-term.")
   }
 }
 
@@ -352,6 +496,9 @@ export async function moveStageTerm(input: { termId: string; direction: "up" | "
       .eq("stage_id", term.stage_id)
       .neq("id", term.id)
       .limit(1)
+    query = term.parent_term_id
+      ? query.eq("parent_term_id", term.parent_term_id)
+      : query.is("parent_term_id", null)
     query =
       input.direction === "up"
         ? query.lt("sort_order", term.sort_order).order("sort_order", { ascending: false })

@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState, useTransition } from "react"
+import { Fragment, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   ArrowDown,
@@ -10,6 +10,7 @@ import {
   CircleDot,
   ClipboardList,
   FileText,
+  ListPlus,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -72,11 +73,13 @@ import type {
 } from "@/lib/db/stages"
 import { type StageTermStatus } from "@/lib/stages/config"
 import { useI18n } from "@/lib/i18n"
+import { GlobalSubtermDialog, type GlobalSubtermDialogState } from "@/components/stages/global-subterm-dialog"
+import { subtermResponseTypeLabel } from "@/lib/stages/execution"
 
 const COPY = {
   en: {
-    eyebrow: "Stage template library",
-    intro: "Define the construction lifecycle and the terms required in each stage. These templates will be used later when project stage execution is enabled.",
+    eyebrow: "Stages Library",
+    intro: "Define reusable stages, terms, and sub-terms for all projects. Each project can independently choose which definitions are available.",
     addStage: "Add Stage",
     stages: "Stages",
     reports: "Terms",
@@ -119,8 +122,8 @@ const COPY = {
     requiredToggle: "Required / Optional",
     approvalToggle: "Approval is required",
     deleteTitle: "Confirm deletion",
-    deleteStageDescription: "Deleting this stage also deletes all terms inside it. This action cannot be undone.",
-    deleteTermDescription: "Deleting this term cannot be undone.",
+    deleteStageDescription: "Stages already used by projects are archived safely. Unused empty stages may be deleted.",
+    deleteTermDescription: "Terms and Sub-terms already used by projects are archived safely. Unused definitions may be deleted.",
     delete: "Delete",
     emptyTitle: "No stages yet",
     emptyDescription: "Create the first construction stage to begin building your template library.",
@@ -128,8 +131,8 @@ const COPY = {
     success: "Changes saved successfully.",
   },
   ar: {
-    eyebrow: "مكتبة قوالب المراحل",
-    intro: "حدّد دورة حياة المشروع الإنشائي والبنود المطلوبة في كل مرحلة. ستُستخدم هذه القوالب لاحقًا عند تفعيل تنفيذ مراحل المشروع.",
+    eyebrow: "مكتبة المراحل",
+    intro: "حدّد المراحل والبنود والبنود الفرعية القابلة لإعادة الاستخدام في جميع المشاريع، ثم اختر ما يناسب كل مشروع بشكل مستقل.",
     addStage: "إضافة مرحلة",
     stages: "المراحل",
     reports: "البنود",
@@ -232,12 +235,13 @@ export function StageManagement({
   const [stageDialog, setStageDialog] = useState<StageDialogState | null>(null)
   const stageDialogVersion = useRef(0)
   const [termDialog, setTermDialog] = useState<TermDialogState | null>(null)
+  const [subtermDialog, setSubtermDialog] = useState<GlobalSubtermDialogState | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null)
   const [stageSubmitting, setStageSubmitting] = useState(false)
   const [isPending, startTransition] = useTransition()
 
-  const totalReports = data.stages.reduce((sum, stage) => sum + stage.terms.length, 0)
+  const totalReports = data.stages.reduce((sum, stage) => sum + stage.terms.reduce((count, term) => count + 1 + term.subterms.length, 0), 0)
   const requiredReports = data.stages.reduce(
     (sum, stage) => sum + stage.terms.filter((term) => term.required).length,
     0,
@@ -488,65 +492,51 @@ export function StageManagement({
                             </TableHeader>
                             <TableBody>
                               {stage.terms.map((term, termIndex) => (
-                                <TableRow key={term.id} className={term.status === "disabled" ? "opacity-60" : undefined}>
-                                  <TableCell className="px-3 py-2.5 align-middle font-medium whitespace-normal">
-                                    <div className="flex min-w-0 items-center gap-2">
-                                      <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
-                                        {termIndex + 1}
-                                      </span>
-                                      <span className="min-w-0 break-words leading-5">{term.reportName}</span>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="px-3 py-2.5 align-middle">
-                                    <Badge
-                                      variant={term.required ? "default" : "outline"}
-                                      className="h-6 min-w-16 justify-center px-2 text-xs"
-                                    >
-                                      {term.required ? c.required : c.optional}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="px-3 py-2.5 align-middle">
-                                    {term.approvalRequired ? (
-                                      <Badge variant="outline" className="h-6 min-w-16 justify-center px-2 text-xs">
-                                        {c.approvalRequired}
-                                      </Badge>
-                                    ) : (
-                                      <span aria-hidden="true" className="inline-block h-6 min-w-16" />
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="px-3 py-2.5 align-middle">
-                                    <Badge
-                                      variant={term.status === "active" ? "secondary" : "outline"}
-                                      className="h-6 min-w-16 justify-center px-2 text-xs"
-                                    >
-                                      {term.status === "active" ? c.active : c.disabled}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="px-3 py-2.5 text-end align-middle">
-                                    <TermActions
-                                      term={term}
-                                      termIndex={termIndex}
-                                      termCount={stage.terms.length}
-                                      disabled={isPending}
-                                      labels={c}
-                                      onEdit={() => setTermDialog({ mode: "edit", stage, term })}
-                                      onMove={(direction) =>
-                                        execute(() => moveStageTerm({ termId: term.id, direction }))
-                                      }
-                                      onToggle={() =>
-                                        execute(() =>
-                                          setStageTermStatus({
-                                            termId: term.id,
-                                            status: term.status === "active" ? "disabled" : "active",
-                                          }),
-                                        )
-                                      }
-                                      onDelete={() =>
-                                        setDeleteTarget({ kind: "term", id: term.id, name: term.reportName })
-                                      }
-                                    />
-                                  </TableCell>
-                                </TableRow>
+                                <Fragment key={term.id}>
+                                  <TableRow className={term.status === "disabled" ? "opacity-60" : undefined}>
+                                    <TableCell className="px-3 py-2.5 align-middle font-medium whitespace-normal">
+                                      <div className="flex min-w-0 items-center gap-2">
+                                        <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">{termIndex + 1}</span>
+                                        <span className="min-w-0 break-words leading-5">{term.reportName}</span>
+                                        {term.subterms.length ? <Badge variant="secondary" className="h-6 px-2 text-xs">{term.subterms.length} Sub-terms</Badge> : null}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="px-3 py-2.5 align-middle"><Badge variant={term.required ? "default" : "outline"} className="h-6 min-w-16 justify-center px-2 text-xs">{term.required ? c.required : c.optional}</Badge></TableCell>
+                                    <TableCell className="px-3 py-2.5 align-middle">{term.approvalRequired ? <Badge variant="outline" className="h-6 min-w-16 justify-center px-2 text-xs">{c.approvalRequired}</Badge> : <span aria-hidden="true" className="inline-block h-6 min-w-16" />}</TableCell>
+                                    <TableCell className="px-3 py-2.5 align-middle"><Badge variant={term.status === "active" ? "secondary" : "outline"} className="h-6 min-w-16 justify-center px-2 text-xs">{term.status === "active" ? c.active : c.disabled}</Badge></TableCell>
+                                    <TableCell className="px-3 py-2.5 text-end align-middle">
+                                      <TermActions term={term} kind="parent" termIndex={termIndex} termCount={stage.terms.length} disabled={isPending} labels={c}
+                                        onAddSubterm={() => setSubtermDialog({ mode: "create", parent: term, subterm: null })}
+                                        onEdit={() => setTermDialog({ mode: "edit", stage, term })}
+                                        onMove={(direction) => execute(() => moveStageTerm({ termId: term.id, direction }))}
+                                        onToggle={() => execute(() => setStageTermStatus({ termId: term.id, status: term.status === "active" ? "disabled" : "active" }))}
+                                        onDelete={() => setDeleteTarget({ kind: "term", id: term.id, name: term.reportName })}
+                                      />
+                                    </TableCell>
+                                  </TableRow>
+                                  {term.subterms.map((subterm, subtermIndex) => (
+                                    <TableRow key={subterm.id} className={subterm.status === "disabled" ? "bg-muted/10 opacity-60" : "bg-muted/10"}>
+                                      <TableCell className="px-3 py-2 align-middle font-medium whitespace-normal">
+                                        <div className="flex min-w-0 items-center gap-2 ps-8">
+                                          <span className="h-5 border-s border-border" aria-hidden="true" />
+                                          <span className="min-w-0 break-words text-sm leading-5">{subterm.reportName}</span>
+                                          <Badge variant="outline" className="h-5 px-1.5 text-[10px]">{subtermResponseTypeLabel(subterm.responseType)}</Badge>
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="px-3 py-2 align-middle"><Badge variant={subterm.required ? "default" : "outline"} className="h-6 min-w-16 justify-center px-2 text-xs">{subterm.required ? c.required : c.optional}</Badge></TableCell>
+                                      <TableCell className="px-3 py-2 align-middle">{subterm.approvalRequired ? <Badge variant="outline" className="h-6 min-w-16 justify-center px-2 text-xs">{c.approvalRequired}</Badge> : <span aria-hidden="true" className="inline-block h-6 min-w-16" />}</TableCell>
+                                      <TableCell className="px-3 py-2 align-middle"><Badge variant={subterm.status === "active" ? "secondary" : "outline"} className="h-6 min-w-16 justify-center px-2 text-xs">{subterm.status === "active" ? c.active : c.disabled}</Badge></TableCell>
+                                      <TableCell className="px-3 py-2 text-end align-middle">
+                                        <TermActions term={subterm} kind="subterm" termIndex={subtermIndex} termCount={term.subterms.length} disabled={isPending} labels={c}
+                                          onEdit={() => setSubtermDialog({ mode: "edit", parent: term, subterm })}
+                                          onMove={(direction) => execute(() => moveStageTerm({ termId: subterm.id, direction }))}
+                                          onToggle={() => execute(() => setStageTermStatus({ termId: subterm.id, status: subterm.status === "active" ? "disabled" : "active" }))}
+                                          onDelete={() => setDeleteTarget({ kind: "term", id: subterm.id, name: subterm.reportName })}
+                                        />
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </Fragment>
                               ))}
                             </TableBody>
                           </Table>
@@ -554,66 +544,41 @@ export function StageManagement({
 
                         <div className="divide-y md:hidden">
                           {stage.terms.map((term, termIndex) => (
-                            <div key={term.id} className="space-y-3 px-4 py-3">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="flex min-w-0 items-start gap-2">
-                                  <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
-                                    {termIndex + 1}
-                                  </span>
-                                  <p className="min-w-0 break-words font-medium leading-5">{term.reportName}</p>
+                            <Fragment key={term.id}>
+                              <div className="space-y-3 px-4 py-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex min-w-0 items-start gap-2">
+                                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">{termIndex + 1}</span>
+                                    <div className="min-w-0"><p className="break-words font-medium leading-5">{term.reportName}</p>{term.subterms.length ? <p className="mt-1 text-xs text-muted-foreground">{term.subterms.length} Sub-terms</p> : null}</div>
+                                  </div>
+                                  <TermActions term={term} kind="parent" termIndex={termIndex} termCount={stage.terms.length} disabled={isPending} labels={c}
+                                    onAddSubterm={() => setSubtermDialog({ mode: "create", parent: term, subterm: null })}
+                                    onEdit={() => setTermDialog({ mode: "edit", stage, term })}
+                                    onMove={(direction) => execute(() => moveStageTerm({ termId: term.id, direction }))}
+                                    onToggle={() => execute(() => setStageTermStatus({ termId: term.id, status: term.status === "active" ? "disabled" : "active" }))}
+                                    onDelete={() => setDeleteTarget({ kind: "term", id: term.id, name: term.reportName })}
+                                  />
                                 </div>
-                                <TermActions
-                                  term={term}
-                                  termIndex={termIndex}
-                                  termCount={stage.terms.length}
-                                  disabled={isPending}
-                                  labels={c}
-                                  onEdit={() => setTermDialog({ mode: "edit", stage, term })}
-                                  onMove={(direction) =>
-                                    execute(() => moveStageTerm({ termId: term.id, direction }))
-                                  }
-                                  onToggle={() =>
-                                    execute(() =>
-                                      setStageTermStatus({
-                                        termId: term.id,
-                                        status: term.status === "active" ? "disabled" : "active",
-                                      }),
-                                    )
-                                  }
-                                  onDelete={() =>
-                                    setDeleteTarget({ kind: "term", id: term.id, name: term.reportName })
-                                  }
-                                />
+                                <dl className="grid grid-cols-3 gap-2 text-sm">
+                                  <div className="min-w-0"><dt className="truncate text-[11px] text-muted-foreground">{c.requirement}</dt><dd className="mt-1"><Badge variant={term.required ? "default" : "outline"} className="h-6 px-2 text-xs">{term.required ? c.required : c.optional}</Badge></dd></div>
+                                  <div className="min-w-0"><dt className="truncate text-[11px] text-muted-foreground">{c.approval}</dt><dd className="mt-1">{term.approvalRequired ? <Badge variant="outline" className="h-6 px-2 text-xs">{c.approvalRequired}</Badge> : <span aria-hidden="true" className="block h-6" />}</dd></div>
+                                  <div className="min-w-0"><dt className="truncate text-[11px] text-muted-foreground">{c.status}</dt><dd className="mt-1"><Badge variant={term.status === "active" ? "secondary" : "outline"} className="h-6 px-2 text-xs">{term.status === "active" ? c.active : c.disabled}</Badge></dd></div>
+                                </dl>
                               </div>
-                              <dl className="grid grid-cols-3 gap-2 text-sm">
-                                <div className="min-w-0">
-                                  <dt className="truncate text-[11px] text-muted-foreground">{c.requirement}</dt>
-                                  <dd className="mt-1">
-                                    <Badge variant={term.required ? "default" : "outline"} className="h-6 px-2 text-xs">
-                                      {term.required ? c.required : c.optional}
-                                    </Badge>
-                                  </dd>
+                              {term.subterms.map((subterm, subtermIndex) => (
+                                <div key={subterm.id} className="ms-6 space-y-2 border-s bg-muted/10 px-4 py-3">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0"><p className="break-words text-sm font-medium leading-5">{subterm.reportName}</p><div className="mt-1 flex flex-wrap gap-1.5"><Badge variant="outline" className="h-5 px-1.5 text-[10px]">{subtermResponseTypeLabel(subterm.responseType)}</Badge><Badge variant={subterm.status === "active" ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">{subterm.status === "active" ? c.active : c.disabled}</Badge></div></div>
+                                    <TermActions term={subterm} kind="subterm" termIndex={subtermIndex} termCount={term.subterms.length} disabled={isPending} labels={c}
+                                      onEdit={() => setSubtermDialog({ mode: "edit", parent: term, subterm })}
+                                      onMove={(direction) => execute(() => moveStageTerm({ termId: subterm.id, direction }))}
+                                      onToggle={() => execute(() => setStageTermStatus({ termId: subterm.id, status: subterm.status === "active" ? "disabled" : "active" }))}
+                                      onDelete={() => setDeleteTarget({ kind: "term", id: subterm.id, name: subterm.reportName })}
+                                    />
+                                  </div>
                                 </div>
-                                <div className="min-w-0">
-                                  <dt className="truncate text-[11px] text-muted-foreground">{c.approval}</dt>
-                                  <dd className="mt-1">
-                                    {term.approvalRequired ? (
-                                      <Badge variant="outline" className="h-6 px-2 text-xs">{c.approvalRequired}</Badge>
-                                    ) : (
-                                      <span aria-hidden="true" className="block h-6" />
-                                    )}
-                                  </dd>
-                                </div>
-                                <div className="min-w-0">
-                                  <dt className="truncate text-[11px] text-muted-foreground">{c.status}</dt>
-                                  <dd className="mt-1">
-                                    <Badge variant={term.status === "active" ? "secondary" : "outline"} className="h-6 px-2 text-xs">
-                                      {term.status === "active" ? c.active : c.disabled}
-                                    </Badge>
-                                  </dd>
-                                </div>
-                              </dl>
-                            </div>
+                              ))}
+                            </Fragment>
                           ))}
                         </div>
                       </>
@@ -655,6 +620,8 @@ export function StageManagement({
         }}
       />
 
+      <GlobalSubtermDialog state={subtermDialog} onClose={() => setSubtermDialog(null)} />
+
       <Dialog open={deleteTarget != null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>
@@ -695,20 +662,24 @@ export function StageManagement({
 
 function TermActions({
   term,
+  kind,
   termIndex,
   termCount,
   disabled,
   labels,
+  onAddSubterm,
   onEdit,
   onMove,
   onToggle,
   onDelete,
 }: {
   term: StageTermRecord
+  kind: "parent" | "subterm"
   termIndex: number
   termCount: number
   disabled: boolean
   labels: (typeof COPY)["en"] | (typeof COPY)["ar"]
+  onAddSubterm?: () => void
   onEdit: () => void
   onMove: (direction: "up" | "down") => void
   onToggle: () => void
@@ -739,16 +710,24 @@ function TermActions({
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onEdit}>
           <Pencil />
-          {labels.editReport}
+          {kind === "subterm" ? "Edit Sub-term" : labels.editReport}
         </DropdownMenuItem>
+        {kind === "parent" && onAddSubterm ? (
+          <DropdownMenuItem onClick={onAddSubterm}>
+            <ListPlus />
+            Add Sub-term
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem onClick={onToggle}>
           <CircleDot />
-          {term.status === "active" ? labels.disableReport : labels.enableReport}
+          {term.status === "active"
+            ? kind === "subterm" ? "Disable Sub-term" : labels.disableReport
+            : kind === "subterm" ? "Enable Sub-term" : labels.enableReport}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={onDelete}>
           <Trash2 />
-          {labels.deleteReport}
+          {kind === "subterm" ? "Delete or Archive Sub-term" : labels.deleteReport}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
