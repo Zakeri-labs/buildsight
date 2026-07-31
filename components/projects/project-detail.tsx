@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { AlertTriangle, ArrowLeft, ClipboardList, Images, Pencil } from "lucide-react"
+import { AlertTriangle, ArrowLeft, ClipboardList, FolderOpen, Images, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -11,6 +11,8 @@ import { ProjectStatusBadge } from "@/components/status-badge"
 import { DonutChart } from "@/components/dashboard/donut-chart"
 import { useI18n } from "@/lib/i18n"
 import type { ProjectRecord } from "@/lib/mock-data"
+import { InitialDocumentsList } from "@/components/initial-documents/initial-documents-list"
+import type { InitialDocumentListItem } from "@/lib/initial-documents/types"
 import { ProjectParticipants, type ProjectParticipant } from "@/components/projects/project-participants"
 import type { ProjectParticipantUserOption } from "@/lib/projects/project-participant-types"
 import { ProjectDocuments, type ProjectDocument } from "@/components/projects/project-documents"
@@ -63,7 +65,9 @@ function DetailField({ label, value }: { label: string; value: React.ReactNode }
 export function ProjectDetail({
   project,
   editProject,
-  documents,
+  letters,
+  initialDocuments,
+  initialDocumentsError,
   participants,
   participantUsers = [],
   canManageImages = false,
@@ -71,7 +75,9 @@ export function ProjectDetail({
 }: {
   project: ProjectRecord
   editProject: ProjectEditData
-  documents?: ProjectDocument[]
+  letters?: ProjectDocument[]
+  initialDocuments: InitialDocumentListItem[]
+  initialDocumentsError?: string | null
   participants: ProjectParticipant[]
   participantUsers?: ProjectParticipantUserOption[]
   canManageImages?: boolean
@@ -108,6 +114,8 @@ export function ProjectDetail({
         description: "وصف المشروع",
         viewGallery: "عرض معرض المشروع",
         editProject: "تعديل المشروع",
+        projectDocuments: "٣. مستندات المشروع",
+        viewAllDocuments: "عرض كل المستندات",
       }
     : {
         details: "1. Project Details",
@@ -125,6 +133,8 @@ export function ProjectDetail({
         description: "Project Description",
         viewGallery: "View Project Gallery",
         editProject: "Edit project",
+        projectDocuments: "3. Project Documents",
+        viewAllDocuments: "View All Documents",
       }
 
   const progress = Math.max(0, Math.min(100, currentProject.progress.actual))
@@ -280,7 +290,34 @@ export function ProjectDetail({
         canManageParticipants={canManageImages}
         canManageAvatars={canManageImages}
       />
-      <ProjectDocuments projectId={currentProject.id} documents={documents ?? projectDocuments(currentProject)} />
+      <Card className="gap-0 py-0">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 border-b px-5 py-4 sm:px-6">
+          <CardTitle className="flex min-w-0 items-center gap-2 text-base font-semibold sm:text-lg">
+            <FolderOpen className="size-5 shrink-0 text-primary" />
+            {labels.projectDocuments}
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="lg"
+            className="h-9 shrink-0"
+            aria-label={labels.viewAllDocuments}
+            render={<Link href={`/initial-documents?project=${encodeURIComponent(currentProject.id)}`} />}
+          >
+            <FolderOpen className="size-4" />
+            <span className="hidden sm:inline">{labels.viewAllDocuments}</span>
+          </Button>
+        </CardHeader>
+        <CardContent className="p-4 sm:p-5">
+          <InitialDocumentsList
+            embedded
+            documents={initialDocuments}
+            selectedProjectId={currentProject.id}
+            selectedProjectName={currentProject.name}
+            errorMessage={initialDocumentsError}
+          />
+        </CardContent>
+      </Card>
+      <ProjectDocuments projectId={currentProject.id} documents={letters ?? projectDocuments(currentProject)} />
 
       {editOpen ? (
         <ProjectEditDialog

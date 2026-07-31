@@ -6,6 +6,7 @@ import { canAdministerProject } from "@/lib/auth/guards"
 import { getDashboardData, getOrgProjects } from "@/lib/db/domain"
 import { getProjectParticipants, getProjectParticipantUserOptions } from "@/lib/db/project-participants"
 import { normalizeDocumentType } from "@/lib/documents/document-types"
+import { getInitialDocumentsForScope } from "@/lib/initial-documents/server"
 import { toProjectRecord } from "@/lib/projects/project-record"
 import { isProjectTypeValue } from "@/lib/projects/project-options"
 import { createClient } from "@/lib/supabase/server"
@@ -98,9 +99,14 @@ export default async function ProjectDetailPage({
   const project = projects.find((item) => item.id === projectId)
   if (!project) return notFound()
 
-  const [dashboardData, documents, participants, canManageImages] = await Promise.all([
+  const [dashboardData, letters, initialDocumentsResult, participants, canManageImages] = await Promise.all([
     getDashboardData(organizationId, project.id),
     getProjectDocuments(project.id, session.userId, session.email),
+    getInitialDocumentsForScope({
+      projectId: project.id,
+      currentUserId: session.userId,
+      currentUserEmail: session.email,
+    }),
     getProjectParticipants(project.id),
     canAdministerProject(project.id),
   ])
@@ -125,7 +131,9 @@ export default async function ProjectDetailPage({
         latitude: project.latitude,
         longitude: project.longitude,
       }}
-      documents={documents}
+      letters={letters}
+      initialDocuments={initialDocumentsResult.documents}
+      initialDocumentsError={initialDocumentsResult.errorMessage}
       participants={participants}
       participantUsers={participantUsers}
       canManageImages={canManageImages}

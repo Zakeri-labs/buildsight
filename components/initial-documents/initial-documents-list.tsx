@@ -20,23 +20,11 @@ import {
   getInitialDocumentCategory,
   getInitialDocumentExtension,
   getInitialDocumentUploadCategory,
-  type InitialDocumentCategory,
-  type InitialDocumentUploadCategory,
 } from "@/lib/initial-documents/config"
+import type { InitialDocumentListItem } from "@/lib/initial-documents/types"
 import { useI18n } from "@/lib/i18n"
 
-export type InitialDocumentListItem = {
-  id: string
-  fileName: string
-  mimeType: string
-  fileSize: number
-  category: InitialDocumentCategory
-  uploadCategory: InitialDocumentUploadCategory | null
-  projectId: string
-  projectName: string
-  uploadedBy: string
-  createdAt: string
-}
+export type { InitialDocumentListItem } from "@/lib/initial-documents/types"
 
 type SortValue = "newest" | "oldest" | "file_name" | "project_name" | "file_size"
 
@@ -73,11 +61,13 @@ export function InitialDocumentsList({
   selectedProjectId,
   selectedProjectName,
   errorMessage,
+  embedded = false,
 }: {
   documents: InitialDocumentListItem[]
   selectedProjectId: string | null
   selectedProjectName: string | null
   errorMessage?: string | null
+  embedded?: boolean
 }) {
   const { locale } = useI18n()
   const isArabic = locale === "ar"
@@ -165,16 +155,18 @@ export function InitialDocumentsList({
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300">
-          <FolderOpen className="size-5" />
-        </span>
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight">{copy.title}</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">{copy.subtitle}</p>
-          {selectedProjectName ? <p className="mt-1 text-sm font-medium text-foreground">{selectedProjectName}</p> : null}
+      {!embedded ? (
+        <div className="flex items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300">
+            <FolderOpen className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight">{copy.title}</h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">{copy.subtitle}</p>
+            {selectedProjectName ? <p className="mt-1 text-sm font-medium text-foreground">{selectedProjectName}</p> : null}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {errorMessage ? (
         <div role="alert" className="rounded-xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive">
@@ -182,6 +174,8 @@ export function InitialDocumentsList({
         </div>
       ) : (
         <>
+          {!embedded ? (
+            <>
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
             <span className="rounded-full border bg-card px-3 py-1.5 font-medium">{documents.length} {copy.total}</span>
             <span className="rounded-full border bg-card px-3 py-1.5">{drawingCount} {isArabic ? "مخططات" : "Drawings"}</span>
@@ -216,6 +210,8 @@ export function InitialDocumentsList({
               </SelectContent>
             </Select>
           </div>
+            </>
+          ) : null}
 
           {filtered.length ? (
             <>

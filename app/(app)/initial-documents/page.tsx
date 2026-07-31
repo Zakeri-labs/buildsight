@@ -1,6 +1,6 @@
-import { InitialDocumentsList, type InitialDocumentListItem } from "@/components/initial-documents/initial-documents-list"
+import { InitialDocumentsList } from "@/components/initial-documents/initial-documents-list"
 import { requireOnboarded } from "@/lib/auth/session"
-import { getInitialDocumentCategory, getInitialDocumentUploadCategoryFromPath } from "@/lib/initial-documents/config"
+import { getInitialDocumentsForScope } from "@/lib/initial-documents/server"
 import { getSelectedProjectId } from "@/lib/project-scope"
 import { createClient } from "@/lib/supabase/server"
 
@@ -34,43 +34,19 @@ export default async function InitialDocumentsPage({ searchParams }: { searchPar
     }
   }
 
-  let query = supabase
-    .from("initial_docs")
-    .select("id, project_id, file_name, original_file_name, file_path, mime_type, file_size, category, uploaded_by, created_at")
-    .order("created_at", { ascending: false })
-  if (effectiveProjectId) query = query.eq("project_id", effectiveProjectId)
+  const result = await getInitialDocumentsForScope({
+    projectId: effectiveProjectId,
+    currentUserId: session.userId,
+    currentUserEmail: session.email,
+    supabase,
+  })
 
-  const { data: rows, error } = await query
-  if (error) {
-    return <InitialDocumentsList documents={[]} selectedProjectId={effectiveProjectId} selectedProjectName={selectedProjectName} errorMessage={error.message} />
-  }
-
-  const projectIds = Array.from(new Set((rows ?? []).map((row: any) => row.project_id)))
-  const uploaderIds = Array.from(new Set((rows ?? []).map((row: any) => row.uploaded_by).filter(Boolean)))
-  const [{ data: projects, error: projectsError }, { data: profiles, error: profilesError }] = await Promise.all([
-    projectIds.length ? supabase.from("projects").select("id, name").in("id", projectIds) : Promise.resolve({ data: [], error: null }),
-    uploaderIds.length ? supabase.from("profiles").select("id, full_name, email").in("id", uploaderIds) : Promise.resolve({ data: [], error: null }),
-  ])
-  const lookupError = projectsError ?? profilesError
-  if (lookupError) {
-    return <InitialDocumentsList documents={[]} selectedProjectId={effectiveProjectId} selectedProjectName={selectedProjectName} errorMessage={lookupError.message} />
-  }
-
-  const projectNames = new Map((projects ?? []).map((project: any) => [project.id, project.name]))
-  const profileNames = new Map((profiles ?? []).map((profile: any) => [profile.id, profile.full_name?.trim() || profile.email]))
-
-  const documents: InitialDocumentListItem[] = (rows ?? []).map((row: any) => ({
-    id: row.id,
-    fileName: row.original_file_name || row.file_name,
-    mimeType: row.mime_type || "application/octet-stream",
-    fileSize: Number(row.file_size) || 0,
-    category: getInitialDocumentCategory(row.category).value,
-    uploadCategory: getInitialDocumentUploadCategoryFromPath(row.file_path)?.value ?? null,
-    projectId: row.project_id,
-    projectName: projectNames.get(row.project_id) ?? "Project",
-    uploadedBy: profileNames.get(row.uploaded_by) ?? (row.uploaded_by === session.userId ? session.email : "Project member"),
-    createdAt: row.created_at,
-  }))
-
-  return <InitialDocumentsList documents={documents} selectedProjectId={effectiveProjectId} selectedProjectName={selectedProjectName} />
+  return (
+    <InitialDocumentsList
+      documents={result.documents}
+      selectedProjectId={effectiveProjectId}
+      selectedProjectName={selectedProjectName}
+      errorMessage={result.errorMessage}
+    />
+  )
 }
