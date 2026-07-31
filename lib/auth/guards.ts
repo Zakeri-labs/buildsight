@@ -9,6 +9,55 @@ export class AuthzError extends Error {
   }
 }
 
+export const PROJECT_REVIEW_ACCESS_ROLES = ["project_admin", "project_manager", "reviewer", "approver"] as const
+export const ORGANIZATION_REVIEW_ROLES = ["org_admin", "org_manager"] as const
+
+/**
+ * Resolve the projects in the supplied scope that the user may review.
+ * This mirrors the Stage approval workflow without issuing one query per project.
+ */
+export async function getReviewableProjectIds(
+  organizationId: string,
+  userId: string,
+  projectIds: string[],
+): Promise<string[]> {
+  if (projectIds.length === 0) return []
+
+  const admin = createAdminClient()
+  const [{ data: organizationMembership, error: organizationError }, { data: projectMemberships, error: projectError }] =
+    await Promise.all([
+      admin
+        .from("organization_memberships")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .in("role", [...ORGANIZATION_REVIEW_ROLES])
+        .limit(1)
+        .maybeSingle(),
+      admin
+        .from("project_user_memberships")
+        .select("project_id")
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .in("access_role", [...PROJECT_REVIEW_ACCESS_ROLES])
+        .in("project_id", projectIds),
+    ])
+
+  if (organizationError) throw organizationError
+  if (projectError) throw projectError
+  if (organizationMembership) return projectIds
+
+  const scopedIds = new Set(projectIds)
+  return Array.from(
+    new Set(
+      (projectMemberships ?? [])
+        .map((membership: any) => membership.project_id as string)
+        .filter((projectId: string) => scopedIds.has(projectId)),
+    ),
+  )
+}
+
 /** Returns the authenticated user id or throws. */
 export async function getUserIdOrThrow(): Promise<string> {
   const supabase = await createClient()
@@ -170,7 +219,7 @@ export async function assertProjectReviewer(projectId: string): Promise<string> 
     .eq("project_id", projectId)
     .eq("user_id", userId)
     .eq("status", "active")
-    .in("access_role", ["project_admin", "project_manager", "reviewer", "approver"])
+    .in("access_role", [...PROJECT_REVIEW_ACCESS_ROLES])
     .limit(1)
     .maybeSingle()
   if (membershipError) throw membershipError
@@ -190,7 +239,7 @@ export async function assertProjectReviewer(projectId: string): Promise<string> 
     .eq("organization_id", project.supervising_organization_id)
     .eq("user_id", userId)
     .eq("status", "active")
-    .in("role", ["org_admin", "org_manager"])
+    .in("role", [...ORGANIZATION_REVIEW_ROLES])
     .limit(1)
     .maybeSingle()
   if (orgError) throw orgError

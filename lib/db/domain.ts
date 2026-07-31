@@ -1,5 +1,6 @@
 import "server-only"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { getReviewableProjectIds } from "@/lib/auth/guards"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 
 export type DomainProject = {
@@ -106,12 +107,19 @@ export type ActivityRow = {
 
 export type TaskRow = {
   id: string
+  kind: "standard" | "review"
   action: string
-  type: "NCR" | "Inspection" | "RFI" | "VO"
+  type: "NCR" | "Inspection" | "RFI" | "VO" | "Stage Report"
   reference: string | null
   dueLabel: string | null
   dueTone: "danger" | "warning" | "muted"
   projectName: string
+  href: string | null
+  title: string | null
+  stageName: string | null
+  submittedBy: string | null
+  submittedAt: string | null
+  reviewStatus: "submitted" | "under_review" | null
 }
 
 /** All projects for the supervising org, ordered for display. */
@@ -188,6 +196,86 @@ async function fetchScopedRows(table: string, columns: string, ids: string[]) {
   return data ?? []
 }
 
+async function fetchPendingReviewTasks(
+  orgId: string,
+  userId: string,
+  scopedProjectIds: string[],
+  projectNames: Map<string, string>,
+): Promise<TaskRow[]> {
+  const reviewableProjectIds = await getReviewableProjectIds(orgId, userId, scopedProjectIds)
+  if (reviewableProjectIds.length === 0) return []
+
+  const admin = createAdminClient()
+  const { data: responses, error: responseError } = await admin
+    .from("term_responses")
+    .select(
+      "id, project_id, project_stage_term_id, report_number, report_type, report_title, status, created_by, submitted_at, updated_at",
+    )
+    .in("project_id", reviewableProjectIds)
+    .in("status", ["submitted", "under_review"])
+    .order("submitted_at", { ascending: false, nullsFirst: false })
+    .order("updated_at", { ascending: false })
+  if (responseError) throw responseError
+  if (!responses?.length) return []
+
+  const termIds = Array.from(new Set(responses.map((response: any) => response.project_stage_term_id as string)))
+  const creatorIds = Array.from(new Set(responses.map((response: any) => response.created_by as string)))
+
+  const [{ data: terms, error: termError }, { data: profiles, error: profileError }] = await Promise.all([
+    admin
+      .from("project_stage_terms")
+      .select("id, project_stage_id, report_name")
+      .in("id", termIds),
+    admin.from("profiles").select("id, full_name, email").in("id", creatorIds),
+  ])
+  if (termError) throw termError
+  if (profileError) throw profileError
+
+  const stageIds = Array.from(new Set((terms ?? []).map((term: any) => term.project_stage_id as string)))
+  const { data: stages, error: stageError } = stageIds.length
+    ? await admin.from("project_stages").select("id, project_id, name").in("id", stageIds)
+    : { data: [] as any[], error: null }
+  if (stageError) throw stageError
+
+  const termById = new Map<string, any>()
+  for (const term of terms ?? []) termById.set((term as any).id, term as any)
+  const stageById = new Map<string, any>()
+  for (const stage of stages ?? []) stageById.set((stage as any).id, stage as any)
+  const profileById = new Map<string, any>()
+  for (const profile of profiles ?? []) profileById.set((profile as any).id, profile as any)
+
+  return responses.flatMap((response: any) => {
+    const term = termById.get(response.project_stage_term_id)
+    const stage = term ? stageById.get(term.project_stage_id) : null
+    if (!term || !stage || stage.project_id !== response.project_id) return []
+
+    const creator = profileById.get(response.created_by)
+    const submittedBy = creator?.full_name?.trim() || creator?.email?.trim() || null
+    const reportType = String(response.report_type ?? "").toLowerCase().includes("inspection")
+      ? "Inspection"
+      : "Stage Report"
+
+    return [
+      {
+        id: `review-${response.id}`,
+        kind: "review" as const,
+        action: "Review submission",
+        type: reportType as "Inspection" | "Stage Report",
+        reference: response.report_number,
+        dueLabel: null,
+        dueTone: "muted" as const,
+        projectName: projectNames.get(response.project_id) ?? "Unknown project",
+        href: `/projects/${response.project_id}/stages/${stage.id}/terms/${term.id}`,
+        title: response.report_title?.trim() || term.report_name,
+        stageName: stage.name,
+        submittedBy,
+        submittedAt: response.submitted_at ?? response.updated_at,
+        reviewStatus: response.status as "submitted" | "under_review",
+      },
+    ]
+  })
+}
+
 export type DashboardData = {
   kpis: {
     totalProjects: number
@@ -213,17 +301,22 @@ export type DashboardData = {
   scopeName: string | null
 }
 
-export async function getDashboardData(orgId: string, projectId: string | null): Promise<DashboardData> {
+export async function getDashboardData(
+  orgId: string,
+  projectId: string | null,
+  userId: string,
+): Promise<DashboardData> {
   const { projects, scoped, ids } = await resolveScopedProjects(orgId, projectId)
   const names = nameMap(projects)
 
-  const [ncrs, inspections, rfis, vos, activity, tasks] = await Promise.all([
+  const [ncrs, inspections, rfis, vos, activity, tasks, reviewTasks] = await Promise.all([
     fetchScopedRows("ncrs", "project_id, status", ids),
     fetchScopedRows("inspections", "project_id, status", ids),
     fetchScopedRows("rfis", "project_id, status", ids),
     fetchScopedRows("variation_orders", "project_id", ids),
     fetchScopedRows("activity_log", "id, project_id, type, verb, reference, created_at", ids),
     fetchScopedRows("tasks", "id, project_id, action, type, reference, due_label, due_tone, sort_order", ids),
+    fetchPendingReviewTasks(orgId, userId, ids, names),
   ])
 
   const countBy = (rows: any[], field: string) => {
@@ -278,20 +371,29 @@ export async function getDashboardData(orgId: string, projectId: string | null):
       projectName: names.get(a.project_id) ?? "Unknown",
       createdAt: a.created_at,
     }))
-    .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
+    .sort((a: ActivityRow, b: ActivityRow) => +new Date(b.createdAt) - +new Date(a.createdAt))
 
-  const taskRows: TaskRow[] = tasks
+  const standardTaskRows: TaskRow[] = tasks
     .slice()
     .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
     .map((t: any) => ({
       id: t.id,
+      kind: "standard",
       action: t.action,
       type: t.type,
       reference: t.reference,
       dueLabel: t.due_label,
       dueTone: t.due_tone,
       projectName: names.get(t.project_id) ?? "Unknown",
+      href: "/calendar",
+      title: null,
+      stageName: null,
+      submittedBy: null,
+      submittedAt: null,
+      reviewStatus: null,
     }))
+
+  const taskRows = [...reviewTasks, ...standardTaskRows]
 
   return {
     kpis: {
