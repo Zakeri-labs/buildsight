@@ -21,7 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { ManageProjectStagesButton, ProjectTermAdminMenu } from "@/components/stages/project-stage-admin-controls"
 import type { ProjectStageExecutionData, ProjectStageTermExecution } from "@/lib/db/project-stages"
-import { statusLabel, statusTone } from "@/lib/stages/execution"
+import { statusLabel, statusTone, subtermResponseTypeLabel } from "@/lib/stages/execution"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
 import { profileAvatarDisplayUrl } from "@/lib/profile-avatar"
@@ -45,6 +45,7 @@ const COPY = {
     openReport: "Open report",
     archived: "Archived",
     parentRecord: "Open existing parent record",
+    subterms: "Sub-terms",
   },
   ar: {
     title: "مراحل المشروع",
@@ -64,6 +65,7 @@ const COPY = {
     openReport: "فتح التقرير",
     archived: "مؤرشف",
     parentRecord: "فتح سجل البند الرئيسي الحالي",
+    subterms: "البنود الفرعية",
   },
 } as const
 
@@ -250,6 +252,7 @@ function TermGroup({
               <p className="truncate font-semibold">{term.reportName}</p>
               <Badge variant="outline" className={term.required ? "border-amber-200 bg-amber-50 text-amber-700" : "text-muted-foreground"}>{term.required ? copy.required : copy.optional}</Badge>
               <Badge variant="outline" className={statusTone(term.status)}>{statusLabel(term.status, locale)}</Badge>
+              <Badge variant="secondary">{activeSubterms.length} {copy.subterms}</Badge>
             </div>
             <div className="mt-2 flex max-w-xl items-center gap-3">
               <Progress value={countedSubterms.length ? Math.round((completed / countedSubterms.length) * 100) : 0} className="h-1.5 flex-1" />
@@ -323,6 +326,7 @@ function TermLink({
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <Badge variant="outline" className={term.required ? "border-amber-200 bg-amber-50 text-amber-700" : "text-muted-foreground"}>{term.required ? copy.required : copy.optional}</Badge>
             <Badge variant="outline" className={statusTone(term.status)}>{statusLabel(term.status, locale)}</Badge>
+            {compact ? <Badge variant="secondary">{subtermResponseTypeLabel(term.responseType)}</Badge> : null}
             {overdue ? <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">{copy.overdue}</Badge> : null}
           </div>
         </div>

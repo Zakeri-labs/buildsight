@@ -51,12 +51,14 @@ import {
   sanitizeEvidenceFileName,
   statusLabel,
   statusTone,
+  subtermResponseTypeLabel,
   validateEvidenceImage,
   validateStageDocument,
   type ChecklistItem,
   type ReportSectionKey,
   type ReportTypeValue,
   type ResponseStatus,
+  type SubtermResponseType,
   type TermResponseContent,
 } from "@/lib/stages/execution"
 import { uploadStageEvidence } from "@/lib/stages/evidence-upload"
@@ -198,13 +200,50 @@ function checklistFromTemplate(reference: string | null): ChecklistItem[] {
         id: crypto.randomUUID(),
         label: typeof item === "string" ? item : String((item as { label?: unknown })?.label ?? "Checklist item"),
         checked: false,
+        result: "" as const,
       }))
     }
   } catch {
     // A plain template reference is still useful as an automatically loaded checklist prompt.
   }
   const values = reference.split(/[\n|;]/).map((item) => item.trim()).filter(Boolean)
-  return values.map((label) => ({ id: crypto.randomUUID(), label: values.length === 1 ? `Complete assigned template: ${label}` : label, checked: false }))
+  return values.map((label) => ({ id: crypto.randomUUID(), label: values.length === 1 ? `Complete assigned template: ${label}` : label, checked: false, result: "" as const }))
+}
+
+
+function plainResponseText(value: string) {
+  return value.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim()
+}
+
+function configuredResponseError(
+  responseType: SubtermResponseType,
+  content: TermResponseContent,
+  imageCount: number,
+  documentCount: number,
+) {
+  switch (responseType) {
+    case "text":
+      return plainResponseText(content.answer || content.feedback) ? null : "A written response is required before submission."
+    case "inspection_checklist": {
+      const rows = content.checklist.filter((item) => item.label.trim())
+      if (!rows.length) return "Add at least one checklist item before submission."
+      return rows.every((item) => item.result === "pass" || item.result === "fail" || item.result === "na") ? null : "Complete every checklist item before submission."
+    }
+    case "yes_no":
+      return content.selection === "yes" || content.selection === "no" ? null : "Select Yes or No before submission."
+    case "pass_fail":
+      return content.selection === "pass" || content.selection === "fail" || content.selection === "na" ? null : "Select Pass, Fail, or N/A before submission."
+    case "measurement":
+      return content.measurementValue.trim() && Number.isFinite(Number(content.measurementValue)) ? null : "Enter a valid measurement before submission."
+    case "date":
+      return content.dateValue && Number.isFinite(Date.parse(content.dateValue)) ? null : "Select a valid date before submission."
+    case "file_upload":
+      return documentCount > 0 ? null : "Upload at least one file before submission."
+    case "photo_evidence":
+      return imageCount > 0 ? null : "Upload at least one photo before submission."
+    default:
+      return null
+  }
 }
 
 function formatDate(value: string | Date, locale: "en" | "ar") {
@@ -216,6 +255,7 @@ export function InspectionReportForm({
   project,
   stage,
   term,
+  parentTerm,
   response,
   translation,
   canReview,
@@ -228,9 +268,12 @@ export function InspectionReportForm({
     required: boolean
     responsibleUser: ProjectStagePerson | null
     templateReference: string | null
+    responseType: SubtermResponseType
+    instructions: string | null
     approvalRequired: boolean
     status: string
   }
+  parentTerm: { id: string; name: string } | null
   response: InitialResponse
   translation?: ProjectStageTranslationSummary | null
   canReview: boolean
@@ -381,6 +424,18 @@ export function InspectionReportForm({
       setError(locale === "ar" ? "عنوان التقرير مطلوب." : "Report title is required.")
       return
     }
+    if (mode === "submit") {
+      const validationError = configuredResponseError(
+        term.responseType,
+        content,
+        evidenceImages.length + pendingImages.length,
+        documentAttachments.length + pendingDocuments.length,
+      )
+      if (validationError) {
+        setError(validationError)
+        return
+      }
+    }
     setError(null)
     setSuccess(null)
     setBusy(mode)
@@ -522,13 +577,18 @@ export function InspectionReportForm({
         <ArrowLeft className="size-4 flip-rtl" />{copy.back}
       </Link>
 
+      <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+        <span>{project.name}</span><span aria-hidden>/</span><span>{stage.name}</span>
+        {parentTerm ? <><span aria-hidden>/</span><span>{parentTerm.name}</span><span aria-hidden>/</span><span className="font-medium text-foreground">{term.reportName}</span></> : <><span aria-hidden>/</span><span className="font-medium text-foreground">{term.reportName}</span></>}
+      </nav>
+
       <Card className="overflow-hidden border-primary/20 py-0">
         <div className="bg-primary px-5 py-4 text-primary-foreground sm:px-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <span className="flex size-11 items-center justify-center rounded-xl bg-white/15"><ClipboardCheck className="size-6" /></span>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-white/70">Construction Inspection / Report</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-white/70">{parentTerm ? "Sub-term Response" : "Construction Inspection / Report"}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   <h1 className="text-xl font-semibold sm:text-2xl">{term.reportName}</h1>
                   <Badge
@@ -539,6 +599,7 @@ export function InspectionReportForm({
                   >
                     {term.required ? copy.required : copy.optional}
                   </Badge>
+                  {parentTerm ? <Badge variant="outline" className="border-white/30 bg-white/10 text-white">{subtermResponseTypeLabel(term.responseType)}</Badge> : null}
                 </div>
               </div>
             </div>
@@ -584,6 +645,41 @@ export function InspectionReportForm({
       </Card>
 
       {term.templateReference ? <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"><FileText className="mt-0.5 size-4 shrink-0" /><div><p className="font-semibold">{copy.template}</p><p className="mt-0.5 text-xs opacity-80">{term.templateReference}</p></div></div> : null}
+      {term.instructions ? <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm"><p className="font-semibold">Description / Instructions</p><p className="mt-1 whitespace-pre-wrap text-muted-foreground">{term.instructions}</p></div> : null}
+
+      {term.responseType !== "combined" && term.responseType !== "inspection_checklist" ? (
+        <Card className="gap-0 py-0">
+          <CardHeader className="border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6">
+            <CardTitle className="text-base font-semibold text-blue-950 dark:text-blue-100">{subtermResponseTypeLabel(term.responseType)}</CardTitle>
+          </CardHeader>
+          <CardContent className="p-5 sm:p-6">
+            {term.responseType === "text" ? (
+              <div className="space-y-2">
+                <Label htmlFor="configured-text-response">Written Response <span className="text-destructive">*</span></Label>
+                <textarea id="configured-text-response" value={content.answer} onChange={(event) => setContent((current) => ({ ...current, answer: event.target.value.slice(0, 10000) }))} rows={7} disabled={isLocked} className="w-full resize-y rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/20" placeholder="Enter the required response" />
+              </div>
+            ) : term.responseType === "yes_no" || term.responseType === "pass_fail" ? (
+              <div className="space-y-3">
+                <Label>Result <span className="text-destructive">*</span></Label>
+                <div className="flex flex-wrap gap-2">
+                  {(term.responseType === "yes_no" ? [{ value: "yes", label: "Yes" }, { value: "no", label: "No" }] : [{ value: "pass", label: "Pass" }, { value: "fail", label: "Fail" }, { value: "na", label: "N/A" }]).map((option) => (
+                    <Button key={option.value} type="button" variant={content.selection === option.value ? "default" : "outline"} disabled={isLocked} onClick={() => setContent((current) => ({ ...current, selection: option.value }))}>{option.label}</Button>
+                  ))}
+                </div>
+              </div>
+            ) : term.responseType === "measurement" ? (
+              <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(140px,0.45fr)]">
+                <div className="space-y-2"><Label htmlFor="measurement-value">Value <span className="text-destructive">*</span></Label><Input id="measurement-value" inputMode="decimal" value={content.measurementValue} onChange={(event) => setContent((current) => ({ ...current, measurementValue: event.target.value }))} placeholder="Enter numeric value" disabled={isLocked} /></div>
+                <div className="space-y-2"><Label htmlFor="measurement-unit">Unit</Label><Input id="measurement-unit" value={content.measurementUnit} onChange={(event) => setContent((current) => ({ ...current, measurementUnit: event.target.value.slice(0, 100) }))} placeholder="mm, m², MPa…" disabled={isLocked} /></div>
+              </div>
+            ) : term.responseType === "date" ? (
+              <div className="max-w-sm space-y-2"><Label htmlFor="configured-date">Date <span className="text-destructive">*</span></Label><Input id="configured-date" type="date" value={content.dateValue} onChange={(event) => setContent((current) => ({ ...current, dateValue: event.target.value }))} disabled={isLocked} /></div>
+            ) : (
+              <p className="text-sm text-muted-foreground">{term.responseType === "file_upload" ? "Upload at least one supporting file before submitting for review." : "Upload at least one evidence photo before submitting for review."}</p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid gap-5 xl:grid-cols-2">
         <AttachmentCard
@@ -619,23 +715,44 @@ export function InspectionReportForm({
         </AttachmentCard>
       </div>
 
-      <Card className="gap-0 py-0">
-        <div className="flex items-center justify-between border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6"><CardTitle className="text-base font-semibold text-blue-950 dark:text-blue-100">{copy.checklist}</CardTitle><Button type="button" variant="outline" size="sm" disabled={isLocked} onClick={() => setContent((current) => ({ ...current, checklist: [...current.checklist, { id: crypto.randomUUID(), label: "", checked: false }] }))}><Plus className="size-4" />{copy.addItem}</Button></div>
-        <CardContent className="space-y-3 p-5 sm:p-6">
-          {content.checklist.length ? content.checklist.map((item, index) => (
-            <div key={item.id} className="grid gap-2 rounded-xl border bg-muted/20 p-3 sm:grid-cols-[auto_minmax(0,1fr)_minmax(180px,0.55fr)_auto] sm:items-center">
-              <button type="button" disabled={isLocked} onClick={() => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, checked: !row.checked } : row) }))} className={cn("flex size-7 items-center justify-center rounded-lg border", item.checked ? "border-emerald-600 bg-emerald-600 text-white" : "bg-background")} aria-label={`Mark checklist item ${index + 1}`}><Check className="size-4" /></button>
-              <Input value={item.label} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))} placeholder={`Checklist item ${index + 1}`} />
-              <Input value={item.notes ?? ""} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, notes: event.target.value } : row) }))} placeholder="Notes / reference" />
-              <Button type="button" variant="ghost" size="icon" disabled={isLocked} onClick={() => setContent((current) => ({ ...current, checklist: current.checklist.filter((row) => row.id !== item.id) }))} aria-label={copy.remove}><Trash2 className="size-4" /></Button>
-            </div>
-          )) : <p className="py-4 text-center text-sm text-muted-foreground">No checklist items. Add items for this inspection.</p>}
-        </CardContent>
-      </Card>
+      {term.responseType === "combined" || term.responseType === "inspection_checklist" ? (
+        <Card className="gap-0 py-0">
+          <div className="flex items-center justify-between border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6">
+            <CardTitle className="text-base font-semibold text-blue-950 dark:text-blue-100">{copy.checklist}</CardTitle>
+            <Button type="button" variant="outline" size="sm" disabled={isLocked} onClick={() => setContent((current) => ({ ...current, checklist: [...current.checklist, { id: crypto.randomUUID(), label: "", checked: false, result: "" }] }))}><Plus className="size-4" />{copy.addItem}</Button>
+          </div>
+          <CardContent className="space-y-3 p-5 sm:p-6">
+            {content.checklist.length ? content.checklist.map((item, index) => (
+              <div key={item.id} className={cn("grid gap-2 rounded-xl border bg-muted/20 p-3 sm:items-center", term.responseType === "inspection_checklist" ? "sm:grid-cols-[minmax(0,1fr)_150px_minmax(180px,0.55fr)_auto]" : "sm:grid-cols-[auto_minmax(0,1fr)_minmax(180px,0.55fr)_auto]")}>
+                {term.responseType === "inspection_checklist" ? (
+                  <>
+                    <Input value={item.label} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))} placeholder={`Check item ${index + 1}`} />
+                    <Select value={item.result || "pending"} onValueChange={(value) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, result: value === "pending" ? "" : (value as "pass" | "fail" | "na"), checked: value === "pass" } : row) }))} disabled={isLocked}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="pending">Select result</SelectItem><SelectItem value="pass">Pass</SelectItem><SelectItem value="fail">Fail</SelectItem><SelectItem value="na">N/A</SelectItem></SelectContent>
+                    </Select>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" disabled={isLocked} onClick={() => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, checked: !row.checked, result: !row.checked ? "pass" : "" } : row) }))} className={cn("flex size-7 items-center justify-center rounded-lg border", item.checked ? "border-emerald-600 bg-emerald-600 text-white" : "bg-background")} aria-label={`Mark checklist item ${index + 1}`}><Check className="size-4" /></button>
+                    <Input value={item.label} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))} placeholder={`Checklist item ${index + 1}`} />
+                  </>
+                )}
+                <Input value={item.notes ?? ""} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, notes: event.target.value } : row) }))} placeholder="Comment / reference" />
+                <Button type="button" variant="ghost" size="icon" disabled={isLocked} onClick={() => setContent((current) => ({ ...current, checklist: current.checklist.filter((row) => row.id !== item.id) }))} aria-label={copy.remove}><Trash2 className="size-4" /></Button>
+              </div>
+            )) : <p className="py-4 text-center text-sm text-muted-foreground">No checklist items. Add items for this inspection.</p>}
+          </CardContent>
+        </Card>
+      ) : null}
 
-      {SECTION_META.map((section) => (
+      {term.responseType === "combined" ? SECTION_META.map((section) => (
         <RichSectionEditor key={section.key} title={locale === "ar" ? section.titleAr : section.title} description={section.description} value={content[section.key]} onChange={(value) => updateSection(section.key, value)} allowTable={section.key === "feedback"} disabled={isLocked} uploadInlineImage={uploadInlineImage} />
-      ))}
+      )) : term.responseType === "inspection_checklist" ? (
+        <RichSectionEditor title="Overall Notes" description="Add overall inspection observations or follow-up notes." value={content.feedback} onChange={(value) => updateSection("feedback", value)} allowTable={false} disabled={isLocked} uploadInlineImage={uploadInlineImage} />
+      ) : term.responseType === "text" ? null : (
+        <RichSectionEditor title="Comments / Notes" description="Add context, observations, or supporting notes." value={content.feedback} onChange={(value) => updateSection("feedback", value)} allowTable={false} disabled={isLocked} uploadInlineImage={uploadInlineImage} />
+      )}
 
       {responseId && (status === "submitted" || status === "under_review" || status === "rejected" || status === "approved") ? (
         <ApprovalPanel canReview={canReview} status={status} comments={reviewComments} onComments={setReviewComments} onDecision={decide} busy={busy} approvals={approvalHistory} copy={copy} locale={locale} />

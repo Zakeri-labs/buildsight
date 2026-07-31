@@ -36,6 +36,28 @@ export const REPORT_TYPES = [
 
 export type ReportTypeValue = (typeof REPORT_TYPES)[number]["value"]
 
+export const SUBTERM_RESPONSE_TYPES = [
+  { value: "combined", label: "Combined Response" },
+  { value: "text", label: "Text Response" },
+  { value: "inspection_checklist", label: "Inspection Checklist" },
+  { value: "yes_no", label: "Yes / No" },
+  { value: "pass_fail", label: "Pass / Fail" },
+  { value: "measurement", label: "Number / Measurement" },
+  { value: "date", label: "Date" },
+  { value: "file_upload", label: "File Upload" },
+  { value: "photo_evidence", label: "Photo Evidence" },
+] as const
+
+export type SubtermResponseType = (typeof SUBTERM_RESPONSE_TYPES)[number]["value"]
+
+export function isSubtermResponseType(value: unknown): value is SubtermResponseType {
+  return typeof value === "string" && SUBTERM_RESPONSE_TYPES.some((item) => item.value === value)
+}
+
+export function subtermResponseTypeLabel(value: SubtermResponseType) {
+  return SUBTERM_RESPONSE_TYPES.find((item) => item.value === value)?.label ?? "Combined Response"
+}
+
 export const STAGE_EVIDENCE_BUCKET = "project-stage-evidence"
 const configuredEvidenceLimit = Number(process.env.NEXT_PUBLIC_STAGE_EVIDENCE_MAX_IMAGES || 8)
 export const STAGE_EVIDENCE_MAX_IMAGES = Number.isFinite(configuredEvidenceLimit)
@@ -68,15 +90,23 @@ export type ReportSectionKey =
   | "recommendations"
   | "correctiveActions"
 
+export type ChecklistResult = "" | "pass" | "fail" | "na"
+
 export type ChecklistItem = {
   id: string
   label: string
   checked: boolean
+  result?: ChecklistResult
   notes?: string
 }
 
 export type TermResponseContent = Record<ReportSectionKey, string> & {
   checklist: ChecklistItem[]
+  answer: string
+  selection: string
+  measurementValue: string
+  measurementUnit: string
+  dateValue: string
 }
 
 export const EMPTY_TERM_RESPONSE_CONTENT: TermResponseContent = {
@@ -86,6 +116,11 @@ export const EMPTY_TERM_RESPONSE_CONTENT: TermResponseContent = {
   recommendations: "",
   correctiveActions: "",
   checklist: [],
+  answer: "",
+  selection: "",
+  measurementValue: "",
+  measurementUnit: "",
+  dateValue: "",
 }
 
 export function sanitizeReportHtml(value: unknown) {

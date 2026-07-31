@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { AlertTriangle, Check, Layers3, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react"
+import { AlertTriangle, Check, Layers3, ListPlus, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -30,6 +30,8 @@ import {
   updateProjectSubtermAction,
 } from "@/lib/actions/project-stages"
 import type { ProjectStageSelectionOption, ProjectStageTermExecution } from "@/lib/db/project-stages"
+import { SUBTERM_RESPONSE_TYPES, type SubtermResponseType } from "@/lib/stages/execution"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 export function ManageProjectStagesButton({
@@ -194,6 +196,8 @@ export function ProjectTermAdminMenu({
   const [name, setName] = useState("")
   const [required, setRequired] = useState(true)
   const [approvalRequired, setApprovalRequired] = useState(false)
+  const [responseType, setResponseType] = useState<SubtermResponseType>("combined")
+  const [instructions, setInstructions] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -203,6 +207,8 @@ export function ProjectTermAdminMenu({
     setName(source?.reportName ?? "")
     setRequired(source?.required ?? true)
     setApprovalRequired(source?.approvalRequired ?? false)
+    setResponseType(source?.responseType ?? "combined")
+    setInstructions(source?.instructions ?? "")
     setError(null)
   }
 
@@ -214,10 +220,18 @@ export function ProjectTermAdminMenu({
     }
     setError(null)
     startTransition(async () => {
+      const payload = {
+        projectId,
+        name: trimmed,
+        required,
+        approvalRequired,
+        responseType,
+        instructions: instructions.trim(),
+      }
       const result = dialog?.type === "edit"
-        ? await updateProjectSubtermAction({ projectId, subtermId: dialog.subterm.id, name: trimmed, required, approvalRequired })
+        ? await updateProjectSubtermAction({ ...payload, subtermId: dialog.subterm.id })
         : dialog?.type === "add"
-          ? await createProjectSubtermAction({ projectId, parentTermId: dialog.parent.id, name: trimmed, required, approvalRequired })
+          ? await createProjectSubtermAction({ ...payload, parentTermId: dialog.parent.id })
           : null
       if (!result) return
       if (!result.ok) {
@@ -255,53 +269,83 @@ export function ProjectTermAdminMenu({
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button type="button" variant="ghost" size="icon-sm" aria-label={kind === "parent" ? "Term actions" : "Sub-term actions"}>
-              <MoreHorizontal className="size-4" />
-            </Button>
-          }
-        />
-        <DropdownMenuContent align="end">
-          {kind === "parent" ? (
-            <DropdownMenuItem onClick={() => openDialog({ type: "add", parent: term })}>
-              <Plus className="size-4" /> Add Sub-term
-            </DropdownMenuItem>
-          ) : term.isActive ? (
-            <>
-              <DropdownMenuItem onClick={() => openDialog({ type: "edit", subterm: term })}>
-                <Pencil className="size-4" /> Edit Sub-term
+      <div className="flex shrink-0 items-center gap-0.5">
+        {kind === "parent" ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Add sub-term"
+                  onClick={() => openDialog({ type: "add", parent: term })}
+                >
+                  <ListPlus className="size-4" />
+                </Button>
+              }
+            />
+            <TooltipContent>Add sub-term</TooltipContent>
+          </Tooltip>
+        ) : null}
+
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button type="button" variant="ghost" size="icon-sm" aria-label={kind === "parent" ? "Term actions" : "Sub-term actions"}>
+                <MoreHorizontal className="size-4" />
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="min-w-44">
+            {kind === "parent" ? (
+              <DropdownMenuItem onClick={() => openDialog({ type: "add", parent: term })}>
+                <Plus className="size-4" /> Add Sub-term
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={() => { setError(null); setDeleteOpen(true) }}>
-                <Trash2 className="size-4" /> Delete Sub-term
+            ) : term.isActive ? (
+              <>
+                <DropdownMenuItem onClick={() => openDialog({ type: "edit", subterm: term })}>
+                  <Pencil className="size-4" /> Edit Sub-term
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onClick={() => { setError(null); setDeleteOpen(true) }}>
+                  <Trash2 className="size-4" /> Delete Sub-term
+                </DropdownMenuItem>
+              </>
+            ) : (
+              <DropdownMenuItem onClick={restore} disabled={isPending}>
+                <RotateCcw className="size-4" /> Restore Sub-term
               </DropdownMenuItem>
-            </>
-          ) : (
-            <DropdownMenuItem onClick={restore} disabled={isPending}>
-              <RotateCcw className="size-4" /> Restore Sub-term
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
       <Dialog open={Boolean(dialog)} onOpenChange={(next) => !next && setDialog(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{dialog?.type === "edit" ? "Edit Sub-term" : "Add Sub-term"}</DialogTitle>
-            <DialogDescription>Use the existing inspection and approval workflow for this one-level sub-term.</DialogDescription>
+            <DialogDescription>
+              Configure one child level under <span className="font-medium text-foreground">{dialog?.type === "add" ? dialog.parent.reportName : term.parentTermId ? "the parent Term" : term.reportName}</span>.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor={`subterm-name-${term.id}`}>Sub-term Name</Label>
-              <Input id={`subterm-name-${term.id}`} value={name} onChange={(event) => setName(event.target.value)} maxLength={200} autoFocus />
+              <Input
+                id={`subterm-name-${term.id}`}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Enter sub-term name"
+                maxLength={200}
+                autoFocus
+              />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Required / Optional</Label>
                 <Select value={required ? "required" : "optional"} onValueChange={(value) => setRequired(value === "required")}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="required">Required</SelectItem>
                     <SelectItem value="optional">Optional</SelectItem>
@@ -311,7 +355,7 @@ export function ProjectTermAdminMenu({
               <div className="space-y-2">
                 <Label>Approval Required</Label>
                 <Select value={approvalRequired ? "yes" : "no"} onValueChange={(value) => setApprovalRequired(value === "yes")}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="yes">Yes</SelectItem>
                     <SelectItem value="no">No</SelectItem>
@@ -319,7 +363,28 @@ export function ProjectTermAdminMenu({
                 </Select>
               </div>
             </div>
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            <div className="space-y-2">
+              <Label>Response Type</Label>
+              <Select value={responseType} onValueChange={(value) => setResponseType(value as SubtermResponseType)}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {SUBTERM_RESPONSE_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`subterm-instructions-${term.id}`}>Description / Instructions</Label>
+              <textarea
+                id={`subterm-instructions-${term.id}`}
+                value={instructions}
+                onChange={(event) => setInstructions(event.target.value.slice(0, 5000))}
+                rows={4}
+                placeholder="Explain what the user must inspect, answer, or upload"
+                className="w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none transition-shadow placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20"
+              />
+              <p className="text-end text-xs text-muted-foreground">{instructions.length}/5000</p>
+            </div>
+            {error ? <p className="text-sm text-destructive" role="alert">{error}</p> : null}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setDialog(null)} disabled={isPending}>Cancel</Button>

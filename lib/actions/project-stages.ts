@@ -9,8 +9,10 @@ import {
   STAGE_DOCUMENT_MAX_FILE_BYTES,
   STAGE_EVIDENCE_MAX_FILE_BYTES,
   isReportType,
+  isSubtermResponseType,
   sanitizeReportHtml,
   type ReportTypeValue,
+  type SubtermResponseType,
   type TermResponseContent,
 } from "@/lib/stages/execution"
 
@@ -34,9 +36,15 @@ function normalizeContent(value: Partial<TermResponseContent>): TermResponseCont
           id: String(item.id || crypto.randomUUID()).slice(0, 100),
           label: String(item.label || "").trim().slice(0, 500),
           checked: Boolean(item.checked),
+          result: (item.result === "pass" || item.result === "fail" || item.result === "na" ? item.result : item.checked ? "pass" : "") as "" | "pass" | "fail" | "na",
           notes: item.notes ? String(item.notes).slice(0, 2_000) : undefined,
         })).filter((item) => item.label.length > 0)
       : EMPTY_TERM_RESPONSE_CONTENT.checklist,
+    answer: typeof value.answer === "string" ? value.answer.trim().slice(0, 10_000) : "",
+    selection: typeof value.selection === "string" ? value.selection.trim().slice(0, 50) : "",
+    measurementValue: typeof value.measurementValue === "string" ? value.measurementValue.trim().slice(0, 100) : "",
+    measurementUnit: typeof value.measurementUnit === "string" ? value.measurementUnit.trim().slice(0, 100) : "",
+    dateValue: typeof value.dateValue === "string" ? value.dateValue.trim().slice(0, 30) : "",
   }
 }
 
@@ -44,7 +52,7 @@ async function termScope(projectId: string, termId: string) {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from("project_stage_terms")
-    .select("id, report_name, approval_required, project_stage_id, parent_term_id, is_active, project_stages!inner(project_id, name, status)")
+    .select("id, report_name, approval_required, response_type, instructions, project_stage_id, parent_term_id, is_active, project_stages!inner(project_id, name, status)")
     .eq("id", termId)
     .eq("project_stages.project_id", projectId)
     .maybeSingle()
@@ -57,6 +65,56 @@ function assertActiveTermScope(term: any) {
   const stageScope = Array.isArray(term.project_stages) ? term.project_stages[0] : term.project_stages
   if (!term.is_active || stageScope?.status === "disabled") {
     throw new Error("This stage or term is inactive and cannot accept new work.")
+  }
+}
+
+
+function plainText(value: string) {
+  return value.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim()
+}
+
+async function validateConfiguredSubmission(
+  admin: ReturnType<typeof createAdminClient>,
+  responseType: SubtermResponseType,
+  content: TermResponseContent,
+  responseId: string | null,
+) {
+  switch (responseType) {
+    case "text":
+      return plainText(content.answer || content.feedback) ? null : "A written response is required before submission."
+    case "inspection_checklist": {
+      const rows = content.checklist.filter((item) => item.label.trim())
+      if (!rows.length) return "Add at least one checklist item before submission."
+      return rows.every((item) => item.result === "pass" || item.result === "fail" || item.result === "na")
+        ? null
+        : "Complete every checklist item before submission."
+    }
+    case "yes_no":
+      return content.selection === "yes" || content.selection === "no" ? null : "Select Yes or No before submission."
+    case "pass_fail":
+      return content.selection === "pass" || content.selection === "fail" || content.selection === "na" ? null : "Select Pass, Fail, or N/A before submission."
+    case "measurement": {
+      const value = Number(content.measurementValue)
+      return content.measurementValue.trim() && Number.isFinite(value) ? null : "Enter a valid measurement before submission."
+    }
+    case "date": {
+      const value = Date.parse(content.dateValue)
+      return content.dateValue && Number.isFinite(value) ? null : "Select a valid date before submission."
+    }
+    case "file_upload":
+    case "photo_evidence": {
+      if (!responseId) return responseType === "file_upload" ? "Upload at least one file before submission." : "Upload at least one photo before submission."
+      const kind = responseType === "file_upload" ? "document" : "evidence_image"
+      const { count, error } = await admin
+        .from("response_attachments")
+        .select("id", { count: "exact", head: true })
+        .eq("response_id", responseId)
+        .eq("attachment_kind", kind)
+      if (error) throw error
+      return (count ?? 0) > 0 ? null : responseType === "file_upload" ? "Upload at least one file before submission." : "Upload at least one photo before submission."
+    }
+    default:
+      return null
   }
 }
 
@@ -111,6 +169,12 @@ export async function saveTermResponseAction(input: {
       if ((activeSubtermCount ?? 0) > 0 && !existing) {
         return { ok: false, error: "Complete the workflow on a sub-term instead of the parent term." }
       }
+    }
+
+    const configuredResponseType: SubtermResponseType = isSubtermResponseType(term.response_type) ? term.response_type : "combined"
+    if (input.submit) {
+      const validationError = await validateConfiguredSubmission(admin, configuredResponseType, content, existing?.id ?? null)
+      if (validationError) return { ok: false, error: validationError }
     }
 
     const lockedStatuses = new Set(["approved", "completed"])
@@ -342,6 +406,16 @@ export async function decideTermResponseAction(input: {
 }
 
 const SUBTERM_NAME_MAX_LENGTH = 200
+const SUBTERM_INSTRUCTIONS_MAX_LENGTH = 5000
+
+function normalizedInstructions(value: string | undefined) {
+  const normalized = value?.trim() ?? ""
+  return normalized || null
+}
+
+function instructionsAreTooLong(value: string | undefined) {
+  return (value?.trim().length ?? 0) > SUBTERM_INSTRUCTIONS_MAX_LENGTH
+}
 
 type ProjectStageSelectionInput = {
   projectId: string
@@ -506,12 +580,17 @@ export async function createProjectSubtermAction(input: {
   name: string
   required: boolean
   approvalRequired: boolean
+  responseType: SubtermResponseType
+  instructions?: string
 }): Promise<StageActionResult<{ id: string }>> {
   try {
     const actorId = await assertProjectAdmin(input.projectId)
     const parent = await parentTermScope(input.projectId, input.parentTermId)
-    if (typeof input.required !== "boolean" || typeof input.approvalRequired !== "boolean") {
+    if (typeof input.required !== "boolean" || typeof input.approvalRequired !== "boolean" || !isSubtermResponseType(input.responseType)) {
       return { ok: false, error: "Select valid Sub-term settings." }
+    }
+    if (instructionsAreTooLong(input.instructions)) {
+      return { ok: false, error: `Description / Instructions must be ${SUBTERM_INSTRUCTIONS_MAX_LENGTH} characters or fewer.` }
     }
     const name = normalizedName(input.name)
     if (!name) return { ok: false, error: "Sub-term name is required." }
@@ -538,6 +617,8 @@ export async function createProjectSubtermAction(input: {
         report_name: name,
         is_required: input.required,
         approval_required: input.approvalRequired,
+        response_type: input.responseType,
+        instructions: normalizedInstructions(input.instructions),
         due_date_rule: "none",
         status: "not_started",
         sort_order: sortOrder,
@@ -563,6 +644,8 @@ export async function updateProjectSubtermAction(input: {
   name: string
   required: boolean
   approvalRequired: boolean
+  responseType: SubtermResponseType
+  instructions?: string
 }): Promise<StageActionResult> {
   try {
     const actorId = await assertProjectAdmin(input.projectId)
@@ -577,8 +660,11 @@ export async function updateProjectSubtermAction(input: {
     if (!subterm?.parent_term_id) return { ok: false, error: "Sub-term not found." }
     if (!subterm.is_active) return { ok: false, error: "Archived sub-terms must be restored before editing." }
     await parentTermScope(input.projectId, subterm.parent_term_id)
-    if (typeof input.required !== "boolean" || typeof input.approvalRequired !== "boolean") {
+    if (typeof input.required !== "boolean" || typeof input.approvalRequired !== "boolean" || !isSubtermResponseType(input.responseType)) {
       return { ok: false, error: "Select valid Sub-term settings." }
+    }
+    if (instructionsAreTooLong(input.instructions)) {
+      return { ok: false, error: `Description / Instructions must be ${SUBTERM_INSTRUCTIONS_MAX_LENGTH} characters or fewer.` }
     }
     const name = normalizedName(input.name)
     if (!name) return { ok: false, error: "Sub-term name is required." }
@@ -590,7 +676,13 @@ export async function updateProjectSubtermAction(input: {
 
     const { error } = await admin
       .from("project_stage_terms")
-      .update({ report_name: name, is_required: input.required, approval_required: input.approvalRequired })
+      .update({
+        report_name: name,
+        is_required: input.required,
+        approval_required: input.approvalRequired,
+        response_type: input.responseType,
+        instructions: normalizedInstructions(input.instructions),
+      })
       .eq("id", input.subtermId)
     if (error) {
       if (isUniqueViolation(error)) return { ok: false, error: "A sub-term with this name already exists under the parent term." }

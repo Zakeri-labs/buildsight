@@ -22,9 +22,12 @@ export default async function ProjectStageTermPage({
         required: data.term.required,
         responsibleUser: data.term.responsibleUser,
         templateReference: data.term.templateReference,
+        responseType: data.term.responseType,
+        instructions: data.term.instructions,
         approvalRequired: data.term.approvalRequired,
         status: data.term.status,
       }}
+      parentTerm={data.parentTerm ? { id: data.parentTerm.id, name: data.parentTerm.reportName } : null}
       response={data.term.response}
       translation={data.term.translation}
       canReview={data.canReview}

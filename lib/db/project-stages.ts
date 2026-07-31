@@ -6,7 +6,9 @@ import {
   sanitizeReportHtml,
   type ProjectStageTermStatus,
   type ResponseStatus,
+  type SubtermResponseType,
   type TermResponseContent,
+  isSubtermResponseType,
 } from "@/lib/stages/execution"
 import { roleLabel } from "@/lib/db/types"
 
@@ -78,6 +80,8 @@ export type ProjectStageTermExecution = {
   dueDate: string | null
   approvalRequired: boolean
   templateReference: string | null
+  responseType: SubtermResponseType
+  instructions: string | null
   status: ProjectStageTermStatus
   sortOrder: number
   isActive: boolean
@@ -132,9 +136,15 @@ function parseContent(value: unknown): TermResponseContent {
             id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
             label: typeof item.label === "string" ? item.label : "Checklist item",
             checked: item.checked === true,
+            result: item.result === "pass" || item.result === "fail" || item.result === "na" ? item.result : item.checked === true ? "pass" : "",
             notes: typeof item.notes === "string" ? item.notes : undefined,
           }))
       : [],
+    answer: typeof row.answer === "string" ? row.answer.slice(0, 10000) : "",
+    selection: typeof row.selection === "string" ? row.selection.slice(0, 50) : "",
+    measurementValue: typeof row.measurementValue === "string" ? row.measurementValue.slice(0, 100) : "",
+    measurementUnit: typeof row.measurementUnit === "string" ? row.measurementUnit.slice(0, 100) : "",
+    dateValue: typeof row.dateValue === "string" ? row.dateValue.slice(0, 30) : "",
   }
 }
 
@@ -216,7 +226,7 @@ export async function loadProjectStageExecution(projectId: string, userId: strin
   const { data: allTerms, error: termsError } = stageIds.length
     ? await admin
         .from("project_stage_terms")
-        .select("id, project_stage_id, parent_term_id, report_name, is_required, responsible_organization_id, responsible_user_id, due_date_rule, due_date, approval_required, template_reference, status, sort_order, is_active")
+        .select("id, project_stage_id, parent_term_id, report_name, is_required, responsible_organization_id, responsible_user_id, due_date_rule, due_date, approval_required, template_reference, response_type, instructions, status, sort_order, is_active")
         .in("project_stage_id", stageIds)
         .order("sort_order", { ascending: true })
     : { data: [], error: null }
@@ -345,6 +355,8 @@ export async function loadProjectStageExecution(projectId: string, userId: strin
       dueDate: term.due_date,
       approvalRequired: term.approval_required ?? true,
       templateReference: term.template_reference,
+      responseType: isSubtermResponseType(term.response_type) ? term.response_type : "combined",
+      instructions: typeof term.instructions === "string" && term.instructions.trim() ? term.instructions : null,
       status: term.status,
       sortOrder: term.sort_order,
       isActive: term.is_active !== false,
@@ -417,7 +429,7 @@ export async function loadProjectStageTerm(projectId: string, termId: string, us
   if (!data) return null
   for (const stage of data.stages) {
     for (const term of stage.terms) {
-      if (term.id === termId) return { ...data, stage, term }
+      if (term.id === termId) return { ...data, stage, term, parentTerm: null }
       const subterm = term.subterms.find((item) => item.id === termId && (item.isActive || data.canManage))
       if (subterm) return { ...data, stage, term: subterm, parentTerm: term }
     }
