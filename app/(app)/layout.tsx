@@ -4,6 +4,7 @@ import { CurrentUserProvider, type CurrentUser } from "@/components/current-user
 import { getOrgProjects } from "@/lib/db/domain"
 import { getSelectedProjectId } from "@/lib/project-scope"
 import { resolveStageManagementOrganization } from "@/lib/db/stages"
+import { getReviewSubmissionFeed } from "@/lib/review-submissions/server"
 
 function initials(name: string, email: string) {
   const source = name.trim() || email
@@ -28,6 +29,9 @@ export default async function AppGroupLayout({
     getSelectedProjectId(),
     resolveStageManagementOrganization(session.userId, session.supervisingOrg?.id),
   ])
+  const reviewFeed = orgId
+    ? await getReviewSubmissionFeed({ userId: session.userId, organizationId: orgId, projectId: selectedProjectId })
+    : { canReview: false, items: [] }
 
   const user: CurrentUser = {
     id: session.userId,
@@ -47,6 +51,7 @@ export default async function AppGroupLayout({
         projects={projectOptions}
         selectedProjectId={selectedProjectId ?? "all"}
         canManageStages={Boolean(stageManagementOrganization)}
+        reviewFeed={reviewFeed}
       >
         {children}
       </AppShell>

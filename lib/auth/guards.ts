@@ -2,6 +2,9 @@ import "server-only"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 
+export const PROJECT_REVIEW_ACCESS_ROLES = ["project_admin", "project_manager", "reviewer", "approver"] as const
+export const ORGANIZATION_REVIEW_ROLES = ["org_admin", "org_manager"] as const
+
 export class AuthzError extends Error {
   constructor(message = "Not authorized") {
     super(message)
@@ -130,7 +133,7 @@ export async function assertStageManager(organizationId: string): Promise<string
     .eq("organization_id", organizationId)
     .eq("user_id", userId)
     .eq("status", "active")
-    .in("role", ["org_admin", "org_manager"])
+    .in("role", [...ORGANIZATION_REVIEW_ROLES])
     .maybeSingle()
   if (orgError) throw orgError
   if (orgManager) return userId
@@ -170,7 +173,7 @@ export async function assertProjectReviewer(projectId: string): Promise<string> 
     .eq("project_id", projectId)
     .eq("user_id", userId)
     .eq("status", "active")
-    .in("access_role", ["project_admin", "project_manager", "reviewer", "approver"])
+    .in("access_role", [...PROJECT_REVIEW_ACCESS_ROLES])
     .limit(1)
     .maybeSingle()
   if (membershipError) throw membershipError
@@ -190,7 +193,7 @@ export async function assertProjectReviewer(projectId: string): Promise<string> 
     .eq("organization_id", project.supervising_organization_id)
     .eq("user_id", userId)
     .eq("status", "active")
-    .in("role", ["org_admin", "org_manager"])
+    .in("role", [...ORGANIZATION_REVIEW_ROLES])
     .limit(1)
     .maybeSingle()
   if (orgError) throw orgError

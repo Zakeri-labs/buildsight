@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Bell, ChevronDown, Lock, LogOut } from "lucide-react"
+import { ChevronDown, Lock, LogOut } from "lucide-react"
 import { ProfileAvatar } from "@/components/profile/profile-avatar"
 import {
   DropdownMenu,
@@ -15,11 +15,18 @@ import {
 import { LanguageSwitch } from "@/components/language-switch"
 import { useCurrentUser } from "@/components/current-user-provider"
 import { signOut } from "@/lib/actions/auth"
-import { notificationsCount } from "@/lib/mock-data"
 import { roleLabel } from "@/lib/db/types"
 import { useI18n } from "@/lib/i18n"
+import { ReviewNotificationCenter } from "@/components/notifications/review-notification-center"
+import type { ReviewSubmissionFeed } from "@/lib/review-submissions/types"
 
-export function AppTopbar({ activeProjectName }: { activeProjectName?: string | null }) {
+export function AppTopbar({
+  activeProjectName,
+  reviewFeed,
+}: {
+  activeProjectName?: string | null
+  reviewFeed: ReviewSubmissionFeed
+}) {
   const pathname = usePathname()
   const currentUser = useCurrentUser()
   const userRoleLabel = currentUser.role ? roleLabel(currentUser.role) : "Admin"
@@ -79,18 +86,7 @@ export function AppTopbar({ activeProjectName }: { activeProjectName?: string | 
         <LanguageSwitch />
 
         {/* Notifications */}
-        <button
-          type="button"
-          aria-label="Notifications"
-          className="relative flex size-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <Bell className="size-5" />
-          {notificationsCount > 0 && (
-            <span className="absolute top-1 inset-inline-end-1 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold text-destructive-foreground">
-              {notificationsCount}
-            </span>
-          )}
-        </button>
+        <ReviewNotificationCenter initialFeed={reviewFeed} userId={currentUser.id} />
 
         {/* User profile link & menu */}
         <div className="flex items-center gap-1 rounded-xl p-0.5 hover:bg-muted/50">

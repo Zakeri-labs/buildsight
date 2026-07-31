@@ -28,7 +28,7 @@ const emptyDashboard: DashboardData = {
 export default async function DashboardPage() {
   const [session, projectId] = await Promise.all([requireOnboarded(), getSelectedProjectId()])
   const orgId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id ?? null
-  const data = orgId ? await getDashboardData(orgId, projectId) : emptyDashboard
+  const data = orgId ? await getDashboardData(orgId, projectId, session.userId) : emptyDashboard
 
   const kpis: KpiCardData[] = [
     {
