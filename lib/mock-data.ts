@@ -216,6 +216,7 @@ export type ProjectRecord = {
   image: string
   statusKey: ProjectStatusKey
   projectType: string
+  supervisionType: string
   organizationRole: string
   description: string
   contractor: string
@@ -238,6 +239,7 @@ export const projects: ProjectRecord[] = [
     image: "/projects/al-noor-tower.png",
     statusKey: "underConstruction",
     projectType: "—",
+    supervisionType: "Not specified",
     organizationRole: "Consultant",
     description: "No project description has been added.",
     contractor: "Atlas Contracting",
@@ -258,6 +260,7 @@ export const projects: ProjectRecord[] = [
     image: "/site/facade-installation.png",
     statusKey: "underConstruction",
     projectType: "—",
+    supervisionType: "Not specified",
     organizationRole: "Consultant",
     description: "No project description has been added.",
     contractor: "Gulf Builders",
@@ -278,6 +281,7 @@ export const projects: ProjectRecord[] = [
     image: "/site/structural-works.png",
     statusKey: "underConstruction",
     projectType: "—",
+    supervisionType: "Not specified",
     organizationRole: "Consultant",
     description: "No project description has been added.",
     contractor: "Emirates Construct",
@@ -298,6 +302,7 @@ export const projects: ProjectRecord[] = [
     image: "/site/mep-works.png",
     statusKey: "planning",
     projectType: "—",
+    supervisionType: "Not specified",
     organizationRole: "Consultant",
     description: "No project description has been added.",
     contractor: "Skyline Contracting",
@@ -318,6 +323,7 @@ export const projects: ProjectRecord[] = [
     image: "/projects/al-noor-tower.png",
     statusKey: "onHold",
     projectType: "—",
+    supervisionType: "Not specified",
     organizationRole: "Consultant",
     description: "No project description has been added.",
     contractor: "Coastal Developers",
@@ -338,6 +344,7 @@ export const projects: ProjectRecord[] = [
     image: "/site/structural-works.png",
     statusKey: "completed",
     projectType: "—",
+    supervisionType: "Not specified",
     organizationRole: "Consultant",
     description: "No project description has been added.",
     contractor: "Atlas Contracting",

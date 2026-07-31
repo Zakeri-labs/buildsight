@@ -7,6 +7,7 @@ import { getDashboardData, getOrgProjects } from "@/lib/db/domain"
 import { getProjectParticipants, getProjectParticipantUserOptions } from "@/lib/db/project-participants"
 import { normalizeDocumentType } from "@/lib/documents/document-types"
 import { toProjectRecord } from "@/lib/projects/project-record"
+import { isProjectTypeValue } from "@/lib/projects/project-options"
 import { createClient } from "@/lib/supabase/server"
 
 type ProjectDocumentRow = {
@@ -105,15 +106,30 @@ export default async function ProjectDetailPage({
   ])
   const participantUsers = canManageImages ? await getProjectParticipantUserOptions(project.id) : []
   const projectCounts = dashboardData.projects.find((item) => item.id === project.id)
+  const projectRecord = toProjectRecord(project, projectCounts)
 
   return (
     <ProjectDetail
       key={project.id}
-      project={toProjectRecord(project, projectCounts)}
+      project={projectRecord}
+      editProject={{
+        id: project.id,
+        name: project.name,
+        code: project.code?.trim() || "—",
+        address: project.location?.trim() || "—",
+        projectTypeLabel: projectRecord.projectType,
+        projectTypeValue: isProjectTypeValue(project.projectType) ? project.projectType : null,
+        supervisionType: project.supervisionType,
+        supervisionTypeOther: project.supervisionTypeOther,
+        description: project.description ?? "",
+        latitude: project.latitude,
+        longitude: project.longitude,
+      }}
       documents={documents}
       participants={participants}
       participantUsers={participantUsers}
       canManageImages={canManageImages}
+      canEditProject={canManageImages}
     />
   )
 }

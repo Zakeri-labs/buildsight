@@ -39,6 +39,8 @@ export type ProjectDeletionImpact = {
   totalRelatedRecords: number
 }
 
+const MAX_SUPERVISION_TYPE_OTHER_LENGTH = 150
+
 const PROJECT_STORAGE_BUCKETS = [
   "project-images",
   "document-images",
@@ -278,6 +280,7 @@ export async function updateProject(input: {
   code?: string
   projectType?: ProjectTypeValue
   supervisionType?: SupervisionTypeValue
+  supervisionTypeOther?: string | null
   description?: string
   location?: string
   latitude?: number | null
@@ -289,8 +292,20 @@ export async function updateProject(input: {
     if (input.projectType !== undefined && !isProjectTypeValue(input.projectType)) {
       return { ok: false, error: "Select a valid project type." }
     }
-    if (input.supervisionType !== undefined && !isSupervisionTypeValue(input.supervisionType)) {
-      return { ok: false, error: "Select a valid supervision type." }
+    let supervisionTypeOther: string | null | undefined
+    if (input.supervisionType !== undefined) {
+      if (!isSupervisionTypeValue(input.supervisionType)) {
+        return { ok: false, error: "Select a valid supervision type." }
+      }
+      if (input.supervisionType === "other") {
+        supervisionTypeOther = input.supervisionTypeOther?.trim() || ""
+        if (!supervisionTypeOther) return { ok: false, error: "Please specify the supervision type." }
+        if (supervisionTypeOther.length > MAX_SUPERVISION_TYPE_OTHER_LENGTH) {
+          return { ok: false, error: "Supervision type must be 150 characters or fewer." }
+        }
+      } else {
+        supervisionTypeOther = null
+      }
     }
     const coordinates = normalizeProjectCoordinates(input.latitude, input.longitude)
     if (!coordinates.ok) return { ok: false, error: coordinates.error }
@@ -319,7 +334,10 @@ export async function updateProject(input: {
       updated_at: new Date().toISOString(),
     }
     if (input.projectType !== undefined) updates.project_type = input.projectType
-    if (input.supervisionType !== undefined) updates.supervision_type = input.supervisionType
+    if (input.supervisionType !== undefined) {
+      updates.supervision_type = input.supervisionType
+      updates.supervision_type_other = supervisionTypeOther ?? null
+    }
     if (input.description !== undefined) updates.description = input.description.trim() || null
 
     const { error } = await admin
@@ -577,8 +595,9 @@ export async function createProject(input: {
   supervisingOrgId: string
   name: string
   code?: string
-  projectType?: string
-  supervisionType?: string
+  projectType?: ProjectTypeValue
+  supervisionType?: SupervisionTypeValue
+  supervisionTypeOther?: string
   region?: string
   description?: string
   location?: string
@@ -610,6 +629,15 @@ export async function createProject(input: {
     }
     if (input.supervisionType && !isSupervisionTypeValue(input.supervisionType)) {
       return { ok: false, error: "Select a valid supervision type." }
+    }
+    const supervisionTypeOther = input.supervisionType === "other"
+      ? input.supervisionTypeOther?.trim() || ""
+      : null
+    if (input.supervisionType === "other" && !supervisionTypeOther) {
+      return { ok: false, error: "Please specify the supervision type." }
+    }
+    if (supervisionTypeOther && supervisionTypeOther.length > MAX_SUPERVISION_TYPE_OTHER_LENGTH) {
+      return { ok: false, error: "Supervision type must be 150 characters or fewer." }
     }
 
     const owners = (input.owners ?? []).map((owner) => ({
@@ -696,6 +724,7 @@ export async function createProject(input: {
         code: input.code?.trim() || null,
         project_type: input.projectType || null,
         supervision_type: input.supervisionType || null,
+        supervision_type_other: supervisionTypeOther,
         region: input.region?.trim() || null,
         description: input.description?.trim() || null,
         location,
@@ -869,6 +898,7 @@ export async function createProject(input: {
         name,
         projectType: input.projectType || null,
         supervisionType: input.supervisionType || null,
+        supervisionTypeOther,
         ownerCount: owners.length,
         contractorOrganizationId,
         assignedUserId,

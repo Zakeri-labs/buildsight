@@ -116,6 +116,7 @@ export function ProjectCreateForm({
   const [code, setCode] = useState("")
   const [projectType, setProjectType] = useState<ProjectTypeValue | "">("")
   const [supervisionType, setSupervisionType] = useState<SupervisionTypeValue | "">("")
+  const [supervisionTypeOther, setSupervisionTypeOther] = useState("")
   const [location, setLocation] = useState<ProjectLocationValue>(EMPTY_PROJECT_LOCATION)
   const [description, setDescription] = useState("")
   const [projectImages, setProjectImages] = useState<ProjectImageDraft[]>([])
@@ -173,6 +174,9 @@ export function ProjectCreateForm({
         projectTypePlaceholder: "اختر نوع المشروع",
         supervisionType: "نوع الإشراف",
         supervisionTypePlaceholder: "اختر نوع الإشراف",
+        supervisionTypeOther: "تحديد نوع الإشراف",
+        supervisionTypeOtherPlaceholder: "أدخل نوع الإشراف",
+        requiredSupervisionTypeOther: "يرجى تحديد نوع الإشراف.",
         assignUser: "تعيين مستخدم",
         assignUserPlaceholder: "اختر مستخدم المشروع",
         assignSupervisor: "تعيين مشرف",
@@ -244,6 +248,9 @@ export function ProjectCreateForm({
         projectTypePlaceholder: "Select project type",
         supervisionType: "Supervision Type",
         supervisionTypePlaceholder: "Select supervision type",
+        supervisionTypeOther: "Specify Supervision Type",
+        supervisionTypeOtherPlaceholder: "Enter the supervision type",
+        requiredSupervisionTypeOther: "Please specify the supervision type.",
         assignUser: "Assign User",
         assignUserPlaceholder: "Select a project user",
         assignSupervisor: "Assign Supervisor",
@@ -335,6 +342,9 @@ export function ProjectCreateForm({
         !assignedSupervisorId
       ) {
         return copy.requiredProject
+      }
+      if (supervisionType === "other" && !supervisionTypeOther.trim()) {
+        return copy.requiredSupervisionTypeOther
       }
       return null
     }
@@ -592,6 +602,7 @@ export function ProjectCreateForm({
           code,
           projectType,
           supervisionType,
+          supervisionTypeOther: supervisionType === "other" ? supervisionTypeOther.trim() : undefined,
           location: location.address,
           latitude: location.latitude,
           longitude: location.longitude,
@@ -774,38 +785,65 @@ export function ProjectCreateForm({
                           className="h-10"
                         />
                       </Field>
-                      <Field label={copy.projectType} required>
-                        <Select value={projectType || null} onValueChange={(value) => setProjectType((value as ProjectTypeValue | null) ?? "")} disabled={pending}>
-                          <SelectTrigger className="h-10 w-full">
-                            <SelectValue placeholder={copy.projectTypePlaceholder}>
-                              {(value) => {
-                                if (!value) return copy.projectTypePlaceholder
-                                const option = PROJECT_TYPES.find((item) => item.value === String(value))
-                                return option ? (isArabic ? option.labelAr : option.label) : humanizeMachineValue(String(value))
-                              }}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PROJECT_TYPES.map((option) => <SelectItem key={option.value} value={option.value}>{isArabic ? option.labelAr : option.label}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </Field>
-                      <Field label={copy.supervisionType} required>
-                        <Select value={supervisionType || null} onValueChange={(value) => setSupervisionType((value as SupervisionTypeValue | null) ?? "")} disabled={pending}>
-                          <SelectTrigger className="h-10 w-full">
-                            <SelectValue placeholder={copy.supervisionTypePlaceholder}>
-                              {(value) => {
-                                if (!value) return copy.supervisionTypePlaceholder
-                                const option = SUPERVISION_TYPES.find((item) => item.value === String(value))
-                                return option ? (isArabic ? option.labelAr : option.label) : humanizeMachineValue(String(value))
-                              }}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {SUPERVISION_TYPES.map((option) => <SelectItem key={option.value} value={option.value}>{isArabic ? option.labelAr : option.label}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </Field>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label={copy.projectType} required>
+                          <Select value={projectType || null} onValueChange={(value) => setProjectType((value as ProjectTypeValue | null) ?? "")} disabled={pending}>
+                            <SelectTrigger className="h-10 w-full">
+                              <SelectValue placeholder={copy.projectTypePlaceholder}>
+                                {(value) => {
+                                  if (!value) return copy.projectTypePlaceholder
+                                  const option = PROJECT_TYPES.find((item) => item.value === String(value))
+                                  return option ? (isArabic ? option.labelAr : option.label) : humanizeMachineValue(String(value))
+                                }}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {PROJECT_TYPES.map((option) => <SelectItem key={option.value} value={option.value}>{isArabic ? option.labelAr : option.label}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </Field>
+                        <Field label={copy.supervisionType} required>
+                          <Select
+                            value={supervisionType || null}
+                            onValueChange={(value) => {
+                              const nextValue = (value as SupervisionTypeValue | null) ?? ""
+                              setSupervisionType(nextValue)
+                              if (nextValue !== "other") setSupervisionTypeOther("")
+                              setError(null)
+                            }}
+                            disabled={pending}
+                          >
+                            <SelectTrigger className="h-10 w-full">
+                              <SelectValue placeholder={copy.supervisionTypePlaceholder}>
+                                {(value) => {
+                                  if (!value) return copy.supervisionTypePlaceholder
+                                  const option = SUPERVISION_TYPES.find((item) => item.value === String(value))
+                                  return option ? (isArabic ? option.labelAr : option.label) : humanizeMachineValue(String(value))
+                                }}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {SUPERVISION_TYPES.map((option) => <SelectItem key={option.value} value={option.value}>{isArabic ? option.labelAr : option.label}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </Field>
+                      </div>
+                      {supervisionType === "other" ? (
+                        <Field label={copy.supervisionTypeOther} htmlFor="new-project-supervision-type-other" required>
+                          <Input
+                            id="new-project-supervision-type-other"
+                            value={supervisionTypeOther}
+                            onChange={(event) => {
+                              setSupervisionTypeOther(event.target.value)
+                              setError(null)
+                            }}
+                            placeholder={copy.supervisionTypeOtherPlaceholder}
+                            maxLength={150}
+                            disabled={pending}
+                            className="h-10"
+                          />
+                        </Field>
+                      ) : null}
                       <div className="flex min-h-40 flex-1 flex-col gap-2">
                         <Label htmlFor="new-project-description">{copy.description} ({copy.optional})</Label>
                         <textarea

@@ -1,6 +1,6 @@
 import type { DomainProject } from "@/lib/db/domain"
 import type { ProjectRecord, ProjectStatusKey } from "@/lib/mock-data"
-import { PROJECT_TYPES } from "@/lib/projects/project-options"
+import { PROJECT_TYPES, supervisionTypeLabel } from "@/lib/projects/project-options"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 
 function projectStatusKey(status: string): ProjectStatusKey {
@@ -39,6 +39,7 @@ export function toProjectRecord(
     image: projectImageDisplayUrl(project.image, project.id) ?? "/placeholder.svg",
     statusKey: projectStatusKey(project.status),
     projectType: projectTypeLabel(project.projectType),
+    supervisionType: supervisionTypeLabel(project.supervisionType, project.supervisionTypeOther),
     organizationRole: project.ourRole?.trim() || "Consultant",
     description: project.description?.trim() || "No project description has been added.",
     contractor: project.contractor ?? "Not assigned",

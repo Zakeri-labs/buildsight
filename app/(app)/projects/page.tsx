@@ -2,7 +2,7 @@ import { ProjectsList, type ProjectRow, type OrgRole, type ProjectStatus } from 
 import { requireOnboarded, isOrgAdmin } from "@/lib/auth/session"
 import { canAdministerProject } from "@/lib/auth/guards"
 import { getOrgProjects } from "@/lib/db/domain"
-import { PROJECT_TYPES, isProjectTypeValue, isSupervisionTypeValue } from "@/lib/projects/project-options"
+import { PROJECT_TYPES, isProjectTypeValue } from "@/lib/projects/project-options"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 
 function projectStatus(status: string): ProjectStatus {
@@ -60,7 +60,8 @@ export default async function ProjectsPage({
     address: project.location?.trim() || "—",
     projectType: projectTypeLabel(project.projectType),
     projectTypeValue: isProjectTypeValue(project.projectType) ? project.projectType : null,
-    supervisionType: isSupervisionTypeValue(project.supervisionType) ? project.supervisionType : null,
+    supervisionType: project.supervisionType,
+    supervisionTypeOther: project.supervisionTypeOther,
     description: project.description ?? "",
     status: projectStatus(project.status),
     startDate: displayDate(project.startDate),
