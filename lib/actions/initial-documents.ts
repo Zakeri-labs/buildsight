@@ -5,6 +5,7 @@ import { requireOnboarded } from "@/lib/auth/session"
 import { createClient } from "@/lib/supabase/server"
 import {
   INITIAL_DOCUMENTS_BUCKET,
+  getInitialDocumentUploadCategoryFromPath,
   isInitialDocumentCategory,
   validateInitialDocumentFile,
   type InitialDocumentCategory,
@@ -47,6 +48,10 @@ export async function saveInitialDocumentAction(input: SaveInitialDocumentInput)
   const expectedPrefix = `${input.projectId}/${session.userId}/${input.id}/`
   if (!storagePath.startsWith(expectedPrefix) || storagePath.includes("..")) {
     return { ok: false, error: "The uploaded file does not belong to this project." }
+  }
+  const uploadCategory = getInitialDocumentUploadCategoryFromPath(storagePath)
+  if (!uploadCategory || uploadCategory.category !== input.category) {
+    return { ok: false, error: "The uploaded file category is invalid." }
   }
 
   const supabase = await createClient()
@@ -93,7 +98,7 @@ export async function saveInitialDocumentAction(input: SaveInitialDocumentInput)
     entity_type: "initial_doc",
     entity_id: input.id,
     project_id: input.projectId,
-    metadata: { file_name: fileName, category: input.category },
+    metadata: { file_name: fileName, category: input.category, upload_category: uploadCategory.value },
   })
 
   revalidatePath("/initial-documents")

@@ -1,6 +1,6 @@
 import { InitialDocumentsList, type InitialDocumentListItem } from "@/components/initial-documents/initial-documents-list"
 import { requireOnboarded } from "@/lib/auth/session"
-import { getInitialDocumentCategory } from "@/lib/initial-documents/config"
+import { getInitialDocumentCategory, getInitialDocumentUploadCategoryFromPath } from "@/lib/initial-documents/config"
 import { getSelectedProjectId } from "@/lib/project-scope"
 import { createClient } from "@/lib/supabase/server"
 
@@ -36,7 +36,7 @@ export default async function InitialDocumentsPage({ searchParams }: { searchPar
 
   let query = supabase
     .from("initial_docs")
-    .select("id, project_id, file_name, original_file_name, mime_type, file_size, category, uploaded_by, created_at")
+    .select("id, project_id, file_name, original_file_name, file_path, mime_type, file_size, category, uploaded_by, created_at")
     .order("created_at", { ascending: false })
   if (effectiveProjectId) query = query.eq("project_id", effectiveProjectId)
 
@@ -65,6 +65,7 @@ export default async function InitialDocumentsPage({ searchParams }: { searchPar
     mimeType: row.mime_type || "application/octet-stream",
     fileSize: Number(row.file_size) || 0,
     category: getInitialDocumentCategory(row.category).value,
+    uploadCategory: getInitialDocumentUploadCategoryFromPath(row.file_path)?.value ?? null,
     projectId: row.project_id,
     projectName: projectNames.get(row.project_id) ?? "Project",
     uploadedBy: profileNames.get(row.uploaded_by) ?? (row.uploaded_by === session.userId ? session.email : "Project member"),

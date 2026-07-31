@@ -530,7 +530,7 @@ export function ProjectCreateForm({
       setSubmissionMessage(progressLabel)
       setUploadingFile(progressLabel)
 
-      const storagePath = `${projectId}/${session.user.id}/${selection.id}/${sanitizeInitialDocumentFileName(file.name)}`
+      const storagePath = `${projectId}/${session.user.id}/${selection.id}/category-${selection.uploadCategory}/${sanitizeInitialDocumentFileName(file.name)}`
       await uploadStorageAsset(
         file,
         storagePath,

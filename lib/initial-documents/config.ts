@@ -51,6 +51,44 @@ export const INITIAL_DOCUMENT_CATEGORIES = [
 export type InitialDocumentCategory = (typeof INITIAL_DOCUMENT_CATEGORIES)[number]["value"]
 export type InitialDocumentCategoryDefinition = (typeof INITIAL_DOCUMENT_CATEGORIES)[number]
 
+export const INITIAL_DOCUMENT_UPLOAD_CARDS = [
+  { value: "drawing", label: "Drawing", labelAr: "المخططات", category: "approved_drawings", multiple: false },
+  { value: "supervision_agreement", label: "Supervision Agreement", labelAr: "اتفاقية الإشراف", category: "consultant_agreement", multiple: false },
+  { value: "contract_agreement", label: "Contract Agreement", labelAr: "اتفاقية العقد", category: "contractor_agreement", multiple: false },
+  { value: "three_d_perspective", label: "3D Perspective", labelAr: "منظور ثلاثي الأبعاد", category: "other", multiple: false },
+  { value: "approval_document", label: "Approval Document", labelAr: "مستند الموافقة", category: "permits_approvals", multiple: false },
+  { value: "test_reports", label: "Test Reports", labelAr: "تقارير الاختبار", category: "initial_site_reports", multiple: false },
+  { value: "additional_documents", label: "Additional Documents", labelAr: "مستندات إضافية", category: "other", multiple: true },
+] as const satisfies readonly {
+  value: string
+  label: string
+  labelAr: string
+  category: InitialDocumentCategory
+  multiple: boolean
+}[]
+
+export type InitialDocumentUploadCategory = (typeof INITIAL_DOCUMENT_UPLOAD_CARDS)[number]["value"]
+export type InitialDocumentUploadCategoryDefinition = (typeof INITIAL_DOCUMENT_UPLOAD_CARDS)[number]
+
+const uploadCategoryMap = new Map<string, InitialDocumentUploadCategoryDefinition>(
+  INITIAL_DOCUMENT_UPLOAD_CARDS.map((category) => [category.value, category]),
+)
+
+export function isInitialDocumentUploadCategory(value: unknown): value is InitialDocumentUploadCategory {
+  return typeof value === "string" && uploadCategoryMap.has(value)
+}
+
+export function getInitialDocumentUploadCategory(value: unknown): InitialDocumentUploadCategoryDefinition | null {
+  return typeof value === "string" ? uploadCategoryMap.get(value) ?? null : null
+}
+
+export function getInitialDocumentUploadCategoryFromPath(filePath: unknown): InitialDocumentUploadCategoryDefinition | null {
+  if (typeof filePath !== "string") return null
+  const segments = filePath.split("/").filter(Boolean)
+  const marker = segments[3]
+  return marker?.startsWith("category-") ? getInitialDocumentUploadCategory(marker.slice("category-".length)) : null
+}
+
 const categoryMap = new Map<string, InitialDocumentCategoryDefinition>(
   INITIAL_DOCUMENT_CATEGORIES.map((category) => [category.value, category]),
 )
