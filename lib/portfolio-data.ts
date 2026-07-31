@@ -90,7 +90,7 @@ export const portfolioActivity: PortfolioActivity[] = [
   },
   { id: "3", type: "rfi", title: "answered", reference: "RFI-3095", project: "Harbor View Hotel", time: "2h ago" },
   { id: "4", type: "vo", title: "approved", reference: "VO-105", project: "City Center Mall", time: "3h ago" },
-  { id: "5", type: "document", title: "Document uploaded", project: "Airport Road Bridge", time: "5h ago" },
+  { id: "5", type: "document", title: "Letter uploaded", project: "Airport Road Bridge", time: "5h ago" },
 ]
 
 export type ProjectRole = "Consultant" | "Contractor" | "Client"

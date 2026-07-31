@@ -38,16 +38,16 @@ type DocumentWriteInput = {
 
 function validateDocumentInput(input: DocumentWriteInput): { ok: true; title: string; documentType: DocumentTypeValue } | { ok: false; error: string } {
   if (input.status !== "draft" && input.status !== "published") {
-    return { ok: false, error: "The requested document status is invalid." }
+    return { ok: false, error: "The requested letter status is invalid." }
   }
 
   const title = input.title.trim()
-  if (!title) return { ok: false, error: "Document title is required." }
-  if (title.length > 180) return { ok: false, error: "Document title must be 180 characters or fewer." }
-  if (!isDocumentTypeValue(input.documentType)) return { ok: false, error: "Select a valid document type." }
-  if (!isRichTextDocument(input.content)) return { ok: false, error: "The document content is invalid." }
+  if (!title) return { ok: false, error: "Letter title is required." }
+  if (title.length > 180) return { ok: false, error: "Letter title must be 180 characters or fewer." }
+  if (!isDocumentTypeValue(input.documentType)) return { ok: false, error: "Select a valid letter type." }
+  if (!isRichTextDocument(input.content)) return { ok: false, error: "The letter content is invalid." }
   if (input.status === "published" && !richTextHasContent(input.content)) {
-    return { ok: false, error: "Add document content before publishing." }
+    return { ok: false, error: "Add letter content before publishing." }
   }
 
   const hasInvalidImagePath = getRichTextImagePaths(input.content).some((path) => {
@@ -55,11 +55,11 @@ function validateDocumentInput(input: DocumentWriteInput): { ok: true; title: st
     return parts.length < 3 || parts[0] !== input.projectId || parts.includes("..")
   })
   if (hasInvalidImagePath) {
-    return { ok: false, error: "One or more embedded images do not belong to the document project." }
+    return { ok: false, error: "One or more embedded images do not belong to the letter project." }
   }
 
   if (JSON.stringify(input.content).length > 2_000_000) {
-    return { ok: false, error: "The document is too large to save. Remove some content and try again." }
+    return { ok: false, error: "The letter is too large to save. Remove some content and try again." }
   }
 
   return { ok: true, title, documentType: input.documentType }
@@ -70,7 +70,7 @@ export async function createDocumentAction(input: DocumentWriteInput): Promise<S
   const selectedProjectId = await getSelectedProjectId()
 
   if (!selectedProjectId || selectedProjectId !== input.projectId) {
-    return { ok: false, error: "The selected project is no longer valid. Return to Documents and select a project." }
+    return { ok: false, error: "The selected project is no longer valid. Return to Letters and select a project." }
   }
 
   const validation = validateDocumentInput(input)
@@ -95,7 +95,7 @@ export async function createDocumentAction(input: DocumentWriteInput): Promise<S
     .select("id, reference")
     .single()
 
-  if (error || !data) return { ok: false, error: error?.message ?? "Unable to save the document." }
+  if (error || !data) return { ok: false, error: error?.message ?? "Unable to save the letter." }
 
   await supabase.from("audit_logs").insert({
     actor_id: session.userId,
@@ -125,7 +125,7 @@ export async function updateDocumentAction(
     .maybeSingle()
 
   if (!existing || existing.project_id !== input.projectId) {
-    return { ok: false, error: "This document is unavailable or you no longer have permission to edit it." }
+    return { ok: false, error: "This letter is unavailable or you no longer have permission to edit it." }
   }
 
   const publishedAt = input.status === "published" ? existing.published_at ?? new Date().toISOString() : null
@@ -144,7 +144,7 @@ export async function updateDocumentAction(
     .select("id, reference")
     .single()
 
-  if (error || !data) return { ok: false, error: error?.message ?? "Unable to update the document." }
+  if (error || !data) return { ok: false, error: error?.message ?? "Unable to update the letter." }
 
   await supabase.from("audit_logs").insert({
     actor_id: session.userId,
@@ -179,7 +179,7 @@ export async function createUploadedDocumentsAction(input: {
   const selectedProjectId = await getSelectedProjectId()
 
   if (selectedProjectId && selectedProjectId !== input.projectId) {
-    return { ok: false, error: "The selected project is no longer valid. Return to Documents and select a project." }
+    return { ok: false, error: "The selected project is no longer valid. Return to Letters and select a project." }
   }
   if (!Array.isArray(input.files) || input.files.length === 0) {
     return { ok: false, error: "Select at least one file to upload." }
@@ -236,7 +236,7 @@ export async function createUploadedDocumentsAction(input: {
     .insert(rows)
     .select("id, reference, title, document_type, simple_upload_category")
 
-  if (error || !data) return { ok: false, error: error?.message ?? "Unable to create the uploaded document records." }
+  if (error || !data) return { ok: false, error: error?.message ?? "Unable to create the uploaded letter records." }
 
   await supabase.from("audit_logs").insert(data.map((document: any) => ({
     actor_id: session.userId,
@@ -267,14 +267,14 @@ export async function createConstructionDocumentAction(input: {
   const title = input.title.trim()
   const shortDescription = input.shortDescription?.trim() ?? ""
   const documentDetails = input.documentDetails?.trimEnd()
-  if (!title) return { ok: false, error: "Document title is required." }
-  if (title.length > 180) return { ok: false, error: "Document title must be 180 characters or fewer." }
+  if (!title) return { ok: false, error: "Letter title is required." }
+  if (title.length > 180) return { ok: false, error: "Letter title must be 180 characters or fewer." }
   if (shortDescription.length > 2_000) return { ok: false, error: "Short description must be 2,000 characters or fewer." }
   if (documentDetails !== undefined && documentDetails.length > 100_000) {
-    return { ok: false, error: "Document details must be 100,000 characters or fewer." }
+    return { ok: false, error: "Letter details must be 100,000 characters or fewer." }
   }
   if (!isConstructionDocumentType(input.documentType)) {
-    return { ok: false, error: "Select a valid construction document type." }
+    return { ok: false, error: "Select a valid letter type." }
   }
 
   const supabase = await createClient()
@@ -300,7 +300,7 @@ export async function createConstructionDocumentAction(input: {
     .select("id, reference")
     .single()
 
-  if (error || !data) return { ok: false, error: error?.message ?? "Unable to create the document." }
+  if (error || !data) return { ok: false, error: error?.message ?? "Unable to create the letter." }
 
   await supabase.from("audit_logs").insert({
     actor_id: session.userId,
@@ -322,7 +322,7 @@ export async function updateConstructionDocumentDetailsAction(input: {
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const session = await requireOnboarded()
   const details = input.details.trimEnd()
-  if (details.length > 100_000) return { ok: false, error: "Document details must be 100,000 characters or fewer." }
+  if (details.length > 100_000) return { ok: false, error: "Letter details must be 100,000 characters or fewer." }
 
   const supabase = await createClient()
   const { data, error } = await supabase
@@ -333,7 +333,7 @@ export async function updateConstructionDocumentDetailsAction(input: {
     .select("id")
     .maybeSingle()
 
-  if (error || !data) return { ok: false, error: error?.message ?? "Unable to save document details." }
+  if (error || !data) return { ok: false, error: error?.message ?? "Unable to save letter details." }
 
   await supabase.from("audit_logs").insert({
     actor_id: session.userId,
@@ -371,7 +371,7 @@ export async function addDocumentAttachmentsAction(input: {
     .eq("id", input.documentId)
     .eq("project_id", input.projectId)
     .maybeSingle()
-  if (!document) return { ok: false, error: "This document is unavailable." }
+  if (!document) return { ok: false, error: "This letter is unavailable." }
 
   const rows = []
   for (const attachment of input.attachments) {
@@ -394,7 +394,7 @@ export async function addDocumentAttachmentsAction(input: {
     const folder = attachment.attachmentType === "image" ? "images" : "files"
     const expectedPrefix = `${input.projectId}/${session.userId}/documents/${input.documentId}/${folder}/`
     if (!attachment.storagePath.startsWith(expectedPrefix) || attachment.storagePath.includes("..")) {
-      return { ok: false, error: "One or more uploads do not belong to this document." }
+      return { ok: false, error: "One or more uploads do not belong to this letter." }
     }
 
     rows.push({

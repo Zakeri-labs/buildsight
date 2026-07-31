@@ -33,6 +33,7 @@ export type ProjectDeletionImpact = {
   terms: number
   inspections: number
   documents: number
+  initialDocuments: number
   translations: number
   participants: number
   attachments: number
@@ -44,6 +45,7 @@ const MAX_SUPERVISION_TYPE_OTHER_LENGTH = 150
 const PROJECT_STORAGE_BUCKETS = [
   "project-images",
   "document-images",
+  "initial-docs",
   "project-stage-evidence",
   "project-stage-translations",
   "participant-avatars",
@@ -79,11 +81,12 @@ async function getProjectDeletionImpactWithAdmin(
     terms = count ?? 0
   }
 
-  const [legacyInspections, termResponses, documents, translations, projectParticipants, userMemberships, orgMemberships, attachments] =
+  const [legacyInspections, termResponses, documents, initialDocuments, translations, projectParticipants, userMemberships, orgMemberships, attachments] =
     await Promise.all([
       countProjectRows(admin, "inspections", projectId),
       countProjectRows(admin, "term_responses", projectId),
       countProjectRows(admin, "documents", projectId),
+      countProjectRows(admin, "initial_docs", projectId),
       countProjectRows(admin, "translation_documents", projectId),
       countProjectRows(admin, "project_participants", projectId),
       countProjectRows(admin, "project_user_memberships", projectId),
@@ -96,6 +99,7 @@ async function getProjectDeletionImpactWithAdmin(
     terms,
     inspections: legacyInspections + termResponses,
     documents,
+    initialDocuments,
     translations,
     participants: projectParticipants + userMemberships + orgMemberships,
     attachments,
@@ -106,6 +110,7 @@ async function getProjectDeletionImpactWithAdmin(
     impact.terms +
     impact.inspections +
     impact.documents +
+    impact.initialDocuments +
     impact.translations +
     impact.participants +
     impact.attachments
@@ -257,6 +262,7 @@ export async function deleteProject(input: {
     revalidatePath("/", "layout")
     revalidatePath("/projects")
     revalidatePath("/documents")
+    revalidatePath("/initial-documents")
     revalidatePath("/users")
 
     return {

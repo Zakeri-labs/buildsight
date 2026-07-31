@@ -12,7 +12,7 @@ const typeConfig: Record<
   inspection: { icon: ClipboardCheck, tile: "bg-blue-50 text-blue-600", label: "Inspection" },
   rfi: { icon: CircleHelp, tile: "bg-emerald-50 text-emerald-600", label: "RFI" },
   vo: { icon: FileText, tile: "bg-amber-50 text-amber-600", label: "VO" },
-  document: { icon: FileUp, tile: "bg-slate-100 text-slate-600", label: "Document" },
+  document: { icon: FileUp, tile: "bg-slate-100 text-slate-600", label: "Letter" },
 }
 
 export function ActivityFeed({ items }: { items: ActivityRow[] }) {

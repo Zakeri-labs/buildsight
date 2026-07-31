@@ -32,6 +32,7 @@ export function AppTopbar({ activeProjectName }: { activeProjectName?: string | 
     "/rfi": { title: "RFI", subtitle: t.documents.typeRfi },
     "/vo": { title: "VO", subtitle: t.documents.typeSubmittal },
     "/documents": { title: t.documents.title, subtitle: t.documents.subtitle },
+    "/initial-documents": { title: t.nav.initialDocuments, subtitle: "Initial reference files uploaded with each project" },
     "/reports": { title: t.reports.title, subtitle: t.reports.subtitle },
     "/calendar": { title: t.nav.calendar, subtitle: "" },
     "/users": { title: t.settings.tabAccess, subtitle: t.settings.accessDesc },
@@ -51,7 +52,7 @@ export function AppTopbar({ activeProjectName }: { activeProjectName?: string | 
     if (activeProjectName && /^\/projects\/[^/]+$/.test(p)) {
       return {
         title: activeProjectName,
-        subtitle: "Project overview, participants, and core documents",
+        subtitle: "Project overview, participants, and project letters",
       }
     }
     if (p === "/") return titleMap["/"]

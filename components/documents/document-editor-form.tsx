@@ -301,11 +301,11 @@ export function DocumentEditorForm({
 
     const currentContent = editorRef.current ? serializeRichText(editorRef.current) : content
     if (!title.trim()) {
-      setError("Document title is required.")
+      setError("Letter title is required.")
       return
     }
     if (!isDocumentTypeValue(documentType)) {
-      setError("Document type is required.")
+      setError("Letter type is required.")
       return
     }
     if (upload) {
@@ -333,12 +333,12 @@ export function DocumentEditorForm({
       }
 
       setSuccess(initialDocument
-        ? mode === "published" ? "Document updated and published successfully." : "Draft updated successfully."
-        : mode === "published" ? "Document published successfully." : "Draft saved successfully.")
+        ? mode === "published" ? "Letter updated and published successfully." : "Draft updated successfully."
+        : mode === "published" ? "Letter published successfully." : "Draft saved successfully.")
       router.push(`/documents/${result.documentId}?${initialDocument ? "updated" : "created"}=${mode}`)
     } catch (saveError) {
       setSaveMode(null)
-      setError(saveError instanceof Error ? saveError.message : "Unable to save the document.")
+      setError(saveError instanceof Error ? saveError.message : "Unable to save the letter.")
     }
   }
 
@@ -351,36 +351,36 @@ export function DocumentEditorForm({
         <DocumentProjectHeader
           projectName={project.name}
           contextLabel={initialDocument ? initialDocument.reference : "Locked"}
-          eyebrow={initialDocument ? "Edit project document" : "New project document"}
+          eyebrow={initialDocument ? "Edit project letter" : "New project letter"}
         />
       ) : null}
 
       {showAdvancedModeLabel ? (
         <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100">
           <FileText className="mt-0.5 size-4 shrink-0" />
-          <div><span className="font-semibold">Advanced mode</span><span className="block text-xs text-blue-700/80 dark:text-blue-200/80">Create a structured document with rich text, formatting, metadata, and inline images.</span></div>
+          <div><span className="font-semibold">Advanced mode</span><span className="block text-xs text-blue-700/80 dark:text-blue-200/80">Create a structured letter with rich text, formatting, metadata, and inline images.</span></div>
         </div>
       ) : null}
 
       <Card className="gap-0 py-0">
         <CardHeader className="border-b px-5 py-4 sm:px-6">
-          <CardTitle className="text-lg">Document details</CardTitle>
+          <CardTitle className="text-lg">Letter Details</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-5 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)] sm:px-6">
           <div className="space-y-2">
-            <Label htmlFor="document-title">Document title <span className="text-destructive">*</span></Label>
+            <Label htmlFor="document-title">Letter title <span className="text-destructive">*</span></Label>
             <Input
               id="document-title"
               value={title}
               maxLength={180}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="Enter a clear document title"
+              placeholder="Enter a clear letter title"
               disabled={saveMode !== null}
               className="h-11"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="document-type">Document type <span className="text-destructive">*</span></Label>
+            <Label htmlFor="document-type">Letter type <span className="text-destructive">*</span></Label>
             <DocumentTypeSelect
               id="document-type"
               value={documentType}
@@ -449,8 +449,8 @@ export function DocumentEditorForm({
           suppressContentEditableWarning
           role="textbox"
           aria-multiline="true"
-          aria-label="Document content editor"
-          data-placeholder="Start writing your document..."
+          aria-label="Letter content editor"
+          data-placeholder="Start writing your letter..."
           onInput={syncContent}
           className="document-editor-surface min-h-[620px] bg-white px-6 py-8 text-slate-900 outline-none dark:bg-slate-950 dark:text-slate-100 sm:px-10 lg:px-16"
         />

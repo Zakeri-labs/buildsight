@@ -34,7 +34,7 @@ export default async function NewDocumentPage({
   }
 
   if (!effectiveProjectId) {
-    return <InvalidProjectState message="Select a specific project from the Projects menu before creating a document." />
+    return <InvalidProjectState message="Select a specific project from the Projects menu before creating a letter." />
   }
 
   const { data: project } = await supabase
@@ -55,7 +55,7 @@ function InvalidProjectState({ message }: { message: string }) {
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 py-8">
       <Link href="/documents" className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" />
-        Back to Documents
+        Back to Letters
       </Link>
       <Card>
         <CardContent className="flex flex-col items-center gap-4 px-6 py-12 text-center">
@@ -68,7 +68,7 @@ function InvalidProjectState({ message }: { message: string }) {
           </div>
           <Button render={<Link href="/documents" />}>
             <AlertCircle className="size-4" />
-            Return to Documents
+            Return to Letters
           </Button>
         </CardContent>
       </Card>

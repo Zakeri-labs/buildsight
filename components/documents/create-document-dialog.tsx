@@ -70,7 +70,7 @@ type UploadProgress = {
 
 export function CreateDocumentDialog({
   projectId,
-  triggerLabel = "Create Document",
+  triggerLabel = "Create Letter",
   triggerVariant = "default",
   triggerClassName,
 }: {
@@ -185,11 +185,11 @@ export function CreateDocumentDialog({
   const saveDocument = async () => {
     setError(null)
     if (!title.trim()) {
-      setError("Document title is required.")
+      setError("Letter title is required.")
       return
     }
     if (!isConstructionDocumentType(documentType)) {
-      setError("Document type is required.")
+      setError("Letter type is required.")
       return
     }
 
@@ -261,9 +261,9 @@ export function CreateDocumentDialog({
       setError(
         createError instanceof Error
           ? documentWasPersisted
-            ? `The document was saved, but attachments could not be completed: ${createError.message}`
+            ? `The letter was saved, but attachments could not be completed: ${createError.message}`
             : createError.message
-          : "Unable to save the document.",
+          : "Unable to save the letter.",
       )
       setUploading(null)
       setSubmitting(false)
@@ -300,8 +300,8 @@ export function CreateDocumentDialog({
                 <FilePlus2 className="size-5" />
               </span>
               <div className="space-y-1">
-                <DialogTitle className="text-lg font-semibold">Document Information</DialogTitle>
-                <DialogDescription>Complete the construction document details and add supporting files before saving.</DialogDescription>
+                <DialogTitle className="text-lg font-semibold">Letter Information</DialogTitle>
+                <DialogDescription>Complete the construction letter details and add supporting files before saving.</DialogDescription>
               </div>
             </div>
           </DialogHeader>
@@ -310,11 +310,11 @@ export function CreateDocumentDialog({
             <div className="grid gap-5">
               <Card className="gap-0 py-0 shadow-xs">
                 <CardHeader className="border-b px-5 py-4 sm:px-6">
-                  <CardTitle className="text-base">Document Information</CardTitle>
+                  <CardTitle className="text-base">Letter Information</CardTitle>
                 </CardHeader>
                 <CardContent className="grid gap-5 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:px-6">
                   <div className="min-w-0 space-y-2">
-                    <Label htmlFor="construction-document-title">Document Title <span className="text-destructive">*</span></Label>
+                    <Label htmlFor="construction-document-title">Letter Title <span className="text-destructive">*</span></Label>
                     <Input
                       id="construction-document-title"
                       value={title}
@@ -322,17 +322,17 @@ export function CreateDocumentDialog({
                       autoFocus
                       disabled={submitting || Boolean(createdDocumentId)}
                       onChange={(event: ChangeEvent<HTMLInputElement>) => setTitle(event.target.value)}
-                      placeholder="Enter document title"
+                      placeholder="Enter letter title"
                       className="h-11 w-full"
                     />
                   </div>
 
                   <div className="min-w-0 space-y-2">
-                    <Label htmlFor="construction-document-type">Document Type <span className="text-destructive">*</span></Label>
+                    <Label htmlFor="construction-document-type">Letter Type <span className="text-destructive">*</span></Label>
                     <Select value={documentType || null} onValueChange={handleDocumentTypeChange} disabled={submitting || Boolean(createdDocumentId)}>
                       <SelectTrigger id="construction-document-type" className="h-11 w-full rounded-lg px-3">
-                        <SelectValue placeholder="Select document type">
-                          {(value) => getConstructionDocumentTypeLabel(value) ?? "Select document type"}
+                        <SelectValue placeholder="Select letter type">
+                          {(value) => getConstructionDocumentTypeLabel(value) ?? "Select letter type"}
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent align="start">
@@ -363,8 +363,8 @@ export function CreateDocumentDialog({
                   <div className="space-y-2 sm:col-span-2">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <Label htmlFor="construction-document-details">Document Details</Label>
-                        <p className="mt-1 text-xs text-muted-foreground">Selecting a document type loads its editable English template immediately.</p>
+                        <Label htmlFor="construction-document-details">Letter Details</Label>
+                        <p className="mt-1 text-xs text-muted-foreground">Selecting a letter type loads its editable English template immediately.</p>
                       </div>
                       <Button
                         type="button"
@@ -383,7 +383,7 @@ export function CreateDocumentDialog({
                       maxLength={100000}
                       disabled={submitting || Boolean(createdDocumentId) || !documentType}
                       onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDocumentDetails(event.target.value)}
-                      placeholder={documentType ? "Add document-specific information" : "Select a document type to load its template"}
+                      placeholder={documentType ? "Add letter-specific information" : "Select a letter type to load its template"}
                       className="min-h-72 w-full resize-y rounded-xl border border-input bg-white px-4 py-3 font-mono text-sm leading-6 outline-none transition-shadow placeholder:font-sans placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-muted/30 disabled:opacity-70 dark:bg-slate-950"
                     />
                   </div>
@@ -484,7 +484,7 @@ export function CreateDocumentDialog({
             <Button variant="outline" size="lg" disabled={submitting} onClick={closeDialog}>Cancel</Button>
             <Button size="lg" disabled={submitting} onClick={() => void saveDocument()}>
               {submitting ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-              Save Document
+              Save Letter
             </Button>
           </DialogFooter>
         </DialogContent>

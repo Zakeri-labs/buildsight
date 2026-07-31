@@ -6,7 +6,7 @@ type LoadingMessage =
   | "Loading projects..."
   | "Loading project data..."
   | "Loading stages and terms..."
-  | "Preparing documents..."
+  | "Preparing letters..."
   | "Preparing AI Summary..."
   | "Preparing translation workspace..."
 
@@ -169,7 +169,7 @@ export function ProjectDashboardLoadingSkeleton() {
 
 export function DocumentsLoadingSkeleton() {
   return (
-    <RouteLoadingFrame message="Preparing documents..." className="max-w-7xl">
+    <RouteLoadingFrame message="Preparing letters..." className="max-w-7xl">
       <MetricCardsSkeleton />
       <CardShell className="mt-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

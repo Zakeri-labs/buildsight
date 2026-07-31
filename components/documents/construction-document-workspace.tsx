@@ -77,10 +77,10 @@ export function ConstructionDocumentWorkspace({
         setMessage({ type: "error", text: result.error })
         return
       }
-      setMessage({ type: "success", text: "Document details saved." })
+      setMessage({ type: "success", text: "Letter details saved." })
       router.refresh()
     } catch (error) {
-      setMessage({ type: "error", text: error instanceof Error ? error.message : "Unable to save document details." })
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Unable to save letter details." })
     } finally {
       setSavingDetails(false)
     }
@@ -178,7 +178,7 @@ export function ConstructionDocumentWorkspace({
       <Card className="gap-0 py-0">
         <CardHeader className="flex-row items-center justify-between gap-4 border-b px-5 py-4 sm:px-6">
           <div>
-            <CardTitle className="text-lg">Document Details</CardTitle>
+            <CardTitle className="text-lg">Letter Details</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">Edit the predefined template or replace it with project-specific information.</p>
           </div>
           <Button variant="outline" size="sm" disabled={!details || savingDetails} onClick={() => setDetails("")}>Clear Template</Button>
@@ -189,9 +189,9 @@ export function ConstructionDocumentWorkspace({
             maxLength={100000}
             disabled={savingDetails}
             onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDetails(event.target.value)}
-            aria-label="Document details"
+            aria-label="Letter details"
             className="min-h-[360px] w-full resize-y rounded-xl border border-input bg-white px-4 py-4 font-mono text-sm leading-7 outline-none transition-shadow placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60 dark:bg-slate-950"
-            placeholder="Add document-specific information..."
+            placeholder="Add letter-specific information..."
           />
           <div className="mt-4 flex items-center justify-between gap-4">
             <span className="text-xs tabular-nums text-muted-foreground">{details.length.toLocaleString("en-GB")} / 100,000 characters</span>

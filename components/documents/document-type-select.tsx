@@ -16,9 +16,9 @@ export function DocumentTypeSelect({
   disabled = false,
   required = false,
   invalid = false,
-  placeholder = "Select a document type",
+  placeholder = "Select a letter type",
   allowClear = false,
-  clearLabel = "All document types",
+  clearLabel = "All letter types",
   className,
 }: {
   id?: string
@@ -129,7 +129,7 @@ export function DocumentTypeSelect({
                     choose(options[activeIndex].value)
                   }
                 }}
-                placeholder="Search document types..."
+                placeholder="Search letter types..."
                 className="h-10 w-full rounded-lg border border-input bg-background ps-9 pe-9 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/20"
               />
               {query ? (
@@ -148,7 +148,7 @@ export function DocumentTypeSelect({
             </div>
           </div>
 
-          <div role="listbox" aria-label="Document types" className="max-h-72 overflow-y-auto p-1.5">
+          <div role="listbox" aria-label="Letter types" className="max-h-72 overflow-y-auto p-1.5">
             {allowClear && !query ? (
               <button
                 type="button"
@@ -182,7 +182,7 @@ export function DocumentTypeSelect({
                 {value === type.value ? <Check className="mt-0.5 size-4 shrink-0 text-primary" /> : null}
               </button>
             )) : (
-              <div className="px-3 py-8 text-center text-sm text-muted-foreground">No document types found.</div>
+              <div className="px-3 py-8 text-center text-sm text-muted-foreground">No letter types found.</div>
             )}
           </div>
         </div>

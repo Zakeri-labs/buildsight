@@ -59,11 +59,11 @@ export function DocumentCreateFlow({ project }: { project: ProjectSummary }) {
     setSuccess(null)
 
     if (!title.trim()) {
-      setError("Document title is required.")
+      setError("Letter title is required.")
       return
     }
     if (!isConstructionDocumentType(documentType)) {
-      setError("Document type is required.")
+      setError("Letter type is required.")
       return
     }
 
@@ -83,7 +83,7 @@ export function DocumentCreateFlow({ project }: { project: ProjectSummary }) {
         return
       }
 
-      setSuccess(`Document ${result.reference || "saved"} was created successfully.`)
+      setSuccess(`Letter ${result.reference || "saved"} was created successfully.`)
       setTitle("")
       setDocumentType("")
       setDescription("")
@@ -91,25 +91,25 @@ export function DocumentCreateFlow({ project }: { project: ProjectSummary }) {
       setSubmitting(false)
       router.refresh()
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Unable to create the document.")
+      setError(createError instanceof Error ? createError.message : "Unable to create the letter.")
       setSubmitting(false)
     }
   }
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
-      <DocumentProjectHeader projectName={project.name} eyebrow="New construction document" contextLabel="Draft" />
+      <DocumentProjectHeader projectName={project.name} eyebrow="New construction letter" contextLabel="Draft" />
 
       <Card className="gap-0 py-0">
         <CardHeader className="border-b px-5 py-4 sm:px-6">
           <CardTitle className="flex items-center gap-2 text-lg">
             <FilePlus2 className="size-5 text-blue-600 dark:text-blue-400" />
-            Create Document
+            Create Letter
           </CardTitle>
         </CardHeader>
         <CardContent className="grid gap-5 px-5 py-5 sm:grid-cols-2 sm:px-6">
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="document-title">Document Title <span className="text-destructive">*</span></Label>
+            <Label htmlFor="document-title">Letter Title <span className="text-destructive">*</span></Label>
             <Input
               id="document-title"
               value={title}
@@ -117,21 +117,21 @@ export function DocumentCreateFlow({ project }: { project: ProjectSummary }) {
               autoFocus
               disabled={submitting}
               onChange={(event: ChangeEvent<HTMLInputElement>) => setTitle(event.target.value)}
-              placeholder="Enter a clear document title"
+              placeholder="Enter a clear letter title"
               className="h-11"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="document-type">Document Type <span className="text-destructive">*</span></Label>
+            <Label htmlFor="document-type">Letter Type <span className="text-destructive">*</span></Label>
             <Select
               value={documentType || null}
               onValueChange={handleDocumentTypeChange}
               disabled={submitting}
             >
               <SelectTrigger id="document-type" className="h-11 w-full rounded-lg px-3">
-                <SelectValue placeholder="Select document type">
-                  {(value) => getConstructionDocumentTypeLabel(value) ?? "Select document type"}
+                <SelectValue placeholder="Select letter type">
+                  {(value) => getConstructionDocumentTypeLabel(value) ?? "Select letter type"}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent align="start">
@@ -164,9 +164,9 @@ export function DocumentCreateFlow({ project }: { project: ProjectSummary }) {
         <CardHeader className="border-b px-5 py-4 sm:px-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <CardTitle className="text-lg">Document Details</CardTitle>
+              <CardTitle className="text-lg">Letter Details</CardTitle>
               <p className="mt-1 text-xs text-muted-foreground">
-                Selecting a document type loads its editable English template automatically.
+                Selecting a letter type loads its editable English template automatically.
               </p>
             </div>
             <Button
@@ -184,12 +184,12 @@ export function DocumentCreateFlow({ project }: { project: ProjectSummary }) {
         <CardContent className="px-5 py-5 sm:px-6">
           <textarea
             id="document-details"
-            aria-label="Document Details"
+            aria-label="Letter Details"
             value={documentDetails}
             maxLength={100000}
             disabled={submitting || !documentType}
             onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDocumentDetails(event.target.value)}
-            placeholder={documentType ? "Add document-specific information" : "Select a document type to load its template"}
+            placeholder={documentType ? "Add letter-specific information" : "Select a letter type to load its template"}
             className="min-h-[360px] w-full resize-y rounded-xl border border-input bg-transparent px-4 py-3 font-mono text-sm leading-6 outline-none transition-shadow placeholder:font-sans placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-muted/30 disabled:opacity-70 dark:bg-input/20"
           />
         </CardContent>
@@ -211,11 +211,11 @@ export function DocumentCreateFlow({ project }: { project: ProjectSummary }) {
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Button variant="outline" render={<Link href={documentsHref} />} disabled={submitting}>
           <ArrowLeft className="size-4" />
-          Back to Documents
+          Back to Letters
         </Button>
         <Button size="lg" disabled={submitting} onClick={() => void createDocument()}>
           {submitting ? <Loader2 className="size-4 animate-spin" /> : <FilePlus2 className="size-4" />}
-          Create Document
+          Create Letter
         </Button>
       </div>
 

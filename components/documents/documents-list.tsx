@@ -221,8 +221,8 @@ export function DocumentsList({
               <Files className="size-5" />
             </span>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-950 dark:text-white">Documents</h1>
-              <p className="mt-0.5 text-sm text-muted-foreground">Create and manage construction documents, details, files and site images.</p>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-950 dark:text-white">Letters</h1>
+              <p className="mt-0.5 text-sm text-muted-foreground">Create and manage construction letters, reports, details, files and site images.</p>
             </div>
           </div>
         </div>
@@ -231,13 +231,13 @@ export function DocumentsList({
         ) : (
           <button type="button" disabled title="Select a project first" className="inline-flex h-10 cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-slate-300 px-4 text-sm font-semibold text-white dark:bg-slate-700">
             <Plus className="size-4" />
-            Create Document
+            Create Letter
           </button>
         )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard icon={Files} label="Total Documents" value={documents.length} tone="blue" />
+        <MetricCard icon={Files} label="Total Letters" value={documents.length} tone="blue" />
         <MetricCard icon={FileClock} label="Drafts" value={draftCount} tone="amber" />
         <MetricCard icon={FileCheck2} label="Published" value={publishedCount} tone="green" />
         <MetricCard icon={FilePlus2} label="New This Week" value={newThisWeek} tone="violet" />
@@ -271,21 +271,21 @@ export function DocumentsList({
 
       {!selectedProjectId ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          Select a specific project from the Projects menu to create a document. The list can still show documents across your accessible projects.
+          Select a specific project from the Projects menu to create a letter. The list can still show letters across your accessible projects.
         </div>
       ) : null}
 
       {uploadedCount > 0 ? (
         <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
           <CheckCircle2 className="size-5 shrink-0" />
-          {uploadedCount} document{uploadedCount === 1 ? "" : "s"} uploaded successfully.
+          {uploadedCount} letter{uploadedCount === 1 ? "" : "s"} uploaded successfully.
         </div>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-[220px] flex-1 sm:max-w-sm">
           <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-          <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search documents" className="h-10 rounded-xl bg-white ps-9 dark:bg-slate-900" />
+          <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search letters" className="h-10 rounded-xl bg-white ps-9 dark:bg-slate-900" />
         </div>
         <DocumentTypeSelect
           value={typeFilter}
@@ -294,8 +294,8 @@ export function DocumentsList({
             if (value) setActiveTab(getDocumentCategory(value))
           }}
           allowClear
-          clearLabel="All document types"
-          placeholder="Document Type"
+          clearLabel="All letter types"
+          placeholder="Letter Type"
           className="w-full sm:w-[310px]"
         />
         <FilterMenu
@@ -325,7 +325,7 @@ export function DocumentsList({
               <tr className="border-b border-slate-200/80 bg-slate-50/80 text-xs font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-400">
                 <th className="px-5 py-3.5 text-start">Reference</th>
                 <th className="px-4 py-3.5 text-start">Title</th>
-                <th className="px-4 py-3.5 text-start">Document Type</th>
+                <th className="px-4 py-3.5 text-start">Letter Type</th>
                 <th className="px-4 py-3.5 text-start">Project</th>
                 <th className="px-4 py-3.5 text-start">Created By</th>
                 <th className="px-4 py-3.5 text-start">Status</th>
@@ -373,7 +373,7 @@ export function DocumentsList({
                       <DropdownMenu>
                         <DropdownMenuTrigger render={<button type="button" aria-label={`Actions for ${document.title}`} className="inline-flex size-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"><MoreVertical className="size-4" /></button>} />
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem render={<Link href={`/documents/${document.id}`}><Eye className="size-4" />View document</Link>} />
+                          <DropdownMenuItem render={<Link href={`/documents/${document.id}`}><Eye className="size-4" />View letter</Link>} />
                           {document.fileStoragePath ? (
                             <DropdownMenuItem
                               render={
@@ -383,7 +383,7 @@ export function DocumentsList({
                               }
                             />
                           ) : (
-                            <DropdownMenuItem render={<Link href={`/documents/${document.id}/edit`}><Pencil className="size-4" />Edit document</Link>} />
+                            <DropdownMenuItem render={<Link href={`/documents/${document.id}/edit`}><Pencil className="size-4" />Edit letter</Link>} />
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -399,14 +399,14 @@ export function DocumentsList({
           <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
             <span className="flex size-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 dark:bg-slate-800"><Archive className="size-6" /></span>
             <div>
-              <h3 className="font-semibold">No documents found</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Create a document for the selected project or adjust the current filters.</p>
+              <h3 className="font-semibold">No letters found</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Create a letter for the selected project or adjust the current filters.</p>
             </div>
           </div>
         ) : null}
 
         <div className="border-t border-slate-200/80 px-5 py-3.5 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-          Showing {filteredDocuments.length} of {documents.length} documents
+          Showing {filteredDocuments.length} of {documents.length} letters
         </div>
       </div>
     </div>

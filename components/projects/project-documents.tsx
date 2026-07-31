@@ -85,12 +85,12 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
       <CardHeader className="gap-3 border-b px-5 py-4 sm:px-6 md:grid-cols-[1fr_auto] md:items-center">
         <CardTitle className="flex items-center gap-2 text-base font-semibold sm:text-lg">
           <FileText className="size-5 text-primary" />
-          3. Core Project Documents
+          3. Project Letters
         </CardTitle>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
           <CreateDocumentDialog
             projectId={projectId}
-            triggerLabel="Create Document"
+            triggerLabel="Create Letter"
             triggerClassName="h-9 w-full sm:w-auto"
           />
           <Link
@@ -105,7 +105,7 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
             className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-9 w-full sm:w-auto")}
           >
             <FolderOpen className="size-4" />
-            View All Documents
+            View All Letters
           </Link>
         </div>
       </CardHeader>
@@ -186,7 +186,7 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
                           render={
                             <Link href={`/documents/${document.id}`}>
                               <Eye className="size-4" />
-                              View document
+                              View letter
                             </Link>
                           }
                         />
@@ -205,7 +205,7 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
                             render={
                               <Link href={`/documents/${document.id}/edit`}>
                                 <Pencil className="size-4" />
-                                Edit details
+                                Edit letter
                               </Link>
                             }
                           />

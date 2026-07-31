@@ -144,12 +144,12 @@ export function SimpleDocumentUploadForm({ project }: { project: ProjectSummary 
         })
       }
 
-      setCurrentFile("Saving document records")
+      setCurrentFile("Saving letter records")
       const result = await createUploadedDocumentsAction({ projectId: project.id, files: records })
       if (!result.ok) throw new Error(result.error)
 
       setProgress(100)
-      setSuccess(`${result.count} document${result.count === 1 ? "" : "s"} uploaded successfully.`)
+      setSuccess(`${result.count} letter${result.count === 1 ? "" : "s"} uploaded successfully.`)
       setSelections(createEmptySelections())
       router.push(`/documents?uploaded=${result.count}`)
       router.refresh()
@@ -158,7 +158,7 @@ export function SimpleDocumentUploadForm({ project }: { project: ProjectSummary 
         const supabase = createClient()
         await supabase.storage.from(DOCUMENT_ASSET_BUCKET).remove(uploadedPaths)
       }
-      setError(uploadError instanceof Error ? uploadError.message : "Unable to upload the selected documents.")
+      setError(uploadError instanceof Error ? uploadError.message : "Unable to upload the selected letters.")
       setIsUploading(false)
       setCurrentFile(null)
       setProgress(0)
@@ -302,7 +302,7 @@ export function SimpleDocumentUploadForm({ project }: { project: ProjectSummary 
       <div className="sticky bottom-4 z-20 flex justify-end rounded-2xl border bg-background/95 p-3 shadow-lg backdrop-blur">
         <Button size="lg" disabled={selectedCount === 0 || isUploading} onClick={() => void uploadDocuments()}>
           {isUploading ? <Loader2 className="size-4 animate-spin" /> : <CloudUpload className="size-4" />}
-          Upload Documents
+          Upload Letters
         </Button>
       </div>
     </div>

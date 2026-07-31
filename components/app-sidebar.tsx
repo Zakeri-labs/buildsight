@@ -4,7 +4,8 @@ import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   Home,
-  Files,
+  Mail,
+  FolderOpen,
   CalendarDays,
   Users,
   Settings,
@@ -100,11 +101,12 @@ export function AppSidebar({
   }, [pathname])
 
   const routeProject = routeProjectId ? projects.find((item) => item.id === routeProjectId) ?? null : null
-  const requestedDocumentProjectId = pathname.startsWith("/documents")
+  const isProjectScopedModule = pathname.startsWith("/documents") || pathname.startsWith("/initial-documents")
+  const requestedModuleProjectId = isProjectScopedModule
     ? searchParams.get("project")?.trim() || null
     : null
-  const requestedDocumentProject = requestedDocumentProjectId
-    ? projects.find((item) => item.id === requestedDocumentProjectId) ?? null
+  const requestedModuleProject = requestedModuleProjectId
+    ? projects.find((item) => item.id === requestedModuleProjectId) ?? null
     : null
   const storedProject = selectedProjectId !== "all"
     ? projects.find((item) => item.id === selectedProjectId) ?? null
@@ -112,13 +114,18 @@ export function AppSidebar({
   const preservesSelectedProject =
     pathname === "/" ||
     pathname.startsWith("/documents") ||
+    pathname.startsWith("/initial-documents") ||
     pathname.startsWith("/ai-summary") ||
     pathname.startsWith("/calendar") ||
     pathname.startsWith("/inspections") ||
     pathname.startsWith("/ncrs")
   const routeSelection = routeProjectId
     ? routeProject?.id ?? "all"
-    : requestedDocumentProject?.id ?? (preservesSelectedProject ? storedProject?.id ?? "all" : "all")
+    : requestedModuleProjectId
+      ? requestedModuleProject?.id ?? "all"
+      : preservesSelectedProject
+        ? storedProject?.id ?? "all"
+        : "all"
   const optimisticSelection =
     pendingSelection?.fromPathname === pathname ? pendingSelection.id : null
   const project = optimisticSelection ?? routeSelection
@@ -178,7 +185,14 @@ export function AppSidebar({
       href: contextProjectId
         ? `/documents?project=${encodeURIComponent(contextProjectId)}`
         : "/documents",
-      icon: Files,
+      icon: Mail,
+    },
+    {
+      label: t.nav.initialDocuments,
+      href: contextProjectId
+        ? `/initial-documents?project=${encodeURIComponent(contextProjectId)}`
+        : "/initial-documents",
+      icon: FolderOpen,
     },
     ...(contextProjectId ? [{ label: t.nav.aiSummary, href: "/ai-summary", icon: Sparkles }] : []),
     { label: t.nav.calendar, href: "/calendar", icon: CalendarDays },

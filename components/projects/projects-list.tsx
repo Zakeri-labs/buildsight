@@ -792,7 +792,8 @@ export function ProjectsList({
                   <ImpactRow label={locale === "ar" ? "المراحل" : "Stages"} value={deletionImpact.stages} />
                   <ImpactRow label={locale === "ar" ? "البنود" : "Terms"} value={deletionImpact.terms} />
                   <ImpactRow label={locale === "ar" ? "الفحوصات" : "Inspections"} value={deletionImpact.inspections} />
-                  <ImpactRow label={locale === "ar" ? "المستندات" : "Documents"} value={deletionImpact.documents} />
+                  <ImpactRow label={locale === "ar" ? "المراسلات" : "Letters"} value={deletionImpact.documents} />
+                  <ImpactRow label={locale === "ar" ? "المستندات" : "Documents"} value={deletionImpact.initialDocuments} />
                   <ImpactRow label={locale === "ar" ? "الترجمات" : "Translations"} value={deletionImpact.translations} />
                   <ImpactRow label={locale === "ar" ? "المشاركون" : "Participants"} value={deletionImpact.participants} />
                 </div>

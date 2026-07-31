@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card"
 export function DocumentProjectHeader({
   projectName,
   contextLabel = "Locked",
-  eyebrow = "Add project documents",
+  eyebrow = "Add project letters",
 }: {
   projectName: string
   contextLabel?: string

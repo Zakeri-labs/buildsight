@@ -114,7 +114,7 @@ export default async function DocumentDetailsPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link href={`/documents?project=${encodeURIComponent(document.project_id)}`} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
           <ArrowLeft className="size-4" />
-          Back to Documents
+          Back to Letters
         </Link>
         <div className="flex items-center gap-2">
           {isFileDocument && downloadUrl ? (
@@ -125,7 +125,7 @@ export default async function DocumentDetailsPage({
           ) : (
             <Link href={`/documents/${document.id}/edit`} className={cn(buttonVariants({ variant: "outline" }), "bg-background")}>
               <Pencil className="size-4" />
-              Edit Rich Content
+              Edit Letter
             </Link>
           )}
         </div>
@@ -135,10 +135,10 @@ export default async function DocumentDetailsPage({
         <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
           <CheckCircle2 className="size-5 shrink-0" />
           {query.created === "construction"
-            ? "Document created successfully. Complete the details and add attachments below."
+            ? "Letter created successfully. Complete the details and add attachments below."
             : wasUpdated
-              ? savedState === "published" ? "Document updated and published successfully." : "Draft updated successfully."
-              : savedState === "published" ? "Document published successfully." : "Draft saved successfully."}
+              ? savedState === "published" ? "Letter updated and published successfully." : "Draft updated successfully."
+              : savedState === "published" ? "Letter published successfully." : "Draft saved successfully."}
         </div>
       ) : null}
 
@@ -166,12 +166,12 @@ export default async function DocumentDetailsPage({
 
       <Card className="gap-0 py-0">
         <CardHeader className="border-b px-5 py-4 sm:px-6">
-          <CardTitle className="text-lg">Document Information</CardTitle>
+          <CardTitle className="text-lg">Letter Information</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-x-8 gap-y-5 px-5 py-5 sm:grid-cols-2 lg:grid-cols-3 sm:px-6">
-          <InformationItem label="Document Type" value={displayType} icon={<FileText className="size-4" />} />
-          <InformationItem label="Reference Number" value={document.reference} icon={<FolderLock className="size-4" />} />
-          <InformationItem label="Title" value={document.title} icon={<FileText className="size-4" />} />
+          <InformationItem label="Letter Type" value={displayType} icon={<FileText className="size-4" />} />
+          <InformationItem label="Letter Reference" value={document.reference} icon={<FolderLock className="size-4" />} />
+          <InformationItem label="Letter Title" value={document.title} icon={<FileText className="size-4" />} />
           <InformationItem label="Description" value={document.short_description?.trim() || "No short description provided."} icon={<FileText className="size-4" />} />
           <div className="flex items-start gap-3">
             <Avatar className="mt-0.5 size-9">
@@ -203,7 +203,7 @@ export default async function DocumentDetailsPage({
               <div>
                 <h2 className="text-xl font-semibold">{document.original_filename ?? document.title}</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {simpleCategory?.label ?? "Uploaded document"}
+                  {simpleCategory?.label ?? "Uploaded letter"}
                   {document.file_size_bytes ? ` · ${formatFileSize(Number(document.file_size_bytes))}` : ""}
                   {document.file_mime_type ? ` · ${document.file_mime_type}` : ""}
                 </p>
@@ -219,7 +219,7 @@ export default async function DocumentDetailsPage({
 
       {!isFileDocument && richTextHasContent(content) ? (
         <Card className="gap-0 overflow-hidden py-0">
-          <CardHeader className="border-b px-5 py-4 sm:px-6"><CardTitle className="text-lg">Rich Document Content</CardTitle></CardHeader>
+          <CardHeader className="border-b px-5 py-4 sm:px-6"><CardTitle className="text-lg">Letter Content</CardTitle></CardHeader>
           <CardContent className="bg-white px-6 py-10 text-slate-900 dark:bg-slate-950 dark:text-slate-100 sm:px-10 lg:px-16">
             <RichTextRenderer document={content} />
           </CardContent>

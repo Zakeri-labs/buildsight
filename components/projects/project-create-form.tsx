@@ -36,25 +36,24 @@ import {
 } from "@/components/ui/select"
 import { ProjectLocationField } from "@/components/projects/project-location-field"
 import {
-  ProjectDocumentUploadStep,
-  createEmptyProjectDocumentSelections,
-  type ProjectDocumentSelections,
-} from "@/components/projects/project-document-upload-step"
+  ProjectInitialDocumentUploadStep,
+  type InitialProjectDocumentSelection,
+} from "@/components/initial-documents/project-initial-document-upload-step"
 import {
   attachProjectGalleryImages,
   attachProjectOwnerIdCards,
   createProject,
   type OwnerIdCardUploadInput,
 } from "@/lib/actions/projects"
-import { createUploadedDocumentsAction, type SimpleUploadedFileInput } from "@/lib/actions/documents"
+import { saveInitialDocumentAction } from "@/lib/actions/initial-documents"
 import { useI18n } from "@/lib/i18n"
 import { EMPTY_PROJECT_LOCATION, type ProjectLocationValue } from "@/lib/locations/types"
+import { DOCUMENT_ASSET_BUCKET } from "@/lib/documents/simple-upload"
 import {
-  DOCUMENT_ASSET_BUCKET,
-  SIMPLE_UPLOAD_CATEGORIES,
-  sanitizeStorageFileName,
-  validateSimpleUploadFile,
-} from "@/lib/documents/simple-upload"
+  INITIAL_DOCUMENTS_BUCKET,
+  sanitizeInitialDocumentFileName,
+  validateInitialDocumentFile,
+} from "@/lib/initial-documents/config"
 import { uploadDocumentAsset, uploadStorageAsset } from "@/lib/documents/storage-upload"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -129,7 +128,7 @@ export function ProjectCreateForm({
   const [contractorAddress, setContractorAddress] = useState("")
   const [contractorPostalCode, setContractorPostalCode] = useState("")
   const [contractorPhone, setContractorPhone] = useState("")
-  const [documents, setDocuments] = useState<ProjectDocumentSelections>(createEmptyProjectDocumentSelections)
+  const [initialDocuments, setInitialDocuments] = useState<InitialProjectDocumentSelection[]>([])
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [pending, setPending] = useState(false)
@@ -139,14 +138,11 @@ export function ProjectCreateForm({
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null)
   const [createdOwnerIds, setCreatedOwnerIds] = useState<string[]>([])
   const [ownerIdCardsUploaded, setOwnerIdCardsUploaded] = useState(false)
-  const [documentsUploaded, setDocumentsUploaded] = useState(false)
+  const [initialDocumentsUploaded, setInitialDocumentsUploaded] = useState(false)
   const [projectImagesUploaded, setProjectImagesUploaded] = useState(false)
   const submissionLockRef = useRef(false)
 
-  const selectedDocumentCount = useMemo(
-    () => SIMPLE_UPLOAD_CATEGORIES.reduce((total, category) => total + documents[category.value].length, 0),
-    [documents],
-  )
+  const selectedDocumentCount = initialDocuments.length
   const selectedOwnerIdCardCount = useMemo(
     () => owners.reduce((total, owner) => total + (owner.idCardFile ? 1 : 0), 0),
     [owners],
@@ -213,7 +209,7 @@ export function ProjectCreateForm({
         address: "العنوان",
         postalCode: "الرمز البريدي",
         phone: "رقم الهاتف",
-        documentsIntro: "ستُحفظ الملفات المحددة كمستندات مشروع عادية وستظهر في صفحة المستندات.",
+        documentsIntro: "ستُحفظ الملفات المحددة كمستندات أولية للمشروع وستظهر في صفحة المستندات.",
         optional: "اختياري",
         cancel: "إلغاء",
         backStep: "السابق",
@@ -287,7 +283,7 @@ export function ProjectCreateForm({
         address: "Address",
         postalCode: "Postal Code",
         phone: "Phone Number",
-        documentsIntro: "Selected files will be saved as normal project document records and appear in Project → Documents.",
+        documentsIntro: "Selected files will be saved as initial project documents and appear in Documents.",
         optional: "Optional",
         cancel: "Cancel",
         backStep: "Back",
@@ -363,11 +359,9 @@ export function ProjectCreateForm({
       return null
     }
     if (targetStep === 4) {
-      for (const category of SIMPLE_UPLOAD_CATEGORIES) {
-        for (const file of documents[category.value]) {
-          const validationError = validateSimpleUploadFile(file)
-          if (validationError) return validationError
-        }
+      for (const selection of initialDocuments) {
+        const validationError = validateInitialDocumentFile(selection.file)
+        if (validationError) return validationError
       }
     }
     return null
@@ -515,59 +509,55 @@ export function ProjectCreateForm({
     }
   }
 
-  async function uploadProjectDocuments(projectId: string) {
-    const filesToUpload = SIMPLE_UPLOAD_CATEGORIES.flatMap((category) =>
-      documents[category.value].map((file) => ({ category, file })),
-    )
-    if (filesToUpload.length === 0) return 0
+  async function uploadInitialProjectDocuments(projectId: string) {
+    if (initialDocuments.length === 0) return 0
 
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) throw new Error("Your session has expired. Sign in again.")
 
-    const totalBytes = filesToUpload.reduce((total, item) => total + item.file.size, 0)
+    const totalBytes = initialDocuments.reduce((total, item) => total + item.file.size, 0)
     let completedBytes = 0
-    const uploadedPaths: string[] = []
-    const records: SimpleUploadedFileInput[] = []
 
-    try {
-      for (const [index, { category, file }] of filesToUpload.entries()) {
-        const validationError = validateSimpleUploadFile(file)
-        if (validationError) throw new Error(validationError)
-        const progressLabel = isArabic
-          ? `جارٍ رفع المستند ${index + 1}/${filesToUpload.length}: ${file.name}`
-          : `Uploading document ${index + 1}/${filesToUpload.length}: ${file.name}`
-        setSubmissionMessage(progressLabel)
-        setUploadingFile(progressLabel)
-        const storagePath = `${projectId}/${session.user.id}/files/${crypto.randomUUID()}-${sanitizeStorageFileName(file.name)}`
-        await uploadDocumentAsset(file, storagePath, session.access_token, (fileProgress) => {
+    for (const [index, selection] of initialDocuments.entries()) {
+      const file = selection.file
+      const validationError = validateInitialDocumentFile(file)
+      if (validationError) throw new Error(validationError)
+
+      const progressLabel = isArabic
+        ? `جارٍ رفع المستند الأولي ${index + 1}/${initialDocuments.length}: ${file.name}`
+        : `Uploading initial document ${index + 1}/${initialDocuments.length}: ${file.name}`
+      setSubmissionMessage(progressLabel)
+      setUploadingFile(progressLabel)
+
+      const storagePath = `${projectId}/${session.user.id}/${selection.id}/${sanitizeInitialDocumentFileName(file.name)}`
+      await uploadStorageAsset(
+        file,
+        storagePath,
+        session.access_token,
+        (fileProgress) => {
           const uploadedBytes = completedBytes + (file.size * fileProgress) / 100
-          setUploadProgress(Math.min(99, Math.round((uploadedBytes / totalBytes) * 100)))
-        })
-        uploadedPaths.push(storagePath)
-        completedBytes += file.size
-        records.push({
-          category: category.value,
-          storagePath,
-          originalFilename: file.name,
-          mimeType: file.type || "application/octet-stream",
-          sizeBytes: file.size,
-        })
-      }
+          setUploadProgress(Math.min(99, Math.round((uploadedBytes / Math.max(totalBytes, 1)) * 100)))
+        },
+        INITIAL_DOCUMENTS_BUCKET,
+        true,
+      )
 
-      const savingMessage = isArabic ? "جارٍ حفظ سجلات المستندات…" : "Saving document records…"
-      setSubmissionMessage(savingMessage)
-      setUploadingFile(savingMessage)
-      const result = await createUploadedDocumentsAction({ projectId, files: records })
-      if (!result.ok) throw new Error(result.error)
-      setUploadProgress(100)
-      return result.count
-    } catch (uploadError) {
-      if (uploadedPaths.length) {
-        void supabase.storage.from(DOCUMENT_ASSET_BUCKET).remove(uploadedPaths).then(() => undefined, () => undefined)
-      }
-      throw uploadError
+      const result = await saveInitialDocumentAction({
+        id: selection.id,
+        projectId,
+        category: selection.category,
+        storagePath,
+        originalFilename: file.name,
+        mimeType: file.type || "application/octet-stream",
+        sizeBytes: file.size,
+      })
+      if (!result.ok) throw new Error(`${file.name}: ${result.error}`)
+      completedBytes += file.size
     }
+
+    setUploadProgress(100)
+    return initialDocuments.length
   }
 
   async function submitProject() {
@@ -646,10 +636,10 @@ export function ProjectCreateForm({
         setOwnerIdCardsUploaded(true)
       }
 
-      if (selectedDocumentCount > 0 && !documentsUploaded) {
+      if (selectedDocumentCount > 0 && !initialDocumentsUploaded) {
         setUploadProgress(0)
-        await uploadProjectDocuments(projectId)
-        setDocumentsUploaded(true)
+        await uploadInitialProjectDocuments(projectId)
+        setInitialDocumentsUploaded(true)
       }
 
       completed = true
@@ -1051,9 +1041,9 @@ export function ProjectCreateForm({
                   <span>{copy.documentsIntro}</span>
                   <span className="shrink-0 rounded-full bg-background/80 px-3 py-1 text-xs font-semibold">{selectedDocumentCount} selected</span>
                 </div>
-                <ProjectDocumentUploadStep
-                  selections={documents}
-                  onChange={setDocuments}
+                <ProjectInitialDocumentUploadStep
+                  selections={initialDocuments}
+                  onChange={setInitialDocuments}
                   disabled={pending}
                   onValidationError={setError}
                 />
