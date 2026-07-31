@@ -94,7 +94,7 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
             triggerClassName="h-9 w-full sm:w-auto"
           />
           <Link
-            href="/documents/new"
+            href={`/documents/new?project=${projectQuery}`}
             className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-9 w-full sm:w-auto")}
           >
             <Upload className="size-4" />

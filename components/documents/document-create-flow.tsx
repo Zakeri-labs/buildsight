@@ -34,6 +34,7 @@ import {
 type ProjectSummary = { id: string; name: string }
 export function DocumentCreateFlow({ project }: { project: ProjectSummary }) {
   const router = useRouter()
+  const documentsHref = `/documents?project=${encodeURIComponent(project.id)}`
   const [title, setTitle] = useState("")
   const [documentType, setDocumentType] = useState<ConstructionDocumentTypeValue | "">("")
   const [description, setDescription] = useState("")
@@ -208,7 +209,7 @@ export function DocumentCreateFlow({ project }: { project: ProjectSummary }) {
       ) : null}
 
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Button variant="outline" render={<Link href="/documents" />} disabled={submitting}>
+        <Button variant="outline" render={<Link href={documentsHref} />} disabled={submitting}>
           <ArrowLeft className="size-4" />
           Back to Documents
         </Button>

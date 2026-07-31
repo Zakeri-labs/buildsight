@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   Home,
   Files,
@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { useEffect, useLayoutEffect, useMemo, useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
 import { selectProject } from "@/lib/actions/project-scope"
 import type { ProjectOption } from "@/components/app-shell"
 import { NAVIGATION_START_EVENT } from "@/components/loading/navigation-progress"
@@ -81,6 +80,7 @@ export function AppSidebar({
   canManageStages: boolean
 }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const { t, locale } = useI18n()
   const [pendingSelection, setPendingSelection] = useState<{ id: string; fromPathname: string } | null>(null)
@@ -100,7 +100,25 @@ export function AppSidebar({
   }, [pathname])
 
   const routeProject = routeProjectId ? projects.find((item) => item.id === routeProjectId) ?? null : null
-  const routeSelection = routeProject?.id ?? "all"
+  const requestedDocumentProjectId = pathname.startsWith("/documents")
+    ? searchParams.get("project")?.trim() || null
+    : null
+  const requestedDocumentProject = requestedDocumentProjectId
+    ? projects.find((item) => item.id === requestedDocumentProjectId) ?? null
+    : null
+  const storedProject = selectedProjectId !== "all"
+    ? projects.find((item) => item.id === selectedProjectId) ?? null
+    : null
+  const preservesSelectedProject =
+    pathname === "/" ||
+    pathname.startsWith("/documents") ||
+    pathname.startsWith("/ai-summary") ||
+    pathname.startsWith("/calendar") ||
+    pathname.startsWith("/inspections") ||
+    pathname.startsWith("/ncrs")
+  const routeSelection = routeProjectId
+    ? routeProject?.id ?? "all"
+    : requestedDocumentProject?.id ?? (preservesSelectedProject ? storedProject?.id ?? "all" : "all")
   const optimisticSelection =
     pendingSelection?.fromPathname === pathname ? pendingSelection.id : null
   const project = optimisticSelection ?? routeSelection
@@ -155,7 +173,13 @@ export function AppSidebar({
     { label: t.nav.dashboard, href: "/", icon: Home },
     projectNavigationItem,
     ...(stageNavigationItem ? [stageNavigationItem] : []),
-    { label: t.nav.documents, href: "/documents", icon: Files },
+    {
+      label: t.nav.documents,
+      href: contextProjectId
+        ? `/documents?project=${encodeURIComponent(contextProjectId)}`
+        : "/documents",
+      icon: Files,
+    },
     ...(contextProjectId ? [{ label: t.nav.aiSummary, href: "/ai-summary", icon: Sparkles }] : []),
     { label: t.nav.calendar, href: "/calendar", icon: CalendarDays },
   ]
@@ -303,11 +327,11 @@ export function AppSidebar({
             active={
               item.href === "/"
                 ? pathname === "/"
-                : item.href === "/projects"
+                : item.href.split("?", 1)[0] === "/projects"
                   ? pathname === "/projects" || pathname === "/projects/new"
-                  : contextProjectId && item.href === `/projects/${contextProjectId}`
-                    ? pathname === item.href || pathname.startsWith(`${item.href}/gallery`)
-                    : pathname.startsWith(item.href)
+                  : contextProjectId && item.href.split("?", 1)[0] === `/projects/${contextProjectId}`
+                    ? pathname === `/projects/${contextProjectId}` || pathname.startsWith(`/projects/${contextProjectId}/gallery`)
+                    : pathname.startsWith(item.href.split("?", 1)[0])
             }
           />
         ))}

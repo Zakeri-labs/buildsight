@@ -7,19 +7,40 @@ import { requireOnboarded } from "@/lib/auth/session"
 import { getSelectedProjectId } from "@/lib/project-scope"
 import { createClient } from "@/lib/supabase/server"
 
-export default async function NewDocumentPage() {
-  await requireOnboarded()
-  const selectedProjectId = await getSelectedProjectId()
+export default async function NewDocumentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ project?: string }>
+}) {
+  const [, queryParams, selectedProjectId, supabase] = await Promise.all([
+    requireOnboarded(),
+    searchParams,
+    getSelectedProjectId(),
+    createClient(),
+  ])
+  const requestedProjectId = queryParams.project?.trim() || null
+  const effectiveProjectId = selectedProjectId
 
-  if (!selectedProjectId) {
+  if (requestedProjectId) {
+    const { data: requestedProject } = await supabase
+      .from("projects")
+      .select("id, name")
+      .eq("id", requestedProjectId)
+      .maybeSingle()
+
+    if (requestedProject) {
+      return <DocumentCreateFlow project={{ id: requestedProject.id, name: requestedProject.name }} />
+    }
+  }
+
+  if (!effectiveProjectId) {
     return <InvalidProjectState message="Select a specific project from the Projects menu before creating a document." />
   }
 
-  const supabase = await createClient()
   const { data: project } = await supabase
     .from("projects")
     .select("id, name")
-    .eq("id", selectedProjectId)
+    .eq("id", effectiveProjectId)
     .maybeSingle()
 
   if (!project) {
