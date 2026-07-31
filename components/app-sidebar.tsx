@@ -28,7 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useLayoutEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { selectProject } from "@/lib/actions/project-scope"
 import type { ProjectOption } from "@/components/app-shell"
@@ -83,16 +83,47 @@ export function AppSidebar({
   const pathname = usePathname()
   const router = useRouter()
   const { t, locale } = useI18n()
-  const [project, setProject] = useState(selectedProjectId)
+  const [pendingSelection, setPendingSelection] = useState<{ id: string; fromPathname: string } | null>(null)
   const [projectSearch, setProjectSearch] = useState("")
   const [projectMenuOpen, setProjectMenuOpen] = useState(false)
   const [, startTransition] = useTransition()
 
-  const routeProjectMatch = pathname.match(/^\/projects\/([^/]+)(?:\/|$)/)
-  const routeProjectId = routeProjectMatch?.[1] && routeProjectMatch[1] !== "new"
-    ? decodeURIComponent(routeProjectMatch[1])
-    : null
-  const contextProjectId = routeProjectId ?? (project !== "all" ? project : null)
+  const routeProjectId = useMemo(() => {
+    const match = pathname.match(/^\/projects\/([^/]+)(?:\/|$)/)
+    if (!match?.[1] || match[1] === "new") return null
+
+    try {
+      return decodeURIComponent(match[1])
+    } catch {
+      return null
+    }
+  }, [pathname])
+
+  const routeProject = routeProjectId ? projects.find((item) => item.id === routeProjectId) ?? null : null
+  const routeSelection = routeProject?.id ?? "all"
+  const optimisticSelection =
+    pendingSelection?.fromPathname === pathname ? pendingSelection.id : null
+  const project = optimisticSelection ?? routeSelection
+  const contextProjectId = project !== "all" ? project : null
+
+  useLayoutEffect(() => {
+    if (pendingSelection && pendingSelection.fromPathname !== pathname) {
+      setPendingSelection(null)
+    }
+  }, [pathname, pendingSelection])
+
+  useEffect(() => {
+    if (selectedProjectId === routeSelection) return
+
+    startTransition(async () => {
+      try {
+        await selectProject(routeSelection)
+        router.refresh()
+      } catch {
+        // Keep the route-derived UI stable even if persisting the cookie fails.
+      }
+    })
+  }, [routeSelection, router, selectedProjectId, startTransition])
 
   const stageNavigationItem = contextProjectId
     ? {
@@ -145,14 +176,21 @@ export function AppSidebar({
 
   function handleSelect(value: string) {
     if (!value || value === project) return
-    setProject(value)
+
+    const targetPath = value === "all" ? "/projects" : `/projects/${encodeURIComponent(value)}`
+    setPendingSelection({ id: value, fromPathname: pathname })
     setProjectMenuOpen(false)
     setProjectSearch("")
     window.dispatchEvent(new Event(NAVIGATION_START_EVENT))
+
     startTransition(async () => {
-      await selectProject(value)
-      router.push(value === "all" ? "/projects" : "/")
-      router.refresh()
+      try {
+        await selectProject(value)
+        router.push(targetPath)
+        router.refresh()
+      } catch {
+        setPendingSelection(null)
+      }
     })
   }
 

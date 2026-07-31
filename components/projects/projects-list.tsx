@@ -20,10 +20,12 @@ import {
   Trash2,
   Loader2,
   AlertTriangle,
+  MapPin,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { ProjectImageDisplay } from "@/components/projects/project-image-display"
 import { ProjectLocationField } from "@/components/projects/project-location-field"
+import { ProjectLocationPreviewDialog } from "@/components/projects/project-location-preview-dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import {
@@ -92,19 +94,6 @@ export interface ProjectRow {
   latitude?: number | null
   longitude?: number | null
   canEdit?: boolean
-}
-
-function compactAddress(address: string) {
-  const normalized = address.replace(/\s+/g, " ").trim()
-  if (!normalized || normalized === "—") return "—"
-
-  const parts = normalized
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean)
-
-  if (parts.length <= 2) return normalized
-  return `${parts[0]}, ${parts[1]}, …`
 }
 
 function TruncatedText({
@@ -255,6 +244,7 @@ export function ProjectsList({
   const [selectedOwner, setSelectedOwner] = useState("all")
   const [sortBy, setSortBy] = useState("default")
   const [editTarget, setEditTarget] = useState<ProjectRow | null>(null)
+  const [locationTarget, setLocationTarget] = useState<ProjectRow | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ProjectRow | null>(null)
   const [deletionImpact, setDeletionImpact] = useState<ProjectDeletionImpact | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -503,7 +493,7 @@ export function ProjectsList({
                 <th className="truncate px-3 py-3.5 text-start font-semibold">Project</th>
                 <th className="truncate px-2.5 py-3.5 text-start font-semibold">Owner / Client</th>
                 <th className="truncate px-2.5 py-3.5 text-start font-semibold" title="Organization Role">Organization Role</th>
-                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Address</th>
+                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Location</th>
                 <th className="truncate px-2.5 py-3.5 text-start font-semibold">Project Type</th>
                 <th className="truncate px-2.5 py-3.5 text-start font-semibold">Status</th>
                 <th className="truncate px-2.5 py-3.5 text-start font-semibold">Start Date</th>
@@ -552,20 +542,46 @@ export function ProjectsList({
                     </div>
                   </td>
 
-                  {/* Address */}
-                  <td className="min-w-0 overflow-hidden px-2.5 py-4 text-xs text-slate-600 dark:text-slate-400">
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <span className="block min-w-0 truncate" />
-                        }
-                      >
-                        {compactAddress(row.address)}
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-sm whitespace-normal text-pretty">
-                        {row.address}
-                      </TooltipContent>
-                    </Tooltip>
+                  {/* Location */}
+                  <td className="min-w-0 overflow-hidden px-2.5 py-4">
+                    {(() => {
+                      const hasAddress = row.address.trim().length > 0 && row.address.trim() !== "—"
+                      const hasCoordinates =
+                        Number.isFinite(row.latitude) &&
+                        Number.isFinite(row.longitude) &&
+                        Number(row.latitude) >= -90 &&
+                        Number(row.latitude) <= 90 &&
+                        Number(row.longitude) >= -180 &&
+                        Number(row.longitude) <= 180
+                      const hasLocation = hasAddress || hasCoordinates
+
+                      return (
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="outline"
+                          disabled={!hasLocation}
+                          onClick={() => hasLocation && setLocationTarget(row)}
+                          aria-label={
+                            hasLocation
+                              ? `${locale === "ar" ? "عرض موقع" : "View location for"} ${row.name}`
+                              : `${locale === "ar" ? "لا يوجد موقع" : "No location for"} ${row.name}`
+                          }
+                          className="h-7 max-w-full gap-1.5 px-2 text-[11px] font-semibold"
+                        >
+                          <MapPin className="size-3.5" aria-hidden="true" />
+                          <span className="truncate">
+                            {hasLocation
+                              ? locale === "ar"
+                                ? "الخريطة"
+                                : "Map"
+                              : locale === "ar"
+                                ? "لا يوجد موقع"
+                                : "No location"}
+                          </span>
+                        </Button>
+                      )
+                    })()}
                   </td>
 
                   {/* Project Type */}
@@ -702,6 +718,16 @@ export function ProjectsList({
           </div>
         </div>
       </div>
+
+      {locationTarget ? (
+        <ProjectLocationPreviewDialog
+          key={locationTarget.id}
+          project={locationTarget}
+          onOpenChange={(open) => {
+            if (!open) setLocationTarget(null)
+          }}
+        />
+      ) : null}
 
       {editTarget ? (
         <ProjectEditDialog

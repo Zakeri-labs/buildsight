@@ -113,6 +113,7 @@ export function LocationMapCanvas({
   onMarkerMove,
   onReady,
   onTileError,
+  readOnly = false,
 }: {
   initialCenter: MapPoint
   initialZoom: number
@@ -122,14 +123,16 @@ export function LocationMapCanvas({
   tileUrl: string
   tileAttribution: string
   markerTitle: string
-  onSelect: (point: MapPoint) => void
-  onMarkerMove: (point: MapPoint) => void
+  onSelect?: (point: MapPoint) => void
+  onMarkerMove?: (point: MapPoint) => void
   onReady: () => void
   onTileError: () => void
+  readOnly?: boolean
 }) {
   const markerHandlers = useMemo(
     () => ({
       dragend(event: LeafletEvent) {
+        if (!onMarkerMove) return
         const draggedMarker = event.target as LeafletMarker
         const position = draggedMarker.getLatLng()
         onMarkerMove({ latitude: position.lat, longitude: position.lng })
@@ -161,12 +164,12 @@ export function LocationMapCanvas({
         maxZoom={19}
         eventHandlers={tileHandlers}
       />
-      <MapClickHandler onSelect={onSelect} />
+      {!readOnly && onSelect ? <MapClickHandler onSelect={onSelect} /> : null}
       <MapLifecycle centerRequest={centerRequest} resizeRequest={resizeRequest} onReady={onReady} />
       {marker && (
         <Marker
           position={[marker.latitude, marker.longitude]}
-          draggable
+          draggable={!readOnly && Boolean(onMarkerMove)}
           icon={MARKER_ICON}
           title={markerTitle}
           eventHandlers={markerHandlers}
