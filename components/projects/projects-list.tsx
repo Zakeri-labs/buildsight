@@ -74,7 +74,7 @@ export type ProjectStatus = "In Progress" | "Planning" | "On Hold" | "Completed"
 export type OrgRole = "Consultant" | "Contractor" | "Client" | "Government" | "Third Party"
 export type ProjectType = "Residential" | "Commercial" | "Hospitality" | "Infrastructure" | "Industrial"
 
-const PROJECT_TABLE_COLUMN_WIDTHS = ["20%", "12%", "11%", "15%", "10%", "10%", "9%", "8%", "5%"] as const
+const PROJECT_TABLE_COLUMN_WIDTHS = ["20%", "13%", "11%", "7%", "11%", "10%", "10%", "12%", "6%"] as const
 
 export interface ProjectRow {
   id: string
@@ -493,7 +493,7 @@ export function ProjectsList({
                 <th className="truncate px-3 py-3.5 text-start font-semibold">Project</th>
                 <th className="truncate px-2.5 py-3.5 text-start font-semibold">Owner / Client</th>
                 <th className="truncate px-2.5 py-3.5 text-start font-semibold" title="Organization Role">Organization Role</th>
-                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Location</th>
+                <th className="truncate px-1 py-3.5 text-center font-semibold">Location</th>
                 <th className="truncate px-2.5 py-3.5 text-start font-semibold">Project Type</th>
                 <th className="truncate px-2.5 py-3.5 text-start font-semibold">Status</th>
                 <th className="truncate px-2.5 py-3.5 text-start font-semibold">Start Date</th>
@@ -522,9 +522,14 @@ export function ProjectsList({
                         iconClassName="size-4"
                       />
                       <div className="flex min-w-0 flex-1 flex-col">
-                        <TruncatedText className="cursor-pointer text-sm font-bold text-slate-900 hover:text-blue-600 dark:text-white">
-                          {row.name}
-                        </TruncatedText>
+                        <Link
+                          href={`/projects/${encodeURIComponent(row.id)}`}
+                          className="block min-w-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                        >
+                          <TruncatedText className="cursor-pointer text-sm font-bold text-slate-900 transition-colors hover:text-blue-600 dark:text-white dark:hover:text-blue-400">
+                            {row.name}
+                          </TruncatedText>
+                        </Link>
                         <span className="block truncate font-mono text-xs text-slate-400" title={row.code}>{row.code}</span>
                       </div>
                     </div>
@@ -543,7 +548,7 @@ export function ProjectsList({
                   </td>
 
                   {/* Location */}
-                  <td className="min-w-0 overflow-hidden px-2.5 py-4">
+                  <td className="min-w-0 overflow-hidden px-1 py-4 text-center">
                     {(() => {
                       const hasAddress = row.address.trim().length > 0 && row.address.trim() !== "—"
                       const hasCoordinates =
@@ -554,32 +559,33 @@ export function ProjectsList({
                         Number(row.longitude) >= -180 &&
                         Number(row.longitude) <= 180
                       const hasLocation = hasAddress || hasCoordinates
+                      const locationLabel = locale === "ar" ? "عرض موقع المشروع" : "View project location"
 
                       return (
-                        <Button
-                          type="button"
-                          size="xs"
-                          variant="outline"
-                          disabled={!hasLocation}
-                          onClick={() => hasLocation && setLocationTarget(row)}
-                          aria-label={
-                            hasLocation
-                              ? `${locale === "ar" ? "عرض موقع" : "View location for"} ${row.name}`
-                              : `${locale === "ar" ? "لا يوجد موقع" : "No location for"} ${row.name}`
-                          }
-                          className="h-7 max-w-full gap-1.5 px-2 text-[11px] font-semibold"
-                        >
-                          <MapPin className="size-3.5" aria-hidden="true" />
-                          <span className="truncate">
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={<span className="inline-flex rounded-lg" />}
+                          >
+                            <Button
+                              type="button"
+                              size="icon-sm"
+                              variant="outline"
+                              disabled={!hasLocation}
+                              onClick={() => hasLocation && setLocationTarget(row)}
+                              aria-label={locationLabel}
+                              className="size-7 rounded-lg border-slate-200 text-slate-500 shadow-2xs hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-blue-800 dark:hover:bg-blue-950/40 dark:hover:text-blue-400"
+                            >
+                              <MapPin className="size-3.5" aria-hidden="true" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
                             {hasLocation
-                              ? locale === "ar"
-                                ? "الخريطة"
-                                : "Map"
+                              ? locationLabel
                               : locale === "ar"
-                                ? "لا يوجد موقع"
-                                : "No location"}
-                          </span>
-                        </Button>
+                                ? "موقع المشروع غير متاح"
+                                : "Project location unavailable"}
+                          </TooltipContent>
+                        </Tooltip>
                       )
                     })()}
                   </td>

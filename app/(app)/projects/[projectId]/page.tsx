@@ -98,7 +98,7 @@ export default async function ProjectDetailPage({
   if (!project) return notFound()
 
   const [dashboardData, documents, participants, canManageImages] = await Promise.all([
-    getDashboardData(organizationId, project.id, session.userId),
+    getDashboardData(organizationId, project.id),
     getProjectDocuments(project.id, session.userId, session.email),
     getProjectParticipants(project.id),
     canAdministerProject(project.id),
