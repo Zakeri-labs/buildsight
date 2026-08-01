@@ -559,6 +559,20 @@ export async function loadProjectStageTerm(projectId: string, termId: string, us
 }
 
 
+
+export async function loadNextProjectVisitNumber(projectId: string) {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("term_responses")
+    .select("visit_number")
+    .eq("project_id", projectId)
+    .order("visit_number", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return (data?.visit_number ?? 0) + 1
+}
+
 export async function loadProjectStageReport(projectId: string, termId: string, reportId: string, userId: string) {
   const execution = await loadProjectStageTerm(projectId, termId, userId)
   if (!execution) return null

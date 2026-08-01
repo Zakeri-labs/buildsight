@@ -149,13 +149,12 @@ export async function saveTermResponseAction(input: {
   termId: string
   responseId: string
   reportType: ReportTypeValue
-  visitNumber?: number
   subject?: string
   reportTitle: string
   content: Partial<TermResponseContent>
   submit?: boolean
   saveStatus?: "draft" | "in_progress"
-}): Promise<StageActionResult<{ responseId: string; reportNumber: string; status: string }>> {
+}): Promise<StageActionResult<{ responseId: string; reportNumber: string; visitNumber: number; status: string }>> {
   try {
     const actorId = await assertProjectMember(input.projectId)
     const term = await termScope(input.projectId, input.termId)
@@ -166,7 +165,6 @@ export async function saveTermResponseAction(input: {
     const title = input.reportTitle.trim()
     if (!title) return { ok: false, error: "Report title is required." }
     if (!isReportType(input.reportType)) return { ok: false, error: "Select a valid report type." }
-    const visitNumber = Number.isInteger(input.visitNumber) && Number(input.visitNumber) > 0 ? Number(input.visitNumber) : 1
     const content = normalizeContent(input.content)
     const admin = createAdminClient()
     // Perform user-owned response writes with the authenticated server client so
@@ -175,7 +173,7 @@ export async function saveTermResponseAction(input: {
     const userClient = await createServerClient()
     const { data: existing, error: existingError } = await admin
       .from("term_responses")
-      .select("id, report_number, status, created_by, project_stage_term_id")
+      .select("id, report_number, visit_number, status, created_by, project_stage_term_id")
       .eq("id", input.responseId)
       .eq("project_id", input.projectId)
       .maybeSingle()
@@ -218,11 +216,11 @@ export async function saveTermResponseAction(input: {
       : input.saveStatus === "in_progress" ? "in_progress" : "draft"
     const now = new Date().toISOString()
     let reportNumber = existing?.report_number ?? reportNumberCandidates(input.responseId)[0]
+    let assignedVisitNumber = existing?.visit_number ?? 1
 
     if (existing) {
       const updatePayload: Record<string, unknown> = {
         report_type: input.reportType,
-        visit_number: visitNumber,
         subject: input.subject?.trim() || null,
         report_title: title,
         response_content: content,
@@ -234,7 +232,7 @@ export async function saveTermResponseAction(input: {
       else if (existing.status === "rejected") updatePayload.submitted_at = null
       const { error } = await userClient.from("term_responses").update(updatePayload).eq("id", existing.id)
       if (error) {
-        if (error.code === "23505") return { ok: false, error: "That visit number is already used for this term." }
+        if (error.code === "23505") return { ok: false, error: "A report with the same reference already exists." }
         throw error
       }
     } else {
@@ -246,7 +244,7 @@ export async function saveTermResponseAction(input: {
           project_id: input.projectId,
           project_stage_term_id: input.termId,
           report_number: reportNumber,
-          visit_number: visitNumber,
+          visit_number: 1,
           report_type: input.reportType,
           subject: input.subject?.trim() || null,
           report_title: title,
@@ -265,7 +263,7 @@ export async function saveTermResponseAction(input: {
 
         const { data: retry, error: retryError } = await admin
           .from("term_responses")
-          .select("id, project_id, report_number, status, project_stage_term_id")
+          .select("id, project_id, report_number, visit_number, status, project_stage_term_id")
           .eq("id", input.responseId)
           .maybeSingle()
         if (retryError) throw retryError
@@ -273,19 +271,20 @@ export async function saveTermResponseAction(input: {
           if (retry.project_id !== input.projectId || retry.project_stage_term_id !== input.termId) {
             return { ok: false, error: "The report identifier is already in use." }
           }
-          return { ok: true, data: { responseId: retry.id, reportNumber: retry.report_number, status: retry.status } }
+          return { ok: true, data: { responseId: retry.id, reportNumber: retry.report_number, visitNumber: retry.visit_number, status: retry.status } }
         }
 
-        const { count: visitConflict, error: visitError } = await admin
-          .from("term_responses")
-          .select("id", { count: "exact", head: true })
-          .eq("project_stage_term_id", input.termId)
-          .eq("visit_number", visitNumber)
-        if (visitError) throw visitError
-        if ((visitConflict ?? 0) > 0) return { ok: false, error: "That visit number is already used for this term." }
         // A rare report-number collision can safely retry with a longer UUID suffix.
       }
       if (!created) return { ok: false, error: "Could not allocate a unique report number. Try again." }
+      const { data: inserted, error: insertedError } = await admin
+        .from("term_responses")
+        .select("visit_number")
+        .eq("id", input.responseId)
+        .eq("project_id", input.projectId)
+        .single()
+      if (insertedError) throw insertedError
+      assignedVisitNumber = inserted.visit_number
     }
 
     await audit({
@@ -299,7 +298,7 @@ export async function saveTermResponseAction(input: {
     revalidateProjectStageViews(input.projectId)
     revalidatePath(`/projects/${input.projectId}/stages/${term.project_stage_id}/terms/${input.termId}`)
     revalidatePath(`/projects/${input.projectId}/stages/${term.project_stage_id}/terms/${input.termId}/reports/${input.responseId}`)
-    return { ok: true, data: { responseId: input.responseId, reportNumber, status: nextStatus } }
+    return { ok: true, data: { responseId: input.responseId, reportNumber, visitNumber: assignedVisitNumber, status: nextStatus } }
   } catch (error) {
     return actionError(error, "Could not save the inspection report.")
   }

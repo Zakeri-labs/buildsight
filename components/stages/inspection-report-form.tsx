@@ -369,7 +369,6 @@ export function InspectionReportForm({
       termId: term.id,
       responseId: targetResponseId,
       reportType,
-      visitNumber,
       subject,
       reportTitle,
       content,
@@ -378,6 +377,7 @@ export function InspectionReportForm({
     if (!result.ok) throw new Error(result.error)
     setResponseId(result.data.responseId)
     setReportNumber(result.data.reportNumber)
+    setVisitNumber(result.data.visitNumber)
     setStatus(result.data.status as ResponseStatus)
     return result.data.responseId
   }
@@ -488,13 +488,13 @@ export function InspectionReportForm({
           termId: term.id,
           responseId: id,
           reportType,
-          visitNumber,
           subject,
           reportTitle,
           content,
           submit: true,
         })
         if (!result.ok) throw new Error(result.error)
+        setVisitNumber(result.data.visitNumber)
         setStatus(result.data.status as ResponseStatus)
         setSuccess(result.data.status === "completed" ? copy.saved : copy.submitted)
       } else {
@@ -684,7 +684,7 @@ export function InspectionReportForm({
         <CardContent className="grid gap-5 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-4">
           <div className="space-y-2 sm:col-span-2 lg:col-span-4"><Label htmlFor="report-title">{copy.title} <span className="text-destructive">*</span></Label><Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} /></div>
           <div className="space-y-2"><Label>{copy.type}</Label><Select value={reportType} onValueChange={(value) => setReportType(value as ReportTypeValue)} disabled={isLocked}><SelectTrigger className="w-full"><SelectValue>{(value) => reportTypeLabel(String(value ?? reportType), locale)}</SelectValue></SelectTrigger><SelectContent>{REPORT_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{reportTypeLabel(item.value, locale)}</SelectItem>)}</SelectContent></Select></div>
-          <div className="space-y-2"><Label htmlFor="visit-no">{copy.visitNo}</Label><Input id="visit-no" type="number" min={1} value={visitNumber} onChange={(event) => setVisitNumber(Math.max(1, Number(event.target.value) || 1))} disabled={isLocked} /></div>
+          <div className="space-y-2"><Label htmlFor="visit-no">{copy.visitNo}</Label><Input id="visit-no" type="number" min={1} value={visitNumber} readOnly aria-readonly="true" className="bg-muted/40" /></div>
           <div className="space-y-2 sm:col-span-2 lg:col-span-2"><Label htmlFor="report-subject">{copy.subject}</Label><Input id="report-subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Inspection location, package, activity, or reference" disabled={isLocked} /></div>
         </CardContent>
       </Card>
