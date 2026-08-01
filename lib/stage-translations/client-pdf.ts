@@ -739,14 +739,32 @@ function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: st
 function drawCcMetadata(flow: Flow, x: number, y: number, width: number, recipients: string[]) {
   if (!recipients.length) return 0
   const { doc, rtl } = flow
-  const label = rtl ? "نسخة إلى" : "CC To"
-  const value = recipients.join("  •  ")
-  const valueHasArabic = containsArabic(value)
-
-  setLanguage(doc, valueHasArabic, 8, false)
-  const lines = textLines(doc, value, width - 6)
-  const lineHeight = 4.1
-  const height = Math.max(14, 8.2 + lines.length * lineHeight)
+  const label = rtl ? "نسخة إلى:" : "CC To:"
+  const contentWidth = width - 14
+  const entries = recipients.map((recipient) => {
+    const [rawName, ...rawDetails] = recipient
+      .split("\n")
+      .map((value) => value.trim())
+      .filter(Boolean)
+    const name = rawName || "—"
+    setLanguage(doc, containsArabic(name), 8, true)
+    const nameLines = textLines(doc, name, contentWidth)
+    const detailLines = rawDetails.flatMap((detail) => {
+      setLanguage(doc, containsArabic(detail), 7, false)
+      return textLines(doc, detail, contentWidth)
+    })
+    return { nameLines, detailLines }
+  })
+  const nameLineHeight = 3.8
+  const detailLineHeight = 3.35
+  const recipientGap = 2.2
+  const contentHeight = entries.reduce((total, entry) => (
+    total
+    + entry.nameLines.length * nameLineHeight
+    + entry.detailLines.length * detailLineHeight
+    + recipientGap
+  ), 0)
+  const height = Math.max(16, 9 + contentHeight)
 
   doc.setDrawColor(226, 232, 240)
   doc.setFillColor(248, 250, 252)
@@ -756,16 +774,33 @@ function drawCcMetadata(flow: Flow, x: number, y: number, width: number, recipie
   doc.setTextColor(100, 116, 139)
   writePdfText(doc, label, rtl ? x + width - 3 : x + 3, y + 4.2, { align: rtl ? "right" : "left" }, rtl)
 
-  setLanguage(doc, valueHasArabic, 8, true)
-  doc.setTextColor(15, 23, 42)
-  writePdfText(
-    doc,
-    lines,
-    rtl && valueHasArabic ? x + width - 3 : x + 3,
-    y + 8.8,
-    { align: rtl && valueHasArabic ? "right" : "left", lineHeightFactor: 1.08 },
-    valueHasArabic,
-  )
+  const bulletX = rtl ? x + width - 4 : x + 4
+  const textX = rtl ? x + width - 9 : x + 9
+  let cursorY = y + 9
+
+  for (const entry of entries) {
+    setLanguage(doc, false, 8, true)
+    doc.setTextColor(37, 99, 235)
+    doc.text("•", bulletX, cursorY, { align: rtl ? "right" : "left" })
+
+    for (const line of entry.nameLines) {
+      const lineHasArabic = containsArabic(line)
+      setLanguage(doc, lineHasArabic, 8, true)
+      doc.setTextColor(15, 23, 42)
+      writePdfText(doc, line, textX, cursorY, { align: rtl ? "right" : "left" }, lineHasArabic)
+      cursorY += nameLineHeight
+    }
+
+    for (const line of entry.detailLines) {
+      const lineHasArabic = containsArabic(line)
+      setLanguage(doc, lineHasArabic, 7, false)
+      doc.setTextColor(100, 116, 139)
+      writePdfText(doc, line, textX, cursorY, { align: rtl ? "right" : "left" }, lineHasArabic)
+      cursorY += detailLineHeight
+    }
+    cursorY += recipientGap
+  }
+
   return height
 }
 
@@ -1576,7 +1611,19 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
   const width = doc.internal.pageSize.getWidth()
   const height = doc.internal.pageSize.getHeight()
   const margin = PAGE.margin
-  const org = getOrganizationProfile()
+  const profile = getOrganizationProfile()
+  // Footer metadata is a fixed document element. It must never be sourced from
+  // translated content or switched to Arabic fields for the Arabic export.
+  const org = {
+    name: profile.nameEn || "BONYAN CONSTRUCTION FOR ENGINEERING CONSULTANCY",
+    crNumber: profile.crNumber,
+    poBox: profile.poBox,
+    postalCode: profile.postalCode,
+    phones: profile.phones,
+    email: profile.email,
+    website: profile.website,
+    address: profile.addressEn,
+  }
 
   for (let page = 1; page <= pages; page += 1) {
     doc.setPage(page)
@@ -1649,7 +1696,7 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
 
     // Right Column: English Registration Details & Address
     const enAddressLine1 = `C.R. No.: ${org.crNumber || "—"}, P.O. Box : ${org.poBox || "—"}, Postal Code : ${org.postalCode || "—"}`
-    const enAddressLine2 = org.addressEn || ""
+    const enAddressLine2 = org.address || ""
 
     // Draw Line 1 (English CR/PO - right aligned, bold dark)
     setLanguage(doc, false, 6.5, true)
@@ -1672,7 +1719,7 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     // Sub-Footer Left: Company Name
     setLanguage(doc, false, 6, false)
     doc.setTextColor(148, 163, 184)
-    doc.text((org.nameEn || org.nameAr).toUpperCase(), margin, height - 2.2, { align: "left" })
+    doc.text(org.name.toUpperCase(), margin, height - 2.2, { align: "left" })
 
     // Sub-Footer Right: Page Number
     doc.text(`Page ${page} / ${pages}`, width - margin, height - 2.2, { align: "right" })
@@ -2910,11 +2957,18 @@ async function buildNativeBilingualPdfBlob(input: {
 }
 
 function formatCcRecipientForPdf(recipient: ReportCcRecipient) {
-  const details = [recipient.role, recipient.company]
+  const normalizedName = recipient.name.trim() || "—"
+  const seen = new Set([normalizedName.toLocaleLowerCase()])
+  const details = [recipient.role, recipient.company, recipient.type === "external" ? recipient.email : null]
     .map((value) => value?.trim())
-    .filter(Boolean)
-  if (recipient.type === "external" && recipient.email?.trim()) details.push(recipient.email.trim())
-  return details.length ? `${recipient.name} — ${details.join(" · ")}` : recipient.name
+    .filter((value): value is string => Boolean(value))
+    .filter((value) => {
+      const key = value.toLocaleLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  return [normalizedName, ...details].join("\n")
 }
 
 export async function exportTranslationPdf({
