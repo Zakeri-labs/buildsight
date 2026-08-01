@@ -105,7 +105,7 @@ export async function createSiteVisitRequestAction(input: {
     }
 
     const { data: profile } = await admin.from("profiles").select("full_name, email").eq("id", actorId).maybeSingle()
-    const requestedByName = profile?.full_name?.trim() || profile?.email?.trim() || "Client"
+    const requestedByName = profile?.full_name?.trim() || profile?.email?.trim() || "Requester"
     let emailStatus = "skipped"
     try {
       const result = await sendSiteVisitRequestEmails({

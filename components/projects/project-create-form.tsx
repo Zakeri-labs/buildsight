@@ -83,7 +83,14 @@ type OwnerDetails = {
 
 type ProjectImageDraft = { id: string; file: File }
 
-type ContractorOrganization = { id: string; name: string }
+type ContractorOrganization = {
+  id: string
+  name: string
+  registrationNumber: string
+  address: string
+  postalCode: string
+  phone: string
+}
 type UserOption = {
   id: string
   name: string
@@ -993,7 +1000,15 @@ export function ProjectCreateForm({
                       const nextId = value === "none" || value == null ? "" : String(value)
                       setContractorOrganizationId(nextId)
                       const selectedOrganization = contractorOrganizations.find((organization) => organization.id === nextId)
-                      if (selectedOrganization) setContractorCompanyName(selectedOrganization.name)
+
+                      // Copy the registered contractor profile into the editable project snapshot.
+                      // These local values are submitted only to the project record; the global
+                      // organization profile is never updated from this wizard.
+                      setContractorCompanyName(selectedOrganization?.name ?? "")
+                      setContractorRegistrationNumber(selectedOrganization?.registrationNumber ?? "")
+                      setContractorAddress(selectedOrganization?.address ?? "")
+                      setContractorPostalCode(selectedOrganization?.postalCode ?? "")
+                      setContractorPhone(selectedOrganization?.phone ?? "")
                     }}
                     disabled={pending}
                   >
@@ -1017,7 +1032,7 @@ export function ProjectCreateForm({
 
                 <div className="grid gap-5 md:grid-cols-2">
                   <Field label={`${copy.companyName} (${copy.optional})`} htmlFor="contractor-company-name">
-                    <Input id="contractor-company-name" value={contractorCompanyName} onChange={(event) => setContractorCompanyName(event.target.value)} disabled={pending || Boolean(contractorOrganizationId)} className="h-10" />
+                    <Input id="contractor-company-name" value={contractorCompanyName} onChange={(event) => setContractorCompanyName(event.target.value)} disabled={pending} className="h-10" />
                   </Field>
                   <Field label={`${copy.registration} (${copy.optional})`} htmlFor="contractor-registration">
                     <Input id="contractor-registration" value={contractorRegistrationNumber} onChange={(event) => setContractorRegistrationNumber(event.target.value)} disabled={pending} className="h-10" />

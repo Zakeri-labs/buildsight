@@ -11,3 +11,7 @@
 
 - `CHANGELOG.md`
   - Added a summary of all file changes included in this update.
+## Contractor profile prefill
+- Prefill Add Project contractor snapshot fields from the selected registered contractor organization.
+- Keep all prefilled values editable without modifying the global contractor profile.
+

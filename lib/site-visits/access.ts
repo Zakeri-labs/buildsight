@@ -10,6 +10,11 @@ export const SITE_VISIT_MANAGER_PROJECT_ROLES = [
   "inspector",
 ] as const
 
+// Request creation is intentionally narrower than request management. Keeping
+// these lists separate makes future requester-role expansion explicit and safe.
+export const SITE_VISIT_REQUESTER_PROJECT_ROLES = ["project_admin"] as const
+export const SITE_VISIT_REQUESTER_ORGANIZATION_ROLES = ["org_admin"] as const
+
 const SITE_VISIT_MANAGER_PARTICIPANT_LABELS = new Set([
   "project manager",
   "project supervisor",
@@ -122,7 +127,7 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
     const projectOrgMemberships = projectOrganizationsByProject.get(projectId) ?? []
     const supervisingOrgRole = orgRoleById.get((project as any).supervising_organization_id as string)
 
-    const canRequest =
+    const isClientRequester =
       linkedParticipants.some(
         (participant) =>
           participant.project_role === "client" || CLIENT_PARTICIPANT_LABELS.has(normalized(participant.participant_role_label)),
@@ -130,6 +135,21 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
       projectOrgMemberships.some(
         (membership) => membership.project_role === "client" && orgRoleById.has(membership.organization_id),
       )
+
+    const isAdminRequester =
+      directMemberships.some((membership) =>
+        (SITE_VISIT_REQUESTER_PROJECT_ROLES as readonly string[]).includes(membership.access_role),
+      ) ||
+      (SITE_VISIT_REQUESTER_ORGANIZATION_ROLES as readonly string[]).includes(supervisingOrgRole ?? "") ||
+      projectOrgMemberships.some(
+        (membership) =>
+          membership.project_role === "consultant" &&
+          (SITE_VISIT_REQUESTER_ORGANIZATION_ROLES as readonly string[]).includes(
+            orgRoleById.get(membership.organization_id) ?? "",
+          ),
+      )
+
+    const canRequest = isClientRequester || isAdminRequester
 
     const canManage =
       directMemberships.some((membership) =>

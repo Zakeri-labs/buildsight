@@ -65,25 +65,32 @@ export async function ProjectCreateContent() {
     memberIds.length
       ? admin
           .from("organizations")
-          .select("id, name, status")
+          .select("id, name, status, registration_number, address, postal_code, phone")
           .eq("type", "external")
           .neq("status", "suspended")
           .in("created_by", memberIds)
-      : Promise.resolve({ data: [] as Array<{ id: string; name: string; status: string }> }),
+      : Promise.resolve({ data: [] as Array<{ id: string; name: string; status: string; registration_number: string | null; address: string | null; postal_code: string | null; phone: string | null }> }),
     organizationIds.length
       ? admin
           .from("organizations")
-          .select("id, name, status")
+          .select("id, name, status, registration_number, address, postal_code, phone")
           .eq("type", "external")
           .neq("status", "suspended")
           .in("id", organizationIds)
-      : Promise.resolve({ data: [] as Array<{ id: string; name: string; status: string }> }),
+      : Promise.resolve({ data: [] as Array<{ id: string; name: string; status: string; registration_number: string | null; address: string | null; postal_code: string | null; phone: string | null }> }),
   ])
 
   const contractorOrganizations = Array.from(
     new Map(
       [...(createdOrganizations.data ?? []), ...(participantOrganizations.data ?? [])]
-        .map((organization) => [organization.id, { id: organization.id, name: organization.name }] as const),
+        .map((organization) => [organization.id, {
+          id: organization.id,
+          name: organization.name,
+          registrationNumber: organization.registration_number?.trim() || "",
+          address: organization.address?.trim() || "",
+          postalCode: organization.postal_code?.trim() || "",
+          phone: organization.phone?.trim() || "",
+        }] as const),
     ).values(),
   ).sort((a, b) => a.name.localeCompare(b.name))
 

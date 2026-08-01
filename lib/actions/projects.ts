@@ -722,7 +722,9 @@ export async function createProject(input: {
       contractorOrganizationName = contractorOrganization.name
     }
 
-    const contractorName = contractorOrganizationName || input.contractor?.companyName?.trim() || null
+    // The wizard may edit the prefilled contractor details for this project only.
+    // Prefer the submitted snapshot while keeping the selected organization relation intact.
+    const contractorName = input.contractor?.companyName?.trim() || contractorOrganizationName || null
     const { data: created, error } = await admin
       .from("projects")
       .insert({
