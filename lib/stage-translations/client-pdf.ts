@@ -1651,41 +1651,137 @@ function parsePdfHtmlRoot(html: string | undefined) {
   return documentNode.getElementById("pdf-table-root")
 }
 
-function tableCellText(cell: Element | undefined) {
+function tableCellTextWithoutNestedTables(cell: Element | undefined) {
   if (!cell) return ""
   const clone = cell.cloneNode(true) as Element
+  clone.querySelectorAll("table").forEach((table) => table.remove())
   clone.querySelectorAll("br").forEach((node) => node.replaceWith("\n"))
   return normalizeText(clone.textContent || "")
 }
 
+function directTableRows(table: Element) {
+  return Array.from(table.querySelectorAll("tr")).filter((row) => row.closest("table") === table)
+}
+
 function directTableCells(row: Element) {
+  const table = row.closest("table")
   return Array.from(row.children).filter((child) => {
     const tag = child.tagName.toLowerCase()
-    return tag === "th" || tag === "td"
+    return (tag === "th" || tag === "td") && child.closest("table") === table
+  })
+}
+
+function topLevelTables(container: Element) {
+  return Array.from(container.querySelectorAll("table")).filter((table) => {
+    const ancestorTable = table.parentElement?.closest("table")
+    return !ancestorTable || !container.contains(ancestorTable)
+  })
+}
+
+function directCaption(table: Element) {
+  return Array.from(table.children).find((child) => child.tagName.toLowerCase() === "caption")
+}
+
+function textNodesOutsideNestedTables(root: Element) {
+  const nodes: Text[] = []
+  const visit = (node: Node) => {
+    for (const child of Array.from(node.childNodes)) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        nodes.push(child as Text)
+        continue
+      }
+      if (child.nodeType !== Node.ELEMENT_NODE) continue
+      const element = child as Element
+      if (element.tagName.toLowerCase() === "table") continue
+      visit(element)
+    }
+  }
+  visit(root)
+  return nodes
+}
+
+function replaceCellTextPreservingStructure(cell: Element, translatedCell?: Element) {
+  const translatedText = tableCellTextWithoutNestedTables(translatedCell)
+  const textNodes = textNodesOutsideNestedTables(cell)
+  const target = textNodes.find((node) => Boolean(node.nodeValue?.trim())) ?? textNodes[0]
+
+  textNodes.forEach((node) => {
+    node.nodeValue = ""
+  })
+
+  if (!translatedText) return
+  if (target) {
+    target.nodeValue = translatedText
+    return
+  }
+
+  const firstNonTableChild = Array.from(cell.children)
+    .find((child) => child.tagName.toLowerCase() !== "table")
+  const textNode = cell.ownerDocument.createTextNode(translatedText)
+  if (firstNonTableChild) firstNonTableChild.insertBefore(textNode, firstNonTableChild.firstChild)
+  else cell.insertBefore(textNode, cell.firstChild)
+}
+
+function synchronizeTableCell(sourceCell: Element, synchronizedCell: Element, translatedCell?: Element) {
+  replaceCellTextPreservingStructure(synchronizedCell, translatedCell)
+
+  const sourceNestedTables = topLevelTables(sourceCell)
+  const synchronizedNestedTables = topLevelTables(synchronizedCell)
+  const translatedNestedTables = translatedCell ? topLevelTables(translatedCell) : []
+
+  sourceNestedTables.forEach((sourceNestedTable, index) => {
+    const currentNestedTable = synchronizedNestedTables[index]
+    if (!currentNestedTable) return
+    currentNestedTable.replaceWith(synchronizedTableElement(sourceNestedTable, translatedNestedTables[index]))
   })
 }
 
 function synchronizedTableElement(sourceTable: Element, translatedTable?: Element) {
   const synchronized = sourceTable.cloneNode(true) as Element
-  const synchronizedCells = Array.from(synchronized.querySelectorAll("th,td"))
-  const translatedCells = translatedTable ? Array.from(translatedTable.querySelectorAll("th,td")) : []
+  const sourceRows = directTableRows(sourceTable)
+  const synchronizedRows = directTableRows(synchronized)
+  const translatedRows = translatedTable ? directTableRows(translatedTable) : []
 
-  synchronizedCells.forEach((cell, index) => {
-    // The English table is the structural source of truth. Only translated text
-    // is copied, so rows, columns, header cells, colspan and rowspan remain exact.
-    cell.textContent = tableCellText(translatedCells[index])
+  sourceRows.forEach((sourceRow, rowIndex) => {
+    const synchronizedRow = synchronizedRows[rowIndex]
+    if (!synchronizedRow) return
+    const sourceCells = directTableCells(sourceRow)
+    const synchronizedCells = directTableCells(synchronizedRow)
+    const translatedCells = translatedRows[rowIndex] ? directTableCells(translatedRows[rowIndex]) : []
+
+    sourceCells.forEach((sourceCell, cellIndex) => {
+      const synchronizedCell = synchronizedCells[cellIndex]
+      if (!synchronizedCell) return
+      synchronizeTableCell(sourceCell, synchronizedCell, translatedCells[cellIndex])
+    })
   })
 
-  const synchronizedCaption = synchronized.querySelector("caption")
-  const translatedCaption = translatedTable?.querySelector("caption")
-  if (synchronizedCaption) synchronizedCaption.textContent = tableCellText(translatedCaption ?? undefined)
+  const synchronizedCaption = directCaption(synchronized)
+  if (synchronizedCaption) {
+    synchronizedCaption.textContent = tableCellTextWithoutNestedTables(
+      translatedTable ? directCaption(translatedTable) : undefined,
+    )
+  }
   return synchronized
 }
 
 function attachmentRegionMap(root: Element) {
   const regions = Array.from(root.querySelectorAll("section[data-attachment-id]"))
-  if (!regions.length) return new Map([["__root__", root]])
-  return new Map(regions.map((region) => [region.getAttribute("data-attachment-id") || "__root__", region]))
+  const map = new Map<string, Element>()
+  const hasRootTables = topLevelTables(root)
+    .some((table) => !table.closest("section[data-attachment-id]"))
+  if (!regions.length || hasRootTables) map.set("__root__", root)
+  regions.forEach((region) => {
+    map.set(region.getAttribute("data-attachment-id") || "__root__", region)
+  })
+  return map
+}
+
+function regionTopLevelTables(region: Element, key: string) {
+  return topLevelTables(region).filter((table) => {
+    const attachmentRegion = table.closest("section[data-attachment-id]")
+    return key === "__root__" ? !attachmentRegion : attachmentRegion === region
+  })
 }
 
 function findDataSection(root: Element, attribute: "data-attachment-id" | "data-source-page", value: string) {
@@ -1722,6 +1818,35 @@ function sourceTableContainer(sourceTable: Element, sourceRegion: Element, targe
   return page
 }
 
+function sourcePageKey(table: Element) {
+  return table.closest("section[data-source-page]")?.getAttribute("data-source-page") ?? "flow"
+}
+
+function translatedTableForSource(input: {
+  sourceTable: Element
+  sourceTables: Element[]
+  translatedTables: Element[]
+  used: Set<Element>
+}) {
+  const sourcePage = sourcePageKey(input.sourceTable)
+  const sourcePageTables = input.sourceTables.filter((table) => sourcePageKey(table) === sourcePage)
+  const pageOrdinal = sourcePageTables.indexOf(input.sourceTable)
+  const samePage = input.translatedTables.filter((table) => sourcePageKey(table) === sourcePage && !input.used.has(table))
+  const candidate = samePage[pageOrdinal] ?? input.translatedTables.find((table) => !input.used.has(table))
+  if (candidate) input.used.add(candidate)
+  return candidate
+}
+
+function reorderSourcePages(sourceRegion: Element, targetRegion: Element) {
+  const sourcePages = Array.from(sourceRegion.querySelectorAll("section[data-source-page]"))
+    .filter((page) => page.closest("section[data-attachment-id]") === sourceRegion.closest("section[data-attachment-id]"))
+  sourcePages.forEach((sourcePage) => {
+    const pageNumber = sourcePage.getAttribute("data-source-page") || ""
+    const targetPage = findDataSection(targetRegion, "data-source-page", pageNumber)
+    if (targetPage) targetRegion.appendChild(targetPage)
+  })
+}
+
 function synchronizeHtmlTableStructures(sourceHtml: string | undefined, translatedHtml: string | undefined) {
   const sourceRoot = parsePdfHtmlRoot(sourceHtml)
   const translatedRoot = parsePdfHtmlRoot(translatedHtml)
@@ -1729,17 +1854,24 @@ function synchronizeHtmlTableStructures(sourceHtml: string | undefined, translat
 
   const sourceRegions = attachmentRegionMap(sourceRoot)
   const translatedRegions = attachmentRegionMap(translatedRoot)
+  const orderedTargetRegions: Element[] = []
 
   for (const [key, sourceRegion] of sourceRegions) {
     const targetRegion = translatedRegions.get(key) ?? ensureTargetRegion(translatedRoot, sourceRegion, key)
-    const sourceTables = Array.from(sourceRegion.querySelectorAll("table"))
-    const translatedTables = Array.from(targetRegion.querySelectorAll("table"))
+    const sourceTables = regionTopLevelTables(sourceRegion, key)
+    const translatedTables = regionTopLevelTables(targetRegion, key)
+    const usedTranslatedTables = new Set<Element>()
 
-    sourceTables.forEach((sourceTable, index) => {
-      const translatedTable = translatedTables[index]
+    sourceTables.forEach((sourceTable) => {
+      const translatedTable = translatedTableForSource({
+        sourceTable,
+        sourceTables,
+        translatedTables,
+        used: usedTranslatedTables,
+      })
       const synchronized = synchronizedTableElement(sourceTable, translatedTable)
       const targetContainer = sourceTableContainer(sourceTable, sourceRegion, targetRegion)
-      if (translatedTable && translatedTable.parentElement === targetContainer) {
+      if (translatedTable && targetContainer.contains(translatedTable)) {
         translatedTable.replaceWith(synchronized)
       } else {
         translatedTable?.remove()
@@ -1747,9 +1879,14 @@ function synchronizeHtmlTableStructures(sourceHtml: string | undefined, translat
       }
     })
 
-    // A translated attachment must never introduce a structural table that is
-    // absent from the English source. Its prose remains untouched.
-    translatedTables.slice(sourceTables.length).forEach((table) => table.remove())
+    // A translated document must never introduce a structural table that is
+    // absent from the English source. Non-table translated prose is preserved.
+    translatedTables
+      .filter((table) => !usedTranslatedTables.has(table))
+      .forEach((table) => table.remove())
+
+    reorderSourcePages(sourceRegion, targetRegion)
+    if (key !== "__root__") orderedTargetRegions.push(targetRegion)
   }
 
   // Remove tables from translated-only attachment regions. The source PDF is
@@ -1757,6 +1894,10 @@ function synchronizeHtmlTableStructures(sourceHtml: string | undefined, translat
   for (const [key, region] of translatedRegions) {
     if (!sourceRegions.has(key)) region.querySelectorAll("table").forEach((table) => table.remove())
   }
+
+  // Keep attachment/section order identical to the English source. Appending an
+  // existing node moves it without recreating translated prose or attributes.
+  orderedTargetRegions.forEach((region) => translatedRoot.appendChild(region))
 
   return translatedRoot.innerHTML
 }
@@ -1792,21 +1933,29 @@ function synchronizeMirroredTableStructures(english: LanguagePdfTemplate, arabic
   }
 }
 
+function tableStructureSignature(table: Element): string {
+  const caption = directCaption(table) ? "caption:1" : "caption:0"
+  const rows = directTableRows(table).map((row) => {
+    const group = row.parentElement?.tagName.toLowerCase() ?? "table"
+    const cells = directTableCells(row).map((cell) => {
+      const tag = cell.tagName.toLowerCase()
+      const colSpan = Math.max(1, Number.parseInt(cell.getAttribute("colspan") || "1", 10) || 1)
+      const rowSpan = Math.max(1, Number.parseInt(cell.getAttribute("rowspan") || "1", 10) || 1)
+      const nested = topLevelTables(cell).map((nestedTable) => tableStructureSignature(nestedTable)).join("&")
+      return `${tag}:${colSpan}:${rowSpan}${nested ? `{${nested}}` : ""}`
+    }).join(",")
+    return `${group}[${cells}]`
+  }).join(";")
+  return `${caption}|${rows}`
+}
+
 function htmlTableStructureSignatures(html: string | undefined) {
   const root = parsePdfHtmlRoot(html)
   if (!root) return []
-  return Array.from(root.querySelectorAll("table")).map((table) => {
+  return topLevelTables(root).map((table) => {
     const attachmentId = table.closest("section[data-attachment-id]")?.getAttribute("data-attachment-id") ?? "root"
     const sourcePage = table.closest("section[data-source-page]")?.getAttribute("data-source-page") ?? "flow"
-    const rows = Array.from(table.querySelectorAll("tr")).map((row) =>
-      directTableCells(row).map((cell) => {
-        const tag = cell.tagName.toLowerCase()
-        const colSpan = Math.max(1, Number.parseInt(cell.getAttribute("colspan") || "1", 10) || 1)
-        const rowSpan = Math.max(1, Number.parseInt(cell.getAttribute("rowspan") || "1", 10) || 1)
-        return `${tag}:${colSpan}:${rowSpan}`
-      }).join(","),
-    ).join(";")
-    return `${attachmentId}:${sourcePage}:${rows}`
+    return `${attachmentId}:${sourcePage}:${tableStructureSignature(table)}`
   })
 }
 
