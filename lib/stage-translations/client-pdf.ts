@@ -1644,6 +1644,192 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
   if (rtl) setLanguage(doc, true, 8, false)
 }
 
+type StructuredPdfTable = NonNullable<PdfSectionTemplate["table"]>
+
+function parsePdfHtmlRoot(html: string | undefined) {
+  const documentNode = new DOMParser().parseFromString(`<div id="pdf-table-root">${html ?? ""}</div>`, "text/html")
+  return documentNode.getElementById("pdf-table-root")
+}
+
+function tableCellText(cell: Element | undefined) {
+  if (!cell) return ""
+  const clone = cell.cloneNode(true) as Element
+  clone.querySelectorAll("br").forEach((node) => node.replaceWith("\n"))
+  return normalizeText(clone.textContent || "")
+}
+
+function directTableCells(row: Element) {
+  return Array.from(row.children).filter((child) => {
+    const tag = child.tagName.toLowerCase()
+    return tag === "th" || tag === "td"
+  })
+}
+
+function synchronizedTableElement(sourceTable: Element, translatedTable?: Element) {
+  const synchronized = sourceTable.cloneNode(true) as Element
+  const synchronizedCells = Array.from(synchronized.querySelectorAll("th,td"))
+  const translatedCells = translatedTable ? Array.from(translatedTable.querySelectorAll("th,td")) : []
+
+  synchronizedCells.forEach((cell, index) => {
+    // The English table is the structural source of truth. Only translated text
+    // is copied, so rows, columns, header cells, colspan and rowspan remain exact.
+    cell.textContent = tableCellText(translatedCells[index])
+  })
+
+  const synchronizedCaption = synchronized.querySelector("caption")
+  const translatedCaption = translatedTable?.querySelector("caption")
+  if (synchronizedCaption) synchronizedCaption.textContent = tableCellText(translatedCaption ?? undefined)
+  return synchronized
+}
+
+function attachmentRegionMap(root: Element) {
+  const regions = Array.from(root.querySelectorAll("section[data-attachment-id]"))
+  if (!regions.length) return new Map([["__root__", root]])
+  return new Map(regions.map((region) => [region.getAttribute("data-attachment-id") || "__root__", region]))
+}
+
+function findDataSection(root: Element, attribute: "data-attachment-id" | "data-source-page", value: string) {
+  return Array.from(root.querySelectorAll(`section[${attribute}]`))
+    .find((section) => section.getAttribute(attribute) === value)
+}
+
+function ensureTargetRegion(targetRoot: Element, sourceRegion: Element, key: string) {
+  if (key === "__root__") return targetRoot
+  const existing = findDataSection(targetRoot, "data-attachment-id", key)
+  if (existing) return existing
+
+  const region = targetRoot.ownerDocument.createElement("section")
+  region.setAttribute("data-attachment-id", key)
+  const sourceHeading = sourceRegion.querySelector(":scope > h1, :scope > h2, :scope > h3, :scope > h4")
+  if (sourceHeading) {
+    const heading = targetRoot.ownerDocument.createElement(sourceHeading.tagName.toLowerCase())
+    heading.textContent = sourceHeading.textContent || ""
+    region.appendChild(heading)
+  }
+  targetRoot.appendChild(region)
+  return region
+}
+
+function sourceTableContainer(sourceTable: Element, sourceRegion: Element, targetRegion: Element) {
+  const sourcePage = sourceTable.closest("section[data-source-page]")
+  if (!sourcePage || !sourceRegion.contains(sourcePage)) return targetRegion
+  const pageNumber = sourcePage.getAttribute("data-source-page") || ""
+  const existing = findDataSection(targetRegion, "data-source-page", pageNumber)
+  if (existing) return existing
+  const page = targetRegion.ownerDocument.createElement("section")
+  page.setAttribute("data-source-page", pageNumber)
+  targetRegion.appendChild(page)
+  return page
+}
+
+function synchronizeHtmlTableStructures(sourceHtml: string | undefined, translatedHtml: string | undefined) {
+  const sourceRoot = parsePdfHtmlRoot(sourceHtml)
+  const translatedRoot = parsePdfHtmlRoot(translatedHtml)
+  if (!sourceRoot || !translatedRoot) return translatedHtml ?? ""
+
+  const sourceRegions = attachmentRegionMap(sourceRoot)
+  const translatedRegions = attachmentRegionMap(translatedRoot)
+
+  for (const [key, sourceRegion] of sourceRegions) {
+    const targetRegion = translatedRegions.get(key) ?? ensureTargetRegion(translatedRoot, sourceRegion, key)
+    const sourceTables = Array.from(sourceRegion.querySelectorAll("table"))
+    const translatedTables = Array.from(targetRegion.querySelectorAll("table"))
+
+    sourceTables.forEach((sourceTable, index) => {
+      const translatedTable = translatedTables[index]
+      const synchronized = synchronizedTableElement(sourceTable, translatedTable)
+      const targetContainer = sourceTableContainer(sourceTable, sourceRegion, targetRegion)
+      if (translatedTable && translatedTable.parentElement === targetContainer) {
+        translatedTable.replaceWith(synchronized)
+      } else {
+        translatedTable?.remove()
+        targetContainer.appendChild(synchronized)
+      }
+    })
+
+    // A translated attachment must never introduce a structural table that is
+    // absent from the English source. Its prose remains untouched.
+    translatedTables.slice(sourceTables.length).forEach((table) => table.remove())
+  }
+
+  // Remove tables from translated-only attachment regions. The source PDF is
+  // the canonical document structure for mirrored exports.
+  for (const [key, region] of translatedRegions) {
+    if (!sourceRegions.has(key)) region.querySelectorAll("table").forEach((table) => table.remove())
+  }
+
+  return translatedRoot.innerHTML
+}
+
+function synchronizeStructuredTable(source: StructuredPdfTable | undefined, translated: StructuredPdfTable | undefined) {
+  if (!source) return undefined
+  return {
+    headers: source.headers.map((_, column) => translated?.headers?.[column] ?? ""),
+    rows: source.rows.map((sourceRow, row) =>
+      sourceRow.map((_, column) => translated?.rows?.[row]?.[column] ?? ""),
+    ),
+  }
+}
+
+function synchronizeMirroredTableStructures(english: LanguagePdfTemplate, arabic: LanguagePdfTemplate) {
+  const englishSections = new Map(english.sections.map((section) => [section.key, section]))
+  return {
+    ...arabic,
+    sections: arabic.sections.map((section) => {
+      const source = englishSections.get(section.key)
+      if (!source) return section
+      const sourceDocumentHtml = synchronizeHtmlTableStructures(source.sourceDocumentHtml, section.sourceDocumentHtml)
+      const otherDocumentsHtml = synchronizeHtmlTableStructures(source.otherDocumentsHtml, section.otherDocumentsHtml)
+      return {
+        ...section,
+        html: synchronizeHtmlTableStructures(source.html, section.html),
+        table: synchronizeStructuredTable(source.table, section.table),
+        sourceDocumentHtml,
+        otherDocumentsHtml,
+        documentsHtml: `${sourceDocumentHtml}${otherDocumentsHtml}`,
+      }
+    }),
+  }
+}
+
+function htmlTableStructureSignatures(html: string | undefined) {
+  const root = parsePdfHtmlRoot(html)
+  if (!root) return []
+  return Array.from(root.querySelectorAll("table")).map((table) => {
+    const attachmentId = table.closest("section[data-attachment-id]")?.getAttribute("data-attachment-id") ?? "root"
+    const sourcePage = table.closest("section[data-source-page]")?.getAttribute("data-source-page") ?? "flow"
+    const rows = Array.from(table.querySelectorAll("tr")).map((row) =>
+      directTableCells(row).map((cell) => {
+        const tag = cell.tagName.toLowerCase()
+        const colSpan = Math.max(1, Number.parseInt(cell.getAttribute("colspan") || "1", 10) || 1)
+        const rowSpan = Math.max(1, Number.parseInt(cell.getAttribute("rowspan") || "1", 10) || 1)
+        return `${tag}:${colSpan}:${rowSpan}`
+      }).join(","),
+    ).join(";")
+    return `${attachmentId}:${sourcePage}:${rows}`
+  })
+}
+
+function structuredTableSignature(table: StructuredPdfTable | undefined) {
+  if (!table) return null
+  const header = table.headers.map(() => "th:1:1").join(",")
+  const rows = table.rows.map((row) => row.map(() => "td:1:1").join(",")).join(";")
+  return `${header}|${rows}`
+}
+
+function templateTableStructureSignatures(template: LanguagePdfTemplate) {
+  return template.sections.flatMap((section) => {
+    const signatures: string[] = []
+    const structured = structuredTableSignature(section.table)
+    if (structured) signatures.push(`${section.key}:structured:${structured}`)
+    htmlTableStructureSignatures(section.html).forEach((signature, index) => signatures.push(`${section.key}:html:${index}:${signature}`))
+    const sourceHtml = section.sourceDocumentHtml ?? (section.otherDocumentsHtml === undefined ? section.documentsHtml : undefined)
+    htmlTableStructureSignatures(sourceHtml).forEach((signature, index) => signatures.push(`${section.key}:source:${index}:${signature}`))
+    htmlTableStructureSignatures(section.otherDocumentsHtml).forEach((signature, index) => signatures.push(`${section.key}:other:${index}:${signature}`))
+    return signatures
+  })
+}
+
 function countHtmlTables(html: string | undefined) {
   return html ? (html.match(/<table\b/gi) ?? []).length : 0
 }
@@ -1714,7 +1900,9 @@ function validateMirroredTemplates(english: LanguagePdfTemplate, arabic: Languag
   if (englishInventory.images !== arabicInventory.images) {
     throw new Error("English and Arabic PDF image counts are not synchronized.")
   }
-  if (englishInventory.tables !== arabicInventory.tables) {
+  const englishTableStructures = templateTableStructureSignatures(english)
+  const arabicTableStructures = templateTableStructureSignatures(arabic)
+  if (englishTableStructures.join("|") !== arabicTableStructures.join("|")) {
     throw new Error("English and Arabic PDF table structures are not synchronized.")
   }
   if (imageFlowSignature(english).join("|") !== imageFlowSignature(arabic).join("|")) {
@@ -2104,10 +2292,9 @@ async function buildNativeBilingualPdfBlob(input: {
 
       // Pre-check: if EITHER column would overflow, add a new page for BOTH columns together
       if (flow.y + rowHeight > flow.bottom) {
-        flow.doc.addPage("a4", "portrait")
-        flow.pageNumber += 1
-        drawBilingualHeader({ doc: flow.doc, data, margin: PAGE.margin })
-        flow.y = 19  // clean start below top header line
+        // Reuse the standard continuation-page path so page 2 receives
+        // the same repeated header as every later generated PDF page.
+        addFlowPage(flow)
       }
 
       const rowY = flow.y
@@ -2179,8 +2366,9 @@ export async function exportTranslationPdf({
   }
 
   if (!translation?.translatedContent) throw new Error("Generate the Arabic translation before exporting PDFs.")
-  const arabicTemplate = buildLanguagePdfTemplate({ data, translation, language: "ar", sourceDocument })
+  const rawArabicTemplate = buildLanguagePdfTemplate({ data, translation, language: "ar", sourceDocument })
   const englishTemplate = buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument })
+  const arabicTemplate = synchronizeMirroredTableStructures(englishTemplate, rawArabicTemplate)
   validateTemplateAssets(arabicTemplate, sourceDocument)
   validateTemplateAssets(englishTemplate, sourceDocument)
   validateMirroredTemplates(englishTemplate, arabicTemplate)
