@@ -13,6 +13,7 @@ import {
 } from "@/lib/stage-translations/pdf-templates"
 import { getSourcePdfAttachment } from "@/lib/stage-translations/source-document"
 import type { StageTranslationPageData, StageTranslationRecord } from "@/lib/stage-translations/types"
+import type { ReportCcRecipient } from "@/lib/report-cc/types"
 import { createClient as createSupabaseClient } from "@/lib/supabase/client"
 import { getOrganizationProfile } from "@/lib/organization/profile"
 
@@ -735,6 +736,39 @@ function drawMetaCell(flow: Flow, x: number, y: number, width: number, label: st
   )
 }
 
+function drawCcMetadata(flow: Flow, x: number, y: number, width: number, recipients: string[]) {
+  if (!recipients.length) return 0
+  const { doc, rtl } = flow
+  const label = rtl ? "نسخة إلى" : "CC To"
+  const value = recipients.join("  •  ")
+  const valueHasArabic = containsArabic(value)
+
+  setLanguage(doc, valueHasArabic, 8, false)
+  const lines = textLines(doc, value, width - 6)
+  const lineHeight = 4.1
+  const height = Math.max(14, 8.2 + lines.length * lineHeight)
+
+  doc.setDrawColor(226, 232, 240)
+  doc.setFillColor(248, 250, 252)
+  doc.roundedRect(x, y, width, height, 1.2, 1.2, "FD")
+
+  setLanguage(doc, rtl, 6.5, false)
+  doc.setTextColor(100, 116, 139)
+  writePdfText(doc, label, rtl ? x + width - 3 : x + 3, y + 4.2, { align: rtl ? "right" : "left" }, rtl)
+
+  setLanguage(doc, valueHasArabic, 8, true)
+  doc.setTextColor(15, 23, 42)
+  writePdfText(
+    doc,
+    lines,
+    rtl && valueHasArabic ? x + width - 3 : x + 3,
+    y + 8.8,
+    { align: rtl && valueHasArabic ? "right" : "left", lineHeightFactor: 1.08 },
+    valueHasArabic,
+  )
+  return height
+}
+
 function drawFirstPageHeader(flow: Flow) {
   const { doc, template, pageWidth, rtl } = flow
   const margin = PAGE.margin
@@ -801,7 +835,9 @@ function drawFirstPageHeader(flow: Flow) {
       values[index],
     )
   }
-  flow.y = gridTop + 2 * 15.5 + 8  // after both meta rows + spacing
+  const metadataBottom = gridTop + 2 * 15.5
+  const ccHeight = drawCcMetadata(flow, margin, metadataBottom + 1, pageWidth - margin * 2, template.ccRecipients)
+  flow.y = metadataBottom + (ccHeight ? ccHeight + 5 : 8)
 }
 
 function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>) {
@@ -2873,18 +2909,29 @@ async function buildNativeBilingualPdfBlob(input: {
   return doc.output("blob") as Blob
 }
 
+function formatCcRecipientForPdf(recipient: ReportCcRecipient) {
+  const details = [recipient.role, recipient.company]
+    .map((value) => value?.trim())
+    .filter(Boolean)
+  if (recipient.type === "external" && recipient.email?.trim()) details.push(recipient.email.trim())
+  return details.length ? `${recipient.name} — ${details.join(" · ")}` : recipient.name
+}
+
 export async function exportTranslationPdf({
   data,
   translation,
   kind,
+  ccRecipients = [],
 }: {
   data: StageTranslationPageData
   translation: StageTranslationRecord | null
   kind: PdfKind
+  ccRecipients?: ReportCcRecipient[]
 }) {
   const base = safePdfFilename(data.project.code || data.project.name)
   const report = safePdfFilename(data.response.reportNumber)
   const sourcePdf = getSourcePdfAttachment(data)
+  const ccMetadata = ccRecipients.map(formatCcRecipientForPdf)
   let sourceDocument: ExtractedSourceDocument | null = null
   if (sourcePdf) {
     try {
@@ -2900,7 +2947,7 @@ export async function exportTranslationPdf({
   }
 
   if (kind === "original") {
-    const englishTemplate = buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument })
+    const englishTemplate = buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument, ccRecipients: ccMetadata })
     validateTemplateAssets(englishTemplate, sourceDocument)
     return {
       blob: await buildLanguagePdfBlob(englishTemplate),
@@ -2909,8 +2956,8 @@ export async function exportTranslationPdf({
   }
 
   if (!translation?.translatedContent) throw new Error("Generate the Arabic translation before exporting PDFs.")
-  const rawArabicTemplate = buildLanguagePdfTemplate({ data, translation, language: "ar", sourceDocument })
-  const englishTemplate = buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument })
+  const rawArabicTemplate = buildLanguagePdfTemplate({ data, translation, language: "ar", sourceDocument, ccRecipients: ccMetadata })
+  const englishTemplate = buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument, ccRecipients: ccMetadata })
   const arabicTemplate = synchronizeMirroredTableStructures(englishTemplate, rawArabicTemplate)
   validateTemplateAssets(arabicTemplate, sourceDocument)
   validateTemplateAssets(englishTemplate, sourceDocument)

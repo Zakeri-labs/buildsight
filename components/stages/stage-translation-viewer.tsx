@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { SourcePdfViewer } from "@/components/stages/source-pdf-viewer"
-import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
+import { CcRecipientsReadOnly } from "@/components/reports/cc-recipients-read-only"
 import { extractSourcePdf } from "@/lib/stage-translations/client-source-pdf"
 import { downloadPdfBlob, exportTranslationPdf, storeTranslationPdf } from "@/lib/stage-translations/client-pdf"
 import type { ExtractedPdfImage, SourceImageSectionHint } from "@/lib/stage-translations/pdf-templates"
@@ -32,8 +32,7 @@ import type {
   TranslationSectionKey,
 } from "@/lib/stage-translations/types"
 import { statusLabel, statusTone } from "@/lib/stages/execution"
-import { saveReportCcRecipientsAction } from "@/lib/actions/report-cc"
-import type { ProjectCcCandidate, ReportCcRecipient, ReportCcSelection } from "@/lib/report-cc/types"
+import type { ReportCcRecipient } from "@/lib/report-cc/types"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
@@ -196,31 +195,17 @@ function filenameWithoutExtension(value: string) {
 
 export function StageTranslationViewer({
   data,
-  ccCandidates,
-  initialCcRecipients,
-  canManageCc,
+  ccRecipients,
 }: {
   data: StageTranslationPageData
-  ccCandidates: ProjectCcCandidate[]
-  initialCcRecipients: ReportCcRecipient[]
-  canManageCc: boolean
+  ccRecipients: ReportCcRecipient[]
 }) {
   const { locale } = useI18n()
   const copy = COPY[locale]
   const [translation, setTranslation] = useState<TranslationRecordState>(data.translation)
-  const [busy, setBusy] = useState<"generate" | "original" | "arabic" | "bilingual" | "cc" | null>(null)
+  const [busy, setBusy] = useState<"generate" | "original" | "arabic" | "bilingual" | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [ccSelection, setCcSelection] = useState<ReportCcSelection>(() => ({
-    internalUserIds: initialCcRecipients.filter((recipient) => recipient.type === "internal" && recipient.userId).map((recipient) => recipient.userId as string),
-    externalRecipients: initialCcRecipients.filter((recipient) => recipient.type === "external").map((recipient) => ({
-      clientId: recipient.id,
-      name: recipient.name,
-      email: recipient.email ?? "",
-      company: recipient.company ?? "",
-      role: recipient.role ?? "",
-    })),
-  }))
   const labelsEn = COPY.en
   const labelsAr = COPY.ar
   const translated = translation?.translatedContent ?? null
@@ -282,27 +267,6 @@ export function StageTranslationViewer({
     return path
   }
 
-  async function saveCcRecipients() {
-    setBusy("cc")
-    setError(null)
-    setSuccess(null)
-    try {
-      const result = await saveReportCcRecipientsAction({
-        projectId: data.project.id,
-        responseId: data.response.id,
-        context: "translation",
-        internalUserIds: ccSelection.internalUserIds,
-        externalRecipients: ccSelection.externalRecipients,
-      })
-      if (!result.ok) throw new Error(result.error)
-      setSuccess(result.emailFailures ? "CC recipients saved. One or more emails could not be sent." : "CC recipients saved.")
-    } catch (ccError) {
-      setError(ccError instanceof Error ? ccError.message : "Unable to save CC recipients.")
-    } finally {
-      setBusy(null)
-    }
-  }
-
   async function downloadPdf(kind: "original" | "arabic" | "bilingual") {
     if (kind !== "original" && (!translation?.translatedContent || translationIsStale)) return
     const storedPath = translation
@@ -321,7 +285,7 @@ export function StageTranslationViewer({
     setError(null)
     setSuccess(null)
     try {
-      const exported = await exportTranslationPdf({ data, translation, kind })
+      const exported = await exportTranslationPdf({ data, translation, kind, ccRecipients })
       if (translation) {
         await storePdf(exported.blob, exported.filename, kind)
         downloadPdfBlob(exported.blob, exported.filename)
@@ -384,25 +348,7 @@ export function StageTranslationViewer({
         </CardContent>
       </Card>
 
-      <div className="space-y-3">
-        <CcRecipientsField
-          title="CC To"
-          description="Store report translation recipients without changing translated content or PDF table structures."
-          candidates={ccCandidates}
-          value={ccSelection}
-          onChange={setCcSelection}
-          disabled={!canManageCc || busy !== null}
-          compact
-        />
-        {canManageCc ? (
-          <div className="flex justify-end">
-            <Button type="button" variant="outline" onClick={() => void saveCcRecipients()} disabled={busy !== null}>
-              {busy === "cc" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-              Save CC
-            </Button>
-          </div>
-        ) : null}
-      </div>
+      <CcRecipientsReadOnly recipients={ccRecipients} title="CC To" compact />
 
       {error ? <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"><AlertCircle className="mt-0.5 size-4 shrink-0" />{error}</div> : null}
       {translationIsStale ? <div role="status" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"><AlertCircle className="mt-0.5 size-4 shrink-0" />{copy.stale}</div> : null}

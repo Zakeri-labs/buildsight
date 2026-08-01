@@ -111,14 +111,19 @@ export async function loadReportCcRecipients(
   }
 
   const userIds = Array.from(new Set((rows ?? []).map((row: any) => row.user_id).filter(Boolean))) as string[]
-  const { data: profiles, error: profileError } = userIds.length
-    ? await admin.from("profiles").select("id, full_name, email, avatar_url").in("id", userIds)
-    : { data: [] as any[], error: null }
+  const [{ data: profiles, error: profileError }, candidates] = await Promise.all([
+    userIds.length
+      ? admin.from("profiles").select("id, full_name, email, avatar_url").in("id", userIds)
+      : Promise.resolve({ data: [] as any[], error: null }),
+    userIds.length ? loadProjectCcCandidates(projectId) : Promise.resolve([] as ProjectCcCandidate[]),
+  ])
   if (profileError) throw profileError
   const profileById = new Map<string, any>((profiles ?? []).map((profile: any) => [profile.id as string, profile]))
+  const candidateById = new Map<string, ProjectCcCandidate>(candidates.map((candidate) => [candidate.id, candidate]))
 
   return (rows ?? []).map((row: any) => {
     const profile = row.user_id ? profileById.get(row.user_id) : null
+    const candidate = row.user_id ? candidateById.get(row.user_id) : null
     return {
       id: row.id,
       context: row.recipient_context,
@@ -126,8 +131,8 @@ export async function loadReportCcRecipients(
       userId: row.user_id ?? null,
       name: row.recipient_type === "internal" ? personName(profile) : row.external_name,
       email: row.recipient_type === "internal" ? profile?.email ?? null : row.external_email,
-      company: row.recipient_type === "external" ? row.external_company ?? null : null,
-      role: row.recipient_type === "external" ? row.external_role ?? null : null,
+      company: row.recipient_type === "internal" ? candidate?.organizationName ?? null : row.external_company ?? null,
+      role: row.recipient_type === "internal" ? candidate?.role ?? null : row.external_role ?? null,
       avatarUrl: row.recipient_type === "internal" ? profile?.avatar_url ?? null : null,
       createdAt: row.created_at,
     } satisfies ReportCcRecipient

@@ -120,6 +120,7 @@ export type LanguagePdfTemplate = {
   status: string
   reportType: string
   subject: string
+  ccRecipients: string[]
   generatedAt: string | null
   sections: PdfSectionTemplate[]
   sourceLayout?: PreservedSourceLayout | null
@@ -590,6 +591,7 @@ export function buildLanguagePdfTemplate(input: {
   translation: StageTranslationRecord | null
   language: "en" | "ar"
   sourceDocument?: ExtractedSourceDocument | null
+  ccRecipients?: string[]
 }): LanguagePdfTemplate {
   const { data, translation, language, sourceDocument } = input
   const content = language === "ar"
@@ -630,6 +632,7 @@ export function buildLanguagePdfTemplate(input: {
     status: data.response.status,
     reportType: content.reportType || data.response.reportType,
     subject: content.subject || data.response.subject || "—",
+    ccRecipients: input.ccRecipients ?? [],
     generatedAt: language === "ar" ? translation?.generatedAt ?? null : null,
     sections,
     sourceLayout: null,
