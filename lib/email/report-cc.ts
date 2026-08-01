@@ -18,18 +18,61 @@ export type ReportCcEmailInput = {
   recipients: ReportCcEmailRecipient[]
 }
 
-export async function sendReportCcEmails(input: ReportCcEmailInput) {
+export type ReportCcEmailStatus = "sent" | "skipped_unconfigured" | "skipped_no_email" | "failed"
+
+export type ReportCcEmailResult = {
+  recipientRowId: string
+  status: ReportCcEmailStatus
+  error: string | null
+  providerMessageId: string | null
+}
+
+function providerErrorMessage(status: number, body: string) {
+  const trimmed = body.trim()
+  if (!trimmed) return `Resend email failed (${status}).`
+
+  try {
+    const parsed = JSON.parse(trimmed) as { message?: unknown; name?: unknown }
+    const message = typeof parsed.message === "string" ? parsed.message.trim() : ""
+    const name = typeof parsed.name === "string" ? parsed.name.trim() : ""
+    if (message) return `Resend email failed (${status})${name ? ` ${name}` : ""}: ${message}`
+  } catch {
+    // Fall back to the provider's raw response below.
+  }
+
+  return `Resend email failed (${status}): ${trimmed.slice(0, 500)}`
+}
+
+function logDeliveryFailure(input: {
+  recipientRowId: string
+  recipientEmail: string | null
+  context: ReportCcEmailInput["context"]
+  error: string
+}) {
+  console.error("[email:report-cc] Delivery failed", input)
+}
+
+export async function sendReportCcEmails(input: ReportCcEmailInput): Promise<ReportCcEmailResult[]> {
   const apiKey = process.env.RESEND_API_KEY?.trim()
   const from = process.env.REPORT_CC_FROM_EMAIL?.trim() || process.env.SITE_VISIT_FROM_EMAIL?.trim()
-  const results: Array<{ recipientRowId: string; status: "sent" | "skipped_unconfigured" | "skipped_no_email" | "failed" }> = []
+  const results: ReportCcEmailResult[] = []
 
   for (const recipient of input.recipients) {
-    if (!recipient.email?.trim()) {
-      results.push({ recipientRowId: recipient.recipientRowId, status: "skipped_no_email" })
+    const recipientEmail = recipient.email?.trim() || null
+    if (!recipientEmail) {
+      const error = `No email address is available for ${recipient.name || "the selected recipient"}.`
+      logDeliveryFailure({ recipientRowId: recipient.recipientRowId, recipientEmail, context: input.context, error })
+      results.push({ recipientRowId: recipient.recipientRowId, status: "skipped_no_email", error, providerMessageId: null })
       continue
     }
+
     if (!apiKey || !from) {
-      results.push({ recipientRowId: recipient.recipientRowId, status: "skipped_unconfigured" })
+      const missing = [!apiKey ? "RESEND_API_KEY" : null, !from ? "REPORT_CC_FROM_EMAIL or SITE_VISIT_FROM_EMAIL" : null]
+        .filter(Boolean)
+        .join(" and ")
+      const error = `Email delivery is not configured. Missing ${missing}.`
+      logDeliveryFailure({ recipientRowId: recipient.recipientRowId, recipientEmail, context: input.context, error })
+      results.push({ recipientRowId: recipient.recipientRowId, status: "skipped_unconfigured", error, providerMessageId: null })
       continue
     }
 
@@ -65,11 +108,33 @@ export async function sendReportCcEmails(input: ReportCcEmailInput) {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ from, to: [recipient.email.trim()], subject, text }),
+        body: JSON.stringify({ from, to: [recipientEmail], subject, text }),
+        cache: "no-store",
       })
-      results.push({ recipientRowId: recipient.recipientRowId, status: response.ok ? "sent" : "failed" })
-    } catch {
-      results.push({ recipientRowId: recipient.recipientRowId, status: "failed" })
+      const body = await response.text().catch(() => "")
+
+      if (!response.ok) {
+        const error = providerErrorMessage(response.status, body)
+        logDeliveryFailure({ recipientRowId: recipient.recipientRowId, recipientEmail, context: input.context, error })
+        results.push({ recipientRowId: recipient.recipientRowId, status: "failed", error, providerMessageId: null })
+        continue
+      }
+
+      let providerMessageId: string | null = null
+      if (body) {
+        try {
+          const parsed = JSON.parse(body) as { id?: unknown }
+          providerMessageId = typeof parsed.id === "string" ? parsed.id : null
+        } catch {
+          providerMessageId = null
+        }
+      }
+      results.push({ recipientRowId: recipient.recipientRowId, status: "sent", error: null, providerMessageId })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown network error."
+      const deliveryError = `Resend email request failed: ${message}`
+      logDeliveryFailure({ recipientRowId: recipient.recipientRowId, recipientEmail, context: input.context, error: deliveryError })
+      results.push({ recipientRowId: recipient.recipientRowId, status: "failed", error: deliveryError, providerMessageId: null })
     }
   }
 

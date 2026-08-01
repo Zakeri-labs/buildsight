@@ -5,13 +5,14 @@ import { assertProjectAdmin, assertProjectMember, audit, AuthzError } from "@/li
 import { sendReportCcEmails } from "@/lib/email/report-cc"
 import { loadProjectCcCandidates, loadReportCcRecipients } from "@/lib/report-cc/server"
 import type { ExternalCcRecipientInput, ReportCcContext, ReportCcRecipient } from "@/lib/report-cc/types"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export type ReportCcActionResult =
-  | { ok: true; recipients: ReportCcRecipient[]; emailFailures: number }
+  | { ok: true; recipients: ReportCcRecipient[]; emailFailures: number; emailErrors: string[] }
   | { ok: false; error: string }
 
 function normalizeExternal(rows: ExternalCcRecipientInput[]) {
@@ -102,7 +103,7 @@ export async function saveReportCcRecipientsAction(input: {
     const supabase = await createClient()
     const { data: existing, error: existingError } = await supabase
       .from("report_cc_recipients")
-      .select("id, recipient_type, user_id, external_name, external_email, external_company, external_role")
+      .select("id, recipient_type, user_id, external_name, external_email, external_company, external_role, email_status, email_sent_at")
       .eq("project_id", input.projectId)
       .eq("response_id", input.responseId)
       .eq("recipient_context", input.context)
@@ -130,7 +131,7 @@ export async function saveReportCcRecipientsAction(input: {
       if (error) throw error
     }
 
-    const inserted: any[] = []
+    let insertedCount = 0
     for (const userId of internalIds.filter((id) => !existingInternal.has(id))) {
       const { data, error } = await supabase
         .from("report_cc_recipients")
@@ -142,10 +143,10 @@ export async function saveReportCcRecipientsAction(input: {
           user_id: userId,
           added_by: actorId,
         })
-        .select("id, user_id, recipient_type")
+        .select("id")
         .single()
       if (error && error.code !== "23505") throw error
-      if (data) inserted.push(data)
+      if (data) insertedCount += 1
     }
     for (const external of externalRows.filter((row) => !existingExternal.has(row.email))) {
       const { data, error } = await supabase
@@ -161,17 +162,30 @@ export async function saveReportCcRecipientsAction(input: {
           external_role: external.role,
           added_by: actorId,
         })
-        .select("id, external_name, external_email, recipient_type")
+        .select("id")
         .single()
       if (error && error.code !== "23505") throw error
-      if (data) inserted.push(data)
+      if (data) insertedCount += 1
     }
 
+    const admin = createAdminClient()
+    const { data: deliveryRows, error: deliveryRowsError } = await admin
+      .from("report_cc_recipients")
+      .select("id, recipient_type, user_id, external_name, external_email, email_status, email_sent_at")
+      .eq("project_id", input.projectId)
+      .eq("response_id", input.responseId)
+      .eq("recipient_context", input.context)
+    if (deliveryRowsError) throw deliveryRowsError
+
+    // Retry any selected recipient that has never been sent or previously failed.
+    // This restores delivery when a CC row was saved during an earlier draft save,
+    // which previously prevented the submit action from attempting email again.
+    const pendingDeliveryRows = (deliveryRows ?? []).filter((row: any) => row.email_status !== "sent" || !row.email_sent_at)
     const stage = Array.isArray(term?.project_stages) ? term.project_stages[0] : term?.project_stages
     const project = Array.isArray(response.projects) ? response.projects[0] : response.projects
     const reportPath = `/projects/${input.projectId}/stages/${stage.id}/terms/${response.project_stage_term_id}/reports/${input.responseId}`
     const href = input.context === "translation" ? `${reportPath}/translate` : reportPath
-    const emailRecipients = inserted.map((row) => {
+    const emailRecipients = pendingDeliveryRows.map((row: any) => {
       if (row.recipient_type === "internal") {
         const candidate = candidateById.get(row.user_id)
         return { recipientRowId: row.id, name: candidate?.name ?? "Project member", email: candidate?.email ?? null, internal: true }
@@ -191,11 +205,26 @@ export async function saveReportCcRecipientsAction(input: {
         })
       : []
     for (const result of emailResults) {
-      await supabase
+      const { error: statusError } = await admin
         .from("report_cc_recipients")
         .update({ email_status: result.status, email_sent_at: result.status === "sent" ? new Date().toISOString() : null })
         .eq("id", result.recipientRowId)
+      if (statusError) {
+        console.error("[email:report-cc] Could not persist delivery status", {
+          recipientRowId: result.recipientRowId,
+          status: result.status,
+          error: statusError.message,
+        })
+      }
     }
+    const emailRecipientByRowId = new Map(emailRecipients.map((recipient) => [recipient.recipientRowId, recipient]))
+    const emailErrors = emailResults
+      .filter((result) => result.status !== "sent")
+      .map((result) => {
+        const recipient = emailRecipientByRowId.get(result.recipientRowId)
+        const label = recipient?.email || recipient?.name || result.recipientRowId
+        return `${label}: ${result.error || "Email delivery failed."}`
+      })
 
     await audit({
       actorId,
@@ -203,7 +232,15 @@ export async function saveReportCcRecipientsAction(input: {
       entityType: "term_response",
       entityId: input.responseId,
       projectId: input.projectId,
-      metadata: { internalCount: internalIds.length, externalCount: externalRows.length, addedCount: inserted.length },
+      metadata: {
+        internalCount: internalIds.length,
+        externalCount: externalRows.length,
+        addedCount: insertedCount,
+        emailAttemptedCount: emailResults.length,
+        emailSentCount: emailResults.filter((row) => row.status === "sent").length,
+        emailFailureCount: emailErrors.length,
+        emailErrors: emailErrors.slice(0, 10),
+      },
     })
 
     revalidatePath(reportPath)
@@ -211,7 +248,7 @@ export async function saveReportCcRecipientsAction(input: {
     revalidatePath("/", "layout")
     revalidatePath("/")
     const recipients = await loadReportCcRecipients(input.projectId, input.responseId, input.context)
-    return { ok: true, recipients, emailFailures: emailResults.filter((row) => row.status === "failed").length }
+    return { ok: true, recipients, emailFailures: emailErrors.length, emailErrors }
   } catch (error) {
     const message = error instanceof AuthzError ? error.message : error instanceof Error ? error.message : "Could not save CC recipients."
     return { ok: false, error: message }

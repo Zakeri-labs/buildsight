@@ -1933,7 +1933,7 @@ function reorderSourcePages(sourceRegion: Element, targetRegion: Element) {
 function synchronizeHtmlTableStructures(sourceHtml: string | undefined, translatedHtml: string | undefined) {
   const sourceRoot = parsePdfHtmlRoot(sourceHtml)
   const translatedRoot = parsePdfHtmlRoot(translatedHtml)
-  if (!sourceRoot || !translatedRoot) return translatedHtml ?? ""
+  if (!sourceRoot || !translatedRoot) return ""
 
   const sourceRegions = attachmentRegionMap(sourceRoot)
   const translatedRegions = attachmentRegionMap(translatedRoot)
@@ -1962,8 +1962,6 @@ function synchronizeHtmlTableStructures(sourceHtml: string | undefined, translat
       }
     })
 
-    // A translated document must never introduce a structural table that is
-    // absent from the English source. Non-table translated prose is preserved.
     translatedTables
       .filter((table) => !usedTranslatedTables.has(table))
       .forEach((table) => table.remove())
@@ -1972,17 +1970,201 @@ function synchronizeHtmlTableStructures(sourceHtml: string | undefined, translat
     if (key !== "__root__") orderedTargetRegions.push(targetRegion)
   }
 
-  // Remove tables from translated-only attachment regions. The source PDF is
-  // the canonical document structure for mirrored exports.
   for (const [key, region] of translatedRegions) {
     if (!sourceRegions.has(key)) region.querySelectorAll("table").forEach((table) => table.remove())
   }
 
-  // Keep attachment/section order identical to the English source. Appending an
-  // existing node moves it without recreating translated prose or attributes.
   orderedTargetRegions.forEach((region) => translatedRoot.appendChild(region))
-
   return translatedRoot.innerHTML
+}
+
+const STRUCTURAL_BLOCK_SELECTOR = [
+  "h1", "h2", "h3", "h4", "h5", "h6",
+  "p", "blockquote", "address", "figcaption", "div", "article",
+  "li", "dt", "dd", "table",
+].join(",")
+
+function closestAttachmentRegion(element: Element) {
+  return element.closest("section[data-attachment-id]")
+}
+
+function regionStructuralBlocks(region: Element, key: string) {
+  return Array.from(region.querySelectorAll(STRUCTURAL_BLOCK_SELECTOR)).filter((element) => {
+    const attachmentRegion = closestAttachmentRegion(element)
+    if (key === "__root__") {
+      if (attachmentRegion) return false
+    } else if (attachmentRegion !== region) {
+      return false
+    }
+
+    // Table structure and text are synchronized as a single block. Do not also
+    // treat headings/paragraphs nested inside a table as independent blocks.
+    if (element.tagName.toLowerCase() !== "table" && element.closest("table")) return false
+
+    const tag = element.tagName.toLowerCase()
+    if ((tag === "div" || tag === "article") && element.querySelector(STRUCTURAL_BLOCK_SELECTOR)) return false
+
+    // A list item's source structure is canonical. Descendant paragraphs are
+    // not treated as separate blocks, otherwise one translated item could be
+    // consumed twice.
+    const parentListItem = element.parentElement?.closest("li,dt,dd")
+    if (parentListItem && parentListItem !== element) return false
+    return true
+  })
+}
+
+function structuralBlockKind(element: Element) {
+  const tag = element.tagName.toLowerCase()
+  if (tag === "table") return "table"
+  if (/^h[1-6]$/.test(tag)) return "heading"
+  if (tag === "li" || tag === "dt" || tag === "dd") return "list-item"
+  if (tag === "figcaption") return "caption"
+  return "prose"
+}
+
+function translatedBlockForSource(input: {
+  sourceBlock: Element
+  sourceBlocks: Element[]
+  translatedBlocks: Element[]
+  used: Set<Element>
+}) {
+  const kind = structuralBlockKind(input.sourceBlock)
+  const sourcePage = sourcePageKey(input.sourceBlock)
+  const sameKindSource = input.sourceBlocks.filter((block) => structuralBlockKind(block) === kind && sourcePageKey(block) === sourcePage)
+  const pageOrdinal = sameKindSource.indexOf(input.sourceBlock)
+  const exactPage = input.translatedBlocks.filter((block) =>
+    structuralBlockKind(block) === kind
+    && sourcePageKey(block) === sourcePage
+    && !input.used.has(block),
+  )
+  const sameTag = input.translatedBlocks.filter((block) =>
+    block.tagName.toLowerCase() === input.sourceBlock.tagName.toLowerCase()
+    && !input.used.has(block),
+  )
+  const sameKind = input.translatedBlocks.filter((block) =>
+    structuralBlockKind(block) === kind
+    && !input.used.has(block),
+  )
+  const candidate = exactPage[pageOrdinal]
+    ?? exactPage[0]
+    ?? sameTag[0]
+    ?? sameKind[0]
+  if (candidate) input.used.add(candidate)
+  return candidate
+}
+
+function blockTextWithoutNestedStructures(element: Element | undefined) {
+  if (!element) return ""
+  const clone = element.cloneNode(true) as Element
+  clone.querySelectorAll("table,ul,ol,dl").forEach((nested) => nested.remove())
+  clone.querySelectorAll("br").forEach((node) => node.replaceWith("\n"))
+  return normalizeText(clone.textContent || "")
+}
+
+function blockTextNodes(target: Element) {
+  const nodes: Text[] = []
+  const visit = (node: Node) => {
+    for (const child of Array.from(node.childNodes)) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        nodes.push(child as Text)
+        continue
+      }
+      if (child.nodeType !== Node.ELEMENT_NODE) continue
+      const element = child as Element
+      if (["table", "ul", "ol", "dl"].includes(element.tagName.toLowerCase())) continue
+      visit(element)
+    }
+  }
+  visit(target)
+  return nodes
+}
+
+function replaceBlockTextPreservingStructure(target: Element, translated?: Element) {
+  const translatedText = blockTextWithoutNestedStructures(translated)
+  const textNodes = blockTextNodes(target)
+  const targetNode = textNodes.find((node) => Boolean(node.nodeValue?.trim())) ?? textNodes[0]
+  textNodes.forEach((node) => {
+    node.nodeValue = ""
+  })
+  if (!translatedText) return
+  if (targetNode) {
+    targetNode.nodeValue = translatedText
+    return
+  }
+  target.insertBefore(target.ownerDocument.createTextNode(translatedText), target.firstChild)
+}
+
+function directMeaningfulTextNodes(element: Element) {
+  return Array.from(element.childNodes)
+    .filter((node): node is Text => node.nodeType === Node.TEXT_NODE && Boolean(node.nodeValue?.trim()))
+}
+
+function mirrorDirectRegionText(source: Element, target: Element, translated?: Element) {
+  const sourceNodes = directMeaningfulTextNodes(source)
+  const targetNodes = directMeaningfulTextNodes(target)
+  const translatedNodes = translated ? directMeaningfulTextNodes(translated) : []
+  sourceNodes.forEach((_, index) => {
+    const targetNode = targetNodes[index]
+    if (targetNode) targetNode.nodeValue = translatedNodes[index]?.nodeValue?.trim() ?? ""
+  })
+}
+
+function cloneRegionWithMirroredContent(sourceRegion: Element, translatedRegion: Element | undefined, key: string) {
+  const synchronizedRegion = sourceRegion.cloneNode(true) as Element
+  const sourceBlocks = regionStructuralBlocks(sourceRegion, key)
+  const synchronizedBlocks = regionStructuralBlocks(synchronizedRegion, key)
+  const translatedBlocks = translatedRegion ? regionStructuralBlocks(translatedRegion, key) : []
+  const usedTranslatedBlocks = new Set<Element>()
+  mirrorDirectRegionText(sourceRegion, synchronizedRegion, translatedRegion)
+
+  sourceBlocks.forEach((sourceBlock, index) => {
+    const synchronizedBlock = synchronizedBlocks[index]
+    if (!synchronizedBlock) return
+    const translatedBlock = translatedBlockForSource({
+      sourceBlock,
+      sourceBlocks,
+      translatedBlocks,
+      used: usedTranslatedBlocks,
+    })
+    if (sourceBlock.tagName.toLowerCase() === "table") {
+      synchronizedBlock.replaceWith(synchronizedTableElement(sourceBlock, translatedBlock))
+      return
+    }
+    replaceBlockTextPreservingStructure(synchronizedBlock, translatedBlock)
+  })
+
+  return synchronizedRegion
+}
+
+/**
+ * Mirrors the complete English document structure into the translated HTML.
+ * English remains the canonical layout source; Arabic contributes text only.
+ * This keeps sections, source pages, headings, rows, columns, merged cells and
+ * ordering identical, while translated-only blocks cannot drift into the PDF.
+ */
+function synchronizeHtmlDocumentStructure(sourceHtml: string | undefined, translatedHtml: string | undefined) {
+  if (!sourceHtml?.trim()) return ""
+  const sourceRoot = parsePdfHtmlRoot(sourceHtml)
+  const tableSynchronizedRoot = parsePdfHtmlRoot(synchronizeHtmlTableStructures(sourceHtml, translatedHtml))
+  if (!sourceRoot || !tableSynchronizedRoot) return ""
+
+  const synchronizedRoot = sourceRoot.cloneNode(true) as Element
+  const sourceRegions = attachmentRegionMap(sourceRoot)
+  const translatedRegions = attachmentRegionMap(tableSynchronizedRoot)
+  const synchronizedRegions = attachmentRegionMap(synchronizedRoot)
+
+  for (const [key, sourceRegion] of sourceRegions) {
+    const synchronizedRegion = synchronizedRegions.get(key)
+    if (!synchronizedRegion) continue
+    const mirrored = cloneRegionWithMirroredContent(sourceRegion, translatedRegions.get(key), key)
+    if (key === "__root__") {
+      synchronizedRoot.innerHTML = mirrored.innerHTML
+    } else {
+      synchronizedRegion.replaceWith(mirrored)
+    }
+  }
+
+  return synchronizedRoot.innerHTML
 }
 
 function synchronizeStructuredTable(source: StructuredPdfTable | undefined, translated: StructuredPdfTable | undefined) {
@@ -1995,19 +2177,42 @@ function synchronizeStructuredTable(source: StructuredPdfTable | undefined, tran
   }
 }
 
-function synchronizeMirroredTableStructures(english: LanguagePdfTemplate, arabic: LanguagePdfTemplate) {
-  const englishSections = new Map(english.sections.map((section) => [section.key, section]))
+function imageStructureKey(image: PdfImageTemplate) {
+  return [
+    image.sourcePage ?? 0,
+    image.sourceOrder ?? 0,
+    image.flowTarget ?? "gallery",
+    image.sectionKey ?? "",
+  ].join(":")
+}
+
+function synchronizeSectionImages(source: PdfImageTemplate[] | undefined, translated: PdfImageTemplate[] | undefined) {
+  if (!source?.length) return undefined
+  const translatedByKey = new Map((translated ?? []).map((image) => [imageStructureKey(image), image]))
+  return source.map((image, index) => ({
+    ...image,
+    caption: translatedByKey.get(imageStructureKey(image))?.caption ?? translated?.[index]?.caption ?? "",
+  }))
+}
+
+function synchronizeMirroredDocumentStructures(english: LanguagePdfTemplate, arabic: LanguagePdfTemplate) {
+  const arabicSections = new Map(arabic.sections.map((section) => [section.key, section]))
   return {
     ...arabic,
-    sections: arabic.sections.map((section) => {
-      const source = englishSections.get(section.key)
-      if (!source) return section
-      const sourceDocumentHtml = synchronizeHtmlTableStructures(source.sourceDocumentHtml, section.sourceDocumentHtml)
-      const otherDocumentsHtml = synchronizeHtmlTableStructures(source.otherDocumentsHtml, section.otherDocumentsHtml)
+    // The English template is the canonical document schema. Arabic supplies
+    // translated labels/text only, never an independent section hierarchy.
+    sections: english.sections.map((source) => {
+      const translated = arabicSections.get(source.key)
+      const sourceDocumentHtml = synchronizeHtmlDocumentStructure(source.sourceDocumentHtml, translated?.sourceDocumentHtml)
+      const otherDocumentsHtml = synchronizeHtmlDocumentStructure(source.otherDocumentsHtml, translated?.otherDocumentsHtml)
       return {
-        ...section,
-        html: synchronizeHtmlTableStructures(source.html, section.html),
-        table: synchronizeStructuredTable(source.table, section.table),
+        ...source,
+        title: translated?.title ?? source.title,
+        imageTitle: translated?.imageTitle ?? source.imageTitle,
+        documentsTitle: translated?.documentsTitle ?? source.documentsTitle,
+        html: synchronizeHtmlDocumentStructure(source.html, translated?.html),
+        table: synchronizeStructuredTable(source.table, translated?.table),
+        images: synchronizeSectionImages(source.images, translated?.images),
         sourceDocumentHtml,
         otherDocumentsHtml,
         documentsHtml: `${sourceDocumentHtml}${otherDocumentsHtml}`,
@@ -2039,6 +2244,49 @@ function htmlTableStructureSignatures(html: string | undefined) {
     const attachmentId = table.closest("section[data-attachment-id]")?.getAttribute("data-attachment-id") ?? "root"
     const sourcePage = table.closest("section[data-source-page]")?.getAttribute("data-source-page") ?? "flow"
     return `${attachmentId}:${sourcePage}:${tableStructureSignature(table)}`
+  })
+}
+
+const DOCUMENT_STRUCTURE_SELECTOR = [
+  "section[data-attachment-id]",
+  "section[data-source-page]",
+  "h1", "h2", "h3", "h4", "h5", "h6",
+  "p", "blockquote", "address", "figure", "figcaption", "div", "article",
+  "ul", "ol", "dl", "li", "dt", "dd", "table",
+].join(",")
+
+function htmlDocumentStructureSignatures(html: string | undefined) {
+  const root = parsePdfHtmlRoot(html)
+  if (!root) return []
+  return Array.from(root.querySelectorAll(DOCUMENT_STRUCTURE_SELECTOR))
+    .filter((element) => {
+      if (element.tagName.toLowerCase() === "table") return !element.parentElement?.closest("table")
+      return !element.closest("table")
+    })
+    .map((element) => {
+      const tag = element.tagName.toLowerCase()
+      const attachmentId = element.getAttribute("data-attachment-id")
+        ?? element.closest("section[data-attachment-id]")?.getAttribute("data-attachment-id")
+        ?? "root"
+      const sourcePage = element.getAttribute("data-source-page")
+        ?? element.closest("section[data-source-page]")?.getAttribute("data-source-page")
+        ?? "flow"
+      if (tag === "table") return `${attachmentId}:${sourcePage}:table:${tableStructureSignature(element)}`
+      const listCount = tag === "ul" || tag === "ol" || tag === "dl"
+        ? Array.from(element.children).filter((child) => ["li", "dt", "dd"].includes(child.tagName.toLowerCase())).length
+        : 0
+      return `${attachmentId}:${sourcePage}:${tag}:${listCount}`
+    })
+}
+
+function templateDocumentStructureSignatures(template: LanguagePdfTemplate) {
+  return template.sections.flatMap((section) => {
+    const signatures: string[] = [`${section.key}:section`]
+    htmlDocumentStructureSignatures(section.html).forEach((signature, index) => signatures.push(`${section.key}:html:${index}:${signature}`))
+    const sourceHtml = section.sourceDocumentHtml ?? (section.otherDocumentsHtml === undefined ? section.documentsHtml : undefined)
+    htmlDocumentStructureSignatures(sourceHtml).forEach((signature, index) => signatures.push(`${section.key}:source:${index}:${signature}`))
+    htmlDocumentStructureSignatures(section.otherDocumentsHtml).forEach((signature, index) => signatures.push(`${section.key}:other:${index}:${signature}`))
+    return signatures
   })
 }
 
@@ -2131,6 +2379,11 @@ function validateMirroredTemplates(english: LanguagePdfTemplate, arabic: Languag
   const arabicInventory = templateInventory(arabic)
   if (englishInventory.images !== arabicInventory.images) {
     throw new Error("English and Arabic PDF image counts are not synchronized.")
+  }
+  const englishDocumentStructures = templateDocumentStructureSignatures(english)
+  const arabicDocumentStructures = templateDocumentStructureSignatures(arabic)
+  if (englishDocumentStructures.join("|") !== arabicDocumentStructures.join("|")) {
+    throw new Error("English and Arabic PDF document structures are not synchronized.")
   }
   const englishTableStructures = templateTableStructureSignatures(english)
   const arabicTableStructures = templateTableStructureSignatures(arabic)
@@ -3056,7 +3309,7 @@ function isStaticOrganizationFooterText(text: string, sourceFooterTexts: Set<str
   return /^(?:page|الصفحة)\s*[:#-]?\s*\d+(?:\s*(?:\/|of|من)\s*\d+)?$/i.test(normalized)
 }
 
-function stripStaticFooterFromArabicHtml(html: string | undefined, sourceFooterTexts: Set<string>) {
+function stripStaticFooterFromDocumentHtml(html: string | undefined, sourceFooterTexts: Set<string>) {
   if (!html?.trim()) return html ?? ""
   const root = parsePdfHtmlRoot(html)
   if (!root) return html
@@ -3073,7 +3326,7 @@ function stripStaticFooterFromArabicHtml(html: string | undefined, sourceFooterT
 
     if (element.tagName.toLowerCase() === "tr") {
       // Preserve the canonical table row/cell structure while removing only
-      // static footer text from the Arabic document body.
+      // static footer text from the mirrored document body.
       directTableCells(element).forEach((cell) => {
         textNodesOutsideNestedTables(cell).forEach((node) => {
           node.nodeValue = ""
@@ -3095,18 +3348,17 @@ function stripStaticFooterFromArabicHtml(html: string | undefined, sourceFooterT
   return root.innerHTML
 }
 
-function stripStaticFooterFromArabicTemplate(
+function stripStaticFooterFromDocumentTemplate(
   template: LanguagePdfTemplate,
   sourceDocument: ExtractedSourceDocument | null,
 ) {
-  if (template.language !== "ar") return template
   const sourceFooterTexts = sourceStaticFooterTexts(sourceDocument)
   return {
     ...template,
     sections: template.sections.map((section) => {
       if (section.key !== "attachments") return section
-      const sourceDocumentHtml = stripStaticFooterFromArabicHtml(section.sourceDocumentHtml, sourceFooterTexts)
-      const otherDocumentsHtml = stripStaticFooterFromArabicHtml(section.otherDocumentsHtml, sourceFooterTexts)
+      const sourceDocumentHtml = stripStaticFooterFromDocumentHtml(section.sourceDocumentHtml, sourceFooterTexts)
+      const otherDocumentsHtml = stripStaticFooterFromDocumentHtml(section.otherDocumentsHtml, sourceFooterTexts)
       return {
         ...section,
         sourceDocumentHtml,
@@ -3161,8 +3413,13 @@ export async function exportTranslationPdf({
     }
   }
 
+  const rawEnglishTemplate = buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument, ccRecipients: ccMetadata })
+  // Static company/footer lines are already drawn by the fixed PDF footer.
+  // Remove them from attachment body content in both languages before the
+  // English structure becomes the canonical mirrored document schema.
+  const englishTemplate = stripStaticFooterFromDocumentTemplate(rawEnglishTemplate, sourceDocument)
+
   if (kind === "original") {
-    const englishTemplate = buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument, ccRecipients: ccMetadata })
     validateTemplateAssets(englishTemplate, sourceDocument)
     return {
       blob: await buildLanguagePdfBlob(englishTemplate),
@@ -3172,13 +3429,12 @@ export async function exportTranslationPdf({
 
   if (!translation?.translatedContent) throw new Error("Generate the Arabic translation before exporting PDFs.")
   const rawArabicTemplate = buildLanguagePdfTemplate({ data, translation, language: "ar", sourceDocument, ccRecipients: ccMetadata })
-  const englishTemplate = buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument, ccRecipients: ccMetadata })
-  const arabicTemplate = synchronizeMirroredTableStructures(englishTemplate, rawArabicTemplate)
+  const footerCleanArabicTemplate = stripStaticFooterFromDocumentTemplate(rawArabicTemplate, sourceDocument)
+  const arabicTemplate = synchronizeMirroredDocumentStructures(englishTemplate, footerCleanArabicTemplate)
   validateTemplateAssets(arabicTemplate, sourceDocument)
   validateTemplateAssets(englishTemplate, sourceDocument)
   validateMirroredTemplates(englishTemplate, arabicTemplate)
-  const arabicPdfTemplate = stripStaticFooterFromArabicTemplate(arabicTemplate, sourceDocument)
-  const arabicBlob = await buildLanguagePdfBlob(arabicPdfTemplate)
+  const arabicBlob = await buildLanguagePdfBlob(arabicTemplate)
   if (kind === "arabic") {
     return { blob: arabicBlob, filename: `${base}-${report}-arabic-translation.pdf` }
   }
