@@ -57,6 +57,7 @@ export type ProjectTermResponse = {
   completedAt: string | null
   attachments: ProjectStageAttachment[]
   approvals: ProjectStageApproval[]
+  translation: ProjectStageTranslationSummary | null
 }
 
 export type ProjectStageTranslationSummary = {
@@ -66,6 +67,7 @@ export type ProjectStageTranslationSummary = {
   originalPdfPath: string | null
   arabicPdfPath: string | null
   bilingualPdfPath: string | null
+  translatedContent?: unknown
 }
 
 export type ProjectStageTermExecution = {
@@ -88,6 +90,8 @@ export type ProjectStageTermExecution = {
   isActive: boolean
   hasLinkedData: boolean
   response: ProjectTermResponse | null
+  responses: ProjectTermResponse[]
+  reportSummary: { total: number; draft: number; inProgress: number; pendingReview: number; approved: number; rejected: number }
   translation: ProjectStageTranslationSummary | null
   subterms: ProjectStageTermExecution[]
 }
@@ -270,6 +274,7 @@ export async function loadProjectStageExecution(
         .from("term_responses")
         .select("id, project_stage_term_id, report_number, visit_number, report_type, subject, report_title, response_content, status, created_by, created_at, updated_at, submitted_at, completed_at")
         .in("project_stage_term_id", termIds)
+        .order("created_at", { ascending: false })
     : { data: [], error: null }
   if (responseError) throw responseError
 
@@ -349,10 +354,10 @@ export async function loadProjectStageExecution(
     })
   }
 
-  const responseByTerm = new Map<string, ProjectTermResponse>()
+  const responsesByTerm = new Map<string, ProjectTermResponse[]>()
   for (const response of responses ?? []) {
     const createdBy = people.get(response.created_by) ?? { id: response.created_by, name: "Project member", email: null, avatarUrl: null }
-    responseByTerm.set(response.project_stage_term_id, {
+    const mapped: ProjectTermResponse = {
       id: response.id,
       reportNumber: response.report_number,
       visitNumber: response.visit_number,
@@ -368,12 +373,20 @@ export async function loadProjectStageExecution(
       completedAt: response.completed_at,
       attachments: attachmentByResponse.get(response.id) ?? [],
       approvals: approvalByResponse.get(response.id) ?? [],
-    })
+      translation: translationByResponse.get(response.id) ?? null,
+    }
+    const items = responsesByTerm.get(response.project_stage_term_id) ?? []
+    items.push(mapped)
+    responsesByTerm.set(response.project_stage_term_id, items)
+  }
+  for (const items of responsesByTerm.values()) {
+    items.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
   }
 
   const termMap = new Map<string, ProjectStageTermExecution>()
   for (const term of termRows) {
-    const response = responseByTerm.get(term.id) ?? null
+    const termResponses = responsesByTerm.get(term.id) ?? []
+    const response = termResponses[0] ?? null
     termMap.set(term.id, {
       id: term.id,
       projectStageId: term.project_stage_id,
@@ -392,9 +405,18 @@ export async function loadProjectStageExecution(
       status: term.status,
       sortOrder: term.sort_order,
       isActive: term.is_active !== false,
-      hasLinkedData: Boolean(response),
+      hasLinkedData: termResponses.length > 0,
       response,
-      translation: response ? translationByResponse.get(response.id) ?? null : null,
+      responses: termResponses,
+      reportSummary: {
+        total: termResponses.length,
+        draft: termResponses.filter((item) => item.status === "draft").length,
+        inProgress: termResponses.filter((item) => item.status === "in_progress").length,
+        pendingReview: termResponses.filter((item) => item.status === "submitted" || item.status === "under_review").length,
+        approved: termResponses.filter((item) => item.status === "approved" || item.status === "completed").length,
+        rejected: termResponses.filter((item) => item.status === "rejected").length,
+      },
+      translation: response?.translation ?? null,
       subterms: [],
     })
   }
@@ -434,9 +456,10 @@ export async function loadProjectStageExecution(
       .filter((term: any) => term.template_term_id)
       .map((term: any) => [term.template_term_id as string, term]),
   )
-  const responseByProjectTermId = new Map<string, any>(
-    (responses ?? []).map((response: any) => [response.project_stage_term_id as string, response]),
-  )
+  const responseTermIds = new Set<string>((responses ?? []).map((response: any) => response.project_stage_term_id as string))
+  const pendingResponseTermIds = new Set<string>((responses ?? [])
+    .filter((response: any) => response.status === "submitted" || response.status === "under_review")
+    .map((response: any) => response.project_stage_term_id as string))
   const libraryTermDefinitionById = new Map<string, any>(
     (libraryTerms ?? []).map((definition: any) => [definition.id as string, definition]),
   )
@@ -444,7 +467,6 @@ export async function loadProjectStageExecution(
   const libraryTermMap = new Map<string, ProjectTermSelectionOption>()
   for (const definition of libraryTerms ?? []) {
     const projectTerm = projectTermByTemplate.get(definition.id)
-    const response = projectTerm ? responseByProjectTermId.get(projectTerm.id) : null
     libraryTermMap.set(definition.id, {
       templateTermId: definition.id,
       projectTermId: projectTerm?.id ?? null,
@@ -454,8 +476,8 @@ export async function loadProjectStageExecution(
       responseType: isSubtermResponseType(definition.response_type) ? definition.response_type : "combined",
       sortOrder: definition.sort_order,
       active: Boolean(projectTerm && projectTerm.is_active !== false),
-      hasData: Boolean(response),
-      hasPendingReview: Boolean(response && (response.status === "submitted" || response.status === "under_review")),
+      hasData: Boolean(projectTerm && responseTermIds.has(projectTerm.id)),
+      hasPendingReview: Boolean(projectTerm && pendingResponseTermIds.has(projectTerm.id)),
       subterms: [],
     })
   }
@@ -494,11 +516,8 @@ export async function loadProjectStageExecution(
         ? termRows.filter((term: any) => term.project_stage_id === projectStage.id && !term.template_term_id)
         : []
       const allItems = terms.flatMap((term) => [term, ...term.subterms])
-      const legacyHasData = legacyProjectTerms.some((term: any) => responseByProjectTermId.has(term.id))
-      const legacyHasPendingReview = legacyProjectTerms.some((term: any) => {
-        const response = responseByProjectTermId.get(term.id)
-        return response?.status === "submitted" || response?.status === "under_review"
-      })
+      const legacyHasData = legacyProjectTerms.some((term: any) => responseTermIds.has(term.id))
+      const legacyHasPendingReview = legacyProjectTerms.some((term: any) => pendingResponseTermIds.has(term.id))
       return {
         templateStageId: stage.id,
         projectStageId: projectStage?.id ?? null,
@@ -537,4 +556,13 @@ export async function loadProjectStageTerm(projectId: string, termId: string, us
     }
   }
   return null
+}
+
+
+export async function loadProjectStageReport(projectId: string, termId: string, reportId: string, userId: string) {
+  const execution = await loadProjectStageTerm(projectId, termId, userId)
+  if (!execution) return null
+  const response = execution.term.responses.find((item) => item.id === reportId)
+  if (!response) return null
+  return { ...execution, response }
 }

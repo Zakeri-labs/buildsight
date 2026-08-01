@@ -42,9 +42,9 @@ const COPY = {
     noStages: "No active project stages are available.",
     noStagesHint: "An administrator can activate the construction stages used by this project.",
     noTerms: "No terms have been added to this stage.",
-    openReport: "Open report",
+    openReport: "Open reports",
     archived: "Archived",
-    parentRecord: "Open existing parent record",
+    parentRecord: "Open parent reports",
     subterms: "Sub-terms",
   },
   ar: {
@@ -62,9 +62,9 @@ const COPY = {
     noStages: "لا توجد مراحل نشطة لهذا المشروع.",
     noStagesHint: "يمكن للمسؤول تفعيل مراحل الإنشاء المستخدمة في هذا المشروع.",
     noTerms: "لم تتم إضافة بنود إلى هذه المرحلة.",
-    openReport: "فتح التقرير",
+    openReport: "فتح التقارير",
     archived: "مؤرشف",
-    parentRecord: "فتح سجل البند الرئيسي الحالي",
+    parentRecord: "فتح تقارير البند الرئيسي",
     subterms: "البنود الفرعية",
   },
 } as const
@@ -124,7 +124,7 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
           <p className="mt-1 text-sm text-muted-foreground">{copy.subtitle}</p>
         </div>
         <div className="grid min-w-0 grid-cols-3 gap-2 sm:min-w-[270px] sm:gap-3">
-          <Metric value={totals.total} label={language === "ar" ? "التقارير" : "Reports"} />
+          <Metric value={totals.total} label={language === "ar" ? "عناصر سير العمل" : "Workflow Items"} />
           <Metric value={totals.completed} label={copy.completed} />
           <Metric value={`${totals.percentage}%`} label={language === "ar" ? "نسبة الإنجاز" : "Progress"} />
         </div>
@@ -250,6 +250,7 @@ function TermGroup({
               <Badge variant="outline" className={term.required ? "border-amber-200 bg-amber-50 text-amber-700" : "text-muted-foreground"}>{term.required ? copy.required : copy.optional}</Badge>
               <Badge variant="outline" className={statusTone(term.status)}>{statusLabel(term.status, locale)}</Badge>
               <Badge variant="secondary">{activeSubterms.length} {copy.subterms}</Badge>
+              <Badge variant="outline">{activeSubterms.reduce((sum, item) => sum + item.reportSummary.total, 0)} Reports</Badge>
             </div>
             <div className="mt-2 flex max-w-xl items-center gap-3">
               <Progress value={countedSubterms.length ? Math.round((completed / countedSubterms.length) * 100) : 0} className="h-1.5 flex-1" />
@@ -322,6 +323,8 @@ function TermLink({
             <Badge variant="outline" className={term.required ? "border-amber-200 bg-amber-50 text-amber-700" : "text-muted-foreground"}>{term.required ? copy.required : copy.optional}</Badge>
             <Badge variant="outline" className={statusTone(term.status)}>{statusLabel(term.status, locale)}</Badge>
             {compact ? <Badge variant="secondary">{subtermResponseTypeLabel(term.responseType)}</Badge> : null}
+            <Badge variant="outline">{term.reportSummary.total} {term.reportSummary.total === 1 ? "Report" : "Reports"}</Badge>
+            {term.reportSummary.pendingReview ? <Badge variant="outline" className="border-violet-200 bg-violet-50 text-violet-700">{term.reportSummary.pendingReview} Pending Review</Badge> : null}
             {overdue ? <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">{copy.overdue}</Badge> : null}
           </div>
         </div>

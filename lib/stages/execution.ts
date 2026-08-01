@@ -36,6 +36,16 @@ export const REPORT_TYPES = [
 
 export type ReportTypeValue = (typeof REPORT_TYPES)[number]["value"]
 
+export function reportTypeLabel(value: string, locale: "en" | "ar" = "en") {
+  const definition = REPORT_TYPES.find((item) => item.value === value)
+  if (definition) return locale === "ar" ? definition.labelAr : definition.label
+
+  return value
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase())
+}
+
 export const SUBTERM_RESPONSE_TYPES = [
   { value: "combined", label: "Combined Response" },
   { value: "text", label: "Text Response" },

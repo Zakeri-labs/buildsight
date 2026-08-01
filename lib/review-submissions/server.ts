@@ -56,7 +56,7 @@ export async function getReviewSubmissionFeed(input: {
 
   const { data: responses, error: responseError } = await admin
     .from("term_responses")
-    .select("id, project_id, project_stage_term_id, report_number, status, submitted_at, updated_at, created_by, updated_by")
+    .select("id, project_id, project_stage_term_id, report_number, report_title, status, submitted_at, updated_at, created_by, updated_by")
     .in("project_id", reviewableProjectIds)
     .in("status", ["submitted", "under_review"])
   if (responseError) throw responseError
@@ -93,11 +93,11 @@ export async function getReviewSubmissionFeed(input: {
     profiles = data ?? []
   }
 
-  const projectById = new Map(projects.map((project: any) => [project.id as string, project.name as string]))
-  const termById = new Map((termRows ?? []).map((term: any) => [term.id as string, term]))
-  const parentById = new Map(parentRows.map((term: any) => [term.id as string, term]))
-  const stageById = new Map(stageRows.map((stage: any) => [stage.id as string, stage]))
-  const profileById = new Map(profiles.map((profile: any) => [profile.id as string, profile]))
+  const projectById = new Map<string, string>(projects.map((project: any) => [project.id as string, project.name as string]))
+  const termById = new Map<string, any>((termRows ?? []).map((term: any) => [term.id as string, term]))
+  const parentById = new Map<string, any>(parentRows.map((term: any) => [term.id as string, term]))
+  const stageById = new Map<string, any>(stageRows.map((stage: any) => [stage.id as string, stage]))
+  const profileById = new Map<string, any>(profiles.map((profile: any) => [profile.id as string, profile]))
 
   const items: ReviewSubmissionItem[] = []
   for (const response of responses as any[]) {
@@ -123,7 +123,8 @@ export async function getReviewSubmissionFeed(input: {
       submittedAt,
       status: response.status as ReviewSubmissionStatus,
       reportNumber: response.report_number ?? null,
-      href: `/projects/${response.project_id}/stages/${stage.id}/terms/${term.id}`,
+      reportTitle: response.report_title || term.report_name,
+      href: `/projects/${response.project_id}/stages/${stage.id}/terms/${term.id}/reports/${response.id}`,
     })
   }
 

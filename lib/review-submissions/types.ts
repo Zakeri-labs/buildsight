@@ -15,6 +15,7 @@ export type ReviewSubmissionItem = {
   submittedAt: string
   status: ReviewSubmissionStatus
   reportNumber: string | null
+  reportTitle: string
   href: string
 }
 

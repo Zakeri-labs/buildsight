@@ -215,7 +215,7 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
       const response = await fetch("/api/stage-translations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: data.project.id, stageId: data.stage.id, termId: data.term.id }),
+        body: JSON.stringify({ projectId: data.project.id, stageId: data.stage.id, termId: data.term.id, responseId: data.response.id }),
       })
       const payload = await response.json().catch(() => null)
       if (!response.ok) throw new Error(payload?.error || "Unable to generate the document translation.")
@@ -295,7 +295,7 @@ export function StageTranslationViewer({ data }: { data: StageTranslationPageDat
 
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
-      <Link href={`/projects/${data.project.id}/stages/${data.stage.id}/terms/${data.term.id}`} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+      <Link href={`/projects/${data.project.id}/stages/${data.stage.id}/terms/${data.term.id}/reports/${data.response.id}`} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4 flip-rtl" />{copy.back}
       </Link>
 

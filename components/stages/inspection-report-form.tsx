@@ -43,6 +43,7 @@ import type { ProjectStageAttachment, ProjectStageApproval, ProjectStagePerson, 
 import {
   EMPTY_TERM_RESPONSE_CONTENT,
   REPORT_TYPES,
+  reportTypeLabel,
   STAGE_DOCUMENT_ACCEPT,
   STAGE_DOCUMENT_MAX_FILES,
   STAGE_EVIDENCE_ACCEPT,
@@ -84,7 +85,7 @@ const SECTION_META: Array<{ key: ReportSectionKey; title: string; titleAr: strin
 
 const COPY = {
   en: {
-    back: "Back to project stages",
+    back: "Back to Reports",
     project: "Project",
     stage: "Stage",
     report: "Report",
@@ -126,7 +127,7 @@ const COPY = {
     translateHint: "Save the report before translating it.",
   },
   ar: {
-    back: "العودة إلى مراحل المشروع",
+    back: "العودة إلى التقارير",
     project: "المشروع",
     stage: "المرحلة",
     report: "التقرير",
@@ -260,6 +261,9 @@ export function InspectionReportForm({
   translation,
   canReview,
   workflowActive,
+  canEdit,
+  suggestedVisitNumber,
+  initialResponseId,
 }: {
   project: { id: string; name: string; code: string | null }
   stage: { id: string; name: string }
@@ -279,13 +283,16 @@ export function InspectionReportForm({
   translation?: ProjectStageTranslationSummary | null
   canReview: boolean
   workflowActive: boolean
+  canEdit: boolean
+  suggestedVisitNumber: number
+  initialResponseId: string
 }) {
   const router = useRouter()
   const { locale } = useI18n()
   const copy = COPY[locale]
   const reportDate = response?.createdAt ?? new Date().toISOString()
   const [reportType, setReportType] = useState<ReportTypeValue>((REPORT_TYPES.some((item) => item.value === response?.reportType) ? response?.reportType : "inspection_report") as ReportTypeValue)
-  const [visitNumber, setVisitNumber] = useState(response?.visitNumber ?? 1)
+  const [visitNumber, setVisitNumber] = useState(response?.visitNumber ?? suggestedVisitNumber)
   const [subject, setSubject] = useState(response?.subject ?? "")
   const [reportTitle, setReportTitle] = useState(response?.reportTitle ?? term.reportName)
   const [content, setContent] = useState<TermResponseContent>(() => ({
@@ -330,16 +337,20 @@ export function InspectionReportForm({
   const evidenceImages = existingAttachments.filter((item) => item.attachmentKind === "evidence_image")
   const documentAttachments = existingAttachments.filter((item) => item.attachmentKind === "document")
   const statusLocked = status === "approved" || status === "completed"
-  const isLocked = statusLocked || !workflowActive
+  const pendingReview = status === "submitted" || status === "under_review"
+  const isEditable = canEdit && !statusLocked && !pendingReview
+  const isLocked = !isEditable || !workflowActive
 
   const updateSection = useCallback((key: ReportSectionKey, value: string) => {
     setContent((current) => ({ ...current, [key]: value }))
   }, [])
 
   const ensureResponse = async (saveStatus: "draft" | "in_progress" = "draft") => {
+    const targetResponseId = responseId ?? initialResponseId
     const result = await saveTermResponseAction({
       projectId: project.id,
       termId: term.id,
+      responseId: targetResponseId,
       reportType,
       visitNumber,
       subject,
@@ -450,6 +461,7 @@ export function InspectionReportForm({
         const result = await saveTermResponseAction({
           projectId: project.id,
           termId: term.id,
+          responseId: id,
           reportType,
           visitNumber,
           subject,
@@ -463,6 +475,9 @@ export function InspectionReportForm({
       } else {
         setStatus(mode === "progress" ? "in_progress" : "draft")
         setSuccess(copy.saved)
+      }
+      if (!response) {
+        router.replace(`/projects/${project.id}/stages/${stage.id}/terms/${term.id}/reports/${id}`)
       }
       router.refresh()
     } catch (saveError) {
@@ -576,13 +591,14 @@ export function InspectionReportForm({
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 pb-24">
-      <Link href={`/projects/${project.id}/stages`} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+      <Link href={`/projects/${project.id}/stages/${stage.id}/terms/${term.id}`} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4 flip-rtl" />{copy.back}
       </Link>
 
       <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
         <span>{project.name}</span><span aria-hidden>/</span><span>{stage.name}</span>
-        {parentTerm ? <><span aria-hidden>/</span><span>{parentTerm.name}</span><span aria-hidden>/</span><span className="font-medium text-foreground">{term.reportName}</span></> : <><span aria-hidden>/</span><span className="font-medium text-foreground">{term.reportName}</span></>}
+        {parentTerm ? <><span aria-hidden>/</span><span>{parentTerm.name}</span><span aria-hidden>/</span><span>{term.reportName}</span></> : <><span aria-hidden>/</span><span>{term.reportName}</span></>}
+        <span aria-hidden>/</span><span className="font-medium text-foreground">{response ? response.reportTitle : "New Report"}</span>
       </nav>
 
       <Card className="overflow-hidden border-primary/20 py-0">
@@ -612,6 +628,7 @@ export function InspectionReportForm({
                   projectId={project.id}
                   stageId={stage.id}
                   termId={term.id}
+                  responseId={responseId}
                   responseUpdatedAt={response?.updatedAt ?? new Date().toISOString()}
                   translation={translation}
                   inHeader
@@ -641,7 +658,7 @@ export function InspectionReportForm({
         <CardHeader className="border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6"><CardTitle className="text-base font-semibold text-blue-950 dark:text-blue-100">{copy.basic}</CardTitle></CardHeader>
         <CardContent className="grid gap-5 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-4">
           <div className="space-y-2 sm:col-span-2 lg:col-span-4"><Label htmlFor="report-title">{copy.title} <span className="text-destructive">*</span></Label><Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} /></div>
-          <div className="space-y-2"><Label>{copy.type}</Label><Select value={reportType} onValueChange={(value) => setReportType(value as ReportTypeValue)} disabled={isLocked}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{REPORT_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{locale === "ar" ? item.labelAr : item.label}</SelectItem>)}</SelectContent></Select></div>
+          <div className="space-y-2"><Label>{copy.type}</Label><Select value={reportType} onValueChange={(value) => setReportType(value as ReportTypeValue)} disabled={isLocked}><SelectTrigger className="w-full"><SelectValue>{(value) => reportTypeLabel(String(value ?? reportType), locale)}</SelectValue></SelectTrigger><SelectContent>{REPORT_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{reportTypeLabel(item.value, locale)}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-2"><Label htmlFor="visit-no">{copy.visitNo}</Label><Input id="visit-no" type="number" min={1} value={visitNumber} onChange={(event) => setVisitNumber(Math.max(1, Number(event.target.value) || 1))} disabled={isLocked} /></div>
           <div className="space-y-2 sm:col-span-2 lg:col-span-2"><Label htmlFor="report-subject">{copy.subject}</Label><Input id="report-subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Inspection location, package, activity, or reference" disabled={isLocked} /></div>
         </CardContent>
@@ -765,10 +782,10 @@ export function InspectionReportForm({
       {error ? <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"><AlertCircle className="mt-0.5 size-4 shrink-0" />{error}</div> : null}
       {success ? <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"><CheckCircle2 className="mt-0.5 size-4 shrink-0" />{success}</div> : null}
 
-      {!statusLocked && (workflowActive || (canReview && (status === "submitted" || status === "under_review"))) ? (
+      {((canReview && pendingReview) || (workflowActive && isEditable)) ? (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur md:start-64 md:px-8">
           <div className="mx-auto flex max-w-7xl flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
-            {canReview && (status === "submitted" || status === "under_review") ? (
+            {canReview && pendingReview ? (
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
@@ -793,7 +810,7 @@ export function InspectionReportForm({
                 </Button>
               </div>
             ) : null}
-            {workflowActive ? (
+            {workflowActive && isEditable ? (
               <>
                 <Button variant="outline" size="lg" disabled={busy !== null} onClick={() => void save("draft")}>{busy === "draft" ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}{copy.saveDraft}</Button>
                 <Button variant="outline" size="lg" disabled={busy !== null} onClick={() => void save("progress")}>{busy === "progress" ? <Loader2 className="size-4 animate-spin" /> : <ClipboardCheck className="size-4" />}{copy.saveProgress}</Button>

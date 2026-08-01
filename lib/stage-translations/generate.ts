@@ -365,9 +365,10 @@ export async function generateStageTranslation(input: {
   projectId: string
   stageId: string
   termId: string
+  responseId: string
 }) {
   const userId = await assertProjectMember(input.projectId)
-  const pageData = await loadStageTranslationPageData(input.projectId, input.stageId, input.termId, userId)
+  const pageData = await loadStageTranslationPageData(input.projectId, input.stageId, input.termId, userId, input.responseId)
   if (!pageData) throw new Error("Save the inspection report before generating a translation.")
 
   const admin = createAdminClient()

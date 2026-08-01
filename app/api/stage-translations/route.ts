@@ -16,8 +16,9 @@ export async function GET(request: NextRequest) {
     const projectId = request.nextUrl.searchParams.get("projectId")
     const stageId = request.nextUrl.searchParams.get("stageId")
     const termId = request.nextUrl.searchParams.get("termId")
-    if (!validUuid(projectId) || !validUuid(stageId) || !validUuid(termId)) {
-      return NextResponse.json({ error: "A valid project, stage, and term are required." }, { status: 400 })
+    const responseId = request.nextUrl.searchParams.get("responseId")
+    if (!validUuid(projectId) || !validUuid(stageId) || !validUuid(termId) || !validUuid(responseId)) {
+      return NextResponse.json({ error: "A valid project, stage, term, and report are required." }, { status: 400 })
     }
 
     const [userId, selectedProjectId] = await Promise.all([assertProjectMember(projectId), getSelectedProjectId()])
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "The selected project is no longer active. Select the project again." }, { status: 400 })
     }
 
-    const data = await loadStageTranslationPageData(projectId, stageId, termId, userId)
+    const data = await loadStageTranslationPageData(projectId, stageId, termId, userId, responseId)
     if (!data) return NextResponse.json({ error: "Translation document not found." }, { status: 404 })
     return NextResponse.json({ data }, { headers: { "Cache-Control": "no-store" } })
   } catch (error) {
@@ -38,8 +39,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as Record<string, unknown>
-    if (!validUuid(body.projectId) || !validUuid(body.stageId) || !validUuid(body.termId)) {
-      return NextResponse.json({ error: "A valid project, stage, and term are required." }, { status: 400 })
+    if (!validUuid(body.projectId) || !validUuid(body.stageId) || !validUuid(body.termId) || !validUuid(body.responseId)) {
+      return NextResponse.json({ error: "A valid project, stage, term, and report are required." }, { status: 400 })
     }
 
     const selectedProjectId = await getSelectedProjectId()
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest) {
       projectId: body.projectId,
       stageId: body.stageId,
       termId: body.termId,
+      responseId: body.responseId,
     })
     return NextResponse.json({ translation }, { headers: { "Cache-Control": "no-store" } })
   } catch (error) {

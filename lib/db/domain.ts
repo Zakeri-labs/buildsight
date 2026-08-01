@@ -111,6 +111,7 @@ export type TaskRow = {
   action: string
   type: "NCR" | "Inspection" | "RFI" | "VO" | "Review"
   reference: string | null
+  reportTitle?: string
   dueLabel: string | null
   dueTone: "danger" | "warning" | "muted"
   projectName: string
@@ -342,6 +343,7 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
     action: "Review Submission",
     type: "Review",
     reference: item.reportNumber,
+    reportTitle: item.reportTitle,
     dueLabel: item.status === "under_review" ? "Under Review" : "Submitted",
     dueTone: item.status === "under_review" ? "warning" : "danger",
     projectName: item.projectName,

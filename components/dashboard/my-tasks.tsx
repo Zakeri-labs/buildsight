@@ -35,7 +35,9 @@ function ReviewTask({ task }: { task: TaskRow }) {
           <p className="text-sm font-semibold text-foreground">Review Submission</p>
           <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold", typeBadge.Review)}>Review</span>
         </div>
-        <p className="mt-1 truncate text-xs font-medium text-foreground">{task.projectName}</p>
+        <p className="mt-1 truncate text-xs font-semibold text-foreground">{task.reportTitle ?? task.reference ?? "Report"}</p>
+        {task.reference ? <p className="truncate font-mono text-[11px] text-muted-foreground">{task.reference}</p> : null}
+        <p className="truncate text-xs font-medium text-foreground">{task.projectName}</p>
         <p className="truncate text-xs text-muted-foreground">Stage: {task.stageName}</p>
         <p className="truncate text-xs text-muted-foreground">Term: {task.parentTermName}</p>
         {task.subtermName ? <p className="truncate text-xs text-muted-foreground">Sub-term: {task.subtermName}</p> : null}
