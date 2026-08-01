@@ -60,54 +60,59 @@ export async function createOrganization(input: {
       return { ok: false, error: "Enter a valid email address." }
     }
 
-    const actorId = await assertOrgAdmin(input.supervisingOrgId)
-    const admin = createAdminClient()
+    // Use the authenticated session for the call. The SECURITY DEFINER RPC
+    // performs the authoritative org-admin check in the database and writes
+    // all profile fields atomically without depending on a service-role insert.
+    const actorId = await getUserIdOrThrow()
+    const supabase = await createClient()
+    const { data: createdId, error } = await supabase.rpc("create_external_organization", {
+      p_supervising_organization_id: input.supervisingOrgId,
+      p_name: name,
+      p_organization_category: organizationCategory,
+      p_contact_person: contactPerson,
+      p_email: email,
+      p_phone: phone,
+      p_registration_number: registrationNumber,
+      p_address: address,
+      p_postal_code: postalCode,
+      p_website: website,
+    })
 
-    // Confirm the caller's org is actually a supervising org.
-    const { data: org } = await admin
-      .from("organizations")
-      .select("type")
-      .eq("id", input.supervisingOrgId)
-      .maybeSingle()
-    if (org?.type !== "supervising") {
-      return { ok: false, error: "Only a supervising organization can create organizations." }
+    if (error) {
+      if (error.code === "23505") {
+        return { ok: false, error: "An organization with this name already exists." }
+      }
+      if (error.code === "42501") {
+        return { ok: false, error: error.message || "You do not have permission to create organizations." }
+      }
+      if (error.code === "PGRST202" || error.message.toLowerCase().includes("create_external_organization")) {
+        return { ok: false, error: "Organization creation is not configured. Run the latest Supabase migration." }
+      }
+      console.error("createOrganization RPC failed", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      })
+      return { ok: false, error: error.message || "Could not create organization." }
     }
 
-    // Prevent duplicate organization names (case-insensitive).
-    const { data: dupe } = await admin.from("organizations").select("id").ilike("name", name).maybeSingle()
-    if (dupe) return { ok: false, error: "An organization with this name already exists." }
-
-    const { data: created, error } = await admin
-      .from("organizations")
-      .insert({
-        name,
-        type: "external",
-        organization_category: organizationCategory,
-        contact_person: contactPerson,
-        email,
-        phone,
-        registration_number: registrationNumber,
-        address,
-        postal_code: postalCode,
-        website,
-        status: "pending",
-        created_by: actorId,
-      })
-      .select("id")
-      .single()
-    if (error) throw error
+    if (typeof createdId !== "string" || !createdId) {
+      return { ok: false, error: "Could not create organization." }
+    }
 
     await audit({
       actorId,
       action: "organization.created",
       entityType: "organization",
-      entityId: created.id,
-      organizationId: created.id,
+      entityId: createdId,
+      organizationId: createdId,
       metadata: { name, organizationCategory, status: "pending" },
     })
     revalidatePath("/users")
-    return { ok: true, data: { id: created.id } }
+    return { ok: true, data: { id: createdId } }
   } catch (err) {
+    console.error("createOrganization failed", err)
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not create organization." }
   }
 }

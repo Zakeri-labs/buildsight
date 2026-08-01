@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { assertProjectAdmin, assertProjectMember, assertProjectReviewer, audit, AuthzError } from "@/lib/auth/guards"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { createClient as createServerClient } from "@/lib/supabase/server"
 import {
   EMPTY_TERM_RESPONSE_CONTENT,
   STAGE_DOCUMENT_ACCEPTED_MIME_TYPES,
@@ -168,6 +169,10 @@ export async function saveTermResponseAction(input: {
     const visitNumber = Number.isInteger(input.visitNumber) && Number(input.visitNumber) > 0 ? Number(input.visitNumber) : 1
     const content = normalizeContent(input.content)
     const admin = createAdminClient()
+    // Perform user-owned response writes with the authenticated server client so
+    // auth.uid() is available to the existing RLS policies. The admin client is
+    // kept only for trusted scope/validation reads after authorization.
+    const userClient = await createServerClient()
     const { data: existing, error: existingError } = await admin
       .from("term_responses")
       .select("id, report_number, status, created_by, project_stage_term_id")
@@ -227,7 +232,7 @@ export async function saveTermResponseAction(input: {
       }
       if (input.submit) updatePayload.submitted_at = now
       else if (existing.status === "rejected") updatePayload.submitted_at = null
-      const { error } = await admin.from("term_responses").update(updatePayload).eq("id", existing.id)
+      const { error } = await userClient.from("term_responses").update(updatePayload).eq("id", existing.id)
       if (error) {
         if (error.code === "23505") return { ok: false, error: "That visit number is already used for this term." }
         throw error
@@ -236,7 +241,7 @@ export async function saveTermResponseAction(input: {
       let created = false
       for (const candidate of reportNumberCandidates(input.responseId)) {
         reportNumber = candidate
-        const { error } = await admin.from("term_responses").insert({
+        const { error } = await userClient.from("term_responses").insert({
           id: input.responseId,
           project_id: input.projectId,
           project_stage_term_id: input.termId,
@@ -319,6 +324,7 @@ export async function registerResponseAttachmentsAction(input: {
     if (!input.attachments.length) return { ok: true, data: { ids: [] } }
     if (input.attachments.length > 20) return { ok: false, error: "Too many attachments." }
     const admin = createAdminClient()
+    const userClient = await createServerClient()
     const { data: response, error: responseError } = await admin
       .from("term_responses")
       .select("id, status, project_stage_term_id, created_by")
@@ -360,7 +366,7 @@ export async function registerResponseAttachmentsAction(input: {
         uploaded_by: actorId,
       }
     })
-    const { data, error } = await admin.from("response_attachments").insert(rows).select("id")
+    const { data, error } = await userClient.from("response_attachments").insert(rows).select("id")
     if (error) throw error
     revalidatePath(`/projects/${input.projectId}/stages`)
     revalidatePath(`/projects/${input.projectId}/stages`, "page")
