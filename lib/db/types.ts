@@ -1,4 +1,5 @@
 export type OrgType = "supervising" | "external"
+export type OrganizationCategory = "contractor" | "client" | "supplier" | "consultant" | "other"
 export type OrganizationStatus = "pending" | "invited" | "active" | "suspended"
 export type OrganizationRole = "org_admin" | "org_manager" | "org_member" | "viewer"
 export type ProjectOrgRole =
@@ -31,6 +32,14 @@ export type Organization = {
   id: string
   name: string
   type: OrgType
+  organization_category?: OrganizationCategory | null
+  contact_person?: string | null
+  email?: string | null
+  phone?: string | null
+  registration_number?: string | null
+  address?: string | null
+  postal_code?: string | null
+  website?: string | null
   status: OrganizationStatus
   created_by: string | null
   created_at: string
@@ -60,6 +69,20 @@ export type Invitation = {
   accepted_by: string | null
   expires_at: string
   created_at: string
+}
+
+export const ORGANIZATION_CATEGORIES: OrganizationCategory[] = ["contractor", "client", "supplier", "consultant", "other"]
+
+export const ORGANIZATION_CATEGORY_LABELS: Record<OrganizationCategory, string> = {
+  contractor: "Contractor",
+  client: "Client",
+  supplier: "Supplier",
+  consultant: "Consultant",
+  other: "Other",
+}
+
+export function organizationCategoryLabel(category: OrganizationCategory | null | undefined): string {
+  return category ? ORGANIZATION_CATEGORY_LABELS[category] : "Other"
 }
 
 export const ORGANIZATION_ROLES: OrganizationRole[] = ["org_admin", "org_manager", "org_member", "viewer"]

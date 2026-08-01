@@ -2,6 +2,7 @@ import "server-only"
 import { createAdminClient } from "@/lib/supabase/admin"
 import type {
   MembershipStatus,
+  OrganizationCategory,
   OrganizationRole,
   OrganizationStatus,
   ProjectAccessRole,
@@ -12,6 +13,14 @@ export type OrgRow = {
   id: string
   name: string
   type: "supervising" | "external"
+  organizationCategory: OrganizationCategory | null
+  contactPerson: string | null
+  email: string | null
+  phone: string | null
+  registrationNumber: string | null
+  address: string | null
+  postalCode: string | null
+  website: string | null
   status: OrganizationStatus
   memberCount: number
 }
@@ -93,7 +102,7 @@ export async function loadAdminConsole(supervisingOrgId: string): Promise<AdminC
   const admin = createAdminClient()
 
   const [{ data: orgs }, { data: projects }, { data: profiles }] = await Promise.all([
-    admin.from("organizations").select("id, name, type, status").order("name"),
+    admin.from("organizations").select("id, name, type, organization_category, contact_person, email, phone, registration_number, address, postal_code, website, status").order("name"),
     admin
       .from("projects")
       .select("id, name, code, location, latitude, longitude, status")
@@ -143,6 +152,14 @@ export async function loadAdminConsole(supervisingOrgId: string): Promise<AdminC
     id: o.id,
     name: o.name,
     type: o.type,
+    organizationCategory: o.organization_category,
+    contactPerson: o.contact_person,
+    email: o.email,
+    phone: o.phone,
+    registrationNumber: o.registration_number,
+    address: o.address,
+    postalCode: o.postal_code,
+    website: o.website,
     status: o.status,
     memberCount: memberCounts.get(o.id) ?? 0,
   }))

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   ArrowLeft,
   ArrowRight,
+  AlertTriangle,
   Building2,
   Camera,
   Check,
@@ -30,7 +31,9 @@ import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -86,6 +89,7 @@ type ProjectImageDraft = { id: string; file: File }
 type ContractorOrganization = {
   id: string
   name: string
+  status: "active" | "pending" | "invited"
   registrationNumber: string
   address: string
   postalCode: string
@@ -155,6 +159,18 @@ export function ProjectCreateForm({
     [owners],
   )
   const selectedUploadCount = selectedDocumentCount + selectedOwnerIdCardCount + projectImages.length
+  const selectedContractorOrganization = useMemo(
+    () => contractorOrganizations.find((organization) => organization.id === contractorOrganizationId) ?? null,
+    [contractorOrganizationId, contractorOrganizations],
+  )
+  const activeContractorOrganizations = useMemo(
+    () => contractorOrganizations.filter((organization) => organization.status === "active"),
+    [contractorOrganizations],
+  )
+  const pendingContractorOrganizations = useMemo(
+    () => contractorOrganizations.filter((organization) => organization.status !== "active"),
+    [contractorOrganizations],
+  )
 
   const copy = isArabic
     ? {
@@ -211,6 +227,11 @@ export function ProjectCreateForm({
         noIdCard: "لم يتم اختيار بطاقة هوية",
         assignContractor: "تعيين مقاول مسجل",
         noContractor: "بدون تعيين جهة مسجلة",
+        activeOrganizations: "الجهات المعتمدة",
+        pendingOrganizations: "الجهات قيد الاعتماد",
+        approvedOrganization: "معتمدة",
+        pendingApproval: "قيد الاعتماد",
+        pendingContractorWarning: "هذه الجهة قيد الاعتماد. يمكنك تعيينها لهذا المشروع، ولكن يظل الوصول محدودًا حتى اعتمادها.",
         companyName: "اسم الشركة",
         registration: "رقم السجل التجاري",
         address: "العنوان",
@@ -285,6 +306,11 @@ export function ProjectCreateForm({
         noIdCard: "No ID card selected",
         assignContractor: "Assign Registered Contractor",
         noContractor: "No registered organization assigned",
+        activeOrganizations: "Active Organizations",
+        pendingOrganizations: "Pending Organizations",
+        approvedOrganization: "Approved",
+        pendingApproval: "Pending Approval",
+        pendingContractorWarning: "This organization is pending approval. You can assign it to this project, but access remains limited until approval.",
         companyName: "Company Name",
         registration: "Registration / CR Number",
         address: "Address",
@@ -1016,19 +1042,68 @@ export function ProjectCreateForm({
                       <SelectValue>
                         {(value) => {
                           if (!value || value === "none") return copy.noContractor
-                          return contractorOrganizations.find((organization) => organization.id === String(value))?.name
-                            ?? (isArabic ? "مقاول محدد" : "Selected contractor")
+                          const organization = contractorOrganizations.find((item) => item.id === String(value))
+                          if (!organization) return isArabic ? "مقاول محدد" : "Selected contractor"
+                          const isApproved = organization.status === "active"
+                          return (
+                            <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                              <span className="truncate">{organization.name}</span>
+                              <span className={cn(
+                                "flex shrink-0 items-center gap-1 text-xs font-medium",
+                                isApproved ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400",
+                              )}>
+                                {isApproved ? <CheckCircle2 className="size-3.5" /> : <AlertTriangle className="size-3.5" />}
+                                {isApproved ? copy.approvedOrganization : copy.pendingApproval}
+                              </span>
+                            </span>
+                          )
                         }}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">{copy.noContractor}</SelectItem>
-                      {contractorOrganizations.map((organization) => (
-                        <SelectItem key={organization.id} value={organization.id}>{organization.name}</SelectItem>
-                      ))}
+                      {activeContractorOrganizations.length ? (
+                        <SelectGroup>
+                          <SelectLabel>{copy.activeOrganizations}</SelectLabel>
+                          {activeContractorOrganizations.map((organization) => (
+                            <SelectItem key={organization.id} value={organization.id}>
+                              <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                                <span className="truncate">{organization.name}</span>
+                                <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                                  <CheckCircle2 className="size-3.5" />
+                                  {copy.approvedOrganization}
+                                </span>
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ) : null}
+                      {pendingContractorOrganizations.length ? (
+                        <SelectGroup>
+                          <SelectLabel>{copy.pendingOrganizations}</SelectLabel>
+                          {pendingContractorOrganizations.map((organization) => (
+                            <SelectItem key={organization.id} value={organization.id}>
+                              <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                                <span className="truncate">{organization.name}</span>
+                                <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                                  <AlertTriangle className="size-3.5" />
+                                  {copy.pendingApproval}
+                                </span>
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ) : null}
                     </SelectContent>
                   </Select>
                 </Field>
+
+                {selectedContractorOrganization && selectedContractorOrganization.status !== "active" ? (
+                  <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200" role="status">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    <span>{copy.pendingContractorWarning}</span>
+                  </div>
+                ) : null}
 
                 <div className="grid gap-5 md:grid-cols-2">
                   <Field label={`${copy.companyName} (${copy.optional})`} htmlFor="contractor-company-name">

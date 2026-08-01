@@ -1103,9 +1103,21 @@ export async function createOrgAndAddToProject(input: {
     // assertProjectAdmin also covers supervising-org admins of this project.
     await assertProjectAdmin(input.projectId)
 
+    const organizationCategory =
+      input.projectRole === "contractor" || input.projectRole === "subcontractor"
+        ? "contractor"
+        : input.projectRole === "client"
+          ? "client"
+          : input.projectRole === "supplier"
+            ? "supplier"
+            : input.projectRole === "consultant"
+              ? "consultant"
+              : "other"
+
     const orgResult = await createOrganization({
       supervisingOrgId: input.supervisingOrgId,
       name: input.organizationName,
+      organizationCategory,
     })
     if (!orgResult.ok || !orgResult.data) return orgResult as ActionResult<never>
     const organizationId = orgResult.data.id

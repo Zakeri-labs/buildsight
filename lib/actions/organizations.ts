@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { assertOrgAdmin, getUserIdOrThrow, audit, AuthzError } from "@/lib/auth/guards"
-import type { OrganizationRole } from "@/lib/db/types"
-import { ORGANIZATION_ROLES } from "@/lib/db/types"
+import type { OrganizationCategory, OrganizationRole } from "@/lib/db/types"
+import { ORGANIZATION_CATEGORIES, ORGANIZATION_ROLES } from "@/lib/db/types"
 import type { ActionResult } from "@/lib/actions/invitations"
 
 /** Search organizations by name (RLS-scoped to the caller's visibility). */
@@ -32,10 +32,33 @@ export async function searchOrganizations(query: string): Promise<
 export async function createOrganization(input: {
   supervisingOrgId: string
   name: string
+  organizationCategory?: OrganizationCategory
+  contactPerson?: string
+  email?: string
+  phone?: string
+  registrationNumber?: string
+  address?: string
+  postalCode?: string
+  website?: string
 }): Promise<ActionResult<{ id: string }>> {
   try {
     const name = input.name.trim()
+    const organizationCategory = input.organizationCategory ?? "other"
+    const contactPerson = input.contactPerson?.trim() || null
+    const email = input.email?.trim().toLowerCase() || null
+    const phone = input.phone?.trim() || null
+    const registrationNumber = input.registrationNumber?.trim() || null
+    const address = input.address?.trim() || null
+    const postalCode = input.postalCode?.trim() || null
+    const website = input.website?.trim() || null
+
     if (name.length < 2) return { ok: false, error: "Organization name is too short." }
+    if (!ORGANIZATION_CATEGORIES.includes(organizationCategory)) {
+      return { ok: false, error: "Select a valid organization type." }
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return { ok: false, error: "Enter a valid email address." }
+    }
 
     const actorId = await assertOrgAdmin(input.supervisingOrgId)
     const admin = createAdminClient()
@@ -56,7 +79,20 @@ export async function createOrganization(input: {
 
     const { data: created, error } = await admin
       .from("organizations")
-      .insert({ name, type: "external", status: "pending", created_by: actorId })
+      .insert({
+        name,
+        type: "external",
+        organization_category: organizationCategory,
+        contact_person: contactPerson,
+        email,
+        phone,
+        registration_number: registrationNumber,
+        address,
+        postal_code: postalCode,
+        website,
+        status: "pending",
+        created_by: actorId,
+      })
       .select("id")
       .single()
     if (error) throw error
@@ -67,7 +103,7 @@ export async function createOrganization(input: {
       entityType: "organization",
       entityId: created.id,
       organizationId: created.id,
-      metadata: { name },
+      metadata: { name, organizationCategory, status: "pending" },
     })
     revalidatePath("/users")
     return { ok: true, data: { id: created.id } }

@@ -65,27 +65,32 @@ export async function ProjectCreateContent() {
     memberIds.length
       ? admin
           .from("organizations")
-          .select("id, name, status, registration_number, address, postal_code, phone")
+          .select("id, name, status, organization_category, registration_number, address, postal_code, phone")
           .eq("type", "external")
           .neq("status", "suspended")
           .in("created_by", memberIds)
-      : Promise.resolve({ data: [] as Array<{ id: string; name: string; status: string; registration_number: string | null; address: string | null; postal_code: string | null; phone: string | null }> }),
+      : Promise.resolve({ data: [] as Array<{ id: string; name: string; status: string; organization_category: string | null; registration_number: string | null; address: string | null; postal_code: string | null; phone: string | null }> }),
     organizationIds.length
       ? admin
           .from("organizations")
-          .select("id, name, status, registration_number, address, postal_code, phone")
+          .select("id, name, status, organization_category, registration_number, address, postal_code, phone")
           .eq("type", "external")
           .neq("status", "suspended")
           .in("id", organizationIds)
-      : Promise.resolve({ data: [] as Array<{ id: string; name: string; status: string; registration_number: string | null; address: string | null; postal_code: string | null; phone: string | null }> }),
+      : Promise.resolve({ data: [] as Array<{ id: string; name: string; status: string; organization_category: string | null; registration_number: string | null; address: string | null; postal_code: string | null; phone: string | null }> }),
   ])
 
   const contractorOrganizations = Array.from(
     new Map(
       [...(createdOrganizations.data ?? []), ...(participantOrganizations.data ?? [])]
+        .filter((organization) =>
+          ["active", "pending", "invited"].includes(organization.status)
+          && (organization.organization_category === "contractor" || organization.organization_category == null),
+        )
         .map((organization) => [organization.id, {
           id: organization.id,
           name: organization.name,
+          status: organization.status === "active" ? "active" : organization.status === "invited" ? "invited" : "pending",
           registrationNumber: organization.registration_number?.trim() || "",
           address: organization.address?.trim() || "",
           postalCode: organization.postal_code?.trim() || "",
