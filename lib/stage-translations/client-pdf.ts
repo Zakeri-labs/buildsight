@@ -2956,6 +2956,167 @@ async function buildNativeBilingualPdfBlob(input: {
   return doc.output("blob") as Blob
 }
 
+
+function normalizeStaticFooterText(value: string) {
+  return value
+    .normalize("NFKC")
+    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
+    .replace(/[\u064B-\u065F\u0670]/g, "")
+    .toLocaleLowerCase()
+    .replace(/https?:\/\//g, "")
+    .replace(/www\./g, "")
+    .replace(/[^\p{L}\p{N}@.+-]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function footerDigits(value: string) {
+  return normalizeStaticFooterText(value).replace(/\D/g, "")
+}
+
+function hasStrongFooterWordOverlap(text: string, candidate: string) {
+  const textWords = new Set(normalizeStaticFooterText(text).split(" ").filter((word) => word.length >= 3))
+  const candidateWords = normalizeStaticFooterText(candidate).split(" ").filter((word) => word.length >= 3)
+  if (candidateWords.length < 2) return false
+  const matches = candidateWords.filter((word) => textWords.has(word)).length
+  return matches >= Math.max(2, Math.ceil(candidateWords.length * 0.65))
+}
+
+function sourceStaticFooterTexts(sourceDocument: ExtractedSourceDocument | null) {
+  if (!sourceDocument) return new Set<string>()
+  const footerBlocks = sourceDocument.pages.flatMap((page) =>
+    (page.layoutBlocks ?? [])
+      .filter((block) => block.yRatio >= 0.82 || block.yRatio + block.heightRatio >= 0.9)
+      .map((block) => normalizeStaticFooterText(block.text))
+      .filter(Boolean),
+  )
+  const frequencies = new Map<string, number>()
+  footerBlocks.forEach((text) => {
+    const stable = text.replace(/\d+/g, "#")
+    frequencies.set(stable, (frequencies.get(stable) ?? 0) + 1)
+  })
+  return new Set(footerBlocks.filter((text) => {
+    const stable = text.replace(/\d+/g, "#")
+    return (frequencies.get(stable) ?? 0) >= 2
+      || /(?:@|\b(?:tel|phone|email|website|www|c\.?\s*r\.?|p\.?\s*o\.?\s*box|postal\s*code|page)\b|هاتف|البريد|الموقع|السجل\s*التجاري|صندوق\s*البريد|الرمز\s*البريدي|الصفحة)/i.test(text)
+  }))
+}
+
+function isStaticOrganizationFooterText(text: string, sourceFooterTexts: Set<string>) {
+  const normalized = normalizeStaticFooterText(text)
+  if (!normalized || normalized.length > 500) return false
+
+  const profile = getOrganizationProfile()
+  const exactProfileValues = [
+    profile.nameEn,
+    profile.nameAr,
+    profile.addressEn,
+    profile.addressAr,
+    profile.email,
+    profile.website,
+  ]
+    .map(normalizeStaticFooterText)
+    .filter((value) => value.length >= 4)
+
+  if (exactProfileValues.some((value) => normalized === value || normalized.includes(value))) return true
+  if (normalized.length <= 240 && [profile.nameEn, profile.nameAr, profile.addressEn, profile.addressAr]
+    .some((value) => hasStrongFooterWordOverlap(normalized, value))) return true
+  if (sourceFooterTexts.has(normalized)) return true
+
+  const email = normalizeStaticFooterText(profile.email)
+  if (email && normalized.includes(email)) return true
+
+  const website = normalizeStaticFooterText(profile.website).replace(/^@/, "")
+  if (website && website.length >= 4 && normalized.replace(/^@/, "").includes(website)) return true
+
+  const textDigits = footerDigits(text)
+  const phoneMatches = profile.phones
+    .split(/[,;/|]+/)
+    .map(footerDigits)
+    .filter((value) => value.length >= 7)
+  if (phoneMatches.some((digits) => textDigits.includes(digits))) return true
+
+  const registrationDigits = footerDigits(profile.crNumber)
+  const hasRegistrationValue = registrationDigits.length >= 3 && textDigits.includes(registrationDigits)
+  const hasRegistrationLabel = /(?:\bc\.?\s*r\.?\b|commercial\s*registration|registration\s*(?:no|number)|السجل\s*التجاري|رقم\s*السجل)/i.test(normalized)
+  if (hasRegistrationValue && hasRegistrationLabel) return true
+
+  const poBoxDigits = footerDigits(profile.poBox)
+  const postalCodeDigits = footerDigits(profile.postalCode)
+  const hasPoBox = poBoxDigits.length >= 2 && textDigits.includes(poBoxDigits)
+  const hasPostalCode = postalCodeDigits.length >= 2 && textDigits.includes(postalCodeDigits)
+  const hasPostalLabel = /(?:p\.?\s*o\.?\s*box|postal\s*code|صندوق\s*البريد|ص\.?\s*ب|الرمز\s*البريدي)/i.test(normalized)
+  if (hasPostalLabel && (hasPoBox || hasPostalCode)) return true
+
+  const looksLikeFixedContactLine = /(?:\b(?:tel|phone|email|website|www)\b|هاتف|البريد\s*الإلكتروني|الموقع\s*الإلكتروني)/i.test(normalized)
+    && (/@/.test(normalized) || textDigits.length >= 7)
+  if (looksLikeFixedContactLine) return true
+
+  return /^(?:page|الصفحة)\s*[:#-]?\s*\d+(?:\s*(?:\/|of|من)\s*\d+)?$/i.test(normalized)
+}
+
+function stripStaticFooterFromArabicHtml(html: string | undefined, sourceFooterTexts: Set<string>) {
+  if (!html?.trim()) return html ?? ""
+  const root = parsePdfHtmlRoot(html)
+  if (!root) return html
+
+  const selector = "p,h1,h2,h3,h4,h5,h6,li,address,tr,div"
+  const candidates = Array.from(root.querySelectorAll(selector)).filter((element) => {
+    if (element.tagName.toLowerCase() !== "div") return true
+    return !element.querySelector(selector)
+  })
+
+  candidates.forEach((element) => {
+    const text = normalizeText(element.textContent || "")
+    if (!isStaticOrganizationFooterText(text, sourceFooterTexts)) return
+
+    if (element.tagName.toLowerCase() === "tr") {
+      // Preserve the canonical table row/cell structure while removing only
+      // static footer text from the Arabic document body.
+      directTableCells(element).forEach((cell) => {
+        textNodesOutsideNestedTables(cell).forEach((node) => {
+          node.nodeValue = ""
+        })
+      })
+      return
+    }
+    element.remove()
+  })
+
+  Array.from(root.querySelectorAll("p,h1,h2,h3,h4,h5,h6,li,address,div"))
+    .reverse()
+    .forEach((element) => {
+      if (element.textContent?.trim()) return
+      if (element.querySelector("img,table,svg,canvas")) return
+      element.remove()
+    })
+
+  return root.innerHTML
+}
+
+function stripStaticFooterFromArabicTemplate(
+  template: LanguagePdfTemplate,
+  sourceDocument: ExtractedSourceDocument | null,
+) {
+  if (template.language !== "ar") return template
+  const sourceFooterTexts = sourceStaticFooterTexts(sourceDocument)
+  return {
+    ...template,
+    sections: template.sections.map((section) => {
+      if (section.key !== "attachments") return section
+      const sourceDocumentHtml = stripStaticFooterFromArabicHtml(section.sourceDocumentHtml, sourceFooterTexts)
+      const otherDocumentsHtml = stripStaticFooterFromArabicHtml(section.otherDocumentsHtml, sourceFooterTexts)
+      return {
+        ...section,
+        sourceDocumentHtml,
+        otherDocumentsHtml,
+        documentsHtml: `${sourceDocumentHtml}${otherDocumentsHtml}`,
+      }
+    }),
+  }
+}
+
 function formatCcRecipientForPdf(recipient: ReportCcRecipient) {
   const normalizedName = recipient.name.trim() || "—"
   const seen = new Set([normalizedName.toLocaleLowerCase()])
@@ -3016,7 +3177,8 @@ export async function exportTranslationPdf({
   validateTemplateAssets(arabicTemplate, sourceDocument)
   validateTemplateAssets(englishTemplate, sourceDocument)
   validateMirroredTemplates(englishTemplate, arabicTemplate)
-  const arabicBlob = await buildLanguagePdfBlob(arabicTemplate)
+  const arabicPdfTemplate = stripStaticFooterFromArabicTemplate(arabicTemplate, sourceDocument)
+  const arabicBlob = await buildLanguagePdfBlob(arabicPdfTemplate)
   if (kind === "arabic") {
     return { blob: arabicBlob, filename: `${base}-${report}-arabic-translation.pdf` }
   }
