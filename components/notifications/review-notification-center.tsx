@@ -1,13 +1,13 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Bell, BellRing, Check, ExternalLink } from "lucide-react"
+import { Bell, BellRing, Check, ClipboardCheck, ExternalLink, MapPinned } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -17,43 +17,31 @@ import {
   enableBrowserReviewNotifications,
   REVIEW_NOTIFICATION_PREFERENCE_EVENT,
 } from "@/lib/review-submissions/client"
-import type { ReviewSubmissionFeed, ReviewSubmissionItem } from "@/lib/review-submissions/types"
+import type { AppNotificationFeed, AppNotificationItem } from "@/lib/notifications/types"
 
 const POLL_INTERVAL_MS = 15_000
-const MAX_STORED_KEYS = 300
+const MAX_STORED_KEYS = 500
 
-function statusLabel(status: ReviewSubmissionItem["status"]) {
-  return status === "under_review" ? "Under Review" : "Submitted"
-}
-
-function submittedLabel(value: string) {
+function createdLabel(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date)
-}
-
-function notificationBody(item: ReviewSubmissionItem) {
-  const subject = item.reportTitle || item.subtermName || item.parentTermName
-  return `${subject}${item.reportNumber ? ` (${item.reportNumber})` : ""} was submitted for review in ${item.projectName}.`
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date)
 }
 
 export function ReviewNotificationCenter({
   initialFeed,
   userId,
 }: {
-  initialFeed: ReviewSubmissionFeed
+  initialFeed: AppNotificationFeed
   userId: string
 }) {
+  const router = useRouter()
   const [feed, setFeed] = useState(initialFeed)
   const [permission, setPermission] = useState<ReturnType<typeof browserNotificationPermission>>("unsupported")
   const [enabled, setEnabled] = useState(false)
   const feedRef = useRef(feed)
   const initializedRef = useRef(false)
-
-  const seenStorageKey = useMemo(() => `buildsight:review-notifications-seen:${userId}`, [userId])
+  const seenStorageKey = useMemo(() => `buildsight:notifications-seen:${userId}`, [userId])
 
   useEffect(() => {
     feedRef.current = feed
@@ -69,54 +57,60 @@ export function ReviewNotificationCenter({
     }
   }, [seenStorageKey])
 
-  const writeSeen = useCallback((seen: Set<string>) => {
-    try {
-      const values = Array.from(seen).slice(-MAX_STORED_KEYS)
-      window.localStorage.setItem(seenStorageKey, JSON.stringify(values))
-    } catch {
-      // Browser storage may be unavailable; in-app notifications still work.
-    }
-  }, [seenStorageKey])
-
-  const seedCurrentItems = useCallback((items: ReviewSubmissionItem[]) => {
-    const seen = readSeen()
-    for (const item of items) seen.add(item.notificationKey)
-    writeSeen(seen)
-  }, [readSeen, writeSeen])
-
-  const showNewBrowserNotifications = useCallback((items: ReviewSubmissionItem[]) => {
-    if (!("Notification" in window) || Notification.permission !== "granted" || !browserReviewNotificationsEnabled()) return
-    const seen = readSeen()
-    const newItems = items.filter((item) => !seen.has(item.notificationKey))
-
-    for (const item of newItems) {
-      seen.add(item.notificationKey)
-      if (item.submittedById === userId) continue
-      const notification = new Notification("New Review Submission", {
-        body: notificationBody(item),
-        tag: item.notificationKey,
-      })
-      notification.onclick = () => {
-        window.focus()
-        window.location.assign(item.href)
-        notification.close()
+  const writeSeen = useCallback(
+    (seen: Set<string>) => {
+      try {
+        window.localStorage.setItem(seenStorageKey, JSON.stringify(Array.from(seen).slice(-MAX_STORED_KEYS)))
+      } catch {
+        // In-app notifications remain available when browser storage is blocked.
       }
-    }
-    writeSeen(seen)
-  }, [readSeen, userId, writeSeen])
+    },
+    [seenStorageKey],
+  )
+
+  const seedCurrentItems = useCallback(
+    (items: AppNotificationItem[]) => {
+      const seen = readSeen()
+      for (const item of items) seen.add(item.notificationKey)
+      writeSeen(seen)
+    },
+    [readSeen, writeSeen],
+  )
+
+  const showNewBrowserNotifications = useCallback(
+    (items: AppNotificationItem[]) => {
+      if (!("Notification" in window) || Notification.permission !== "granted" || !browserReviewNotificationsEnabled()) return
+      const seen = readSeen()
+      for (const item of items.filter((candidate) => !seen.has(candidate.notificationKey))) {
+        seen.add(item.notificationKey)
+        if (item.actorId === userId && !item.notifyActor) continue
+        const notification = new Notification(item.title, { body: item.body, tag: item.notificationKey })
+        notification.onclick = () => {
+          window.focus()
+          window.location.assign(item.href)
+          notification.close()
+        }
+      }
+      writeSeen(seen)
+    },
+    [readSeen, userId, writeSeen],
+  )
 
   const refresh = useCallback(async () => {
     try {
       const response = await fetch("/api/review-notifications", { cache: "no-store" })
       if (!response.ok) return
-      const nextFeed = (await response.json()) as ReviewSubmissionFeed
+      const nextFeed = (await response.json()) as AppNotificationFeed
+      const previousSignature = feedRef.current.items.map((item) => `${item.notificationKey}:${item.status}`).join("|")
+      const nextSignature = nextFeed.items.map((item) => `${item.notificationKey}:${item.status}`).join("|")
       setFeed(nextFeed)
       feedRef.current = nextFeed
       showNewBrowserNotifications(nextFeed.items)
+      if (previousSignature !== nextSignature) router.refresh()
     } catch {
       // Preserve the last reliable in-app state when polling fails.
     }
-  }, [showNewBrowserNotifications])
+  }, [router, showNewBrowserNotifications])
 
   useEffect(() => {
     setFeed(initialFeed)
@@ -134,16 +128,13 @@ export function ReviewNotificationCenter({
         initializedRef.current = true
       }
     }
-
     syncPreference()
     window.addEventListener(REVIEW_NOTIFICATION_PREFERENCE_EVENT, syncPreference)
     return () => window.removeEventListener(REVIEW_NOTIFICATION_PREFERENCE_EVENT, syncPreference)
   }, [seedCurrentItems])
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      void refresh()
-    }, POLL_INTERVAL_MS)
+    const timer = window.setInterval(() => void refresh(), POLL_INTERVAL_MS)
     return () => window.clearInterval(timer)
   }, [refresh])
 
@@ -166,37 +157,31 @@ export function ReviewNotificationCenter({
         render={
           <button
             type="button"
-            aria-label={`Notifications${pendingCount ? `, ${pendingCount} pending review submissions` : ""}`}
+            aria-label={`Notifications${pendingCount ? `, ${pendingCount} pending items` : ""}`}
             className="relative flex size-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <Bell className="size-5" />
             {pendingCount > 0 ? (
-              <span className="absolute top-1 inset-inline-end-1 flex min-w-4 h-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground">
+              <span className="absolute top-1 inset-inline-end-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground">
                 {pendingCount > 99 ? "99+" : pendingCount}
               </span>
             ) : null}
           </button>
         }
       />
-      <DropdownMenuContent align="end" className="w-[min(24rem,calc(100vw-2rem))] p-1.5">
+      <DropdownMenuContent align="end" className="w-[min(25rem,calc(100vw-2rem))] p-1.5">
         <div className="flex items-center justify-between gap-3 px-2 py-1.5">
           <div>
-            <p className="text-sm font-semibold">Review notifications</p>
-            <p className="text-xs text-muted-foreground">{pendingCount} pending submission{pendingCount === 1 ? "" : "s"}</p>
+            <p className="text-sm font-semibold">Notifications</p>
+            <p className="text-xs text-muted-foreground">{pendingCount} pending item{pendingCount === 1 ? "" : "s"}</p>
           </div>
-          {feed.canReview && permission !== "unsupported" ? (
+          {feed.canNotify && permission !== "unsupported" ? (
             enabled ? (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
-                <Check className="size-3.5" /> Enabled
-              </span>
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600"><Check className="size-3.5" /> Enabled</span>
             ) : permission === "denied" ? (
               <span className="text-xs text-muted-foreground">Blocked in browser</span>
             ) : (
-              <button
-                type="button"
-                onClick={() => void enableNotifications()}
-                className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors hover:bg-muted"
-              >
+              <button type="button" onClick={() => void enableNotifications()} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors hover:bg-muted">
                 <BellRing className="size-3.5" /> Enable Notifications
               </button>
             )
@@ -204,29 +189,26 @@ export function ReviewNotificationCenter({
         </div>
         <DropdownMenuSeparator />
         {feed.items.length === 0 ? (
-          <div className="px-3 py-6 text-center text-sm text-muted-foreground">No pending review submissions.</div>
+          <div className="px-3 py-6 text-center text-sm text-muted-foreground">No pending notifications.</div>
         ) : (
-          feed.items.slice(0, 10).map((item) => (
-            <DropdownMenuItem
-              key={item.notificationKey}
-              render={<Link href={item.href} />}
-              className="block cursor-pointer px-2.5 py-2.5"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold">Review Submission</p>
-                  <p className="mt-0.5 truncate text-xs font-medium">{item.reportTitle}</p>
-                  <p className="truncate font-mono text-[11px] text-muted-foreground">{item.reportNumber ?? "Report"}</p>
-                  <p className="truncate text-xs text-muted-foreground">{item.subtermName ?? item.parentTermName}</p>
-                  <p className="truncate text-xs text-muted-foreground">{item.projectName} · {item.stageName}</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    {item.submittedBy} · {submittedLabel(item.submittedAt)} · {statusLabel(item.status)}
-                  </p>
+          feed.items.slice(0, 12).map((item) => {
+            const Icon = item.kind === "site_visit" ? MapPinned : ClipboardCheck
+            return (
+              <DropdownMenuItem key={item.notificationKey} render={<Link href={item.href} />} className="block cursor-pointer px-2.5 py-2.5">
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary"><Icon className="size-4" /></span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">{item.kind === "site_visit" ? "New Site Visit Request" : "Review Submission"}</p>
+                    <p className="mt-0.5 truncate text-xs font-medium">{item.subject}</p>
+                    {item.reference ? <p className="truncate font-mono text-[11px] text-muted-foreground">{item.reference}</p> : null}
+                    <p className="truncate text-xs text-muted-foreground">{item.projectName} · {item.context}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">{item.actorName} · {createdLabel(item.createdAt)} · {item.status}</p>
+                  </div>
+                  <ExternalLink className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                 </div>
-                <ExternalLink className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-              </div>
-            </DropdownMenuItem>
-          ))
+              </DropdownMenuItem>
+            )
+          })
         )}
       </DropdownMenuContent>
     </DropdownMenu>

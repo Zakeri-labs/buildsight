@@ -14,7 +14,7 @@ export default async function ProjectGalleryPage({
   const organizationId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id
   if (!organizationId) notFound()
 
-  const projects = await getOrgProjects(organizationId)
+  const projects = await getOrgProjects(organizationId, session.userId)
   const project = projects.find((item) => item.id === projectId)
   if (!project) notFound()
 

@@ -4,7 +4,8 @@ import { CurrentUserProvider, type CurrentUser } from "@/components/current-user
 import { getOrgProjects } from "@/lib/db/domain"
 import { getSelectedProjectId } from "@/lib/project-scope"
 import { resolveStageManagementOrganization } from "@/lib/db/stages"
-import { getReviewSubmissionFeed } from "@/lib/review-submissions/server"
+import { getAppNotificationFeed } from "@/lib/notifications/server"
+import { getSiteVisitProjectAccess } from "@/lib/site-visits/access"
 
 function initials(name: string, email: string) {
   const source = name.trim() || email
@@ -24,14 +25,17 @@ export default async function AppGroupLayout({
   const primary = session.memberships[0]
   const orgId = session.supervisingOrg?.id ?? primary?.organization?.id ?? null
 
-  const [projects, selectedProjectId, stageManagementOrganization] = await Promise.all([
-    orgId ? getOrgProjects(orgId) : Promise.resolve([]),
+  const [projects, selectedProjectId, stageManagementOrganization, siteVisitAccess] = await Promise.all([
+    orgId ? getOrgProjects(orgId, session.userId) : Promise.resolve([]),
     getSelectedProjectId(),
     resolveStageManagementOrganization(session.userId, session.supervisingOrg?.id),
+    getSiteVisitProjectAccess(session.userId),
   ])
-  const reviewFeed = orgId
-    ? await getReviewSubmissionFeed({ userId: session.userId, organizationId: orgId, projectId: selectedProjectId })
-    : { canReview: false, items: [] }
+  const notificationFeed = await getAppNotificationFeed({
+    userId: session.userId,
+    organizationId: orgId,
+    projectId: selectedProjectId,
+  })
 
   const user: CurrentUser = {
     id: session.userId,
@@ -51,7 +55,8 @@ export default async function AppGroupLayout({
         projects={projectOptions}
         selectedProjectId={selectedProjectId ?? "all"}
         canManageStages={Boolean(stageManagementOrganization)}
-        reviewFeed={reviewFeed}
+        canAccessSiteVisits={siteVisitAccess.size > 0}
+        notificationFeed={notificationFeed}
       >
         {children}
       </AppShell>

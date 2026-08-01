@@ -20,6 +20,8 @@ import { ProjectEditDialog, type ProjectEditData } from "@/components/projects/p
 import { ProjectImageManagementDialog } from "@/components/projects/project-image-management-dialog"
 import { ProjectImageDisplay } from "@/components/projects/project-image-display"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
+import type { ProjectSiteVisitSummary } from "@/lib/site-visits/types"
+import { ProjectSiteVisitsSection } from "@/components/site-visits/project-site-visits-section"
 
 function projectDocuments(project: ProjectRecord): ProjectDocument[] {
   return [
@@ -72,6 +74,7 @@ export function ProjectDetail({
   participantUsers = [],
   canManageImages = false,
   canEditProject = false,
+  siteVisitSummary,
 }: {
   project: ProjectRecord
   editProject: ProjectEditData
@@ -82,6 +85,7 @@ export function ProjectDetail({
   participantUsers?: ProjectParticipantUserOption[]
   canManageImages?: boolean
   canEditProject?: boolean
+  siteVisitSummary: ProjectSiteVisitSummary
 }) {
   const { t, locale } = useI18n()
   const router = useRouter()
@@ -318,6 +322,10 @@ export function ProjectDetail({
         </CardContent>
       </Card>
       <ProjectDocuments projectId={currentProject.id} documents={letters ?? projectDocuments(currentProject)} />
+      <ProjectSiteVisitsSection
+        project={{ id: currentProject.id, name: currentProject.name, canRequest: siteVisitSummary.canRequest, canManage: siteVisitSummary.canManage }}
+        summary={siteVisitSummary}
+      />
 
       {editOpen ? (
         <ProjectEditDialog

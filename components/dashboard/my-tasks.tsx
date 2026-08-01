@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Circle, MoreVertical, ChevronRight, ClipboardCheck } from "lucide-react"
+import { Circle, MoreVertical, ChevronRight, ClipboardCheck, MapPinned } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { TaskRow } from "@/lib/db/domain"
 
@@ -9,6 +9,7 @@ const typeBadge: Record<TaskRow["type"], string> = {
   RFI: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
   VO: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
   Review: "bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300",
+  "Site Visit": "bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300",
 }
 
 const dueTone: Record<TaskRow["dueTone"], string> = {
@@ -64,6 +65,36 @@ function ReviewTask({ task }: { task: TaskRow }) {
   )
 }
 
+
+function SiteVisitTask({ task }: { task: TaskRow }) {
+  const content = (
+    <>
+      <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300">
+        <MapPinned className="size-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-semibold text-foreground">New Site Visit Request</p>
+          <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold", typeBadge["Site Visit"])}>Site Visit</span>
+        </div>
+        <p className="mt-1 truncate text-xs font-medium text-foreground">{task.projectName}</p>
+        <p className="truncate text-xs text-muted-foreground">Requested by: {task.requestedBy ?? "Client"}</p>
+        <p className="truncate text-xs text-muted-foreground">Preferred visit: {task.preferredVisit ?? "Not specified"}</p>
+        <p className="mt-1 text-[11px] text-muted-foreground">{dateTime(task.submittedAt)}</p>
+      </div>
+      <div className="shrink-0 text-end">
+        <span className={cn("text-xs font-medium", dueTone[task.dueTone])}>{task.dueLabel}</span>
+      </div>
+    </>
+  )
+
+  return task.href ? (
+    <Link href={task.href} className="flex items-start gap-3 rounded-lg px-1 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Open site visit request for ${task.projectName}`}>
+      {content}
+    </Link>
+  ) : <div className="flex items-start gap-3 py-3">{content}</div>
+}
+
 function StandardTask({ task }: { task: TaskRow }) {
   return (
     <div className="flex items-start gap-3 py-3 first:pt-0">
@@ -107,7 +138,7 @@ export function MyTasks({ tasks }: { tasks: TaskRow[] }) {
       <ul className="mt-4 flex flex-1 flex-col divide-y divide-border">
         {tasks.length === 0 && <li className="py-3 text-sm text-muted-foreground">No tasks for this scope.</li>}
         {tasks.map((task) => (
-          <li key={task.id}>{task.type === "Review" ? <ReviewTask task={task} /> : <StandardTask task={task} />}</li>
+          <li key={task.id}>{task.type === "Review" ? <ReviewTask task={task} /> : task.type === "Site Visit" ? <SiteVisitTask task={task} /> : <StandardTask task={task} />}</li>
         ))}
       </ul>
 

@@ -9,15 +9,18 @@ import { profileAvatarDisplayUrl } from "@/lib/profile-avatar"
 import { resolveParticipantProfiles } from "@/lib/projects/participant-user-resolution"
 import { roleLabel } from "@/lib/db/types"
 import type {
+  ContractorRole,
   ProjectParticipantRole,
   ProjectParticipantUserOption,
   ProjectParticipantView,
 } from "@/lib/projects/project-participant-types"
+import { contractorRoleLabel } from "@/lib/projects/project-participant-types"
 
 const CUSTOM_PARTICIPANT_ROLES = new Set<ProjectParticipantRole>([
   "Consultant",
   "Client / Owner",
   "Contractor",
+  "Supervisor",
   "Project Manager",
   "Site Engineer",
   "QA/QC Engineer",
@@ -34,6 +37,10 @@ type ParticipantRow = {
   participant_type: string
   project_role: string
   participant_role_label: string | null
+  contractor_role: ContractorRole | null
+  contractor_role_other: string | null
+  source_key: string
+  access_membership_id: string | null
   key_contact_user_id: string | null
   key_contact_name: string | null
   key_contact_email: string | null
@@ -213,7 +220,7 @@ export async function getProjectParticipants(projectId: string): Promise<Project
   const { data, error } = await admin
     .from("project_participants")
     .select(
-      "id, organization_id, organization_name, participant_type, project_role, participant_role_label, key_contact_user_id, key_contact_name, key_contact_email, key_contact_phone, avatar_url, status",
+      "id, organization_id, organization_name, participant_type, project_role, participant_role_label, contractor_role, contractor_role_other, source_key, access_membership_id, key_contact_user_id, key_contact_name, key_contact_email, key_contact_phone, avatar_url, status",
     )
     .eq("project_id", projectId)
     .eq("status", "active")
@@ -225,8 +232,9 @@ export async function getProjectParticipants(projectId: string): Promise<Project
   if (rows.length === 0) return []
 
   const organizationIds = Array.from(new Set(rows.map((row) => row.organization_id).filter((id): id is string => Boolean(id))))
+  const resolvableRows = rows.filter((row) => !row.source_key.startsWith("external-contractor:"))
   const [resolvedProfiles, membershipResult] = await Promise.all([
-    resolveParticipantProfiles(admin, projectId, rows),
+    resolveParticipantProfiles(admin, projectId, resolvableRows),
     organizationIds.length
       ? admin
           .from("project_user_memberships")
@@ -287,12 +295,19 @@ export async function getProjectParticipants(projectId: string): Promise<Project
       organization: row.organization_name,
       organizationId: row.organization_id ?? undefined,
       organizationType: organizationType(row.participant_type),
+      participantType: row.participant_type,
       projectRole: role,
+      contractorRole: row.contractor_role ?? undefined,
+      contractorRoleLabel: contractorRoleLabel(row.contractor_role, row.contractor_role_other),
+      contractorRoleOther: row.contractor_role_other?.trim() || undefined,
+      sourceKey: row.source_key,
+      isExternalContact: !row.key_contact_user_id && !profile,
       keyContact: {
         userId: profile?.id ?? undefined,
         linkedBy: profile?.match,
         name: contactName,
         email: profile?.email?.trim() || row.key_contact_email?.trim() || undefined,
+        phone: row.key_contact_phone?.trim() || undefined,
         initials: initials(contactName),
         avatar: profile ? profileAvatar : participantAvatar ?? undefined,
         profileAvatar,
@@ -300,7 +315,11 @@ export async function getProjectParticipants(projectId: string): Promise<Project
         detail: contactDetail || undefined,
       },
       usersWithAccess: row.organization_id ? accessByOrganization.get(row.organization_id)?.size ?? 0 : 0,
-      status: row.status === "active" ? "Active" : "Limited Access",
+      status: !row.key_contact_user_id && !profile
+        ? "Contact Only"
+        : row.status === "active"
+          ? "Active"
+          : "Limited Access",
       logoTone: logoTone(role),
     }
   })

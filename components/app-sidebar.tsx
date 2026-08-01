@@ -17,6 +17,7 @@ import {
   ListTree,
   Search,
   Sparkles,
+  MapPinned,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Logo } from "@/components/logo"
@@ -75,10 +76,12 @@ export function AppSidebar({
   projects,
   selectedProjectId,
   canManageStages,
+  canAccessSiteVisits,
 }: {
   projects: ProjectOption[]
   selectedProjectId: string
   canManageStages: boolean
+  canAccessSiteVisits: boolean
 }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -101,7 +104,7 @@ export function AppSidebar({
   }, [pathname])
 
   const routeProject = routeProjectId ? projects.find((item) => item.id === routeProjectId) ?? null : null
-  const isProjectScopedModule = pathname.startsWith("/documents") || pathname.startsWith("/initial-documents")
+  const isProjectScopedModule = pathname.startsWith("/documents") || pathname.startsWith("/initial-documents") || pathname.startsWith("/site-visits")
   const requestedModuleProjectId = isProjectScopedModule
     ? searchParams.get("project")?.trim() || null
     : null
@@ -115,6 +118,7 @@ export function AppSidebar({
     pathname === "/" ||
     pathname.startsWith("/documents") ||
     pathname.startsWith("/initial-documents") ||
+    pathname.startsWith("/site-visits") ||
     pathname.startsWith("/ai-summary") ||
     pathname.startsWith("/calendar") ||
     pathname.startsWith("/inspections") ||
@@ -194,6 +198,15 @@ export function AppSidebar({
         : "/initial-documents",
       icon: FolderOpen,
     },
+    ...(canAccessSiteVisits
+      ? [{
+          label: t.nav.siteVisits,
+          href: contextProjectId
+            ? `/site-visits?project=${encodeURIComponent(contextProjectId)}`
+            : "/site-visits",
+          icon: MapPinned,
+        }]
+      : []),
     ...(contextProjectId ? [{ label: t.nav.aiSummary, href: "/ai-summary", icon: Sparkles }] : []),
     { label: t.nav.calendar, href: "/calendar", icon: CalendarDays },
   ]

@@ -87,8 +87,8 @@ export const getSession = cache(async (): Promise<SessionContext | null> => {
       userId: user.id,
       email: user.email ?? "",
       profile: (profile as Profile) ?? null,
-      memberships: memberships.length ? memberships : DEMO_SESSION.memberships,
-      supervisingOrg: supervisingOrg ?? DEMO_SESSION.supervisingOrg,
+      memberships,
+      supervisingOrg,
     }
   } catch {
     return DEMO_SESSION

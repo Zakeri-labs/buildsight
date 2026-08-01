@@ -18,14 +18,14 @@ import { signOut } from "@/lib/actions/auth"
 import { roleLabel } from "@/lib/db/types"
 import { useI18n } from "@/lib/i18n"
 import { ReviewNotificationCenter } from "@/components/notifications/review-notification-center"
-import type { ReviewSubmissionFeed } from "@/lib/review-submissions/types"
+import type { AppNotificationFeed } from "@/lib/notifications/types"
 
 export function AppTopbar({
   activeProjectName,
-  reviewFeed,
+  notificationFeed,
 }: {
   activeProjectName?: string | null
-  reviewFeed: ReviewSubmissionFeed
+  notificationFeed: AppNotificationFeed
 }) {
   const pathname = usePathname()
   const currentUser = useCurrentUser()
@@ -42,6 +42,7 @@ export function AppTopbar({
     "/initial-documents": { title: t.nav.initialDocuments, subtitle: "Initial reference files uploaded with each project" },
     "/reports": { title: t.reports.title, subtitle: t.reports.subtitle },
     "/calendar": { title: t.nav.calendar, subtitle: "" },
+    "/site-visits": { title: t.nav.siteVisits, subtitle: "Request, schedule, and track project site visits" },
     "/users": { title: t.settings.tabAccess, subtitle: t.settings.accessDesc },
     "/stages": { title: t.nav.addStage, subtitle: t.stages.subtitle },
     "/settings": { title: t.settings.title, subtitle: t.settings.subtitle },
@@ -59,7 +60,7 @@ export function AppTopbar({
     if (activeProjectName && /^\/projects\/[^/]+$/.test(p)) {
       return {
         title: activeProjectName,
-        subtitle: "Project overview, participants, and project letters",
+        subtitle: "Project overview, participants, documents, letters, and site visits",
       }
     }
     if (p === "/") return titleMap["/"]
@@ -86,7 +87,7 @@ export function AppTopbar({
         <LanguageSwitch />
 
         {/* Notifications */}
-        <ReviewNotificationCenter initialFeed={reviewFeed} userId={currentUser.id} />
+        <ReviewNotificationCenter initialFeed={notificationFeed} userId={currentUser.id} />
 
         {/* User profile link & menu */}
         <div className="flex items-center gap-1 rounded-xl p-0.5 hover:bg-muted/50">

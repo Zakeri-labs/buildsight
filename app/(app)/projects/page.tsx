@@ -45,7 +45,7 @@ export default async function ProjectsPage({
   const [params, session] = await Promise.all([searchParams, requireOnboarded()])
   const primaryMembership = session.memberships[0]
   const organizationId = session.supervisingOrg?.id ?? primaryMembership?.organization?.id
-  const projects = organizationId ? await getOrgProjects(organizationId) : []
+  const projects = organizationId ? await getOrgProjects(organizationId, session.userId) : []
   const canDeleteProjects = Boolean(
     session.supervisingOrg && isOrgAdmin(session, session.supervisingOrg.id),
   )

@@ -2,6 +2,7 @@ import "server-only"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 import { getReviewSubmissionFeed } from "@/lib/review-submissions/server"
+import { getSiteVisitTaskFeed } from "@/lib/site-visits/server"
 
 export type DomainProject = {
   id: string
@@ -109,7 +110,7 @@ export type ActivityRow = {
 export type TaskRow = {
   id: string
   action: string
-  type: "NCR" | "Inspection" | "RFI" | "VO" | "Review"
+  type: "NCR" | "Inspection" | "RFI" | "VO" | "Review" | "Site Visit"
   reference: string | null
   reportTitle?: string
   dueLabel: string | null
@@ -122,19 +123,67 @@ export type TaskRow = {
   submittedBy?: string
   submittedAt?: string
   reviewStatus?: "submitted" | "under_review"
+  requestedBy?: string
+  preferredVisit?: string
+  siteVisitStatus?: "pending"
 }
 
 /** All projects for the supervising org, ordered for display. */
-export async function getOrgProjects(orgId: string): Promise<DomainProject[]> {
+export async function getOrgProjects(orgId: string, userId?: string): Promise<DomainProject[]> {
   const admin = createAdminClient()
-  const { data } = await admin
-    .from("projects")
-    .select(
-      "id, name, code, location, latitude, longitude, status, project_type, supervision_type, supervision_type_other, region, description, image, our_role, contractor, consultant, client, start_date, target_handover, contract_value, progress_planned, progress_actual, progress_delay",
-    )
-    .eq("supervising_organization_id", orgId)
-    .order("sort_order", { ascending: true })
-    .order("name", { ascending: true })
+  const projectColumns =
+    "id, name, code, location, latitude, longitude, status, project_type, supervision_type, supervision_type_other, region, description, image, our_role, contractor, consultant, client, start_date, target_handover, contract_value, progress_planned, progress_actual, progress_delay, supervising_organization_id, sort_order"
+
+  let data: any[] | null = null
+  if (!userId) {
+    const result = await admin
+      .from("projects")
+      .select(projectColumns)
+      .eq("supervising_organization_id", orgId)
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true })
+    if (result.error) throw result.error
+    data = result.data
+  } else {
+    const [orgMembershipResult, projectMembershipResult, participantResult] = await Promise.all([
+      admin.from("organization_memberships").select("organization_id").eq("user_id", userId).eq("status", "active"),
+      admin.from("project_user_memberships").select("project_id").eq("user_id", userId).eq("status", "active"),
+      admin.from("project_participants").select("project_id").eq("key_contact_user_id", userId).eq("status", "active"),
+    ])
+    if (orgMembershipResult.error) throw orgMembershipResult.error
+    if (projectMembershipResult.error) throw projectMembershipResult.error
+    if (participantResult.error) throw participantResult.error
+
+    const organizationIds = Array.from(new Set([orgId, ...(orgMembershipResult.data ?? []).map((row: any) => row.organization_id as string)]))
+    const [projectOrgResult, supervisedResult] = await Promise.all([
+      organizationIds.length
+        ? admin.from("project_organization_memberships").select("project_id").in("organization_id", organizationIds).eq("status", "active")
+        : Promise.resolve({ data: [] as any[], error: null }),
+      organizationIds.length
+        ? admin.from("projects").select("id").in("supervising_organization_id", organizationIds)
+        : Promise.resolve({ data: [] as any[], error: null }),
+    ])
+    if (projectOrgResult.error) throw projectOrgResult.error
+    if (supervisedResult.error) throw supervisedResult.error
+
+    const projectIds = Array.from(new Set([
+      ...(projectMembershipResult.data ?? []).map((row: any) => row.project_id as string),
+      ...(participantResult.data ?? []).map((row: any) => row.project_id as string),
+      ...(projectOrgResult.data ?? []).map((row: any) => row.project_id as string),
+      ...(supervisedResult.data ?? []).map((row: any) => row.id as string),
+    ]))
+    if (!projectIds.length) data = []
+    else {
+      const result = await admin
+        .from("projects")
+        .select(projectColumns)
+        .in("id", projectIds)
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true })
+      if (result.error) throw result.error
+      data = result.data
+    }
+  }
 
   const projectRows = data ?? []
   const projectIds = projectRows.map((project: any) => project.id)
@@ -227,8 +276,8 @@ export async function getOrgProjects(orgId: string): Promise<DomainProject[]> {
 
 // Resolve the set of project ids in scope. A selected project is never
 // allowed to fall back to organisation-wide data when it is missing or stale.
-async function resolveScopedProjects(orgId: string, projectId: string | null) {
-  const projects = await getOrgProjects(orgId)
+async function resolveScopedProjects(orgId: string, projectId: string | null, userId?: string) {
+  const projects = await getOrgProjects(orgId, userId)
   const scoped = projectId ? projects.filter((p) => p.id === projectId) : projects
   const ids = scoped.map((p) => p.id)
   return { projects, scoped, ids }
@@ -271,10 +320,10 @@ export type DashboardData = {
 }
 
 export async function getDashboardData(orgId: string, projectId: string | null, userId: string): Promise<DashboardData> {
-  const { projects, scoped, ids } = await resolveScopedProjects(orgId, projectId)
+  const { projects, scoped, ids } = await resolveScopedProjects(orgId, projectId, userId)
   const names = nameMap(projects)
 
-  const [ncrs, inspections, rfis, vos, activity, tasks, reviewFeed] = await Promise.all([
+  const [ncrs, inspections, rfis, vos, activity, tasks, reviewFeed, siteVisitFeed] = await Promise.all([
     fetchScopedRows("ncrs", "project_id, status", ids),
     fetchScopedRows("inspections", "project_id, status", ids),
     fetchScopedRows("rfis", "project_id, status", ids),
@@ -282,6 +331,7 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
     fetchScopedRows("activity_log", "id, project_id, type, verb, reference, created_at", ids),
     fetchScopedRows("tasks", "id, project_id, action, type, reference, due_label, due_tone, sort_order", ids),
     getReviewSubmissionFeed({ userId, organizationId: orgId, projectId }),
+    getSiteVisitTaskFeed({ userId, projectId }),
   ])
 
   const countBy = (rows: any[], field: string) => {
@@ -356,7 +406,23 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
     reviewStatus: item.status,
   }))
 
+  const siteVisitTasks: TaskRow[] = siteVisitFeed.items.map((item) => ({
+    id: `site-visit:${item.id}`,
+    action: "New Site Visit Request",
+    type: "Site Visit",
+    reference: null,
+    dueLabel: "Pending",
+    dueTone: "warning",
+    projectName: item.projectName,
+    href: item.href,
+    requestedBy: item.requestedBy,
+    preferredVisit: item.preferredVisit,
+    submittedAt: item.createdAt,
+    siteVisitStatus: item.status,
+  }))
+
   const taskRows: TaskRow[] = [
+    ...siteVisitTasks,
     ...reviewTasks,
     ...tasks
       .slice()
