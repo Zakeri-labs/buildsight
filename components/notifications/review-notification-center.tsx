@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Bell, BellRing, Check, ClipboardCheck, ExternalLink, MapPinned } from "lucide-react"
+import { Bell, BellRing, Check, ClipboardCheck, ExternalLink, Mail, MapPinned } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -192,13 +192,13 @@ export function ReviewNotificationCenter({
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">No pending notifications.</div>
         ) : (
           feed.items.slice(0, 12).map((item) => {
-            const Icon = item.kind === "site_visit" ? MapPinned : ClipboardCheck
+            const Icon = item.kind === "site_visit" ? MapPinned : item.kind === "report_cc" ? Mail : ClipboardCheck
             return (
               <DropdownMenuItem key={item.notificationKey} render={<Link href={item.href} />} className="block cursor-pointer px-2.5 py-2.5">
                 <div className="flex items-start gap-3">
                   <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary"><Icon className="size-4" /></span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">{item.kind === "site_visit" ? "New Site Visit Request" : "Review Submission"}</p>
+                    <p className="text-sm font-semibold">{item.kind === "review" ? "Review Submission" : item.title}</p>
                     <p className="mt-0.5 truncate text-xs font-medium">{item.subject}</p>
                     {item.reference ? <p className="truncate font-mono text-[11px] text-muted-foreground">{item.reference}</p> : null}
                     <p className="truncate text-xs text-muted-foreground">{item.projectName} · {item.context}</p>

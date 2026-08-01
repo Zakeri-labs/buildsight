@@ -38,8 +38,11 @@ import {
   saveTermResponseAction,
   type AttachmentRegistration,
 } from "@/lib/actions/project-stages"
+import { saveReportCcRecipientsAction } from "@/lib/actions/report-cc"
 import { StageTranslationActions } from "@/components/stages/stage-translation-actions"
+import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
 import type { ProjectStageAttachment, ProjectStageApproval, ProjectStagePerson, ProjectStageTranslationSummary } from "@/lib/db/project-stages"
+import type { ProjectCcCandidate, ReportCcRecipient, ReportCcSelection } from "@/lib/report-cc/types"
 import {
   EMPTY_TERM_RESPONSE_CONTENT,
   REPORT_TYPES,
@@ -264,6 +267,8 @@ export function InspectionReportForm({
   canEdit,
   suggestedVisitNumber,
   initialResponseId,
+  ccCandidates,
+  initialCcRecipients,
 }: {
   project: { id: string; name: string; code: string | null }
   stage: { id: string; name: string }
@@ -286,6 +291,8 @@ export function InspectionReportForm({
   canEdit: boolean
   suggestedVisitNumber: number
   initialResponseId: string
+  ccCandidates: ProjectCcCandidate[]
+  initialCcRecipients: ReportCcRecipient[]
 }) {
   const router = useRouter()
   const { locale } = useI18n()
@@ -310,6 +317,16 @@ export function InspectionReportForm({
   const [success, setSuccess] = useState<string | null>(null)
   const [reviewComments, setReviewComments] = useState("")
   const [approvalHistory, setApprovalHistory] = useState(response?.approvals ?? [])
+  const [ccSelection, setCcSelection] = useState<ReportCcSelection>(() => ({
+    internalUserIds: initialCcRecipients.filter((recipient) => recipient.type === "internal" && recipient.userId).map((recipient) => recipient.userId as string),
+    externalRecipients: initialCcRecipients.filter((recipient) => recipient.type === "external").map((recipient) => ({
+      clientId: recipient.id,
+      name: recipient.name,
+      email: recipient.email ?? "",
+      company: recipient.company ?? "",
+      role: recipient.role ?? "",
+    })),
+  }))
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const documentInputRef = useRef<HTMLInputElement | null>(null)
   const pendingImagesRef = useRef<PendingFile[]>([])
@@ -455,6 +472,14 @@ export function InspectionReportForm({
     setBusy(mode)
     try {
       const id = await ensureResponse(mode === "progress" ? "in_progress" : "draft")
+      const ccResult = await saveReportCcRecipientsAction({
+        projectId: project.id,
+        responseId: id,
+        context: "report",
+        internalUserIds: ccSelection.internalUserIds,
+        externalRecipients: ccSelection.externalRecipients,
+      })
+      if (!ccResult.ok) throw new Error(ccResult.error)
       await uploadFiles(id, pendingImages, "evidence_image")
       await uploadFiles(id, pendingDocuments, "document")
       if (mode === "submit") {
@@ -663,6 +688,13 @@ export function InspectionReportForm({
           <div className="space-y-2 sm:col-span-2 lg:col-span-2"><Label htmlFor="report-subject">{copy.subject}</Label><Input id="report-subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Inspection location, package, activity, or reference" disabled={isLocked} /></div>
         </CardContent>
       </Card>
+
+      <CcRecipientsField
+        candidates={ccCandidates}
+        value={ccSelection}
+        onChange={setCcSelection}
+        disabled={isLocked || busy !== null}
+      />
 
       {term.templateReference ? <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"><FileText className="mt-0.5 size-4 shrink-0" /><div><p className="font-semibold">{copy.template}</p><p className="mt-0.5 text-xs opacity-80">{term.templateReference}</p></div></div> : null}
       {term.instructions ? <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm"><p className="font-semibold">Description / Instructions</p><p className="mt-1 whitespace-pre-wrap text-muted-foreground">{term.instructions}</p></div> : null}

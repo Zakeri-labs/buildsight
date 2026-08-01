@@ -69,9 +69,9 @@ export function SettingsNotifications() {
       <CardContent className="space-y-5">
         <div className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="text-sm font-semibold">Chrome review notifications</p>
+            <p className="text-sm font-semibold">Chrome notifications</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Show a browser notification for new Term and Sub-term review submissions while BuildSight is open.
+              Show browser notifications for review submissions, Site Visit requests, and new Report/Translation CC items while BuildSight is open.
             </p>
             {browserPermission === "denied" ? (
               <p className="mt-1 text-xs text-destructive">Notifications are blocked in your browser settings.</p>

@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Circle, MoreVertical, ChevronRight, ClipboardCheck, MapPinned } from "lucide-react"
+import { Circle, MoreVertical, ChevronRight, ClipboardCheck, Mail, MapPinned } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { TaskRow } from "@/lib/db/domain"
 
@@ -10,6 +10,7 @@ const typeBadge: Record<TaskRow["type"], string> = {
   VO: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
   Review: "bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300",
   "Site Visit": "bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300",
+  CC: "bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
 }
 
 const dueTone: Record<TaskRow["dueTone"], string> = {
@@ -95,6 +96,27 @@ function SiteVisitTask({ task }: { task: TaskRow }) {
   ) : <div className="flex items-start gap-3 py-3">{content}</div>
 }
 
+function CcTask({ task }: { task: TaskRow }) {
+  const content = (
+    <>
+      <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300"><Mail className="size-4" /></div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-semibold text-foreground">{task.ccContext === "translation" ? "Translation CC" : "Report CC"}</p>
+          <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-semibold", typeBadge.CC)}>CC</span>
+        </div>
+        <p className="mt-1 truncate text-xs font-semibold text-foreground">{task.reportTitle ?? task.reference ?? "Report"}</p>
+        {task.reference ? <p className="truncate font-mono text-[11px] text-muted-foreground">{task.reference}</p> : null}
+        <p className="truncate text-xs font-medium text-foreground">{task.projectName}</p>
+        <p className="truncate text-xs text-muted-foreground">{task.stageName} · {task.parentTermName}</p>
+        <p className="mt-1 text-[11px] text-muted-foreground">Added by {task.ccAddedBy ?? "Project member"} · {dateTime(task.submittedAt)}</p>
+      </div>
+      <div className="shrink-0 text-end"><span className={cn("text-xs font-medium", dueTone[task.dueTone])}>{task.dueLabel}</span></div>
+    </>
+  )
+  return task.href ? <Link href={task.href} className="flex items-start gap-3 rounded-lg px-1 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{content}</Link> : <div className="flex items-start gap-3 py-3">{content}</div>
+}
+
 function StandardTask({ task }: { task: TaskRow }) {
   return (
     <div className="flex items-start gap-3 py-3 first:pt-0">
@@ -138,7 +160,7 @@ export function MyTasks({ tasks }: { tasks: TaskRow[] }) {
       <ul className="mt-4 flex flex-1 flex-col divide-y divide-border">
         {tasks.length === 0 && <li className="py-3 text-sm text-muted-foreground">No tasks for this scope.</li>}
         {tasks.map((task) => (
-          <li key={task.id}>{task.type === "Review" ? <ReviewTask task={task} /> : task.type === "Site Visit" ? <SiteVisitTask task={task} /> : <StandardTask task={task} />}</li>
+          <li key={task.id}>{task.type === "Review" ? <ReviewTask task={task} /> : task.type === "Site Visit" ? <SiteVisitTask task={task} /> : task.type === "CC" ? <CcTask task={task} /> : <StandardTask task={task} />}</li>
         ))}
       </ul>
 

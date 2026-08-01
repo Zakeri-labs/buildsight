@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 import { getReviewSubmissionFeed } from "@/lib/review-submissions/server"
 import { getSiteVisitTaskFeed } from "@/lib/site-visits/server"
+import { getReportCcNotificationFeed } from "@/lib/report-cc/server"
 
 export type DomainProject = {
   id: string
@@ -110,7 +111,7 @@ export type ActivityRow = {
 export type TaskRow = {
   id: string
   action: string
-  type: "NCR" | "Inspection" | "RFI" | "VO" | "Review" | "Site Visit"
+  type: "NCR" | "Inspection" | "RFI" | "VO" | "Review" | "Site Visit" | "CC"
   reference: string | null
   reportTitle?: string
   dueLabel: string | null
@@ -126,6 +127,8 @@ export type TaskRow = {
   requestedBy?: string
   preferredVisit?: string
   siteVisitStatus?: "pending"
+  ccContext?: "report" | "translation"
+  ccAddedBy?: string
 }
 
 /** All projects for the supervising org, ordered for display. */
@@ -323,7 +326,7 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
   const { projects, scoped, ids } = await resolveScopedProjects(orgId, projectId, userId)
   const names = nameMap(projects)
 
-  const [ncrs, inspections, rfis, vos, activity, tasks, reviewFeed, siteVisitFeed] = await Promise.all([
+  const [ncrs, inspections, rfis, vos, activity, tasks, reviewFeed, siteVisitFeed, reportCcFeed] = await Promise.all([
     fetchScopedRows("ncrs", "project_id, status", ids),
     fetchScopedRows("inspections", "project_id, status", ids),
     fetchScopedRows("rfis", "project_id, status", ids),
@@ -332,6 +335,7 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
     fetchScopedRows("tasks", "id, project_id, action, type, reference, due_label, due_tone, sort_order", ids),
     getReviewSubmissionFeed({ userId, organizationId: orgId, projectId }),
     getSiteVisitTaskFeed({ userId, projectId }),
+    getReportCcNotificationFeed({ userId, projectId }),
   ])
 
   const countBy = (rows: any[], field: string) => {
@@ -421,7 +425,25 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
     siteVisitStatus: item.status,
   }))
 
+  const reportCcTasks: TaskRow[] = reportCcFeed.items.map((item) => ({
+    id: `report-cc:${item.id}`,
+    action: item.context === "translation" ? "Translation CC" : "Report CC",
+    type: "CC",
+    reference: item.reportNumber,
+    reportTitle: item.reportTitle,
+    dueLabel: "CC Recipient",
+    dueTone: "muted",
+    projectName: item.projectName,
+    href: item.href,
+    stageName: item.stageName,
+    parentTermName: item.termName,
+    submittedAt: item.createdAt,
+    ccContext: item.context,
+    ccAddedBy: item.addedByName,
+  }))
+
   const taskRows: TaskRow[] = [
+    ...reportCcTasks,
     ...siteVisitTasks,
     ...reviewTasks,
     ...tasks

@@ -2177,9 +2177,117 @@ async function renderPdfPage(documentProxy: any, pageNumber: number, targetWidth
     context.fillStyle = "#ffffff"
     context.fillRect(0, 0, canvas.width, canvas.height)
     await page.render({ canvasContext: context, viewport, background: "#ffffff" }).promise
-    return canvas.toDataURL("image/jpeg", 0.8)
+    return canvas.toDataURL("image/jpeg", 0.92)
   } finally {
     page.cleanup?.()
+  }
+}
+
+function drawComposedPdfPage(
+  doc: JsPdfDocument,
+  dataUrl: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const imageProperties = doc.getImageProperties(dataUrl)
+  const ratio = Math.min(width / imageProperties.width, height / imageProperties.height)
+  const renderedWidth = imageProperties.width * ratio
+  const renderedHeight = imageProperties.height * ratio
+  doc.addImage(
+    dataUrl,
+    "JPEG",
+    x + (width - renderedWidth) / 2,
+    y + (height - renderedHeight) / 2,
+    renderedWidth,
+    renderedHeight,
+    undefined,
+    "FAST",
+  )
+}
+
+/**
+ * Builds the bilingual export strictly as a visual page composer.
+ *
+ * The existing English and Arabic PDF generators remain the only content
+ * renderers. Their completed pages are paired side-by-side without rebuilding
+ * text, tables, images, headers, footers, or pagination. A3 landscape is
+ * exactly two A4 portrait pages wide, so paired pages preserve their original
+ * proportions. Unmatched trailing pages remain full-size A4 pages.
+ */
+async function buildPageComposedBilingualPdfBlob(input: {
+  data: StageTranslationPageData
+  englishBlob: Blob
+  arabicBlob: Blob
+}) {
+  const { data, englishBlob, arabicBlob } = input
+  const JsPdf = await loadPdfTools()
+  const [englishPdf, arabicPdf] = await Promise.all([
+    openPdfBlob(englishBlob),
+    openPdfBlob(arabicBlob),
+  ])
+
+  const englishPages = Number(englishPdf.documentProxy.numPages || 0)
+  const arabicPages = Number(arabicPdf.documentProxy.numPages || 0)
+  const totalPages = Math.max(englishPages, arabicPages)
+  if (!totalPages) {
+    await Promise.allSettled([
+      englishPdf.loadingTask.destroy?.(),
+      arabicPdf.loadingTask.destroy?.(),
+    ])
+    throw new Error("The English and Arabic PDFs contain no pages to compose.")
+  }
+
+  // A3 landscape = two A4 portrait pages placed side-by-side at their native
+  // physical aspect ratio. If one PDF has no matching page, the output page is
+  // a normal A4 portrait page containing the remaining original page.
+  const firstPageIsPaired = englishPages > 0 && arabicPages > 0
+  const doc = new JsPdf({
+    unit: "mm",
+    format: firstPageIsPaired ? "a3" : "a4",
+    orientation: firstPageIsPaired ? "landscape" : "portrait",
+    compress: true,
+  })
+
+  try {
+    for (let index = 0; index < totalPages; index += 1) {
+      const englishPageNumber = index + 1 <= englishPages ? index + 1 : null
+      const arabicPageNumber = index + 1 <= arabicPages ? index + 1 : null
+      const paired = englishPageNumber !== null && arabicPageNumber !== null
+
+      if (index > 0) {
+        doc.addPage(paired ? "a3" : "a4", paired ? "landscape" : "portrait")
+      }
+
+      if (paired) {
+        const [englishImage, arabicImage] = await Promise.all([
+          renderPdfPage(englishPdf.documentProxy, englishPageNumber, 1800),
+          renderPdfPage(arabicPdf.documentProxy, arabicPageNumber, 1800),
+        ])
+        drawComposedPdfPage(doc, englishImage, 0, 0, PAGE.portraitWidth, PAGE.portraitHeight)
+        drawComposedPdfPage(doc, arabicImage, PAGE.portraitWidth, 0, PAGE.portraitWidth, PAGE.portraitHeight)
+        continue
+      }
+
+      const remainingImage = englishPageNumber !== null
+        ? await renderPdfPage(englishPdf.documentProxy, englishPageNumber, 1800)
+        : await renderPdfPage(arabicPdf.documentProxy, arabicPageNumber as number, 1800)
+      drawComposedPdfPage(doc, remainingImage, 0, 0, PAGE.portraitWidth, PAGE.portraitHeight)
+    }
+
+    doc.setProperties({
+      title: `${data.response.reportTitle} — Bilingual`,
+      subject: data.response.subject || data.term.name,
+      author: data.project.name,
+      creator: "BuildSight AI Document Translation",
+    })
+    return doc.output("blob") as Blob
+  } finally {
+    await Promise.allSettled([
+      englishPdf.loadingTask.destroy?.(),
+      arabicPdf.loadingTask.destroy?.(),
+    ])
   }
 }
 
@@ -2812,6 +2920,7 @@ export async function exportTranslationPdf({
     return { blob: arabicBlob, filename: `${base}-${report}-arabic-translation.pdf` }
   }
 
-  const bilingualBlob = await buildNativeBilingualPdfBlob({ data, translation, englishTemplate, arabicTemplate, sourceDocument })
+  const englishBlob = await buildLanguagePdfBlob(englishTemplate)
+  const bilingualBlob = await buildPageComposedBilingualPdfBlob({ data, englishBlob, arabicBlob })
   return { blob: bilingualBlob, filename: `${base}-${report}-bilingual.pdf` }
 }

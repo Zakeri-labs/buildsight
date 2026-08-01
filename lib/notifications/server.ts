@@ -2,6 +2,7 @@ import "server-only"
 
 import { getReviewSubmissionFeed } from "@/lib/review-submissions/server"
 import { getSiteVisitTaskFeed } from "@/lib/site-visits/server"
+import { getReportCcNotificationFeed } from "@/lib/report-cc/server"
 import type { AppNotificationFeed, AppNotificationItem } from "@/lib/notifications/types"
 
 export async function getAppNotificationFeed({
@@ -13,14 +14,16 @@ export async function getAppNotificationFeed({
   organizationId: string | null
   projectId: string | null
 }): Promise<AppNotificationFeed> {
-  const [reviewResult, siteVisitResult] = await Promise.allSettled([
+  const [reviewResult, siteVisitResult, reportCcResult] = await Promise.allSettled([
     organizationId
       ? getReviewSubmissionFeed({ userId, organizationId, projectId })
       : Promise.resolve({ canReview: false, items: [] }),
     getSiteVisitTaskFeed({ userId, projectId }),
+    getReportCcNotificationFeed({ userId, projectId }),
   ])
   const reviewFeed = reviewResult.status === "fulfilled" ? reviewResult.value : { canReview: false, items: [] }
   const siteVisitFeed = siteVisitResult.status === "fulfilled" ? siteVisitResult.value : { canManage: false, items: [] }
+  const reportCcFeed = reportCcResult.status === "fulfilled" ? reportCcResult.value : { canNotify: false, items: [] }
 
   const reviewItems: AppNotificationItem[] = reviewFeed.items.map((item) => ({
     id: item.id,
@@ -57,8 +60,28 @@ export async function getAppNotificationFeed({
     notifyActor: false,
   }))
 
-  const items = [...reviewItems, ...siteVisitItems].sort(
+  const reportCcItems: AppNotificationItem[] = reportCcFeed.items.map((item) => ({
+    id: item.id,
+    kind: "report_cc",
+    notificationKey: item.notificationKey,
+    title: item.context === "translation" ? "Translation CC" : "Report Created",
+    subject: item.reportTitle,
+    reference: item.reportNumber,
+    body: item.context === "translation"
+      ? `You have been CC'd on a report translation in ${item.projectName}.`
+      : `You have been CC'd on a report in ${item.projectName}.`,
+    projectName: item.projectName,
+    context: `${item.stageName} · ${item.termName}`,
+    actorId: item.addedById,
+    actorName: item.addedByName,
+    createdAt: item.createdAt,
+    status: "CC Recipient",
+    href: item.href,
+    notifyActor: false,
+  }))
+
+  const items = [...reportCcItems, ...reviewItems, ...siteVisitItems].sort(
     (a, b) => +new Date(b.createdAt) - +new Date(a.createdAt),
   )
-  return { canNotify: reviewFeed.canReview || siteVisitFeed.canManage, items }
+  return { canNotify: reportCcFeed.canNotify || reviewFeed.canReview || siteVisitFeed.canManage, items }
 }
