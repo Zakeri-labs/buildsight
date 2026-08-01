@@ -2291,44 +2291,378 @@ function addBilingualPageNumbers(doc: JsPdfDocument) {
   }
 }
 
-function measureBlockHeight(doc: JsPdfDocument, block: PdfBlock | undefined, width: number, rtl: boolean): number {
-  if (!block) return 0
-  if (block.type === "heading") {
-    const size = block.level <= 2 ? 14 : block.level === 3 ? 12 : 10.5
-    setLanguage(doc, rtl, size, true)
-    const lines = textLines(doc, block.text, width)
-    return Math.max(size * 0.42 + 1.4, lines.length * (size * 0.42 + 1.4)) + 5
-  }
-  if (block.type === "paragraph") {
-    setLanguage(doc, rtl, 9, false)
-    const indent = (block as any).indent ?? block.indent ?? 0
-    const bulletW = (block as any).bullet ? 6 : block.bullet ? 6 : 0
-    const available = width - indent - bulletW
-    const lines = textLines(doc, block.text, available)
-    const lineHeight = 4.4
-    return Math.max(lineHeight, lines.length * lineHeight) + 1.2
-  }
-  if (block.type === "list") {
-    setLanguage(doc, rtl, 9, false)
-    let totalH = 0
-    for (let index = 0; index < block.items.length; index += 1) {
-      const itemText = block.items[index] || ""
-      const available = width - 2 - 6
-      const lines = textLines(doc, itemText, available)
-      const lineHeight = 4.6
-      totalH += Math.max(lineHeight, lines.length * lineHeight) + 1.5
+type BilingualRowStyle = "column-header" | "section" | "heading" | "body" | "table-header" | "table-cell"
+
+type BilingualRowOptions = {
+  style?: BilingualRowStyle
+  alternate?: boolean
+  groupEnd?: boolean
+}
+
+function bilingualCellLines(
+  doc: JsPdfDocument,
+  text: string | undefined,
+  width: number,
+  rtl: boolean,
+  fontSize: number,
+  bold: boolean,
+) {
+  const value = normalizeText(text || "")
+  if (!value) return [] as string[]
+  setLanguage(doc, rtl, fontSize, bold)
+  const split = doc.splitTextToSize(value, Math.max(8, width))
+  return Array.isArray(split) ? split.map(String) : [String(split)]
+}
+
+function bilingualRowAppearance(style: BilingualRowStyle, alternate: boolean) {
+  if (style === "column-header") {
+    return {
+      fontSize: 9,
+      bold: true,
+      lineHeight: 4.8,
+      padding: 2.2,
+      minHeight: 9,
+      fill: [30, 58, 138] as const,
+      text: [255, 255, 255] as const,
+      border: [30, 58, 138] as const,
     }
-    return Math.max(6, totalH) + 2
   }
-  if (block.type === "table") {
-    const rows = (block && Array.isArray(block.rows)) ? block.rows : []
-    const headers = (block && Array.isArray(block.headers)) ? block.headers : []
-    const rowCount = rows.length + (headers.length ? 1 : 0)
-    const avgCellLines = 1.5
-    return rowCount * (avgCellLines * 4.2 + 4) + 6
+  if (style === "section") {
+    return {
+      fontSize: 11,
+      bold: true,
+      lineHeight: 5.4,
+      padding: 2.6,
+      minHeight: 11,
+      fill: [239, 246, 255] as const,
+      text: [15, 23, 42] as const,
+      border: [147, 197, 253] as const,
+    }
   }
-  if (block.type === "spacer") return block.height
-  return 18
+  if (style === "heading") {
+    return {
+      fontSize: 9.5,
+      bold: true,
+      lineHeight: 4.8,
+      padding: 2.2,
+      minHeight: 8.5,
+      fill: [248, 250, 252] as const,
+      text: [15, 23, 42] as const,
+      border: [203, 213, 225] as const,
+    }
+  }
+  if (style === "table-header") {
+    return {
+      fontSize: 8.2,
+      bold: true,
+      lineHeight: 4.3,
+      padding: 2,
+      minHeight: 8,
+      fill: [226, 232, 240] as const,
+      text: [30, 41, 59] as const,
+      border: [148, 163, 184] as const,
+    }
+  }
+  if (style === "table-cell") {
+    return {
+      fontSize: 8,
+      bold: false,
+      lineHeight: 4.2,
+      padding: 1.8,
+      minHeight: 7,
+      fill: alternate ? [248, 250, 252] as const : [255, 255, 255] as const,
+      text: [51, 65, 85] as const,
+      border: [226, 232, 240] as const,
+    }
+  }
+  return {
+    fontSize: 8.7,
+    bold: false,
+    lineHeight: 4.5,
+    padding: 2.1,
+    minHeight: 7.5,
+    fill: [255, 255, 255] as const,
+    text: [51, 65, 85] as const,
+    border: [226, 232, 240] as const,
+  }
+}
+
+function drawBilingualColumnHeader(flow: Flow) {
+  const appearance = bilingualRowAppearance("column-header", false)
+  const width = flow.width / 2
+  const height = appearance.minHeight
+  const { doc } = flow
+
+  doc.setFillColor(...appearance.fill)
+  doc.rect(flow.x, flow.y, flow.width, height, "F")
+  doc.setDrawColor(...appearance.border)
+  doc.rect(flow.x, flow.y, flow.width, height)
+  doc.line(flow.x + width, flow.y, flow.x + width, flow.y + height)
+
+  setLanguage(doc, false, appearance.fontSize, appearance.bold)
+  doc.setTextColor(...appearance.text)
+  doc.text("English", flow.x + appearance.padding, flow.y + 5.8, { align: "left" })
+
+  setLanguage(doc, true, appearance.fontSize, appearance.bold)
+  doc.setTextColor(...appearance.text)
+  writePdfText(doc, "العربية", flow.x + flow.width - appearance.padding, flow.y + 5.8, { align: "right" }, true)
+  flow.y += height
+}
+
+function addBilingualContinuationPage(flow: Flow) {
+  addFlowPage(flow)
+  drawBilingualColumnHeader(flow)
+}
+
+function renderBilingualTextRow(
+  flow: Flow,
+  englishText: string | undefined,
+  arabicText: string | undefined,
+  options: BilingualRowOptions = {},
+) {
+  const style = options.style ?? "body"
+  const appearance = bilingualRowAppearance(style, Boolean(options.alternate))
+  const columnWidth = flow.width / 2
+  const contentWidth = columnWidth - appearance.padding * 2
+  const englishLines = bilingualCellLines(flow.doc, englishText, contentWidth, false, appearance.fontSize, appearance.bold)
+  const arabicLines = bilingualCellLines(flow.doc, arabicText, contentWidth, true, appearance.fontSize, appearance.bold)
+
+  let englishOffset = 0
+  let arabicOffset = 0
+  let firstSegment = true
+
+  do {
+    if (flow.y + appearance.minHeight > flow.bottom) addBilingualContinuationPage(flow)
+
+    const availableHeight = Math.max(appearance.minHeight, flow.bottom - flow.y)
+    const availableLineCount = Math.max(
+      1,
+      Math.floor((availableHeight - appearance.padding * 2) / appearance.lineHeight),
+    )
+    const englishRemaining = Math.max(0, englishLines.length - englishOffset)
+    const arabicRemaining = Math.max(0, arabicLines.length - arabicOffset)
+    const remainingLineCount = Math.max(englishRemaining, arabicRemaining, 1)
+    const segmentLineCount = Math.min(remainingLineCount, availableLineCount)
+    const englishSegment = englishLines.slice(englishOffset, englishOffset + segmentLineCount)
+    const arabicSegment = arabicLines.slice(arabicOffset, arabicOffset + segmentLineCount)
+    const rowHeight = Math.max(
+      appearance.minHeight,
+      segmentLineCount * appearance.lineHeight + appearance.padding * 2,
+    )
+    const rowY = flow.y
+    const { doc } = flow
+
+    doc.setFillColor(...appearance.fill)
+    doc.rect(flow.x, rowY, flow.width, rowHeight, "F")
+    doc.setDrawColor(...appearance.border)
+    doc.setLineWidth(style === "section" ? 0.35 : 0.18)
+    doc.rect(flow.x, rowY, flow.width, rowHeight)
+    doc.line(flow.x + columnWidth, rowY, flow.x + columnWidth, rowY + rowHeight)
+
+    if (englishSegment.length) {
+      setLanguage(doc, false, appearance.fontSize, appearance.bold)
+      doc.setTextColor(...appearance.text)
+      writePdfText(
+        doc,
+        englishSegment,
+        flow.x + appearance.padding,
+        rowY + appearance.padding + appearance.lineHeight * 0.78,
+        { align: "left", lineHeightFactor: 1.15 },
+        false,
+      )
+    }
+
+    if (arabicSegment.length) {
+      setLanguage(doc, true, appearance.fontSize, appearance.bold)
+      doc.setTextColor(...appearance.text)
+      writePdfText(
+        doc,
+        arabicSegment,
+        flow.x + flow.width - appearance.padding,
+        rowY + appearance.padding + appearance.lineHeight * 0.78,
+        { align: "right", lineHeightFactor: 1.15 },
+        true,
+      )
+    }
+
+    flow.y += rowHeight
+    englishOffset += segmentLineCount
+    arabicOffset += segmentLineCount
+    firstSegment = false
+
+    const hasMore = englishOffset < englishLines.length || arabicOffset < arabicLines.length
+    if (hasMore) addBilingualContinuationPage(flow)
+  } while (
+    firstSegment
+    || englishOffset < englishLines.length
+    || arabicOffset < arabicLines.length
+  )
+
+  if (options.groupEnd) {
+    flow.doc.setDrawColor(148, 163, 184)
+    flow.doc.setLineWidth(0.35)
+    flow.doc.line(flow.x, flow.y, flow.x + flow.width, flow.y)
+    flow.doc.setLineWidth(0.2)
+  }
+}
+
+function pairedBlocksByEnglishStructure(englishBlocks: PdfBlock[], arabicBlocks: PdfBlock[]) {
+  const queues = new Map<PdfBlock["type"], PdfBlock[]>()
+  arabicBlocks.forEach((block) => {
+    const queue = queues.get(block.type) ?? []
+    queue.push(block)
+    queues.set(block.type, queue)
+  })
+  const indexes = new Map<PdfBlock["type"], number>()
+
+  return englishBlocks.map((english) => {
+    const index = indexes.get(english.type) ?? 0
+    const arabic = queues.get(english.type)?.[index]
+    indexes.set(english.type, index + 1)
+    return { english, arabic }
+  })
+}
+
+function bilingualTableRows(
+  english: Extract<PdfBlock, { type: "table" }>,
+  arabic?: Extract<PdfBlock, { type: "table" }>,
+) {
+  const output: Array<{
+    english: string
+    arabic: string
+    header: boolean
+    alternate: boolean
+    groupEnd: boolean
+  }> = []
+
+  english.headers.forEach((header, columnIndex) => {
+    output.push({
+      english: header || "",
+      arabic: arabic?.headers?.[columnIndex] || "",
+      header: true,
+      alternate: false,
+      groupEnd: columnIndex === english.headers.length - 1,
+    })
+  })
+
+  english.rows.forEach((row, rowIndex) => {
+    const columnCount = row.length
+    if (!columnCount) {
+      output.push({ english: "", arabic: "", header: false, alternate: rowIndex % 2 === 1, groupEnd: true })
+      return
+    }
+    row.forEach((cell, columnIndex) => {
+      output.push({
+        english: cell || "",
+        arabic: arabic?.rows?.[rowIndex]?.[columnIndex] || "",
+        header: false,
+        alternate: rowIndex % 2 === 1,
+        groupEnd: columnIndex === columnCount - 1,
+      })
+    })
+  })
+  return output
+}
+
+async function renderBilingualImagePair(
+  flow: Flow,
+  english: Extract<PdfBlock, { type: "image" }>,
+  arabic?: Extract<PdfBlock, { type: "image" }>,
+) {
+  const image = await loadImage(english.src)
+  if (!image) {
+    renderBilingualTextRow(flow, english.caption || "Image unavailable.", arabic?.caption || "", { style: "body" })
+    return
+  }
+
+  const maxWidth = Math.min(flow.width, flow.width * Math.max(0.35, Math.min(1, english.preferredWidthRatio ?? 1)))
+  const maxHeight = 105
+  const ratio = Math.min(maxWidth / image.width, maxHeight / image.height)
+  const width = image.width * ratio
+  const height = image.height * ratio
+  if (flow.y + height + 4 > flow.bottom) addBilingualContinuationPage(flow)
+  const x = flow.x + (flow.width - width) / 2
+  flow.doc.setDrawColor(203, 213, 225)
+  flow.doc.rect(x - 0.5, flow.y - 0.5, width + 1, height + 1)
+  flow.doc.addImage(image.dataUrl, "JPEG", x, flow.y, width, height, undefined, "FAST")
+  flow.y += height + 2
+  if (english.caption || arabic?.caption) {
+    renderBilingualTextRow(flow, english.caption, arabic?.caption, { style: "body" })
+  }
+  flow.y += 2
+}
+
+async function renderBilingualBlockPair(
+  flow: Flow,
+  english: PdfBlock,
+  arabic: PdfBlock | undefined,
+) {
+  if (english.type === "heading") {
+    renderBilingualTextRow(
+      flow,
+      english.text,
+      arabic?.type === "heading" ? arabic.text : "",
+      { style: "heading" },
+    )
+    return
+  }
+  if (english.type === "paragraph") {
+    const englishBullet = (english as any).bullet ? `${(english as any).bullet} ` : ""
+    const arabicBullet = arabic?.type === "paragraph" && (arabic as any).bullet ? `${(arabic as any).bullet} ` : englishBullet
+    renderBilingualTextRow(
+      flow,
+      `${englishBullet}${english.text}`,
+      arabic?.type === "paragraph" ? `${arabicBullet}${arabic.text}` : "",
+      { style: "body" },
+    )
+    return
+  }
+  if (english.type === "list") {
+    const arabicItems = arabic?.type === "list" ? arabic.items : []
+    english.items.forEach((item, index) => {
+      const prefix = english.ordered ? `${index + 1}. ` : "• "
+      renderBilingualTextRow(flow, `${prefix}${item}`, arabicItems[index] ? `${prefix}${arabicItems[index]}` : "", { style: "body" })
+    })
+    return
+  }
+  if (english.type === "table") {
+    const arabicTable = arabic?.type === "table" ? arabic : undefined
+    bilingualTableRows(english, arabicTable).forEach((row) => {
+      renderBilingualTextRow(flow, row.english, row.arabic, {
+        style: row.header ? "table-header" : "table-cell",
+        alternate: row.alternate,
+        groupEnd: row.groupEnd,
+      })
+    })
+    return
+  }
+  if (english.type === "image") {
+    await renderBilingualImagePair(flow, english, arabic?.type === "image" ? arabic : undefined)
+    return
+  }
+  if (english.type === "spacer") {
+    const height = Math.max(english.height, arabic?.type === "spacer" ? arabic.height : 0)
+    if (flow.y + height > flow.bottom) addBilingualContinuationPage(flow)
+    flow.y += height
+  }
+}
+
+function sectionContentBlocks(section: PdfSectionTemplate) {
+  const blocks = section.html !== undefined ? htmlToBlocks(section.html) : []
+  if (section.table && Array.isArray(section.table.rows) && section.table.rows.length > 0) {
+    blocks.push({ type: "table", ...section.table })
+  }
+  const flowImages = (section.images ?? []).filter((image) => image.flowTarget === "section")
+  return flattenPdfBlocks(interleaveFlowImages(blocks, flowImages))
+}
+
+function sectionDocumentBlocks(section: PdfSectionTemplate) {
+  if (!section.documentsTitle) return [] as PdfBlock[]
+  const sourceBlocks = htmlToBlocks(section.sourceDocumentHtml ?? section.documentsHtml ?? "")
+  const sourceImages = (section.images ?? []).filter((image) => image.flowTarget === "documents")
+  const reconstructed = interleaveFlowImages(sourceBlocks, sourceImages)
+  const other = htmlToBlocks(section.otherDocumentsHtml ?? "")
+  return flattenPdfBlocks([...reconstructed, ...other])
 }
 
 async function buildNativeBilingualPdfBlob(input: {
@@ -2366,15 +2700,12 @@ async function buildNativeBilingualPdfBlob(input: {
     logoImage,
   }
 
-  // 1. Draw header & top 8 metadata cards (from English template layout)
   drawFirstPageHeader(flow)
+  drawBilingualColumnHeader(flow)
 
   const engSections = englishTemplate.sections
   const arSections = arabicTemplate.sections
   const arSectionMap = new Map(arSections.map((s) => [s.key, s]))
-
-  const gap = 6
-  const colWidth = (flow.width - gap) / 2  // 88 mm each
 
   for (const engSection of engSections) {
     if (engSection.key === "projectInformation" || engSection.key === "project-info") {
@@ -2383,87 +2714,42 @@ async function buildNativeBilingualPdfBlob(input: {
 
     const arSection = arSectionMap.get(engSection.key)
 
-    const rawEngBlocks = engSection.html !== undefined ? htmlToBlocks(engSection.html) : []
-    if (engSection.table && Array.isArray(engSection.table.rows) && engSection.table.rows.length > 0) {
-      rawEngBlocks.push({ type: "table", ...engSection.table })
-    }
-    const rawArBlocks = arSection?.html !== undefined ? htmlToBlocks(arSection.html) : []
-    if (arSection?.table && Array.isArray(arSection.table.rows) && arSection.table.rows.length > 0) {
-      rawArBlocks.push({ type: "table", ...arSection.table })
-    }
-
-    const engBlocks = flattenPdfBlocks(rawEngBlocks)
-    const arBlocks = flattenPdfBlocks(rawArBlocks)
-
-    const galleryImages = (engSection.images ?? []).filter((i) => i.flowTarget !== "section" && i.flowTarget !== "documents")
-    const hasContent = engBlocks.length > 0 || arBlocks.length > 0 || galleryImages.length > 0
+    const engBlocks = sectionContentBlocks(engSection)
+    const arBlocks = arSection ? sectionContentBlocks(arSection) : []
+    const engDocumentBlocks = sectionDocumentBlocks(engSection)
+    const arDocumentBlocks = arSection ? sectionDocumentBlocks(arSection) : []
+    const galleryImages = (engSection.images ?? []).filter((image) => image.flowTarget !== "section" && image.flowTarget !== "documents")
+    const arabicGalleryImages = (arSection?.images ?? []).filter((image) => image.flowTarget !== "section" && image.flowTarget !== "documents")
+    const hasContent = engBlocks.length > 0 || engDocumentBlocks.length > 0 || galleryImages.length > 0
 
     if (!hasContent) continue
 
-    // 1. Render Section Titles side-by-side (synchronized Y)
-    ensureSpace(flow, 24)
+    if (flow.y + 11 > flow.bottom) addBilingualContinuationPage(flow)
     flow.y += 3
+    renderBilingualTextRow(flow, engSection.title, arSection?.title || "", { style: "section" })
 
-    const iconSize = 3.5
-    // Left title (English)
-    setLanguage(flow.doc, false, 11, true)
-    flow.doc.setFillColor(37, 99, 235)
-    flow.doc.rect(flow.x, flow.y - 3, iconSize, iconSize, "F")
-    flow.doc.setTextColor(15, 23, 42)
-    flow.doc.text(engSection.title, flow.x + iconSize + 2, flow.y)
-
-    // Right title (Arabic)
-    if (arSection) {
-      setLanguage(flow.doc, true, 11, true)
-      const rx = flow.x + flow.width
-      flow.doc.setFillColor(37, 99, 235)
-      flow.doc.rect(rx - iconSize, flow.y - 3, iconSize, iconSize, "F")
-      flow.doc.setTextColor(15, 23, 42)
-      writePdfText(flow.doc, arSection.title, rx - iconSize - 2, flow.y, { align: "right" }, true)
+    for (const pair of pairedBlocksByEnglishStructure(engBlocks, arBlocks)) {
+      await renderBilingualBlockPair(flow, pair.english, pair.arabic)
     }
 
-    flow.y += 3
-    flow.doc.setDrawColor(226, 232, 240)
-    flow.doc.setLineWidth(0.3)
-    flow.doc.line(flow.x, flow.y, flow.x + flow.width, flow.y)
-    flow.doc.setLineWidth(0.2)
-    flow.y += 5
-
-    // 2. Render Blocks in Parallel Rows (Synchronized Paragraph by Paragraph)
-    const maxBlocks = Math.max(engBlocks.length, arBlocks.length)
-    for (let b = 0; b < maxBlocks; b += 1) {
-      const engBlock = engBlocks[b]
-      const arBlock = arBlocks[b]
-
-      const hEng = measureBlockHeight(flow.doc, engBlock, colWidth, false)
-      const hAr = measureBlockHeight(flow.doc, arBlock, colWidth, true)
-      const rowHeight = Math.max(hEng, hAr)
-
-      // Pre-check: if EITHER column would overflow, add a new page for BOTH columns together
-      if (flow.y + rowHeight > flow.bottom) {
-        // Reuse the standard continuation-page path so page 2 receives
-        // the same repeated header as every later generated PDF page.
-        addFlowPage(flow)
+    if (engDocumentBlocks.length) {
+      renderBilingualTextRow(flow, engSection.documentsTitle || "Related Documents", arSection?.documentsTitle || "", { style: "heading" })
+      for (const pair of pairedBlocksByEnglishStructure(engDocumentBlocks, arDocumentBlocks)) {
+        await renderBilingualBlockPair(flow, pair.english, pair.arabic)
       }
-
-      const rowY = flow.y
-
-      // Render both columns at the same Y using shallow sub-flows that do NOT add pages
-      const leftSub: Flow = { ...flow, x: flow.x, width: colWidth, y: rowY, rtl: false, bottom: flow.bottom }
-      const rightSub: Flow = { ...flow, x: flow.x + colWidth + gap, width: colWidth, y: rowY, rtl: true, bottom: flow.bottom }
-
-      if (engBlock) await renderBlocks(leftSub, [engBlock], engSection.key)
-      if (arBlock) await renderBlocks(rightSub, [arBlock], engSection.key)
-
-      flow.y = Math.max(leftSub.y, rightSub.y)
     }
 
-    // 3. Render Gallery Images across FULL page width (Not split into 2 narrow columns)
     if (galleryImages.length) {
-      if (engSection.imageTitle) {
-        renderHeading(flow, { type: "heading", level: 3, text: engSection.imageTitle })
+      renderBilingualTextRow(flow, engSection.imageTitle || "Images", arSection?.imageTitle || "", { style: "heading" })
+      for (let index = 0; index < galleryImages.length; index += 1) {
+        await renderBilingualImagePair(
+          flow,
+          imageTemplateBlock(galleryImages[index]) as Extract<PdfBlock, { type: "image" }>,
+          arabicGalleryImages[index]
+            ? imageTemplateBlock(arabicGalleryImages[index]) as Extract<PdfBlock, { type: "image" }>
+            : undefined,
+        )
       }
-      await renderImageGrid(flow, galleryImages, false)
     }
 
     flow.y += 4
