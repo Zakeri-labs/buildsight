@@ -66,7 +66,7 @@ import {
 export type ProjectStatus = ProjectStatusValue
 export type ProjectType = "Residential" | "Commercial" | "Hospitality" | "Infrastructure" | "Industrial"
 
-const PROJECT_TABLE_COLUMN_WIDTHS = ["19%", "13%", "15%", "6%", "10%", "10%", "10%", "11%", "6%"] as const
+const PROJECT_TABLE_COLUMN_WIDTHS = ["19%", "13%", "12%", "6%", "11%", "11%", "10%", "12%", "6%"] as const
 
 export interface ProjectRow {
   id: string
@@ -485,7 +485,7 @@ export function ProjectsList({
                 <th className="truncate px-3 py-3.5 text-start font-semibold">Project</th>
                 <th className="truncate px-2.5 py-3.5 text-start font-semibold">Owner / Client</th>
                 <th className="truncate px-2.5 py-3.5 text-start font-semibold" title="Supervision Type">Supervision Type</th>
-                <th className="truncate px-1 py-3.5 text-center font-semibold">Location</th>
+                <th className="truncate px-0 py-3.5 text-center align-middle font-semibold">Location</th>
                 <th className="truncate px-2.5 py-3.5 text-start font-semibold">Project Type</th>
                 <th className="truncate px-2.5 py-3.5 text-start font-semibold">Status</th>
                 <th className="truncate px-2.5 py-3.5 text-start font-semibold">Start Date</th>
@@ -542,46 +542,48 @@ export function ProjectsList({
                   </td>
 
                   {/* Location */}
-                  <td className="min-w-0 overflow-hidden px-1 py-4 text-center">
-                    {(() => {
-                      const hasAddress = row.address.trim().length > 0 && row.address.trim() !== "—"
-                      const hasCoordinates =
-                        Number.isFinite(row.latitude) &&
-                        Number.isFinite(row.longitude) &&
-                        Number(row.latitude) >= -90 &&
-                        Number(row.latitude) <= 90 &&
-                        Number(row.longitude) >= -180 &&
-                        Number(row.longitude) <= 180
-                      const hasLocation = hasAddress || hasCoordinates
-                      const locationLabel = locale === "ar" ? "عرض موقع المشروع" : "View project location"
+                  <td className="min-w-0 overflow-hidden px-0 py-4 text-center align-middle">
+                    <div className="flex w-full items-center justify-center">
+                      {(() => {
+                        const hasAddress = row.address.trim().length > 0 && row.address.trim() !== "—"
+                        const hasCoordinates =
+                          Number.isFinite(row.latitude) &&
+                          Number.isFinite(row.longitude) &&
+                          Number(row.latitude) >= -90 &&
+                          Number(row.latitude) <= 90 &&
+                          Number(row.longitude) >= -180 &&
+                          Number(row.longitude) <= 180
+                        const hasLocation = hasAddress || hasCoordinates
+                        const locationLabel = locale === "ar" ? "عرض موقع المشروع" : "View project location"
 
-                      return (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={<span className="inline-flex rounded-lg" />}
-                          >
-                            <Button
-                              type="button"
-                              size="icon-sm"
-                              variant="outline"
-                              disabled={!hasLocation}
-                              onClick={() => hasLocation && setLocationTarget(row)}
-                              aria-label={locationLabel}
-                              className="size-7 rounded-lg border-slate-200 text-slate-500 shadow-2xs hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-blue-800 dark:hover:bg-blue-950/40 dark:hover:text-blue-400"
+                        return (
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={<span className="inline-flex rounded-lg" />}
                             >
-                              <MapPin className="size-3.5" aria-hidden="true" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {hasLocation
-                              ? locationLabel
-                              : locale === "ar"
-                                ? "موقع المشروع غير متاح"
-                                : "Project location unavailable"}
-                          </TooltipContent>
-                        </Tooltip>
-                      )
-                    })()}
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="outline"
+                                disabled={!hasLocation}
+                                onClick={() => hasLocation && setLocationTarget(row)}
+                                aria-label={locationLabel}
+                                className="size-7 rounded-lg border-slate-200 text-slate-500 shadow-2xs hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-blue-800 dark:hover:bg-blue-950/40 dark:hover:text-blue-400"
+                              >
+                                <MapPin className="size-3.5" aria-hidden="true" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {hasLocation
+                                ? locationLabel
+                                : locale === "ar"
+                                  ? "موقع المشروع غير متاح"
+                                  : "Project location unavailable"}
+                            </TooltipContent>
+                          </Tooltip>
+                        )
+                      })()}
+                    </div>
                   </td>
 
                   {/* Project Type */}
