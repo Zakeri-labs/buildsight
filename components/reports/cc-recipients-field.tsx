@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import { Building2, Check, ChevronDown, Mail, Plus, Search, UserCheck, UserPlus, X } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
@@ -260,19 +260,17 @@ export function CcRecipientsField({
 
               {/* Minimal Dropdown Menu */}
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={disabled}
-                    className="w-full justify-between bg-background text-xs font-normal"
-                  >
-                    <span className="truncate">
-                      {isAr ? "+ حدد مستلم التقرير..." : "+ Select Report To recipient..."}
-                    </span>
-                    <ChevronDown className="size-3.5 opacity-60" />
-                  </Button>
+                <DropdownMenuTrigger
+                  disabled={disabled}
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "sm" }),
+                    "w-full justify-between bg-background text-xs font-normal"
+                  )}
+                >
+                  <span className="truncate">
+                    {isAr ? "+ حدد مستلم التقرير..." : "+ Select Report To recipient..."}
+                  </span>
+                  <ChevronDown className="size-3.5 opacity-60" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-72 p-2">
                   <div className="mb-2 relative">
@@ -433,19 +431,17 @@ export function CcRecipientsField({
 
               {/* Minimal Dropdown Menu */}
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={disabled}
-                    className="w-full justify-between bg-background text-xs font-normal"
-                  >
-                    <span className="truncate">
-                      {isAr ? "+ حدد نسخة التقرير (CC)..." : "+ Select CC recipient..."}
-                    </span>
-                    <ChevronDown className="size-3.5 opacity-60" />
-                  </Button>
+                <DropdownMenuTrigger
+                  disabled={disabled}
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "sm" }),
+                    "w-full justify-between bg-background text-xs font-normal"
+                  )}
+                >
+                  <span className="truncate">
+                    {isAr ? "+ حدد نسخة التقرير (CC)..." : "+ Select CC recipient..."}
+                  </span>
+                  <ChevronDown className="size-3.5 opacity-60" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-72 p-2">
                   <div className="mb-2 relative">
