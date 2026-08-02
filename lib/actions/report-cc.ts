@@ -33,29 +33,41 @@ async function reportScope(projectId: string, responseId: string) {
   const supabase = await createClient()
   const { data: response, error: responseError } = await supabase
     .from("term_responses")
-    .select("id, project_id, project_stage_term_id, report_number, report_title, status, created_by")
+    .select("id, project_id, project_stage_id, project_stage_term_id, report_number, report_title, status, created_by")
     .eq("id", responseId)
     .eq("project_id", projectId)
     .maybeSingle()
   if (responseError) throw responseError
   if (!response) throw new Error("Report not found.")
 
-  const [{ data: term, error: termError }, { data: project, error: projectError }] = await Promise.all([
-    supabase
-      .from("project_stage_terms")
-      .select("id, report_name, responsible_user_id, project_stage_id, project_stages!inner(id, name, project_id)")
-      .eq("id", response.project_stage_term_id)
-      .eq("project_stages.project_id", projectId)
-      .maybeSingle(),
+  const [{ data: term, error: termError }, { data: stage, error: stageError }, { data: project, error: projectError }] = await Promise.all([
+    response.project_stage_term_id
+      ? supabase
+          .from("project_stage_terms")
+          .select("id, report_name, responsible_user_id, project_stage_id, project_stages!inner(id, name, project_id)")
+          .eq("id", response.project_stage_term_id)
+          .eq("project_stages.project_id", projectId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    response.project_stage_id
+      ? supabase
+          .from("project_stages")
+          .select("id, name, project_id")
+          .eq("id", response.project_stage_id)
+          .eq("project_id", projectId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
     supabase.from("projects").select("id, name").eq("id", projectId).maybeSingle(),
   ])
   if (termError) throw termError
+  if (stageError) throw stageError
   if (projectError) throw projectError
-  if (!term || !project) throw new Error("Report project context could not be resolved.")
+  if (!project) throw new Error("Report project context could not be resolved.")
 
   return {
     ...response,
     project_stage_terms: term,
+    project_stages: stage,
     projects: project,
   } as any
 }
@@ -64,7 +76,9 @@ async function assertCanManage(projectId: string, responseId: string, context: R
   const actorId = await assertProjectMember(projectId)
   const response = await reportScope(projectId, responseId)
   const term = Array.isArray(response.project_stage_terms) ? response.project_stage_terms[0] : response.project_stage_terms
-  if (response.created_by !== actorId && term?.responsible_user_id !== actorId) await assertProjectAdmin(projectId)
+  const isCreator = response.created_by === actorId
+  const isResponsible = term?.responsible_user_id === actorId
+  if (!isCreator && !isResponsible) await assertProjectAdmin(projectId)
   if (context === "report" && ["submitted", "under_review", "approved", "completed"].includes(response.status)) {
     throw new Error("CC recipients cannot be changed while this report is awaiting review or finalized.")
   }
