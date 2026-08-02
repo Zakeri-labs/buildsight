@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useTransition } from "react"
-import { Loader2 } from "lucide-react"
+import { useRef, useState, useTransition } from "react"
+import { CalendarDays, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -21,15 +21,23 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ProjectLocationField } from "@/components/projects/project-location-field"
+import {
+  ProjectFinancialFields,
+  type ProjectFinancialFormValues,
+} from "@/components/projects/project-financial-fields"
 import { updateProject } from "@/lib/actions/projects"
 import type { ProjectLocationValue } from "@/lib/locations/types"
 import {
+  PROJECT_PRIORITIES,
   PROJECT_TYPES,
   SUPERVISION_TYPES,
+  isProjectPriorityValue,
   isSupervisionTypeValue,
   supervisionTypeLabel,
+  type ProjectPriorityValue,
   type ProjectTypeValue,
 } from "@/lib/projects/project-options"
+import { calculateProjectOutstandingAmount, validateProjectFinancialForm } from "@/lib/projects/project-financial"
 import {
   normalizeProjectStatus,
   PROJECT_STATUS_OPTIONS,
@@ -38,6 +46,14 @@ import {
 
 export { normalizeProjectStatus, PROJECT_STATUS_OPTIONS }
 export type { ProjectStatusValue }
+
+function isOptionalWholeNumber(value: string) {
+  return value === "" || /^\d+$/.test(value)
+}
+
+function optionalWholeNumber(value: string): number | null {
+  return value === "" ? null : Number(value)
+}
 
 export type ProjectEditData = {
   id: string
@@ -50,6 +66,19 @@ export type ProjectEditData = {
   supervisionType?: string | null
   supervisionTypeOther?: string | null
   status: string
+  plotNo?: string | null
+  supervisionStartDate?: string | null
+  priority?: string | null
+  includedStructureVisits?: number | null
+  includedFinishingVisits?: number | null
+  structureSupervisionFee?: number | null
+  finishingSupervisionFee?: number | null
+  receivedAmount?: number | null
+  outstandingAmount?: number | null
+  nextPaymentAmount?: number | null
+  nextPaymentDueDate?: string | null
+  invoiceReferencePaymentNote?: string | null
+  initialRemarks?: string | null
   description?: string
   latitude?: number | null
   longitude?: number | null
@@ -73,8 +102,29 @@ export function ProjectEditDialog({
   const [supervisionType, setSupervisionType] = useState(project.supervisionType ?? "")
   const [supervisionTypeOther, setSupervisionTypeOther] = useState(project.supervisionTypeOther ?? "")
   const [status, setStatus] = useState<ProjectStatusValue>(normalizeProjectStatus(project.status))
+  const [plotNo, setPlotNo] = useState(project.plotNo ?? "")
+  const [supervisionStartDate, setSupervisionStartDate] = useState(project.supervisionStartDate ?? "")
+  const [priority, setPriority] = useState<ProjectPriorityValue | "">(
+    isProjectPriorityValue(project.priority) ? project.priority : "",
+  )
+  const [includedStructureVisits, setIncludedStructureVisits] = useState(
+    project.includedStructureVisits == null ? "" : String(project.includedStructureVisits),
+  )
+  const [includedFinishingVisits, setIncludedFinishingVisits] = useState(
+    project.includedFinishingVisits == null ? "" : String(project.includedFinishingVisits),
+  )
   const [areaDistrict, setAreaDistrict] = useState(project.areaDistrict ?? "")
   const [description, setDescription] = useState(project.description ?? "")
+  const [financialValues, setFinancialValues] = useState<ProjectFinancialFormValues>({
+    structureSupervisionFee: project.structureSupervisionFee == null ? "" : String(project.structureSupervisionFee),
+    finishingSupervisionFee: project.finishingSupervisionFee == null ? "" : String(project.finishingSupervisionFee),
+    receivedAmount: project.receivedAmount == null ? "" : String(project.receivedAmount),
+    nextPaymentAmount: project.nextPaymentAmount == null ? "" : String(project.nextPaymentAmount),
+    nextPaymentDueDate: project.nextPaymentDueDate ?? "",
+    invoiceReferencePaymentNote: project.invoiceReferencePaymentNote ?? "",
+    initialRemarks: project.initialRemarks ?? "",
+  })
+  const supervisionStartDateInputRef = useRef<HTMLInputElement>(null)
   const [location, setLocation] = useState<ProjectLocationValue>({
     address: project.address === "—" || project.address === "Location not set" ? "" : project.address,
     latitude: project.latitude ?? null,
@@ -92,6 +142,23 @@ export function ProjectEditDialog({
       setError(isArabic ? "يرجى تحديد نوع الإشراف." : "Please specify the supervision type.")
       return
     }
+    if (!isOptionalWholeNumber(includedStructureVisits) || !isOptionalWholeNumber(includedFinishingVisits)) {
+      setError(
+        isArabic
+          ? "يجب أن تكون الزيارات المشمولة أعدادًا صحيحة غير سالبة."
+          : "Included visits must be non-negative whole numbers.",
+      )
+      return
+    }
+    const financialValidation = validateProjectFinancialForm(financialValues)
+    if (!financialValidation.ok) {
+      setError(
+        isArabic
+          ? "أدخل مبالغ صحيحة غير سالبة، ويجب ألا يتجاوز المبلغ المستلم إجمالي رسوم الإشراف."
+          : financialValidation.error,
+      )
+      return
+    }
     setError(null)
     startTransition(async () => {
       const result = await updateProject({
@@ -104,6 +171,18 @@ export function ProjectEditDialog({
           ? (validSupervisionType === "other" ? normalizedSupervisionTypeOther : null)
           : undefined,
         status,
+        plotNo,
+        supervisionStartDate,
+        priority: priority || undefined,
+        includedStructureVisits: optionalWholeNumber(includedStructureVisits),
+        includedFinishingVisits: optionalWholeNumber(includedFinishingVisits),
+        structureSupervisionFee: financialValues.structureSupervisionFee,
+        finishingSupervisionFee: financialValues.finishingSupervisionFee,
+        receivedAmount: financialValues.receivedAmount,
+        nextPaymentAmount: financialValues.nextPaymentAmount,
+        nextPaymentDueDate: financialValues.nextPaymentDueDate,
+        invoiceReferencePaymentNote: financialValues.invoiceReferencePaymentNote,
+        initialRemarks: financialValues.initialRemarks,
         description,
         region: areaDistrict,
         location: location.address,
@@ -131,6 +210,26 @@ export function ProjectEditDialog({
         supervisionTypeOther: nextSupervisionTypeOther,
         supervisionTypeLabel: supervisionTypeLabel(nextSupervisionType, nextSupervisionTypeOther),
         status,
+        plotNo: plotNo.trim() || null,
+        supervisionStartDate: supervisionStartDate || null,
+        priority: priority || project.priority || null,
+        includedStructureVisits: optionalWholeNumber(includedStructureVisits),
+        includedFinishingVisits: optionalWholeNumber(includedFinishingVisits),
+        structureSupervisionFee: financialValues.structureSupervisionFee === "" ? null : Number(financialValues.structureSupervisionFee),
+        finishingSupervisionFee: financialValues.finishingSupervisionFee === "" ? null : Number(financialValues.finishingSupervisionFee),
+        receivedAmount: financialValues.receivedAmount === "" ? null : Number(financialValues.receivedAmount),
+        outstandingAmount:
+          (financialValues.structureSupervisionFee !== "" || financialValues.finishingSupervisionFee !== "" || financialValues.receivedAmount !== "")
+            ? calculateProjectOutstandingAmount(
+                financialValues.structureSupervisionFee,
+                financialValues.finishingSupervisionFee,
+                financialValues.receivedAmount,
+              )
+            : null,
+        nextPaymentAmount: financialValues.nextPaymentAmount === "" ? null : Number(financialValues.nextPaymentAmount),
+        nextPaymentDueDate: financialValues.nextPaymentDueDate || null,
+        invoiceReferencePaymentNote: financialValues.invoiceReferencePaymentNote.trim() || null,
+        initialRemarks: financialValues.initialRemarks.trim() || null,
         description: description.trim(),
         address: location.address.trim() || "—",
         areaDistrict: areaDistrict.trim() || null,
@@ -184,6 +283,44 @@ export function ProjectEditDialog({
                   disabled={pending}
                   className="h-10"
                 />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor={`project-edit-plot-no-${project.id}`}>{isArabic ? "رقم قطعة الأرض" : "Plot No."}</Label>
+                  <Input
+                    id={`project-edit-plot-no-${project.id}`}
+                    value={plotNo}
+                    onChange={(event) => setPlotNo(event.target.value)}
+                    placeholder={isArabic ? "مثال: 42-B" : "e.g. 42-B"}
+                    disabled={pending}
+                    className="h-10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>{isArabic ? "الأولوية" : "Priority"}</Label>
+                  <Select
+                    value={priority || null}
+                    onValueChange={(value) => setPriority((value as ProjectPriorityValue | null) ?? "")}
+                    disabled={pending}
+                  >
+                    <SelectTrigger className="h-10 w-full">
+                      <SelectValue placeholder={isArabic ? "غير محدد" : "Not set"}>
+                        {(value) => {
+                          if (!value) return isArabic ? "غير محدد" : "Not set"
+                          const option = PROJECT_PRIORITIES.find((item) => item.value === String(value))
+                          return option ? (isArabic ? option.labelAr : option.label) : String(value)
+                        }}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PROJECT_PRIORITIES.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {isArabic ? option.labelAr : option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
@@ -289,19 +426,106 @@ export function ProjectEditDialog({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex min-h-40 flex-1 flex-col gap-2">
+              <div className="space-y-2">
+                <Label htmlFor={`project-edit-supervision-start-date-${project.id}`}>
+                  {isArabic ? "تاريخ بدء الإشراف" : "Supervision Start Date"}
+                </Label>
+                <div className="relative">
+                  <Input
+                    ref={supervisionStartDateInputRef}
+                    id={`project-edit-supervision-start-date-${project.id}`}
+                    type="date"
+                    value={supervisionStartDate}
+                    onChange={(event) => setSupervisionStartDate(event.target.value)}
+                    disabled={pending}
+                    className="h-10 pe-11 [&::-webkit-calendar-picker-indicator]:opacity-0"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute end-1 top-1/2 size-8 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      const input = supervisionStartDateInputRef.current
+                      if (!input || pending) return
+                      try {
+                        input.showPicker()
+                      } catch {
+                        input.focus()
+                        input.click()
+                      }
+                    }}
+                    disabled={pending}
+                    aria-label={isArabic ? "فتح تقويم تاريخ بدء الإشراف" : "Open supervision start date calendar"}
+                    title={isArabic ? "فتح تقويم تاريخ بدء الإشراف" : "Open supervision start date calendar"}
+                  >
+                    <CalendarDays className="size-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor={`project-edit-included-structure-visits-${project.id}`}>
+                    {isArabic ? "زيارات الهيكل الإنشائي المشمولة" : "Included Structure Visits"}
+                  </Label>
+                  <Input
+                    id={`project-edit-included-structure-visits-${project.id}`}
+                    type="number"
+                    min={0}
+                    step={1}
+                    inputMode="numeric"
+                    value={includedStructureVisits}
+                    onChange={(event) => {
+                      setIncludedStructureVisits(event.target.value)
+                      setError(null)
+                    }}
+                    disabled={pending}
+                    className="h-10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`project-edit-included-finishing-visits-${project.id}`}>
+                    {isArabic ? "زيارات التشطيبات المشمولة" : "Included Finishing Visits"}
+                  </Label>
+                  <Input
+                    id={`project-edit-included-finishing-visits-${project.id}`}
+                    type="number"
+                    min={0}
+                    step={1}
+                    inputMode="numeric"
+                    value={includedFinishingVisits}
+                    onChange={(event) => {
+                      setIncludedFinishingVisits(event.target.value)
+                      setError(null)
+                    }}
+                    disabled={pending}
+                    className="h-10"
+                  />
+                </div>
+              </div>
+              <div className="flex min-h-32 flex-1 flex-col gap-2">
                 <Label htmlFor={`project-edit-description-${project.id}`}>{isArabic ? "وصف المشروع" : "Project Description"}</Label>
                 <textarea
                   id={`project-edit-description-${project.id}`}
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                   disabled={pending}
-                  rows={6}
-                  className="min-h-32 flex-1 resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 lg:resize-none"
+                  rows={4}
+                  className="min-h-24 flex-1 resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 lg:resize-none"
                 />
               </div>
             </div>
           </ProjectLocationField>
+          <ProjectFinancialFields
+            idPrefix={`project-edit-financial-${project.id}`}
+            values={financialValues}
+            onChange={(field, value) => {
+              setFinancialValues((current) => ({ ...current, [field]: value }))
+              setError(null)
+            }}
+            disabled={pending}
+            isArabic={isArabic}
+          />
           {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
         </div>
         <DialogFooter>

@@ -217,6 +217,11 @@ export type ProjectRecord = {
   statusKey: ProjectStatusKey
   projectType: string
   supervisionType: string
+  plotNo: string
+  supervisionStartDate: string
+  priority: string
+  includedStructureVisits: string
+  includedFinishingVisits: string
   organizationRole: string
   description: string
   contractor: string
@@ -240,6 +245,11 @@ export const projects: ProjectRecord[] = [
     statusKey: "underConstruction",
     projectType: "—",
     supervisionType: "Not specified",
+    plotNo: "Not set",
+    supervisionStartDate: "Not set",
+    priority: "Medium",
+    includedStructureVisits: "Not set",
+    includedFinishingVisits: "Not set",
     organizationRole: "Consultant",
     description: "No project description has been added.",
     contractor: "Atlas Contracting",
@@ -261,6 +271,11 @@ export const projects: ProjectRecord[] = [
     statusKey: "underConstruction",
     projectType: "—",
     supervisionType: "Not specified",
+    plotNo: "Not set",
+    supervisionStartDate: "Not set",
+    priority: "Medium",
+    includedStructureVisits: "Not set",
+    includedFinishingVisits: "Not set",
     organizationRole: "Consultant",
     description: "No project description has been added.",
     contractor: "Gulf Builders",
@@ -282,6 +297,11 @@ export const projects: ProjectRecord[] = [
     statusKey: "underConstruction",
     projectType: "—",
     supervisionType: "Not specified",
+    plotNo: "Not set",
+    supervisionStartDate: "Not set",
+    priority: "Medium",
+    includedStructureVisits: "Not set",
+    includedFinishingVisits: "Not set",
     organizationRole: "Consultant",
     description: "No project description has been added.",
     contractor: "Emirates Construct",
@@ -303,6 +323,11 @@ export const projects: ProjectRecord[] = [
     statusKey: "planning",
     projectType: "—",
     supervisionType: "Not specified",
+    plotNo: "Not set",
+    supervisionStartDate: "Not set",
+    priority: "Medium",
+    includedStructureVisits: "Not set",
+    includedFinishingVisits: "Not set",
     organizationRole: "Consultant",
     description: "No project description has been added.",
     contractor: "Skyline Contracting",
@@ -324,6 +349,11 @@ export const projects: ProjectRecord[] = [
     statusKey: "onHold",
     projectType: "—",
     supervisionType: "Not specified",
+    plotNo: "Not set",
+    supervisionStartDate: "Not set",
+    priority: "Medium",
+    includedStructureVisits: "Not set",
+    includedFinishingVisits: "Not set",
     organizationRole: "Consultant",
     description: "No project description has been added.",
     contractor: "Coastal Developers",
@@ -345,6 +375,11 @@ export const projects: ProjectRecord[] = [
     statusKey: "completed",
     projectType: "—",
     supervisionType: "Not specified",
+    plotNo: "Not set",
+    supervisionStartDate: "Not set",
+    priority: "Medium",
+    includedStructureVisits: "Not set",
+    includedFinishingVisits: "Not set",
     organizationRole: "Consultant",
     description: "No project description has been added.",
     contractor: "Atlas Contracting",

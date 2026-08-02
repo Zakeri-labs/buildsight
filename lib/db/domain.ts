@@ -16,6 +16,19 @@ export type DomainProject = {
   projectType: string | null
   supervisionType: string | null
   supervisionTypeOther: string | null
+  plotNo: string | null
+  supervisionStartDate: string | null
+  priority: string | null
+  includedStructureVisits: number | null
+  includedFinishingVisits: number | null
+  structureSupervisionFee: number | null
+  finishingSupervisionFee: number | null
+  receivedAmount: number | null
+  outstandingAmount: number | null
+  nextPaymentAmount: number | null
+  nextPaymentDueDate: string | null
+  invoiceReferencePaymentNote: string | null
+  initialRemarks: string | null
   region: string | null
   description: string | null
   image: string | null
@@ -136,7 +149,7 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
   try {
     const admin = createAdminClient()
   const projectColumns =
-    "id, name, code, location, latitude, longitude, status, project_type, supervision_type, supervision_type_other, region, description, image, our_role, contractor, consultant, client, start_date, target_handover, contract_value, progress_planned, progress_actual, progress_delay, supervising_organization_id, sort_order"
+    "id, name, code, location, latitude, longitude, status, project_type, supervision_type, supervision_type_other, plot_no, supervision_start_date, priority, included_structure_visits, included_finishing_visits, structure_supervision_fee, finishing_supervision_fee, received_amount, outstanding_amount, next_payment_amount, next_payment_due_date, invoice_reference_payment_note, initial_remarks, region, description, image, our_role, contractor, consultant, client, start_date, target_handover, contract_value, progress_planned, progress_actual, progress_delay, supervising_organization_id, sort_order"
 
   let data: any[] | null = null
   if (!userId) {
@@ -260,6 +273,19 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
     projectType: p.project_type,
     supervisionType: p.supervision_type,
     supervisionTypeOther: p.supervision_type_other,
+    plotNo: p.plot_no,
+    supervisionStartDate: p.supervision_start_date,
+    priority: p.priority,
+    includedStructureVisits: p.included_structure_visits,
+    includedFinishingVisits: p.included_finishing_visits,
+    structureSupervisionFee: p.structure_supervision_fee == null ? null : Number(p.structure_supervision_fee),
+    finishingSupervisionFee: p.finishing_supervision_fee == null ? null : Number(p.finishing_supervision_fee),
+    receivedAmount: p.received_amount == null ? null : Number(p.received_amount),
+    outstandingAmount: p.outstanding_amount == null ? null : Number(p.outstanding_amount),
+    nextPaymentAmount: p.next_payment_amount == null ? null : Number(p.next_payment_amount),
+    nextPaymentDueDate: p.next_payment_due_date,
+    invoiceReferencePaymentNote: p.invoice_reference_payment_note,
+    initialRemarks: p.initial_remarks,
     region: p.region,
     description: p.description,
     image:

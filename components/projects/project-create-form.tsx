@@ -40,6 +40,10 @@ import {
 } from "@/components/ui/select"
 import { ProjectLocationField } from "@/components/projects/project-location-field"
 import {
+  ProjectFinancialFields,
+  type ProjectFinancialFormValues,
+} from "@/components/projects/project-financial-fields"
+import {
   ProjectInitialDocumentUploadStep,
   type InitialProjectDocumentSelection,
 } from "@/components/initial-documents/project-initial-document-upload-step"
@@ -61,8 +65,10 @@ import {
 import { uploadDocumentAsset, uploadStorageAsset } from "@/lib/documents/storage-upload"
 import { createClient } from "@/lib/supabase/client"
 import {
+  PROJECT_PRIORITIES,
   PROJECT_TYPES,
   SUPERVISION_TYPES,
+  type ProjectPriorityValue,
   type ProjectTypeValue,
   type SupervisionTypeValue,
 } from "@/lib/projects/project-options"
@@ -75,6 +81,7 @@ import {
   PROJECT_IMAGE_BUCKET,
   validateProjectImageFile,
 } from "@/lib/projects/project-image"
+import { validateProjectFinancialForm } from "@/lib/projects/project-financial"
 import { cn } from "@/lib/utils"
 
 type OwnerDetails = {
@@ -108,6 +115,14 @@ function emptyOwner(): OwnerDetails {
   return { name: "", contactName: "", contactEmail: "", contactPhone: "", idCardFile: null }
 }
 
+function isOptionalWholeNumber(value: string) {
+  return value === "" || /^\d+$/.test(value)
+}
+
+function optionalWholeNumber(value: string): number | null {
+  return value === "" ? null : Number(value)
+}
+
 export function ProjectCreateForm({
   supervisingOrg,
   contractorOrganizations,
@@ -130,7 +145,12 @@ export function ProjectCreateForm({
   const [supervisionTypeOther, setSupervisionTypeOther] = useState("")
   const [location, setLocation] = useState<ProjectLocationValue>(EMPTY_PROJECT_LOCATION)
   const [areaDistrict, setAreaDistrict] = useState("")
+  const [plotNo, setPlotNo] = useState("")
   const [projectStartDate, setProjectStartDate] = useState("")
+  const [supervisionStartDate, setSupervisionStartDate] = useState("")
+  const [priority, setPriority] = useState<ProjectPriorityValue>("medium")
+  const [includedStructureVisits, setIncludedStructureVisits] = useState("")
+  const [includedFinishingVisits, setIncludedFinishingVisits] = useState("")
   const [description, setDescription] = useState("")
   const [projectImages, setProjectImages] = useState<ProjectImageDraft[]>([])
   const [assignedUserId, setAssignedUserId] = useState("")
@@ -142,6 +162,15 @@ export function ProjectCreateForm({
   const [contractorAddress, setContractorAddress] = useState("")
   const [contractorPostalCode, setContractorPostalCode] = useState("")
   const [contractorPhone, setContractorPhone] = useState("")
+  const [financialValues, setFinancialValues] = useState<ProjectFinancialFormValues>({
+    structureSupervisionFee: "",
+    finishingSupervisionFee: "",
+    receivedAmount: "0",
+    nextPaymentAmount: "",
+    nextPaymentDueDate: "",
+    invoiceReferencePaymentNote: "",
+    initialRemarks: "",
+  })
   const [initialDocuments, setInitialDocuments] = useState<InitialProjectDocumentSelection[]>([])
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -155,6 +184,7 @@ export function ProjectCreateForm({
   const [initialDocumentsUploaded, setInitialDocumentsUploaded] = useState(false)
   const [projectImagesUploaded, setProjectImagesUploaded] = useState(false)
   const projectStartDateInputRef = useRef<HTMLInputElement>(null)
+  const supervisionStartDateInputRef = useRef<HTMLInputElement>(null)
   const submissionLockRef = useRef(false)
 
   const selectedDocumentCount = initialDocuments.length
@@ -182,10 +212,10 @@ export function ProjectCreateForm({
         title: "إضافة مشروع جديد",
         subtitle: `سيتم إنشاء هذا المشروع ضمن ${supervisingOrg.name}.`,
         org: "الجهة المشرفة",
-        steps: ["تفاصيل المشروع", "تفاصيل المالك", "المقاول", "المستندات"],
+        steps: ["تفاصيل المشروع", "معلومات الموقع / نطاق الإشراف", "المقاول", "المستندات"],
         stepDescriptions: [
           "أدخل معلومات المشروع وموقعه وعيّن المستخدم والمشرف.",
-          "أضف بيانات المالك أو العميل.",
+          "حدد الزيارات المشمولة وأضف بيانات المالك أو العميل.",
           "عيّن المقاول وسجّل بيانات الشركة.",
           "أرفق المستندات الأولية للمشروع.",
         ],
@@ -215,8 +245,19 @@ export function ProjectCreateForm({
         moveImageLater: "تحريك الصورة إلى اليمين",
         areaDistrict: "المنطقة / الحي",
         areaDistrictPlaceholder: "مثال: وسط المدينة أو منطقة الأعمال",
+        plotNo: "رقم قطعة الأرض",
+        plotNoPlaceholder: "مثال: 42-B",
         projectStartDate: "تاريخ بدء المشروع",
         openProjectStartDateCalendar: "فتح تقويم تاريخ بدء المشروع",
+        supervisionStartDate: "تاريخ بدء الإشراف",
+        openSupervisionStartDateCalendar: "فتح تقويم تاريخ بدء الإشراف",
+        priority: "الأولوية",
+        includedVisits: "نطاق الإشراف",
+        includedStructureVisits: "زيارات الهيكل الإنشائي المشمولة",
+        includedFinishingVisits: "زيارات التشطيبات المشمولة",
+        visitsPlaceholder: "مثال: 12",
+        invalidVisitCounts: "يجب أن تكون الزيارات المشمولة أعدادًا صحيحة غير سالبة.",
+        invalidFinancialAmounts: "أدخل مبالغ صحيحة غير سالبة، ويجب ألا يتجاوز المبلغ المستلم إجمالي رسوم الإشراف.",
         description: "وصف المشروع",
         descriptionPlaceholder: "نبذة مختصرة عن نطاق المشروع وأهدافه",
         ownerCount: "عدد المالكين",
@@ -265,10 +306,10 @@ export function ProjectCreateForm({
         title: "Add New Project",
         subtitle: `This project will be created under ${supervisingOrg.name}.`,
         org: "Supervising organization",
-        steps: ["Project Details", "Owner Details", "Contractor", "Documents"],
+        steps: ["Project Details", "Site Information / Supervision Scope", "Contractor", "Documents"],
         stepDescriptions: [
           "Enter project details, location, assigned user, and supervisor.",
-          "Capture owner or client contact details.",
+          "Set included supervision visits and capture owner or client contact details.",
           "Assign the contractor and company information.",
           "Attach the initial project documents.",
         ],
@@ -298,8 +339,19 @@ export function ProjectCreateForm({
         moveImageLater: "Move image later",
         areaDistrict: "Area / District",
         areaDistrictPlaceholder: "e.g. Downtown or Business District",
+        plotNo: "Plot No.",
+        plotNoPlaceholder: "e.g. 42-B",
         projectStartDate: "Project Start Date",
         openProjectStartDateCalendar: "Open project start date calendar",
+        supervisionStartDate: "Supervision Start Date",
+        openSupervisionStartDateCalendar: "Open supervision start date calendar",
+        priority: "Priority",
+        includedVisits: "Supervision Scope",
+        includedStructureVisits: "Included Structure Visits",
+        includedFinishingVisits: "Included Finishing Visits",
+        visitsPlaceholder: "e.g. 12",
+        invalidVisitCounts: "Included visits must be non-negative whole numbers.",
+        invalidFinancialAmounts: "Enter valid non-negative amounts, and do not let Received Amount exceed the total supervision fees.",
         description: "Project Description",
         descriptionPlaceholder: "Briefly describe the project scope and objectives",
         ownerCount: "Number of Owners",
@@ -390,6 +442,9 @@ export function ProjectCreateForm({
       return null
     }
     if (targetStep === 2) {
+      if (!isOptionalWholeNumber(includedStructureVisits) || !isOptionalWholeNumber(includedFinishingVisits)) {
+        return copy.invalidVisitCounts
+      }
       if (owners.some((owner) => owner.name.trim().length < 2)) return copy.requiredOwners
       const invalidEmail = owners.some((owner) => {
         const email = owner.contactEmail.trim()
@@ -401,6 +456,11 @@ export function ProjectCreateForm({
         const validationError = validateOwnerIdCardFile(owner.idCardFile)
         if (validationError) return validationError
       }
+      return null
+    }
+    if (targetStep === 3) {
+      const financialValidation = validateProjectFinancialForm(financialValues)
+      if (!financialValidation.ok) return copy.invalidFinancialAmounts
       return null
     }
     if (targetStep === 4) {
@@ -638,6 +698,11 @@ export function ProjectCreateForm({
           projectType,
           supervisionType,
           supervisionTypeOther: supervisionType === "other" ? supervisionTypeOther.trim() : undefined,
+          plotNo,
+          supervisionStartDate,
+          priority,
+          includedStructureVisits: optionalWholeNumber(includedStructureVisits),
+          includedFinishingVisits: optionalWholeNumber(includedFinishingVisits),
           location: location.address,
           region: areaDistrict,
           latitude: location.latitude,
@@ -646,6 +711,13 @@ export function ProjectCreateForm({
           startDate: projectStartDate,
           assignedUserId,
           assignedSupervisorId,
+          structureSupervisionFee: financialValues.structureSupervisionFee,
+          finishingSupervisionFee: financialValues.finishingSupervisionFee,
+          receivedAmount: financialValues.receivedAmount,
+          nextPaymentAmount: financialValues.nextPaymentAmount,
+          nextPaymentDueDate: financialValues.nextPaymentDueDate,
+          invoiceReferencePaymentNote: financialValues.invoiceReferencePaymentNote,
+          initialRemarks: financialValues.initialRemarks,
           owners: owners.map((owner) => ({
             name: owner.name,
             contactName: owner.contactName,
@@ -829,6 +901,41 @@ export function ProjectCreateForm({
                         />
                       </Field>
                       <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label={`${copy.plotNo} (${copy.optional})`} htmlFor="new-project-plot-no">
+                          <Input
+                            id="new-project-plot-no"
+                            value={plotNo}
+                            onChange={(event) => setPlotNo(event.target.value)}
+                            placeholder={copy.plotNoPlaceholder}
+                            disabled={pending}
+                            className="h-10"
+                          />
+                        </Field>
+                        <Field label={copy.priority}>
+                          <Select
+                            value={priority}
+                            onValueChange={(value) => value && setPriority(value as ProjectPriorityValue)}
+                            disabled={pending}
+                          >
+                            <SelectTrigger className="h-10 w-full">
+                              <SelectValue>
+                                {(value) => {
+                                  const option = PROJECT_PRIORITIES.find((item) => item.value === String(value))
+                                  return option ? (isArabic ? option.labelAr : option.label) : String(value ?? "")
+                                }}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {PROJECT_PRIORITIES.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {isArabic ? option.labelAr : option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </Field>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
                         <Field label={copy.projectType} required>
                           <Select value={projectType || null} onValueChange={(value) => setProjectType((value as ProjectTypeValue | null) ?? "")} disabled={pending}>
                             <SelectTrigger className="h-10 w-full">
@@ -887,40 +994,76 @@ export function ProjectCreateForm({
                           />
                         </Field>
                       ) : null}
-                      <Field label={`${copy.projectStartDate} (${copy.optional})`} htmlFor="new-project-start-date">
-                        <div className="relative">
-                          <Input
-                            ref={projectStartDateInputRef}
-                            id="new-project-start-date"
-                            type="date"
-                            value={projectStartDate}
-                            onChange={(event) => setProjectStartDate(event.target.value)}
-                            disabled={pending}
-                            className="h-10 pe-11 [&::-webkit-calendar-picker-indicator]:opacity-0"
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute end-1 top-1/2 size-8 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                            onClick={() => {
-                              const input = projectStartDateInputRef.current
-                              if (!input || pending) return
-                              try {
-                                input.showPicker()
-                              } catch {
-                                input.focus()
-                                input.click()
-                              }
-                            }}
-                            disabled={pending}
-                            aria-label={copy.openProjectStartDateCalendar}
-                            title={copy.openProjectStartDateCalendar}
-                          >
-                            <CalendarDays className="size-4" />
-                          </Button>
-                        </div>
-                      </Field>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label={`${copy.projectStartDate} (${copy.optional})`} htmlFor="new-project-start-date">
+                          <div className="relative">
+                            <Input
+                              ref={projectStartDateInputRef}
+                              id="new-project-start-date"
+                              type="date"
+                              value={projectStartDate}
+                              onChange={(event) => setProjectStartDate(event.target.value)}
+                              disabled={pending}
+                              className="h-10 pe-11 [&::-webkit-calendar-picker-indicator]:opacity-0"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute end-1 top-1/2 size-8 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                              onClick={() => {
+                                const input = projectStartDateInputRef.current
+                                if (!input || pending) return
+                                try {
+                                  input.showPicker()
+                                } catch {
+                                  input.focus()
+                                  input.click()
+                                }
+                              }}
+                              disabled={pending}
+                              aria-label={copy.openProjectStartDateCalendar}
+                              title={copy.openProjectStartDateCalendar}
+                            >
+                              <CalendarDays className="size-4" />
+                            </Button>
+                          </div>
+                        </Field>
+                        <Field label={`${copy.supervisionStartDate} (${copy.optional})`} htmlFor="new-project-supervision-start-date">
+                          <div className="relative">
+                            <Input
+                              ref={supervisionStartDateInputRef}
+                              id="new-project-supervision-start-date"
+                              type="date"
+                              value={supervisionStartDate}
+                              onChange={(event) => setSupervisionStartDate(event.target.value)}
+                              disabled={pending}
+                              className="h-10 pe-11 [&::-webkit-calendar-picker-indicator]:opacity-0"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute end-1 top-1/2 size-8 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                              onClick={() => {
+                                const input = supervisionStartDateInputRef.current
+                                if (!input || pending) return
+                                try {
+                                  input.showPicker()
+                                } catch {
+                                  input.focus()
+                                  input.click()
+                                }
+                              }}
+                              disabled={pending}
+                              aria-label={copy.openSupervisionStartDateCalendar}
+                              title={copy.openSupervisionStartDateCalendar}
+                            >
+                              <CalendarDays className="size-4" />
+                            </Button>
+                          </div>
+                        </Field>
+                      </div>
                       <div className="flex min-h-32 flex-1 flex-col gap-2">
                         <Label htmlFor="new-project-description">{copy.description} ({copy.optional})</Label>
                         <textarea
@@ -1011,6 +1154,46 @@ export function ProjectCreateForm({
 
             {step === 2 ? (
               <div className="space-y-5">
+                <section className="rounded-2xl border bg-muted/10 p-4 sm:p-5" aria-labelledby="project-supervision-scope-title">
+                  <h3 id="project-supervision-scope-title" className="mb-4 text-sm font-semibold">{copy.includedVisits}</h3>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label={`${copy.includedStructureVisits} (${copy.optional})`} htmlFor="included-structure-visits">
+                      <Input
+                        id="included-structure-visits"
+                        type="number"
+                        min={0}
+                        step={1}
+                        inputMode="numeric"
+                        value={includedStructureVisits}
+                        onChange={(event) => {
+                          setIncludedStructureVisits(event.target.value)
+                          setError(null)
+                        }}
+                        placeholder={copy.visitsPlaceholder}
+                        disabled={pending}
+                        className="h-10"
+                      />
+                    </Field>
+                    <Field label={`${copy.includedFinishingVisits} (${copy.optional})`} htmlFor="included-finishing-visits">
+                      <Input
+                        id="included-finishing-visits"
+                        type="number"
+                        min={0}
+                        step={1}
+                        inputMode="numeric"
+                        value={includedFinishingVisits}
+                        onChange={(event) => {
+                          setIncludedFinishingVisits(event.target.value)
+                          setError(null)
+                        }}
+                        placeholder={copy.visitsPlaceholder}
+                        disabled={pending}
+                        className="h-10"
+                      />
+                    </Field>
+                  </div>
+                </section>
+
                 <div className="max-w-xs space-y-2">
                   <Label htmlFor="owner-count">{copy.ownerCount}</Label>
                   <Select value={String(owners.length)} onValueChange={(value) => setOwnerCount(Number(value ?? 1))} disabled={pending}>
@@ -1073,6 +1256,16 @@ export function ProjectCreateForm({
 
             {step === 3 ? (
               <div className="space-y-6">
+                <ProjectFinancialFields
+                  idPrefix="new-project-financial"
+                  values={financialValues}
+                  onChange={(field, value) => {
+                    setFinancialValues((current) => ({ ...current, [field]: value }))
+                    setError(null)
+                  }}
+                  disabled={pending}
+                  isArabic={isArabic}
+                />
                 <Field label={`${copy.assignContractor} (${copy.optional})`}>
                   <Select
                     value={contractorOrganizationId || "none"}

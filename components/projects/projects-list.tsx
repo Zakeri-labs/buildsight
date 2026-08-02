@@ -66,7 +66,17 @@ import {
 export type ProjectStatus = ProjectStatusValue
 export type ProjectType = "Residential" | "Commercial" | "Hospitality" | "Infrastructure" | "Industrial"
 
-const PROJECT_TABLE_COLUMN_WIDTHS = ["19%", "13%", "12%", "6%", "11%", "11%", "10%", "12%", "6%"] as const
+const PROJECT_TABLE_COLUMN_WIDTHS = [
+  "19%",
+  "13%",
+  "12.5%",
+  "5.5%",
+  "10.5%",
+  "10%",
+  "10%",
+  "13.5%",
+  "6%",
+] as const
 
 export interface ProjectRow {
   id: string
@@ -473,8 +483,8 @@ export function ProjectsList({
 
       {/* Main Data Table */}
       <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900">
-        <div className="w-full overflow-hidden">
-          <table className="w-full table-fixed text-start text-sm">
+        <div className="w-full overflow-x-auto">
+          <table className="w-full min-w-[960px] table-fixed text-start text-sm">
             <colgroup>
               {PROJECT_TABLE_COLUMN_WIDTHS.map((width, index) => (
                 <col key={`${width}-${index}`} style={{ width }} />
@@ -482,15 +492,15 @@ export function ProjectsList({
             </colgroup>
             <thead>
               <tr className="border-b border-slate-200/80 bg-slate-50/80 text-xs font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-400">
-                <th className="truncate px-3 py-3.5 text-start font-semibold">Project</th>
-                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Owner / Client</th>
-                <th className="truncate px-2.5 py-3.5 text-start font-semibold" title="Supervision Type">Supervision Type</th>
-                <th className="truncate px-0 py-3.5 text-center align-middle font-semibold">Location</th>
-                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Project Type</th>
-                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Status</th>
-                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Start Date</th>
-                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Progress</th>
-                <th className="truncate px-2 py-3.5 text-end font-semibold">Actions</th>
+                <th className="truncate px-3 py-3.5 text-start align-middle font-semibold">Project</th>
+                <th className="truncate px-2 py-3.5 text-start align-middle font-semibold">Owner / Client</th>
+                <th className="truncate px-2 py-3.5 text-start align-middle font-semibold" title="Supervision Type">Supervision Type</th>
+                <th className="truncate px-1 py-3.5 text-center align-middle font-semibold">Location</th>
+                <th className="truncate px-2 py-3.5 text-start align-middle font-semibold">Project Type</th>
+                <th className="truncate px-1.5 py-3.5 text-center align-middle font-semibold">Status</th>
+                <th className="truncate px-1.5 py-3.5 text-center align-middle font-semibold">Start Date</th>
+                <th className="truncate px-2 py-3.5 text-start align-middle font-semibold">Progress</th>
+                <th className="truncate px-2 py-3.5 text-end align-middle font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -504,7 +514,7 @@ export function ProjectsList({
               {filteredProjects.map((row) => (
                 <tr key={row.id} className="transition-colors hover:bg-slate-50/60 dark:hover:bg-slate-800/30">
                   {/* Project info with thumbnail */}
-                  <td className="min-w-0 overflow-hidden px-3 py-4">
+                  <td className="min-w-0 overflow-hidden px-3 py-4 align-middle">
                     <div className="flex min-w-0 items-center gap-2.5">
                       <ProjectImageDisplay
                         src={row.imageUrl}
@@ -528,12 +538,12 @@ export function ProjectsList({
                   </td>
 
                   {/* Owner / Client */}
-                  <td className="min-w-0 overflow-hidden px-2.5 py-4 text-xs font-medium text-slate-700 dark:text-slate-300">
+                  <td className="min-w-0 overflow-hidden px-2 py-4 align-middle text-xs font-medium text-slate-700 dark:text-slate-300">
                     <TruncatedText>{row.ownerClient}</TruncatedText>
                   </td>
 
                   {/* Supervision Type */}
-                  <td className="min-w-0 overflow-hidden px-2.5 py-4 text-xs font-medium text-slate-700 dark:text-slate-300">
+                  <td className="min-w-0 overflow-hidden px-2 py-4 align-middle text-xs font-medium text-slate-700 dark:text-slate-300">
                     <TruncatedText>
                       {row.supervisionType?.trim()
                         ? supervisionTypeLabel(row.supervisionType, row.supervisionTypeOther)
@@ -542,7 +552,7 @@ export function ProjectsList({
                   </td>
 
                   {/* Location */}
-                  <td className="min-w-0 overflow-hidden px-0 py-4 text-center align-middle">
+                  <td className="min-w-0 overflow-hidden px-1 py-4 text-center align-middle">
                     <div className="flex w-full items-center justify-center">
                       {(() => {
                         const hasAddress = row.address.trim().length > 0 && row.address.trim() !== "—"
@@ -587,24 +597,24 @@ export function ProjectsList({
                   </td>
 
                   {/* Project Type */}
-                  <td className="min-w-0 overflow-hidden px-2.5 py-4 text-xs text-slate-600 dark:text-slate-400">
+                  <td className="min-w-0 overflow-hidden px-2 py-4 align-middle text-xs text-slate-600 dark:text-slate-400">
                     <TruncatedText>{row.projectType}</TruncatedText>
                   </td>
 
                   {/* Status Badge */}
-                  <td className="min-w-0 overflow-hidden px-2.5 py-4">
-                    <div className="min-w-0 overflow-hidden">
+                  <td className="min-w-0 overflow-hidden px-1.5 py-4 text-center align-middle">
+                    <div className="flex min-w-0 items-center justify-center overflow-hidden">
                       <ProjectStatusBadge status={row.status} />
                     </div>
                   </td>
 
                   {/* Start Date */}
-                  <td className="min-w-0 overflow-hidden px-2.5 py-4 text-xs text-slate-600 dark:text-slate-400">
-                    <TruncatedText>{row.startDate}</TruncatedText>
+                  <td className="min-w-0 overflow-hidden px-1.5 py-4 text-center align-middle text-xs text-slate-600 dark:text-slate-400">
+                    <TruncatedText className="text-center">{row.startDate}</TruncatedText>
                   </td>
 
                   {/* Progress bar */}
-                  <td className="min-w-0 overflow-hidden px-2.5 py-4">
+                  <td className="min-w-0 overflow-hidden px-2 py-4 align-middle">
                     <div className="flex min-w-0 flex-col gap-1.5">
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                         {row.progress}%
@@ -619,7 +629,7 @@ export function ProjectsList({
                   </td>
 
                   {/* Actions */}
-                  <td className="overflow-hidden px-2 py-4 text-end">
+                  <td className="overflow-hidden px-2 py-4 text-end align-middle">
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         render={

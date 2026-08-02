@@ -29,6 +29,8 @@ import {
 import { ProjectImageManagementDialog } from "@/components/projects/project-image-management-dialog"
 import { ProjectImageDisplay } from "@/components/projects/project-image-display"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
+import { projectPriorityLabel } from "@/lib/projects/project-options"
+import { formatProjectAmountOmr } from "@/lib/projects/project-financial"
 import type { ProjectSiteVisitSummary } from "@/lib/site-visits/types"
 import { ProjectSiteVisitsSection } from "@/components/site-visits/project-site-visits-section"
 import { MAP_TILE_ATTRIBUTION, MAP_TILE_URL } from "@/lib/locations/config"
@@ -104,6 +106,21 @@ function DetailField({ label, value }: { label: string; value: React.ReactNode }
   )
 }
 
+function displayProjectDate(value: string | null | undefined, locale: string, notSet: string) {
+  if (!value) return notSet
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar" : "en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date)
+}
+
+function displayVisitCount(value: number | null | undefined, notSet: string) {
+  return value == null ? notSet : String(value)
+}
+
 function ProjectStatusDisplay({ status, isArabic }: { status: string; isArabic: boolean }) {
   const normalizedStatus = normalizeProjectStatus(status)
 
@@ -171,11 +188,25 @@ export function ProjectDetail({
         notSet: "غير محدد",
         type: "نوع المشروع",
         supervisionType: "نوع الإشراف",
+        plotNo: "رقم قطعة الأرض",
+        priority: "الأولوية",
         status: "الحالة",
         start: "تاريخ البدء",
+        supervisionStart: "تاريخ بدء الإشراف",
+        includedStructureVisits: "زيارات الهيكل الإنشائي المشمولة",
+        includedFinishingVisits: "زيارات التشطيبات المشمولة",
         completion: "الإنجاز المتوقع",
         progress: "التقدم",
         description: "وصف المشروع",
+        financialSummary: "الملخص المالي",
+        structureFee: "رسوم الإشراف الإنشائي",
+        finishingFee: "رسوم الإشراف على التشطيبات",
+        receivedAmount: "المبلغ المستلم",
+        outstandingAmount: "المبلغ المستحق",
+        nextPaymentAmount: "مبلغ الدفعة التالية",
+        nextPaymentDueDate: "تاريخ استحقاق الدفعة التالية",
+        paymentNote: "مرجع الفاتورة / ملاحظة الدفع",
+        initialRemarks: "ملاحظات أولية",
         viewGallery: "عرض معرض المشروع",
         editProject: "تعديل المشروع",
         projectDocuments: "٣. مستندات المشروع",
@@ -192,11 +223,25 @@ export function ProjectDetail({
         notSet: "Not set",
         type: "Project Type",
         supervisionType: "Supervision Type",
+        plotNo: "Plot No.",
+        priority: "Priority",
         status: "Status",
         start: "Start Date",
+        supervisionStart: "Supervision Start Date",
+        includedStructureVisits: "Included Structure Visits",
+        includedFinishingVisits: "Included Finishing Visits",
         completion: "Expected Completion",
         progress: "Progress",
         description: "Project Description",
+        financialSummary: "Financial Summary",
+        structureFee: "Structure Supervision Fee",
+        finishingFee: "Finishing Supervision Fee",
+        receivedAmount: "Received Amount",
+        outstandingAmount: "Outstanding Amount",
+        nextPaymentAmount: "Next Payment Amount",
+        nextPaymentDueDate: "Next Payment Due Date",
+        paymentNote: "Invoice Reference / Payment Note",
+        initialRemarks: "Initial Remarks",
         viewGallery: "View Project Gallery",
         editProject: "Edit project",
         projectDocuments: "3. Project Documents",
@@ -376,22 +421,74 @@ export function ProjectDetail({
                   <DetailField label={labels.type} value={currentProject.projectType} />
                   <DetailField label={labels.supervisionType} value={currentProject.supervisionType} />
                   <DetailField label={labels.code} value={currentProject.code} />
+                  <DetailField label={labels.plotNo} value={currentEditProject.plotNo?.trim() || labels.notSet} />
                   <DetailField
                     label={labels.status}
                     value={<ProjectStatusDisplay status={currentEditProject.status} isArabic={isArabic} />}
                   />
+                  <DetailField label={labels.priority} value={projectPriorityLabel(currentEditProject.priority, isArabic)} />
                   <DetailField label={labels.owner} value={currentProject.client} />
                   <DetailField label={labels.start} value={currentProject.startDate} />
+                  <DetailField
+                    label={labels.supervisionStart}
+                    value={displayProjectDate(currentEditProject.supervisionStartDate, locale, labels.notSet)}
+                  />
                   <DetailField label={labels.role} value={currentProject.organizationRole} />
                   <DetailField label={labels.completion} value={currentProject.targetHandover} />
                   <DetailField label={labels.location} value={currentProject.location} />
                   <DetailField label={labels.areaDistrict} value={currentEditProject.areaDistrict?.trim() || labels.notSet} />
+                  <DetailField
+                    label={labels.includedStructureVisits}
+                    value={displayVisitCount(currentEditProject.includedStructureVisits, labels.notSet)}
+                  />
+                  <DetailField
+                    label={labels.includedFinishingVisits}
+                    value={displayVisitCount(currentEditProject.includedFinishingVisits, labels.notSet)}
+                  />
                   <DetailField label={labels.progress} value={`${progress}%`} />
                 </dl>
 
                 <div className="mt-3 border-t pt-3">
                   <p className="text-xs font-medium text-muted-foreground">{labels.description}</p>
                   <p className="mt-1.5 whitespace-pre-wrap text-sm leading-6 text-foreground/90">{currentProject.description}</p>
+                </div>
+
+                <div className="mt-3 border-t pt-3">
+                  <p className="text-xs font-semibold text-foreground">{labels.financialSummary}</p>
+                  <dl className="mt-1 grid min-w-0 gap-x-7 md:grid-cols-2">
+                    <DetailField
+                      label={labels.structureFee}
+                      value={formatProjectAmountOmr(currentEditProject.structureSupervisionFee, labels.notSet)}
+                    />
+                    <DetailField
+                      label={labels.finishingFee}
+                      value={formatProjectAmountOmr(currentEditProject.finishingSupervisionFee, labels.notSet)}
+                    />
+                    <DetailField
+                      label={labels.receivedAmount}
+                      value={formatProjectAmountOmr(currentEditProject.receivedAmount, labels.notSet)}
+                    />
+                    <DetailField
+                      label={labels.outstandingAmount}
+                      value={formatProjectAmountOmr(currentEditProject.outstandingAmount, labels.notSet)}
+                    />
+                    <DetailField
+                      label={labels.nextPaymentAmount}
+                      value={formatProjectAmountOmr(currentEditProject.nextPaymentAmount, labels.notSet)}
+                    />
+                    <DetailField
+                      label={labels.nextPaymentDueDate}
+                      value={displayProjectDate(currentEditProject.nextPaymentDueDate, locale, labels.notSet)}
+                    />
+                    <DetailField
+                      label={labels.paymentNote}
+                      value={currentEditProject.invoiceReferencePaymentNote?.trim() || labels.notSet}
+                    />
+                    <DetailField
+                      label={labels.initialRemarks}
+                      value={currentEditProject.initialRemarks?.trim() || labels.notSet}
+                    />
+                  </dl>
                 </div>
 
                 <div className="mt-4 flex items-center gap-3" aria-label={`${labels.progress}: ${progress}%`}>
@@ -614,6 +711,11 @@ export function ProjectDetail({
               location: updated.address === "—" ? "Location not set" : updated.address,
               projectType: updated.projectTypeLabel,
               supervisionType: updated.supervisionTypeLabel,
+              plotNo: updated.plotNo?.trim() || "Not set",
+              supervisionStartDate: displayProjectDate(updated.supervisionStartDate, "en", "Not set"),
+              priority: projectPriorityLabel(updated.priority),
+              includedStructureVisits: updated.includedStructureVisits == null ? "Not set" : String(updated.includedStructureVisits),
+              includedFinishingVisits: updated.includedFinishingVisits == null ? "Not set" : String(updated.includedFinishingVisits),
               description: updated.description?.trim() || "No project description has been added.",
             }))
             setEditOpen(false)

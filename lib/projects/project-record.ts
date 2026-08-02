@@ -1,6 +1,6 @@
 import type { DomainProject } from "@/lib/db/domain"
 import type { ProjectRecord, ProjectStatusKey } from "@/lib/mock-data"
-import { PROJECT_TYPES, supervisionTypeLabel } from "@/lib/projects/project-options"
+import { PROJECT_TYPES, projectPriorityLabel, supervisionTypeLabel } from "@/lib/projects/project-options"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 
 function projectStatusKey(status: string): ProjectStatusKey {
@@ -40,6 +40,11 @@ export function toProjectRecord(
     statusKey: projectStatusKey(project.status),
     projectType: projectTypeLabel(project.projectType),
     supervisionType: supervisionTypeLabel(project.supervisionType, project.supervisionTypeOther),
+    plotNo: project.plotNo?.trim() || "Not set",
+    supervisionStartDate: displayDate(project.supervisionStartDate),
+    priority: projectPriorityLabel(project.priority),
+    includedStructureVisits: project.includedStructureVisits == null ? "Not set" : String(project.includedStructureVisits),
+    includedFinishingVisits: project.includedFinishingVisits == null ? "Not set" : String(project.includedFinishingVisits),
     organizationRole: project.ourRole?.trim() || "Consultant",
     description: project.description?.trim() || "No project description has been added.",
     contractor: project.contractor ?? "Not assigned",
