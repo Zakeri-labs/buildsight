@@ -31,7 +31,8 @@ function normalized(value: unknown) {
 }
 
 export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVisitAccessMap> {
-  const admin = createAdminClient()
+  try {
+    const admin = createAdminClient()
 
   const [organizationMembershipResult, projectMembershipResult, participantResult] = await Promise.all([
     admin
@@ -177,6 +178,10 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
   }
 
   return result
+  } catch (error) {
+    console.error("getSiteVisitProjectAccess error:", error)
+    return new Map()
+  }
 }
 
 export async function assertSiteVisitRequester(projectId: string): Promise<string> {

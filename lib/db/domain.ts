@@ -133,7 +133,8 @@ export type TaskRow = {
 
 /** All projects for the supervising org, ordered for display. */
 export async function getOrgProjects(orgId: string, userId?: string): Promise<DomainProject[]> {
-  const admin = createAdminClient()
+  try {
+    const admin = createAdminClient()
   const projectColumns =
     "id, name, code, location, latitude, longitude, status, project_type, supervision_type, supervision_type_other, region, description, image, our_role, contractor, consultant, client, start_date, target_handover, contract_value, progress_planned, progress_actual, progress_delay, supervising_organization_id, sort_order"
 
@@ -275,6 +276,10 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
     progressActual: calculatedProgress.get(p.id) ?? p.progress_actual ?? 0,
     progressDelay: p.progress_delay ?? 0,
   }))
+  } catch (error) {
+    console.error("getOrgProjects error:", error)
+    return []
+  }
 }
 
 // Resolve the set of project ids in scope. A selected project is never
@@ -323,157 +328,156 @@ export type DashboardData = {
 }
 
 export async function getDashboardData(orgId: string, projectId: string | null, userId: string): Promise<DashboardData> {
-  const { projects, scoped, ids } = await resolveScopedProjects(orgId, projectId, userId)
-  const names = nameMap(projects)
+  try {
+    const { projects, scoped, ids } = await resolveScopedProjects(orgId, projectId, userId)
+    const names = nameMap(projects)
 
-  const [ncrs, inspections, rfis, vos, activity, tasks, reviewFeed, siteVisitFeed, reportCcFeed] = await Promise.all([
-    fetchScopedRows("ncrs", "project_id, status", ids),
-    fetchScopedRows("inspections", "project_id, status", ids),
-    fetchScopedRows("rfis", "project_id, status", ids),
-    fetchScopedRows("variation_orders", "project_id", ids),
-    fetchScopedRows("activity_log", "id, project_id, type, verb, reference, created_at", ids),
-    fetchScopedRows("tasks", "id, project_id, action, type, reference, due_label, due_tone, sort_order", ids),
-    getReviewSubmissionFeed({ userId, organizationId: orgId, projectId }),
-    getSiteVisitTaskFeed({ userId, projectId }),
-    getReportCcNotificationFeed({ userId, projectId }),
-  ])
+    const [ncrs, inspections, rfis, vos, activity, tasks, reviewFeed, siteVisitFeed, reportCcFeed] = await Promise.all([
+      fetchScopedRows("ncrs", "project_id, status", ids),
+      fetchScopedRows("inspections", "project_id, status", ids),
+      fetchScopedRows("rfis", "project_id, status", ids),
+      fetchScopedRows("variation_orders", "project_id", ids),
+      fetchScopedRows("activity_log", "id, project_id, type, verb, reference, created_at", ids),
+      fetchScopedRows("tasks", "id, project_id, action, type, reference, due_label, due_tone, sort_order", ids),
+      getReviewSubmissionFeed({ userId, organizationId: orgId, projectId }),
+      getSiteVisitTaskFeed({ userId, projectId }),
+      getReportCcNotificationFeed({ userId, projectId }),
+    ])
 
-  const countBy = (rows: any[], field: string) => {
-    const m = new Map<string, number>()
-    for (const r of rows) m.set(r[field], (m.get(r[field]) ?? 0) + 1)
-    return m
-  }
-  const ncrByStatus = countBy(ncrs, "status")
-  const inspByStatus = countBy(inspections, "status")
-  const rfiByStatus = countBy(rfis, "status")
+    const countBy = (rows: any[], field: string) => {
+      const m = new Map<string, number>()
+      for (const r of rows) m.set(r[field], (m.get(r[field]) ?? 0) + 1)
+      return m
+    }
+    const ncrByStatus = countBy(ncrs, "status")
+    const inspByStatus = countBy(inspections, "status")
+    const rfiByStatus = countBy(rfis, "status")
 
-  const ncrDonut = [
-    { label: "Open", value: ncrByStatus.get("open") ?? 0, color: "var(--chart-3)" },
-    { label: "In Review", value: ncrByStatus.get("in-review") ?? 0, color: "var(--chart-4)" },
-    { label: "Closed", value: ncrByStatus.get("closed") ?? 0, color: "var(--chart-2)" },
-  ]
-  const inspectionDonut = [
-    { label: "Pending", value: inspByStatus.get("pending") ?? 0, color: "var(--chart-1)" },
-    { label: "In Progress", value: inspByStatus.get("in-progress") ?? 0, color: "var(--chart-2)" },
-    { label: "Approved", value: inspByStatus.get("approved") ?? 0, color: "var(--warning)" },
-    { label: "Rejected", value: inspByStatus.get("rejected") ?? 0, color: "var(--chart-5)" },
-  ]
+    const ncrDonut = [
+      { label: "Open", value: ncrByStatus.get("open") ?? 0, color: "var(--destructive)" },
+      { label: "In Review", value: ncrByStatus.get("in-review") ?? 0, color: "var(--warning)" },
+      { label: "Closed", value: ncrByStatus.get("closed") ?? 0, color: "var(--success)" },
+    ]
 
-  const perProject = (rows: any[]) => {
-    const m = new Map<string, number>()
-    for (const r of rows) m.set(r.project_id, (m.get(r.project_id) ?? 0) + 1)
-    return m
-  }
-  const ncrPer = perProject(ncrs)
-  const inspPer = perProject(inspections)
-  const rfiPer = perProject(rfis)
-  const voPer = perProject(vos)
+    const inspectionDonut = [
+      { label: "Pending", value: inspByStatus.get("pending") ?? 0, color: "var(--amber-500)" },
+      { label: "In Progress", value: inspByStatus.get("in-progress") ?? 0, color: "var(--info)" },
+      { label: "Approved", value: inspByStatus.get("approved") ?? 0, color: "var(--success)" },
+    ]
 
-  const projectRows = scoped.map((p) => ({
-    id: p.id,
-    name: p.name,
-    image: projectImageDisplayUrl(p.image, p.id),
-    role: p.ourRole ?? "Consultant",
-    ncrs: ncrPer.get(p.id) ?? 0,
-    inspections: inspPer.get(p.id) ?? 0,
-    rfis: rfiPer.get(p.id) ?? 0,
-    vos: voPer.get(p.id) ?? 0,
-    progress: p.progressActual,
-  }))
-
-  const activityRows: ActivityRow[] = activity
-    .map((a: any) => ({
+    const activityRows: ActivityRow[] = activity.slice(0, 8).map((a: any) => ({
       id: a.id,
+      projectName: names.get(a.project_id) ?? "Unknown",
       type: a.type,
       verb: a.verb,
       reference: a.reference,
-      projectName: names.get(a.project_id) ?? "Unknown",
-      createdAt: a.created_at,
+      timestamp: a.created_at,
     }))
-    .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
 
-  const reviewTasks: TaskRow[] = reviewFeed.items.map((item) => ({
-    id: `review:${item.id}`,
-    action: "Review Submission",
-    type: "Review",
-    reference: item.reportNumber,
-    reportTitle: item.reportTitle,
-    dueLabel: item.status === "under_review" ? "Under Review" : "Submitted",
-    dueTone: item.status === "under_review" ? "warning" : "danger",
-    projectName: item.projectName,
-    href: item.href,
-    stageName: item.stageName,
-    parentTermName: item.parentTermName,
-    subtermName: item.subtermName,
-    submittedBy: item.submittedBy,
-    submittedAt: item.submittedAt,
-    reviewStatus: item.status,
-  }))
+    const projectRows = scoped.map((p) => {
+      const pNcrs = ncrs.filter((r) => r.project_id === p.id).length
+      const pInsps = inspections.filter((r) => r.project_id === p.id).length
+      const pRfis = rfis.filter((r) => r.project_id === p.id).length
+      const pVos = vos.filter((r) => r.project_id === p.id).length
+      return {
+        id: p.id,
+        name: p.name,
+        image: p.image,
+        role: p.ourRole ?? "Supervising Consultant",
+        ncrs: pNcrs,
+        inspections: pInsps,
+        rfis: pRfis,
+        vos: pVos,
+        progress: p.progressActual,
+      }
+    })
 
-  const siteVisitTasks: TaskRow[] = siteVisitFeed.items.map((item) => ({
-    id: `site-visit:${item.id}`,
-    action: "New Site Visit Request",
-    type: "Site Visit",
-    reference: null,
-    dueLabel: "Pending",
-    dueTone: "warning",
-    projectName: item.projectName,
-    href: item.href,
-    requestedBy: item.requestedBy,
-    preferredVisit: item.preferredVisit,
-    submittedAt: item.createdAt,
-    siteVisitStatus: item.status,
-  }))
+    const reviewTasks: TaskRow[] = reviewFeed.items.map((item) => ({
+      id: `review:${item.id}`,
+      action: "Review Submission",
+      type: "Review",
+      reference: item.reportNumber,
+      reportTitle: item.reportTitle,
+      dueLabel: item.status === "under_review" ? "Under Review" : "Submitted",
+      dueTone: item.status === "under_review" ? "warning" : "danger",
+      projectName: item.projectName,
+      href: item.href,
+      stageName: item.stageName,
+      parentTermName: item.parentTermName,
+      subtermName: item.subtermName,
+      submittedBy: item.submittedBy,
+      submittedAt: item.submittedAt,
+      reviewStatus: item.status,
+    }))
 
-  const reportCcTasks: TaskRow[] = reportCcFeed.items.map((item) => ({
-    id: `report-cc:${item.id}`,
-    action: item.context === "translation" ? "Translation CC" : "Report CC",
-    type: "CC",
-    reference: item.reportNumber,
-    reportTitle: item.reportTitle,
-    dueLabel: "CC Recipient",
-    dueTone: "muted",
-    projectName: item.projectName,
-    href: item.href,
-    stageName: item.stageName,
-    parentTermName: item.termName,
-    submittedAt: item.createdAt,
-    ccContext: item.context,
-    ccAddedBy: item.addedByName,
-  }))
+    const siteVisitTasks: TaskRow[] = siteVisitFeed.items.map((item) => ({
+      id: `site-visit:${item.id}`,
+      action: "New Site Visit Request",
+      type: "Site Visit",
+      reference: null,
+      dueLabel: "Pending",
+      dueTone: "warning",
+      projectName: item.projectName,
+      href: item.href,
+      requestedBy: item.requestedBy,
+      preferredVisit: item.preferredVisit,
+      siteVisitStatus: item.status,
+      submittedAt: item.createdAt,
+    }))
 
-  const taskRows: TaskRow[] = [
-    ...reportCcTasks,
-    ...siteVisitTasks,
-    ...reviewTasks,
-    ...tasks
-      .slice()
-      .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-      .map((t: any) => ({
-        id: t.id,
-        action: t.action,
-        type: t.type,
-        reference: t.reference,
-        dueLabel: t.due_label,
-        dueTone: t.due_tone,
-        projectName: names.get(t.project_id) ?? "Unknown",
-      })),
-  ]
+    const reportCcTasks: TaskRow[] = reportCcFeed.items.map((item) => ({
+      id: `report-cc:${item.id}`,
+      action: "Report CC Notification",
+      type: "CC Notification",
+      reference: item.reportNumber,
+      reportTitle: item.reportTitle,
+      dueLabel: "CC Copy",
+      dueTone: "muted",
+      projectName: item.projectName,
+      href: item.href,
+      stageName: item.stageName,
+      parentTermName: item.termName,
+      submittedAt: item.createdAt,
+      ccContext: item.context,
+      ccAddedBy: item.addedByName,
+    }))
 
-  return {
-    kpis: {
-      totalProjects: scoped.length,
-      openNcrs: ncrByStatus.get("open") ?? 0,
-      openInspections:
-        (inspByStatus.get("pending") ?? 0) + (inspByStatus.get("in-progress") ?? 0),
-      openRfis: rfiByStatus.get("open") ?? 0,
-    },
-    ncrDonut,
-    inspectionDonut,
-    activity: activityRows,
-    projects: projectRows,
-    tasks: taskRows,
-    scopeName: projectId && scoped.length === 1 ? scoped[0].name : null,
+    const taskRows: TaskRow[] = [
+      ...reportCcTasks,
+      ...siteVisitTasks,
+      ...reviewTasks,
+      ...tasks
+        .slice()
+        .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+        .map((t: any) => ({
+          id: t.id,
+          action: t.action,
+          type: t.type,
+          reference: t.reference,
+          dueLabel: t.due_label,
+          dueTone: t.due_tone,
+          projectName: names.get(t.project_id) ?? "Unknown",
+        })),
+    ]
+
+    return {
+      kpis: {
+        totalProjects: scoped.length,
+        openNcrs: ncrByStatus.get("open") ?? 0,
+        openInspections:
+          (inspByStatus.get("pending") ?? 0) + (inspByStatus.get("in-progress") ?? 0),
+        openRfis: rfiByStatus.get("open") ?? 0,
+      },
+      ncrDonut,
+      inspectionDonut,
+      activity: activityRows,
+      projects: projectRows,
+      tasks: taskRows,
+      scopeName: projectId && scoped.length === 1 ? scoped[0].name : null,
+    }
+  } catch (error) {
+    console.error("getDashboardData error:", error)
+    return emptyDashboard
   }
 }
 

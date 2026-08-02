@@ -14,7 +14,8 @@ export async function getReviewSubmissionFeed(input: {
   organizationId: string
   projectId: string | null
 }): Promise<ReviewSubmissionFeed> {
-  const admin = createAdminClient()
+  try {
+    const admin = createAdminClient()
   let projectQuery = admin
     .from("projects")
     .select("id, name")
@@ -130,4 +131,8 @@ export async function getReviewSubmissionFeed(input: {
 
   items.sort((a, b) => +new Date(b.submittedAt) - +new Date(a.submittedAt))
   return { canReview: true, items }
+  } catch (error) {
+    console.error("getReviewSubmissionFeed error:", error)
+    return { canReview: false, items: [] }
+  }
 }
