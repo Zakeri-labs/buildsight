@@ -9,8 +9,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { ProjectStatusBadge } from "@/components/status-badge"
-import { DonutChart } from "@/components/dashboard/donut-chart"
+import { Badge } from "@/components/ui/badge"
 import { useI18n } from "@/lib/i18n"
 import type { ProjectRecord } from "@/lib/mock-data"
 import { InitialDocumentsList } from "@/components/initial-documents/initial-documents-list"
@@ -18,7 +17,15 @@ import type { InitialDocumentListItem } from "@/lib/initial-documents/types"
 import { ProjectParticipants, type ProjectParticipant } from "@/components/projects/project-participants"
 import type { ProjectParticipantUserOption } from "@/lib/projects/project-participant-types"
 import { ProjectDocuments, type ProjectDocument } from "@/components/projects/project-documents"
-import { ProjectEditDialog, type ProjectEditData } from "@/components/projects/project-edit-dialog"
+import {
+  ProjectEditDialog,
+  type ProjectEditData,
+} from "@/components/projects/project-edit-dialog"
+import {
+  normalizeProjectStatus,
+  PROJECT_STATUS_BADGE_CLASS,
+  projectStatusLabel,
+} from "@/lib/projects/project-status"
 import { ProjectImageManagementDialog } from "@/components/projects/project-image-management-dialog"
 import { ProjectImageDisplay } from "@/components/projects/project-image-display"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
@@ -32,18 +39,28 @@ const DynamicLocationMapCanvas = dynamic(
   { ssr: false, loading: () => null },
 )
 
-function validCoordinates(
-  latitude: number | null | undefined,
-  longitude: number | null | undefined,
-): boolean {
-  return (
-    Number.isFinite(latitude) &&
-    Number.isFinite(longitude) &&
-    Number(latitude) >= -90 &&
-    Number(latitude) <= 90 &&
-    Number(longitude) >= -180 &&
-    Number(longitude) <= 180
-  )
+function normalizedProjectPoint(
+  latitude: number | string | null | undefined,
+  longitude: number | string | null | undefined,
+): MapPoint | null {
+  if (latitude == null || longitude == null) return null
+  if (typeof latitude === "string" && !latitude.trim()) return null
+  if (typeof longitude === "string" && !longitude.trim()) return null
+
+  const normalizedLatitude = Number(latitude)
+  const normalizedLongitude = Number(longitude)
+  if (
+    !Number.isFinite(normalizedLatitude) ||
+    !Number.isFinite(normalizedLongitude) ||
+    normalizedLatitude < -90 ||
+    normalizedLatitude > 90 ||
+    normalizedLongitude < -180 ||
+    normalizedLongitude > 180
+  ) {
+    return null
+  }
+
+  return { latitude: normalizedLatitude, longitude: normalizedLongitude }
 }
 
 function projectDocuments(project: ProjectRecord): ProjectDocument[] {
@@ -84,6 +101,19 @@ function DetailField({ label, value }: { label: string; value: React.ReactNode }
       <dt className="text-xs font-medium leading-5 text-muted-foreground">{label}</dt>
       <dd className="min-w-0 break-words text-sm font-semibold leading-5 text-foreground">{value}</dd>
     </div>
+  )
+}
+
+function ProjectStatusDisplay({ status, isArabic }: { status: string; isArabic: boolean }) {
+  const normalizedStatus = normalizeProjectStatus(status)
+
+  return (
+    <Badge
+      variant="outline"
+      className={cn("h-6 rounded-md px-2 text-[11px] font-medium shadow-none", PROJECT_STATUS_BADGE_CLASS[normalizedStatus])}
+    >
+      {projectStatusLabel(normalizedStatus, isArabic)}
+    </Badge>
   )
 }
 
@@ -137,6 +167,8 @@ export function ProjectDetail({
         owner: "المالك / العميل",
         role: "دور الجهة",
         location: "الموقع / العنوان",
+        areaDistrict: "المنطقة / الحي",
+        notSet: "غير محدد",
         type: "نوع المشروع",
         supervisionType: "نوع الإشراف",
         status: "الحالة",
@@ -156,6 +188,8 @@ export function ProjectDetail({
         owner: "Owner / Client",
         role: "Organization Role",
         location: "Location / Address",
+        areaDistrict: "Area / District",
+        notSet: "Not set",
         type: "Project Type",
         supervisionType: "Supervision Type",
         status: "Status",
@@ -170,19 +204,18 @@ export function ProjectDetail({
       }
 
   const progress = Math.max(0, Math.min(100, currentProject.progress.actual))
-  const hasProjectCoordinates = validCoordinates(currentEditProject.latitude, currentEditProject.longitude)
-  const projectPoint = useMemo<MapPoint | null>(() => {
-    if (!hasProjectCoordinates) return null
-    return {
-      latitude: Number(currentEditProject.latitude),
-      longitude: Number(currentEditProject.longitude),
-    }
-  }, [currentEditProject.latitude, currentEditProject.longitude, hasProjectCoordinates])
+  const projectPoint = useMemo(
+    () => normalizedProjectPoint(currentEditProject.latitude, currentEditProject.longitude),
+    [currentEditProject.latitude, currentEditProject.longitude],
+  )
+  const hasProjectCoordinates = projectPoint !== null
   const googleMapsUrl = projectPoint
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${projectPoint.latitude},${projectPoint.longitude}`)}`
     : null
   const handleMapReady = useCallback(() => setMapState("ready"), [])
-  const handleMapError = useCallback(() => setMapState("error"), [])
+  const handleTileError = useCallback(() => {
+    // Keep the mounted map visible; Leaflet can continue rendering the marker, controls, and remaining tiles.
+  }, [])
   const isFullscreen = nativeFullscreen || fallbackFullscreen
   const requestMapResize = useCallback(() => {
     setResizeRequest((request) => request + 1)
@@ -302,7 +335,7 @@ export function ProjectDetail({
             ) : null}
           </CardHeader>
           <CardContent className="p-4 sm:p-5">
-            <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)] 2xl:grid-cols-[220px_minmax(0,1fr)_190px]">
+            <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
               <div className="min-w-0">
                 <div className="relative">
                   <ProjectImageDisplay
@@ -343,12 +376,16 @@ export function ProjectDetail({
                   <DetailField label={labels.type} value={currentProject.projectType} />
                   <DetailField label={labels.supervisionType} value={currentProject.supervisionType} />
                   <DetailField label={labels.code} value={currentProject.code} />
-                  <DetailField label={labels.status} value={<ProjectStatusBadge statusKey={currentProject.statusKey} />} />
+                  <DetailField
+                    label={labels.status}
+                    value={<ProjectStatusDisplay status={currentEditProject.status} isArabic={isArabic} />}
+                  />
                   <DetailField label={labels.owner} value={currentProject.client} />
                   <DetailField label={labels.start} value={currentProject.startDate} />
                   <DetailField label={labels.role} value={currentProject.organizationRole} />
                   <DetailField label={labels.completion} value={currentProject.targetHandover} />
                   <DetailField label={labels.location} value={currentProject.location} />
+                  <DetailField label={labels.areaDistrict} value={currentEditProject.areaDistrict?.trim() || labels.notSet} />
                   <DetailField label={labels.progress} value={`${progress}%`} />
                 </dl>
 
@@ -365,165 +402,144 @@ export function ProjectDetail({
                 </div>
               </div>
 
-              <div className="min-w-0 lg:col-start-2 lg:justify-self-end 2xl:col-start-auto">
-                <div
-                  ref={mapShellRef}
-                  role="region"
-                  aria-label={isArabic ? "خريطة موقع المشروع" : "Project location map"}
-                  className={cn(
-                    "relative isolate mx-auto w-full overflow-hidden border bg-muted/40 shadow-sm lg:mx-0",
-                    isFullscreen
-                      ? "fixed inset-0 z-[1200] h-screen max-h-none max-w-none rounded-none border-0 bg-background"
-                      : "aspect-square max-w-[22rem] rounded-lg lg:max-w-[220px] 2xl:max-w-[190px]",
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "absolute overflow-hidden",
-                      isFullscreen ? "inset-3 rounded-xl border sm:inset-4" : "inset-0",
-                    )}
-                  >
-                    {projectPoint ? (
-                      <DynamicLocationMapCanvas
-                        key={`${currentProject.id}-${projectPoint.latitude}-${projectPoint.longitude}`}
-                        initialCenter={projectPoint}
-                        initialZoom={15}
-                        marker={projectPoint}
-                        centerRequest={null}
-                        resizeRequest={resizeRequest}
-                        tileUrl={MAP_TILE_URL}
-                        tileAttribution={MAP_TILE_ATTRIBUTION}
-                        markerTitle={currentProject.name}
-                        onReady={handleMapReady}
-                        onTileError={handleMapError}
-                        readOnly
-                      />
-                    ) : null}
+            </div>
+          </CardContent>
+        </Card>
 
-                    {mapState === "loading" ? (
-                      <div className="pointer-events-none absolute inset-0 z-[500] flex items-center justify-center bg-background/88 text-xs text-muted-foreground backdrop-blur-[1px]">
-                        <Loader2 className="me-2 size-3.5 animate-spin" aria-hidden="true" />
-                        {isArabic ? "جارٍ تحميل الخريطة..." : "Loading map..."}
-                      </div>
-                    ) : null}
+        <Card className="gap-0 overflow-hidden py-0">
+          <CardHeader className="border-b px-5 py-3.5 sm:px-6">
+            <CardTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">
+              <MapPin className="size-4 text-primary" aria-hidden="true" />
+              {isArabic ? "موقع المشروع" : "Project Location"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex min-h-[300px] flex-1 p-0">
+            <div
+              ref={mapShellRef}
+              role="region"
+              aria-label={isArabic ? "خريطة موقع المشروع" : "Project location map"}
+              className={cn(
+                "relative isolate min-h-[300px] w-full flex-1 overflow-hidden bg-muted/40",
+                isFullscreen
+                  ? "fixed inset-0 z-[1200] h-screen max-h-none max-w-none rounded-none border-0 bg-background"
+                  : "h-full",
+              )}
+            >
+              <div
+                className={cn(
+                  "absolute overflow-hidden",
+                  isFullscreen ? "inset-3 rounded-xl border sm:inset-4" : "inset-0",
+                )}
+              >
+                {projectPoint ? (
+                  <DynamicLocationMapCanvas
+                    key={`${currentProject.id}-${projectPoint.latitude}-${projectPoint.longitude}`}
+                    initialCenter={projectPoint}
+                    initialZoom={15}
+                    marker={projectPoint}
+                    centerRequest={null}
+                    resizeRequest={resizeRequest}
+                    tileUrl={MAP_TILE_URL}
+                    tileAttribution={MAP_TILE_ATTRIBUTION}
+                    markerTitle={currentProject.name}
+                    onReady={handleMapReady}
+                    onTileError={handleTileError}
+                    readOnly
+                  />
+                ) : null}
 
-                    {mapState === "error" ? (
-                      <div className="absolute inset-0 z-[501] flex flex-col items-center justify-center gap-2 px-4 text-center text-xs text-muted-foreground">
-                        <MapPin className="size-6" aria-hidden="true" />
-                        <span>{isArabic ? "إحداثيات الموقع غير متاحة." : "Location coordinates unavailable."}</span>
-                      </div>
-                    ) : null}
-
-                    {projectPoint && mapState !== "error" ? (
-                      <div
-                        className="pointer-events-none absolute bottom-2 start-2 z-[700] rounded-md bg-background/92 px-2 py-1 font-mono text-[10px] font-medium text-foreground shadow-sm backdrop-blur-sm"
-                        dir="ltr"
-                      >
-                        {projectPoint.latitude.toFixed(6)}, {projectPoint.longitude.toFixed(6)}
-                      </div>
-                    ) : null}
+                {mapState === "loading" ? (
+                  <div className="pointer-events-none absolute inset-0 z-[500] flex items-center justify-center bg-background/88 text-xs text-muted-foreground backdrop-blur-[1px]">
+                    <Loader2 className="me-2 size-3.5 animate-spin" aria-hidden="true" />
+                    {isArabic ? "جارٍ تحميل الخريطة..." : "Loading map..."}
                   </div>
+                ) : null}
 
-                  <div className={cn("absolute end-2 top-2 z-[900] flex items-center gap-1.5", isFullscreen && "end-6 top-6")}>
-                    <Tooltip>
-                      <TooltipTrigger render={<span className="inline-flex rounded-md" />}>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="icon-sm"
-                          className="size-8 bg-background/95 shadow-md backdrop-blur-sm hover:bg-background"
-                          disabled={!projectPoint}
-                          onClick={toggleMapFullscreen}
-                          aria-label={
-                            isFullscreen
-                              ? isArabic
-                                ? "الخروج من وضع ملء الشاشة"
-                                : "Exit fullscreen"
-                              : isArabic
-                                ? "فتح الخريطة بملء الشاشة"
-                                : "Open map fullscreen"
-                          }
-                        >
-                          {isFullscreen ? (
-                            <Minimize2 className="size-3.5" aria-hidden="true" />
-                          ) : (
-                            <Maximize2 className="size-3.5" aria-hidden="true" />
-                          )}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {isFullscreen
+                {mapState === "error" ? (
+                  <div className="absolute inset-0 z-[501] flex flex-col items-center justify-center gap-2 px-4 text-center text-xs text-muted-foreground">
+                    <MapPin className="size-6" aria-hidden="true" />
+                    <span>{isArabic ? "الموقع غير متاح." : "Location unavailable"}</span>
+                  </div>
+                ) : null}
+
+                {projectPoint && mapState !== "error" ? (
+                  <div
+                    className="pointer-events-none absolute bottom-2 start-2 z-[700] rounded-md bg-background/92 px-2 py-1 font-mono text-[10px] font-medium text-foreground shadow-sm backdrop-blur-sm"
+                    dir="ltr"
+                  >
+                    {projectPoint.latitude.toFixed(6)}, {projectPoint.longitude.toFixed(6)}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className={cn("absolute end-2 top-2 z-[900] flex items-center gap-1.5", isFullscreen && "end-6 top-6")}>
+                <Tooltip>
+                  <TooltipTrigger render={<span className="inline-flex rounded-md" />}>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="icon-sm"
+                      className="size-8 bg-background/95 shadow-md backdrop-blur-sm hover:bg-background"
+                      disabled={!projectPoint}
+                      onClick={toggleMapFullscreen}
+                      aria-label={
+                        isFullscreen
                           ? isArabic
                             ? "الخروج من وضع ملء الشاشة"
                             : "Exit fullscreen"
                           : isArabic
                             ? "فتح الخريطة بملء الشاشة"
-                            : "Open map fullscreen"}
-                      </TooltipContent>
-                    </Tooltip>
+                            : "Open map fullscreen"
+                      }
+                    >
+                      {isFullscreen ? (
+                        <Minimize2 className="size-3.5" aria-hidden="true" />
+                      ) : (
+                        <Maximize2 className="size-3.5" aria-hidden="true" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isFullscreen
+                      ? isArabic
+                        ? "الخروج من وضع ملء الشاشة"
+                        : "Exit fullscreen"
+                      : isArabic
+                        ? "فتح الخريطة بملء الشاشة"
+                        : "Open map fullscreen"}
+                  </TooltipContent>
+                </Tooltip>
 
-                    <Tooltip>
-                      <TooltipTrigger render={<span className="inline-flex rounded-md" />}>
-                        {googleMapsUrl ? (
-                          <a
-                            href={googleMapsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={cn(
-                              buttonVariants({ variant: "secondary", size: "icon-sm" }),
-                              "size-8 bg-background/95 shadow-md backdrop-blur-sm hover:bg-background",
-                            )}
-                            aria-label={isArabic ? "فتح في خرائط Google" : "Open in Google Maps"}
-                          >
-                            <ExternalLink className="size-3.5" aria-hidden="true" />
-                          </a>
-                        ) : (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="icon-sm"
-                            className="size-8 bg-background/95 shadow-md backdrop-blur-sm"
-                            disabled
-                            aria-label={isArabic ? "فتح في خرائط Google" : "Open in Google Maps"}
-                          >
-                            <ExternalLink className="size-3.5" aria-hidden="true" />
-                          </Button>
+                <Tooltip>
+                  <TooltipTrigger render={<span className="inline-flex rounded-md" />}>
+                    {googleMapsUrl ? (
+                      <a
+                        href={googleMapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={cn(
+                          buttonVariants({ variant: "secondary", size: "icon-sm" }),
+                          "size-8 bg-background/95 shadow-md backdrop-blur-sm hover:bg-background",
                         )}
-                      </TooltipTrigger>
-                      <TooltipContent>{isArabic ? "فتح في خرائط Google" : "Open in Google Maps"}</TooltipContent>
-                    </Tooltip>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t.dashboard.overallProgress}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center gap-6">
-            <DonutChart
-              segments={[
-                { value: currentProject.progress.actual, color: "var(--success)" },
-                { value: Math.max(0, 100 - currentProject.progress.actual), color: "var(--muted)" },
-              ]}
-              total={100}
-              centerTop={<span className="text-3xl font-semibold tabular-nums">{currentProject.progress.actual}%</span>}
-            />
-            <div className="flex w-full flex-col gap-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-info" />{t.dashboard.planned}</span>
-                <span className="font-semibold tabular-nums">{currentProject.progress.planned}%</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-success" />{t.dashboard.actual}</span>
-                <span className="font-semibold tabular-nums">{currentProject.progress.actual}%</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-destructive" />{t.dashboard.delay}</span>
-                <span className="font-semibold tabular-nums">{currentProject.progress.delay}%</span>
+                        aria-label={isArabic ? "فتح في خرائط Google" : "Open in Google Maps"}
+                      >
+                        <ExternalLink className="size-3.5" aria-hidden="true" />
+                      </a>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="icon-sm"
+                        className="size-8 bg-background/95 shadow-md backdrop-blur-sm"
+                        disabled
+                        aria-label={isArabic ? "فتح في خرائط Google" : "Open in Google Maps"}
+                      >
+                        <ExternalLink className="size-3.5" aria-hidden="true" />
+                      </Button>
+                    )}
+                  </TooltipTrigger>
+                  <TooltipContent>{isArabic ? "فتح في خرائط Google" : "Open in Google Maps"}</TooltipContent>
+                </Tooltip>
               </div>
             </div>
           </CardContent>

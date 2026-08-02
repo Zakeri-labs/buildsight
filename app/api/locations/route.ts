@@ -57,6 +57,16 @@ function normalize(features: PhotonFeature[] | undefined): LocationSuggestion[] 
     const [longitude, latitude] = coordinates
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue
     const p = feature.properties ?? {}
+    const city = clean(p.city) || clean(p.town) || clean(p.village) || clean(p.locality)
+    const district = clean(p.district) || clean(p.county)
+    const area =
+      clean(p.neighbourhood) ||
+      clean(p.neighborhood) ||
+      clean(p.suburb) ||
+      clean(p.city_district) ||
+      district ||
+      clean(p.locality) ||
+      city
     results.push({
       id: `${clean(p.osm_type) || "location"}-${clean(p.osm_id) || index}-${latitude}-${longitude}`,
       label: makeLabel(p),
@@ -65,8 +75,9 @@ function normalize(features: PhotonFeature[] | undefined): LocationSuggestion[] 
       kind: clean(p.type) || clean(p.osm_value) || "location",
       country: clean(p.country) || undefined,
       state: clean(p.state) || undefined,
-      city: clean(p.city) || clean(p.town) || clean(p.village) || undefined,
-      district: clean(p.district) || clean(p.county) || undefined,
+      city: city || undefined,
+      district: district || undefined,
+      area: area || undefined,
       street: clean(p.street) || undefined,
       postcode: clean(p.postcode) || undefined,
     })

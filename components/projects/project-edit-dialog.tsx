@@ -30,16 +30,26 @@ import {
   supervisionTypeLabel,
   type ProjectTypeValue,
 } from "@/lib/projects/project-options"
+import {
+  normalizeProjectStatus,
+  PROJECT_STATUS_OPTIONS,
+  type ProjectStatusValue,
+} from "@/lib/projects/project-status"
+
+export { normalizeProjectStatus, PROJECT_STATUS_OPTIONS }
+export type { ProjectStatusValue }
 
 export type ProjectEditData = {
   id: string
   name: string
   code: string
   address: string
+  areaDistrict?: string | null
   projectTypeLabel: string
   projectTypeValue?: ProjectTypeValue | null
   supervisionType?: string | null
   supervisionTypeOther?: string | null
+  status: string
   description?: string
   latitude?: number | null
   longitude?: number | null
@@ -62,6 +72,8 @@ export function ProjectEditDialog({
   const [projectType, setProjectType] = useState<ProjectTypeValue | "">(project.projectTypeValue ?? "")
   const [supervisionType, setSupervisionType] = useState(project.supervisionType ?? "")
   const [supervisionTypeOther, setSupervisionTypeOther] = useState(project.supervisionTypeOther ?? "")
+  const [status, setStatus] = useState<ProjectStatusValue>(normalizeProjectStatus(project.status))
+  const [areaDistrict, setAreaDistrict] = useState(project.areaDistrict ?? "")
   const [description, setDescription] = useState(project.description ?? "")
   const [location, setLocation] = useState<ProjectLocationValue>({
     address: project.address === "—" || project.address === "Location not set" ? "" : project.address,
@@ -91,7 +103,9 @@ export function ProjectEditDialog({
         supervisionTypeOther: validSupervisionType
           ? (validSupervisionType === "other" ? normalizedSupervisionTypeOther : null)
           : undefined,
+        status,
         description,
+        region: areaDistrict,
         location: location.address,
         latitude: location.latitude,
         longitude: location.longitude,
@@ -116,8 +130,10 @@ export function ProjectEditDialog({
         supervisionType: nextSupervisionType,
         supervisionTypeOther: nextSupervisionTypeOther,
         supervisionTypeLabel: supervisionTypeLabel(nextSupervisionType, nextSupervisionTypeOther),
+        status,
         description: description.trim(),
         address: location.address.trim() || "—",
+        areaDistrict: areaDistrict.trim() || null,
         latitude: location.latitude,
         longitude: location.longitude,
       })
@@ -140,6 +156,12 @@ export function ProjectEditDialog({
             id={`project-edit-location-${project.id}`}
             value={location}
             onChange={setLocation}
+            areaField={{
+              value: areaDistrict,
+              onChange: setAreaDistrict,
+              label: isArabic ? "المنطقة / الحي" : "Area / District",
+              placeholder: isArabic ? "مثال: وسط المدينة أو منطقة الأعمال" : "e.g. Downtown or Business District",
+            }}
             disabled={pending}
           >
             <div className="flex h-full min-h-0 flex-col gap-4">
@@ -241,6 +263,32 @@ export function ProjectEditDialog({
                   />
                 </div>
               ) : null}
+              <div className="space-y-2">
+                <Label>{isArabic ? "الحالة" : "Status"}</Label>
+                <Select
+                  value={status}
+                  onValueChange={(value) => {
+                    if (value) setStatus(value as ProjectStatusValue)
+                  }}
+                  disabled={pending}
+                >
+                  <SelectTrigger className="h-10 w-full">
+                    <SelectValue>
+                      {(value) => {
+                        const option = PROJECT_STATUS_OPTIONS.find((item) => item.value === String(value))
+                        return option ? (isArabic ? option.labelAr : option.label) : String(value ?? "")
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PROJECT_STATUS_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {isArabic ? option.labelAr : option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex min-h-40 flex-1 flex-col gap-2">
                 <Label htmlFor={`project-edit-description-${project.id}`}>{isArabic ? "وصف المشروع" : "Project Description"}</Label>
                 <textarea

@@ -42,6 +42,15 @@ export type ProjectDeletionImpact = {
 
 const MAX_SUPERVISION_TYPE_OTHER_LENGTH = 150
 
+const PROJECT_STATUS_VALUES = new Set([
+  "active",
+  "inactive",
+  "completed",
+  "stopped",
+  "final_visit",
+  "not_started",
+])
+
 const PROJECT_STORAGE_BUCKETS = [
   "project-images",
   "document-images",
@@ -307,7 +316,9 @@ export async function updateProject(input: {
   projectType?: ProjectTypeValue
   supervisionType?: SupervisionTypeValue
   supervisionTypeOther?: string | null
+  status?: "active" | "inactive" | "completed" | "stopped" | "final_visit" | "not_started"
   description?: string
+  region?: string
   location?: string
   latitude?: number | null
   longitude?: number | null
@@ -317,6 +328,9 @@ export async function updateProject(input: {
     if (name.length < 2) return { ok: false, error: "Project name is too short." }
     if (input.projectType !== undefined && !isProjectTypeValue(input.projectType)) {
       return { ok: false, error: "Select a valid project type." }
+    }
+    if (input.status !== undefined && !PROJECT_STATUS_VALUES.has(input.status)) {
+      return { ok: false, error: "Select a valid project status." }
     }
     let supervisionTypeOther: string | null | undefined
     if (input.supervisionType !== undefined) {
@@ -364,7 +378,9 @@ export async function updateProject(input: {
       updates.supervision_type = input.supervisionType
       updates.supervision_type_other = supervisionTypeOther ?? null
     }
+    if (input.status !== undefined) updates.status = input.status
     if (input.description !== undefined) updates.description = input.description.trim() || null
+    if (input.region !== undefined) updates.region = input.region.trim() || null
 
     const { error } = await admin
       .from("projects")

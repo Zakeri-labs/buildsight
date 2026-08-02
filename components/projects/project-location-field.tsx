@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { LocationCombobox } from "@/components/projects/location-combobox"
 import type { MapCenterRequest, MapPoint } from "@/components/projects/location-map-canvas"
@@ -28,6 +29,7 @@ import {
   coordinateLabel,
   EMPTY_PROJECT_LOCATION,
   hasCoordinates,
+  locationAreaName,
   type LocationSuggestion,
   type ProjectLocationValue,
 } from "@/lib/locations/types"
@@ -88,12 +90,19 @@ export function ProjectLocationField({
   id,
   disabled,
   children,
+  areaField,
 }: {
   value: ProjectLocationValue
   onChange: (value: ProjectLocationValue) => void
   id?: string
   disabled?: boolean
   children?: React.ReactNode
+  areaField?: {
+    value: string
+    onChange: (value: string) => void
+    label: string
+    placeholder?: string
+  }
 }) {
   const generatedId = useId()
   const inputId = id ?? `project-location-${generatedId}`
@@ -261,6 +270,7 @@ export function ProjectLocationField({
 
       setReverseState("loading")
       setMessage(null)
+      areaField?.onChange("")
       commitValue({
         address: fallback,
         latitude,
@@ -283,6 +293,7 @@ export function ProjectLocationField({
         if (!samePoint(valueRef.current, latitude, longitude)) return
 
         const match = payload.results?.[0]
+        areaField?.onChange(locationAreaName(match))
         commitValue({
           address: match?.label || fallback,
           latitude,
@@ -299,7 +310,7 @@ export function ProjectLocationField({
         setMessage(labels.reverseGeocodeError)
       }
     },
-    [commitValue, labels.addressUnavailable, labels.reverseGeocodeError, locale],
+    [areaField, commitValue, labels.addressUnavailable, labels.reverseGeocodeError, locale],
   )
 
   const placeMarker = useCallback(
@@ -328,6 +339,7 @@ export function ProjectLocationField({
 
   function handleSuggestion(suggestion: LocationSuggestion) {
     cancelReverseLookup()
+    areaField?.onChange(locationAreaName(suggestion))
     commitValue({
       address: suggestion.label,
       latitude: suggestion.latitude,
@@ -340,6 +352,7 @@ export function ProjectLocationField({
 
   function clearLocation() {
     cancelReverseLookup()
+    areaField?.onChange("")
     commitValue(EMPTY_PROJECT_LOCATION)
     requestCenter(DEFAULT_MAP_CENTER.latitude, DEFAULT_MAP_CENTER.longitude)
   }
@@ -432,6 +445,20 @@ export function ProjectLocationField({
             describedBy={helpId}
             suppressSearch={value.verified}
           />
+
+          {areaField ? (
+            <div className="space-y-2.5">
+              <Label htmlFor={`${inputId}-area`}>{areaField.label}</Label>
+              <Input
+                id={`${inputId}-area`}
+                value={areaField.value}
+                onChange={(event) => areaField.onChange(event.target.value)}
+                placeholder={areaField.placeholder}
+                disabled={disabled}
+                className="h-10"
+              />
+            </div>
+          ) : null}
 
           <div id={helpId} className="space-y-1.5">
             {value.verified && hasCoordinates(value) ? (

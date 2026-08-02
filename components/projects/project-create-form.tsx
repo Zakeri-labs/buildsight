@@ -129,6 +129,7 @@ export function ProjectCreateForm({
   const [supervisionType, setSupervisionType] = useState<SupervisionTypeValue | "">("")
   const [supervisionTypeOther, setSupervisionTypeOther] = useState("")
   const [location, setLocation] = useState<ProjectLocationValue>(EMPTY_PROJECT_LOCATION)
+  const [areaDistrict, setAreaDistrict] = useState("")
   const [projectStartDate, setProjectStartDate] = useState("")
   const [description, setDescription] = useState("")
   const [projectImages, setProjectImages] = useState<ProjectImageDraft[]>([])
@@ -212,6 +213,8 @@ export function ProjectCreateForm({
         noProjectImages: "لم تتم إضافة صور للمشروع",
         moveImageEarlier: "تحريك الصورة إلى اليسار",
         moveImageLater: "تحريك الصورة إلى اليمين",
+        areaDistrict: "المنطقة / الحي",
+        areaDistrictPlaceholder: "مثال: وسط المدينة أو منطقة الأعمال",
         projectStartDate: "تاريخ بدء المشروع",
         openProjectStartDateCalendar: "فتح تقويم تاريخ بدء المشروع",
         description: "وصف المشروع",
@@ -293,6 +296,8 @@ export function ProjectCreateForm({
         noProjectImages: "No project images selected",
         moveImageEarlier: "Move image earlier",
         moveImageLater: "Move image later",
+        areaDistrict: "Area / District",
+        areaDistrictPlaceholder: "e.g. Downtown or Business District",
         projectStartDate: "Project Start Date",
         openProjectStartDateCalendar: "Open project start date calendar",
         description: "Project Description",
@@ -634,6 +639,7 @@ export function ProjectCreateForm({
           supervisionType,
           supervisionTypeOther: supervisionType === "other" ? supervisionTypeOther.trim() : undefined,
           location: location.address,
+          region: areaDistrict,
           latitude: location.latitude,
           longitude: location.longitude,
           description,
@@ -791,6 +797,12 @@ export function ProjectCreateForm({
                     id="new-project-location"
                     value={location}
                     onChange={setLocation}
+                    areaField={{
+                      value: areaDistrict,
+                      onChange: setAreaDistrict,
+                      label: copy.areaDistrict,
+                      placeholder: copy.areaDistrictPlaceholder,
+                    }}
                     disabled={pending}
                   >
                     <div className="flex h-full min-h-0 flex-col gap-4">

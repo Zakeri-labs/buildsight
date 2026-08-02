@@ -1,26 +1,10 @@
-import { ProjectsList, type ProjectRow, type OrgRole, type ProjectStatus } from "@/components/projects/projects-list"
+import { ProjectsList, type ProjectRow } from "@/components/projects/projects-list"
 import { requireOnboarded, isOrgAdmin } from "@/lib/auth/session"
 import { canAdministerProject } from "@/lib/auth/guards"
 import { getOrgProjects } from "@/lib/db/domain"
 import { PROJECT_TYPES, isProjectTypeValue } from "@/lib/projects/project-options"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
-
-function projectStatus(status: string): ProjectStatus {
-  const normalized = status.trim().toLowerCase().replaceAll("_", "-")
-  if (normalized.includes("complete")) return "Completed"
-  if (normalized.includes("hold") || normalized.includes("pause")) return "On Hold"
-  if (normalized.includes("plan") || normalized === "draft") return "Planning"
-  return "In Progress"
-}
-
-function organizationRole(role: string | null): OrgRole {
-  const normalized = role?.trim().toLowerCase() ?? ""
-  if (normalized.includes("contract")) return "Contractor"
-  if (normalized.includes("client") || normalized.includes("owner")) return "Client"
-  if (normalized.includes("government")) return "Government"
-  if (normalized.includes("third")) return "Third Party"
-  return "Consultant"
-}
+import { normalizeProjectStatus } from "@/lib/projects/project-status"
 
 function projectTypeLabel(value: string | null) {
   return PROJECT_TYPES.find((type) => type.value === value)?.label ?? "—"
@@ -57,14 +41,13 @@ export default async function ProjectsPage({
     code: project.code ?? "—",
     name: project.name,
     ownerClient: project.client?.trim() || "—",
-    orgRole: organizationRole(project.ourRole),
     address: project.location?.trim() || "—",
     projectType: projectTypeLabel(project.projectType),
     projectTypeValue: isProjectTypeValue(project.projectType) ? project.projectType : null,
     supervisionType: project.supervisionType,
     supervisionTypeOther: project.supervisionTypeOther,
     description: project.description ?? "",
-    status: projectStatus(project.status),
+    status: normalizeProjectStatus(project.status),
     startDate: displayDate(project.startDate),
     progress: Math.min(100, Math.max(0, Math.round(project.progressActual))),
     imageUrl: projectImageDisplayUrl(project.image, project.id) ?? "/placeholder.svg",
