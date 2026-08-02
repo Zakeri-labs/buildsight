@@ -194,36 +194,58 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
                     {stageReports.length ? (
                       <div className="divide-y">
                         {stageReports.map((report) => (
-                          <div key={report.id} className="flex flex-wrap items-center justify-between gap-3 p-4 transition-colors hover:bg-muted/30">
-                            <div className="flex min-w-0 items-center gap-3">
-                              <FileText className="size-4 text-muted-foreground shrink-0" />
-                              <div className="min-w-0">
+                          <div
+                            key={report.id}
+                            className={cn(
+                              "group relative flex flex-wrap items-center justify-between gap-3 border-l-4 px-5 py-3.5 transition-all hover:bg-slate-50 dark:hover:bg-slate-800/50",
+                              report.status === "approved" || report.status === "completed"
+                                ? "border-l-emerald-500"
+                                : report.status === "draft"
+                                ? "border-l-purple-500 font-medium"
+                                : report.status === "in_progress"
+                                ? "border-l-amber-500"
+                                : "border-l-blue-500"
+                            )}
+                          >
+                            <div className="flex min-w-0 items-center gap-3.5">
+                              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-slate-200/80 bg-slate-100/70 text-slate-600 transition-colors group-hover:border-blue-200 group-hover:bg-blue-50 group-hover:text-blue-600 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400 dark:group-hover:border-blue-900 dark:group-hover:bg-blue-950/40 dark:group-hover:text-blue-400">
+                                <FileText className="size-4" />
+                              </div>
+                              <div className="min-w-0 space-y-1">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <span className="font-semibold text-sm text-foreground">{report.reportTitle || report.reportNumber}</span>
-                                  <Badge variant="outline" className={cn("text-[11px]", statusTone(report.status))}>
+                                  <Link
+                                    href={`/projects/${data.project.id}/stages/${stage.id}/reports/${report.id}`}
+                                    className="font-semibold text-sm text-slate-900 hover:text-blue-600 dark:text-slate-100 dark:hover:text-blue-400 truncate"
+                                  >
+                                    {report.reportTitle || report.reportNumber}
+                                  </Link>
+                                  <Badge variant="outline" className={cn("text-[11px] font-medium px-2 py-0.5 rounded-md", statusTone(report.status))}>
                                     {statusLabel(report.status, language)}
                                   </Badge>
                                 </div>
-                                <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                                  <span>{report.reportNumber}</span>
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                  <span className="font-mono text-slate-600 dark:text-slate-300 font-medium">{report.reportNumber}</span>
                                   <span>•</span>
                                   <span>{language === "ar" ? `زيارة #${report.visitNumber}` : `Visit #${report.visitNumber}`}</span>
                                   {report.createdBy?.name ? (
                                     <>
                                       <span>•</span>
-                                      <span>{report.createdBy.name}</span>
+                                      <span className="font-medium text-slate-700 dark:text-slate-300">{report.createdBy.name}</span>
                                     </>
                                   ) : null}
                                   <span>•</span>
                                   <span>{formatDate(report.createdAt, language)}</span>
-                                </p>
+                                </div>
                               </div>
                             </div>
                             <Link
                               href={`/projects/${data.project.id}/stages/${stage.id}/reports/${report.id}`}
-                              className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-8 gap-1 text-xs text-primary font-medium")}
+                              className={cn(
+                                buttonVariants({ variant: "outline", size: "sm" }),
+                                "h-8 gap-1.5 px-3 text-xs font-medium border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-blue-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 shrink-0 shadow-2xs"
+                              )}
                             >
-                              <Eye className="size-3.5" />
+                              <Eye className="size-3.5 text-slate-400 transition-colors group-hover:text-blue-600 dark:text-slate-500" />
                               {copy.viewReport}
                             </Link>
                           </div>
