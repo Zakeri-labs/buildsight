@@ -168,6 +168,26 @@ async function removeProjectStorageObjects(admin: ReturnType<typeof createAdminC
   return failedBuckets
 }
 
+function normalizeProjectStartDate(value?: string) {
+  const date = value?.trim()
+  if (!date) return { ok: true as const, date: null }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return { ok: false as const, error: "Enter a valid project start date." }
+  }
+
+  const [year, month, day] = date.split("-").map(Number)
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return { ok: false as const, error: "Enter a valid project start date." }
+  }
+
+  return { ok: true as const, date }
+}
+
 function normalizeProjectCoordinates(latitude?: number | null, longitude?: number | null) {
   const hasLatitude = latitude != null
   const hasLongitude = longitude != null
@@ -606,6 +626,7 @@ export async function createProject(input: {
   supervisionTypeOther?: string
   region?: string
   description?: string
+  startDate?: string
   location?: string
   latitude?: number | null
   longitude?: number | null
@@ -645,6 +666,8 @@ export async function createProject(input: {
     if (supervisionTypeOther && supervisionTypeOther.length > MAX_SUPERVISION_TYPE_OTHER_LENGTH) {
       return { ok: false, error: "Supervision type must be 150 characters or fewer." }
     }
+    const projectStartDate = normalizeProjectStartDate(input.startDate)
+    if (!projectStartDate.ok) return { ok: false, error: projectStartDate.error }
 
     const owners = (input.owners ?? []).map((owner) => ({
       name: owner.name.trim(),
@@ -735,6 +758,7 @@ export async function createProject(input: {
         supervision_type_other: supervisionTypeOther,
         region: input.region?.trim() || null,
         description: input.description?.trim() || null,
+        start_date: projectStartDate.date,
         location,
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,

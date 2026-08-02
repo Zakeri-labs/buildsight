@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   Building2,
   Camera,
+  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -128,6 +129,7 @@ export function ProjectCreateForm({
   const [supervisionType, setSupervisionType] = useState<SupervisionTypeValue | "">("")
   const [supervisionTypeOther, setSupervisionTypeOther] = useState("")
   const [location, setLocation] = useState<ProjectLocationValue>(EMPTY_PROJECT_LOCATION)
+  const [projectStartDate, setProjectStartDate] = useState("")
   const [description, setDescription] = useState("")
   const [projectImages, setProjectImages] = useState<ProjectImageDraft[]>([])
   const [assignedUserId, setAssignedUserId] = useState("")
@@ -151,6 +153,7 @@ export function ProjectCreateForm({
   const [ownerIdCardsUploaded, setOwnerIdCardsUploaded] = useState(false)
   const [initialDocumentsUploaded, setInitialDocumentsUploaded] = useState(false)
   const [projectImagesUploaded, setProjectImagesUploaded] = useState(false)
+  const projectStartDateInputRef = useRef<HTMLInputElement>(null)
   const submissionLockRef = useRef(false)
 
   const selectedDocumentCount = initialDocuments.length
@@ -209,6 +212,8 @@ export function ProjectCreateForm({
         noProjectImages: "لم تتم إضافة صور للمشروع",
         moveImageEarlier: "تحريك الصورة إلى اليسار",
         moveImageLater: "تحريك الصورة إلى اليمين",
+        projectStartDate: "تاريخ بدء المشروع",
+        openProjectStartDateCalendar: "فتح تقويم تاريخ بدء المشروع",
         description: "وصف المشروع",
         descriptionPlaceholder: "نبذة مختصرة عن نطاق المشروع وأهدافه",
         ownerCount: "عدد المالكين",
@@ -288,6 +293,8 @@ export function ProjectCreateForm({
         noProjectImages: "No project images selected",
         moveImageEarlier: "Move image earlier",
         moveImageLater: "Move image later",
+        projectStartDate: "Project Start Date",
+        openProjectStartDateCalendar: "Open project start date calendar",
         description: "Project Description",
         descriptionPlaceholder: "Briefly describe the project scope and objectives",
         ownerCount: "Number of Owners",
@@ -630,6 +637,7 @@ export function ProjectCreateForm({
           latitude: location.latitude,
           longitude: location.longitude,
           description,
+          startDate: projectStartDate,
           assignedUserId,
           assignedSupervisorId,
           owners: owners.map((owner) => ({
@@ -867,7 +875,41 @@ export function ProjectCreateForm({
                           />
                         </Field>
                       ) : null}
-                      <div className="flex min-h-40 flex-1 flex-col gap-2">
+                      <Field label={`${copy.projectStartDate} (${copy.optional})`} htmlFor="new-project-start-date">
+                        <div className="relative">
+                          <Input
+                            ref={projectStartDateInputRef}
+                            id="new-project-start-date"
+                            type="date"
+                            value={projectStartDate}
+                            onChange={(event) => setProjectStartDate(event.target.value)}
+                            disabled={pending}
+                            className="h-10 pe-11 [&::-webkit-calendar-picker-indicator]:opacity-0"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute end-1 top-1/2 size-8 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                              const input = projectStartDateInputRef.current
+                              if (!input || pending) return
+                              try {
+                                input.showPicker()
+                              } catch {
+                                input.focus()
+                                input.click()
+                              }
+                            }}
+                            disabled={pending}
+                            aria-label={copy.openProjectStartDateCalendar}
+                            title={copy.openProjectStartDateCalendar}
+                          >
+                            <CalendarDays className="size-4" />
+                          </Button>
+                        </div>
+                      </Field>
+                      <div className="flex min-h-32 flex-1 flex-col gap-2">
                         <Label htmlFor="new-project-description">{copy.description} ({copy.optional})</Label>
                         <textarea
                           id="new-project-description"
@@ -875,8 +917,8 @@ export function ProjectCreateForm({
                           onChange={(event) => setDescription(event.target.value)}
                           placeholder={copy.descriptionPlaceholder}
                           disabled={pending}
-                          rows={6}
-                          className="min-h-32 flex-1 resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 lg:resize-none"
+                          rows={4}
+                          className="min-h-24 flex-1 resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 lg:resize-none"
                         />
                       </div>
                     </div>
