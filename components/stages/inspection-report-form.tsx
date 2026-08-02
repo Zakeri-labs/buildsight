@@ -272,6 +272,8 @@ export function InspectionReportForm({
   response,
   translation,
   canReview,
+  canManage,
+  currentUserId,
   workflowActive,
   canEdit,
   suggestedVisitNumber,
