@@ -113,37 +113,42 @@ export async function saveReportCcRecipientsAction(input: {
       loadProjectCcCandidates(input.projectId),
       loadProjectParticipantsOnly(input.projectId),
     ])
-    const internalCandidateMap = new Map(internalCandidates.map((c) => [c.id, c]))
     const candidateById = new Map<string, ProjectCcCandidate>([
       ...internalCandidates.map((c) => [c.id, c] as const),
       ...participantCandidates.map((c) => [c.id, c] as const),
     ])
 
+    const admin = createAdminClient()
+    const { data: profileRows } = rawInternalIds.length
+      ? await admin.from("profiles").select("id").in("id", rawInternalIds)
+      : { data: [] }
+    const validProfileUserIds = new Set((profileRows ?? []).map((p: any) => p.id as string))
+
     const validInternalUserIds: string[] = []
     const convertedExternalRecipients: ExternalCcRecipientInput[] = [...input.externalRecipients]
 
     for (const id of rawInternalIds) {
-      if (internalCandidateMap.has(id)) {
+      if (validProfileUserIds.has(id)) {
         validInternalUserIds.push(id)
       } else {
         const participant = candidateById.get(id)
-        if (participant && participant.email) {
+        if (participant) {
+          const safeEmail = participant.email?.trim() || `${participant.name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20)}@project.contact`
           convertedExternalRecipients.push({
             clientId: participant.id,
             name: participant.name,
-            email: participant.email,
+            email: safeEmail,
             company: participant.organizationName ?? "",
             role: participant.role ?? "",
           })
-        } else if (!candidateById.has(id)) {
-          return { ok: false, error: "One or more internal CC recipients no longer have access to this project." }
+        } else {
+          return { ok: false, error: "One or more selected recipients no longer have access to this project." }
         }
       }
     }
 
     const externalRows = normalizeExternal(convertedExternalRecipients)
 
-    const admin = createAdminClient()
     const { data: existing, error: existingError } = await admin
       .from("report_cc_recipients")
       .select("id, recipient_type, user_id, external_name, external_email, external_company, external_role")
