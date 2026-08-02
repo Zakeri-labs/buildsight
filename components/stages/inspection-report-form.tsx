@@ -333,7 +333,7 @@ export function InspectionReportForm({
   const [reportType, setReportType] = useState<ReportTypeValue>((REPORT_TYPES.some((item) => item.value === response?.reportType) ? response?.reportType : "inspection_report") as ReportTypeValue)
   const [visitNumber, setVisitNumber] = useState(response?.visitNumber ?? suggestedVisitNumber)
   const [subject, setSubject] = useState(response?.subject ?? "")
-  const [reportTitle, setReportTitle] = useState(response?.reportTitle ?? cleanTermReportName)
+  const [reportTitle, setReportTitle] = useState(response?.reportTitle ? response.reportTitle.replace(/^\d+[\.\s\-]+/, "") : cleanTermReportName)
   const [content, setContent] = useState<TermResponseContent>(() => {
     let initialChecklist: ChecklistItem[] = []
     if (response?.content.checklist?.length) {
@@ -688,9 +688,13 @@ export function InspectionReportForm({
       </Link>
 
       <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-        <span>{project.name}</span><span aria-hidden>/</span><span>{stage.name}</span>
-        {parentTerm ? <><span aria-hidden>/</span><span>{parentTerm.name}</span><span aria-hidden>/</span><span>{reportDefinition.reportName}</span></> : <><span aria-hidden>/</span><span>{reportDefinition.reportName}</span></>}
-        <span aria-hidden>/</span><span className="font-medium text-foreground">{response ? response.reportTitle : "New Report"}</span>
+        <span>{project.name}</span><span aria-hidden>/</span><span>{cleanStageName}</span>
+        {isDirectStageReport ? null : parentTerm ? (
+          <><span aria-hidden>/</span><span>{parentTerm.name.replace(/^\d+[\.\s\-]+/, "")}</span><span aria-hidden>/</span><span>{cleanTermReportName}</span></>
+        ) : (
+          <><span aria-hidden>/</span><span>{cleanTermReportName}</span></>
+        )}
+        <span aria-hidden>/</span><span className="font-medium text-foreground">{response ? response.reportTitle.replace(/^\d+[\.\s\-]+/, "") : (locale === "ar" ? "تقرير جديد" : "New Report")}</span>
       </nav>
 
       <Card className="overflow-hidden border-primary/20 py-0">
@@ -701,7 +705,7 @@ export function InspectionReportForm({
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-white/70">{parentTerm ? "Sub-term Response" : "Construction Inspection / Report"}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl font-semibold sm:text-2xl">{reportDefinition.reportName}</h1>
+                  <h1 className="text-xl font-semibold sm:text-2xl">{cleanTermReportName}</h1>
                   <Badge
                     variant="outline"
                     className={reportDefinition.required
@@ -736,13 +740,13 @@ export function InspectionReportForm({
         </div>
         <CardContent className="grid gap-px bg-border p-0 sm:grid-cols-2 lg:grid-cols-4">
           <HeaderCell label={copy.project} value={project.name} />
-          <HeaderCell label={copy.stage} value={stage.name} />
+          <HeaderCell label={copy.stage} value={cleanStageName} />
           <HeaderCell label={copy.reportNo} value={reportNumber} />
           <HeaderCell label={copy.visitNo} value={String(visitNumber)} />
           <HeaderCell label={copy.date} value={formatDate(reportDate, locale)} />
           <HeaderCell label={copy.responsible} value={reportDefinition.responsibleUser?.name ?? copy.noResponsible} person={reportDefinition.responsibleUser} />
           <HeaderCell label={copy.status} value={statusLabel(status, locale)} />
-          <HeaderCell label={copy.report} value={reportDefinition.reportName} />
+          <HeaderCell label={copy.report} value={cleanTermReportName} />
         </CardContent>
       </Card>
 
