@@ -37,11 +37,8 @@ import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 const SECTION_LABELS: Array<{ key: TranslationSectionKey; en: string; ar: string }> = [
-  { key: "feedback", en: "Feedback", ar: "الملاحظات العامة" },
-  { key: "observation", en: "Observation", ar: "المعاينة" },
-  { key: "findings", en: "Findings", ar: "النتائج" },
-  { key: "recommendations", en: "Recommendations", ar: "التوصيات" },
-  { key: "correctiveActions", en: "Corrective Actions", ar: "الإجراءات التصحيحية" },
+  { key: "observation", en: "Observation / Work Progress", ar: "المعاينة وسير العمل" },
+  { key: "recommendations", en: "Instructions / Recommendations", ar: "التوصيات والتعليمات" },
 ]
 
 const COPY = {
@@ -482,7 +479,12 @@ function MirroredBilingualReport({
           }
         />
 
-        {SECTION_LABELS.map((section) => (
+        {SECTION_LABELS.filter((section) => {
+          const hasEn = Boolean(englishDocument.sections[section.key]?.trim())
+          const hasAr = Boolean(arabic.sections[section.key]?.trim())
+          const hasImg = sourceImages.some((image) => image.sectionHint === section.key)
+          return hasEn || hasAr || hasImg
+        }).map((section) => (
           <MirroredRow
             key={section.key}
             english={
@@ -508,51 +510,55 @@ function MirroredBilingualReport({
           />
         ))}
 
-        <MirroredRow
-          english={
-            <MirroredSectionCard title={labelsEn.checklist} icon={<CheckCircle2 className="size-4" />}>
-              <ChecklistBody content={englishDocument} labels={labelsEn} language="en" />
-              <SourcePdfImageGrid
-                images={sourceImages.filter((image) => image.sectionHint === "checklist")}
-                content={englishDocument}
-                language="en"
-              />
-            </MirroredSectionCard>
-          }
-          arabic={
-            <MirroredSectionCard title={labelsAr.checklist} icon={<CheckCircle2 className="size-4" />}>
-              <ChecklistBody content={arabic} labels={labelsAr} language="ar" />
-              <SourcePdfImageGrid
-                images={sourceImages.filter((image) => image.sectionHint === "checklist")}
-                content={arabic}
-                language="ar"
-              />
-            </MirroredSectionCard>
-          }
-        />
+        {englishDocument.checklist.length > 0 || arabic.checklist.length > 0 || sourceImages.some((i) => i.sectionHint === "checklist") ? (
+          <MirroredRow
+            english={
+              <MirroredSectionCard title={labelsEn.checklist} icon={<CheckCircle2 className="size-4" />}>
+                <ChecklistBody content={englishDocument} labels={labelsEn} language="en" />
+                <SourcePdfImageGrid
+                  images={sourceImages.filter((image) => image.sectionHint === "checklist")}
+                  content={englishDocument}
+                  language="en"
+                />
+              </MirroredSectionCard>
+            }
+            arabic={
+              <MirroredSectionCard title={labelsAr.checklist} icon={<CheckCircle2 className="size-4" />}>
+                <ChecklistBody content={arabic} labels={labelsAr} language="ar" />
+                <SourcePdfImageGrid
+                  images={sourceImages.filter((image) => image.sectionHint === "checklist")}
+                  content={arabic}
+                  language="ar"
+                />
+              </MirroredSectionCard>
+            }
+          />
+        ) : null}
 
-        <MirroredRow
-          english={
-            <MirroredSectionCard title={labelsEn.approvals} icon={<ShieldCheck className="size-4" />}>
-              <ApprovalBody content={englishDocument} labels={{ ...labelsEn, noApprovals: labelsEn.noContent }} language="en" />
-              <SourcePdfImageGrid
-                images={sourceImages.filter((image) => image.sectionHint === "approvals")}
-                content={englishDocument}
-                language="en"
-              />
-            </MirroredSectionCard>
-          }
-          arabic={
-            <MirroredSectionCard title={labelsAr.approvals} icon={<ShieldCheck className="size-4" />}>
-              <ApprovalBody content={arabic} labels={{ ...labelsAr, noApprovals: labelsAr.noContent }} language="ar" />
-              <SourcePdfImageGrid
-                images={sourceImages.filter((image) => image.sectionHint === "approvals")}
-                content={arabic}
-                language="ar"
-              />
-            </MirroredSectionCard>
-          }
-        />
+        {englishDocument.approvals.length > 0 || arabic.approvals.length > 0 || sourceImages.some((i) => i.sectionHint === "approvals") ? (
+          <MirroredRow
+            english={
+              <MirroredSectionCard title={labelsEn.approvals} icon={<ShieldCheck className="size-4" />}>
+                <ApprovalBody content={englishDocument} labels={{ ...labelsEn, noApprovals: labelsEn.noContent }} language="en" />
+                <SourcePdfImageGrid
+                  images={sourceImages.filter((image) => image.sectionHint === "approvals")}
+                  content={englishDocument}
+                  language="en"
+                />
+              </MirroredSectionCard>
+            }
+            arabic={
+              <MirroredSectionCard title={labelsAr.approvals} icon={<ShieldCheck className="size-4" />}>
+                <ApprovalBody content={arabic} labels={{ ...labelsAr, noApprovals: labelsAr.noContent }} language="ar" />
+                <SourcePdfImageGrid
+                  images={sourceImages.filter((image) => image.sectionHint === "approvals")}
+                  content={arabic}
+                  language="ar"
+                />
+              </MirroredSectionCard>
+            }
+          />
+        ) : null}
 
         <MirroredRow
           english={
@@ -932,16 +938,18 @@ const LanguageReport = forwardRef<HTMLElement, {
           </dl>
         </ReportGroup>
 
-        <ReportGroup title={labels.inspectionContent}>
-          <div className="space-y-7">
-            {SECTION_LABELS.map((section) => (
-              <ReportSection key={section.key} title={isArabic ? section.ar : section.en} html={content.sections[section.key]} empty={labels.noContent} />
-            ))}
-          </div>
-        </ReportGroup>
+        {SECTION_LABELS.some((section) => Boolean(content.sections[section.key]?.trim())) ? (
+          <ReportGroup title={labels.inspectionContent}>
+            <div className="space-y-7">
+              {SECTION_LABELS.filter((section) => Boolean(content.sections[section.key]?.trim())).map((section) => (
+                <ReportSection key={section.key} title={isArabic ? section.ar : section.en} html={content.sections[section.key]} empty={labels.noContent} />
+              ))}
+            </div>
+          </ReportGroup>
+        ) : null}
 
-        <ChecklistSection content={content} labels={labels} language={language} />
-        <ApprovalSection content={content} labels={labels} language={language} />
+        {content.checklist.length > 0 ? <ChecklistSection content={content} labels={labels} language={language} /> : null}
+        {content.approvals.length > 0 ? <ApprovalSection content={content} labels={labels} language={language} /> : null}
 
         <ReportGroup title={labels.attachmentsGroup}>
           <div className="space-y-7">
