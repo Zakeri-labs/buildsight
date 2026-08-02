@@ -12,6 +12,12 @@ export default async function NewTermReportPage({ params }: { params: Promise<{ 
   if (!workflowActive) notFound()
   const [ccCandidates, nextVisitNumber] = await Promise.all([loadProjectCcCandidates(projectId), loadNextProjectVisitNumber(projectId)])
   const stageSubterms = data.stage.terms.flatMap((t) => [t, ...t.subterms])
+  const currentUserPerson = {
+    id: session.userId,
+    name: session.profile?.full_name || session.email.split("@")[0] || "User",
+    email: session.email,
+    avatarUrl: session.profile?.avatar_url || null,
+  }
   return (
     <InspectionReportForm
       project={data.project}
@@ -31,6 +37,9 @@ export default async function NewTermReportPage({ params }: { params: Promise<{ 
       response={null}
       translation={null}
       canReview={data.canReview}
+      canManage={data.canManage}
+      currentUserId={data.currentUserId}
+      currentUserPerson={currentUserPerson}
       workflowActive={workflowActive}
       canEdit={true}
       suggestedVisitNumber={nextVisitNumber}

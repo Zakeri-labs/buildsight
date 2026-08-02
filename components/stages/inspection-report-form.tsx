@@ -274,6 +274,7 @@ export function InspectionReportForm({
   canReview,
   canManage,
   currentUserId,
+  currentUserPerson,
   workflowActive,
   canEdit,
   suggestedVisitNumber,
@@ -312,6 +313,7 @@ export function InspectionReportForm({
   canReview: boolean
   canManage?: boolean
   currentUserId?: string
+  currentUserPerson?: ProjectStagePerson | null
   workflowActive: boolean
   canEdit: boolean
   suggestedVisitNumber: number
@@ -692,7 +694,7 @@ export function InspectionReportForm({
   const displayReportNo = response?.reportNumber && response.reportNumber.includes("/")
     ? response.reportNumber
     : `${projectCode}/${formattedVisitNo}`
-  const creatorPerson = response?.createdBy ?? {
+  const creatorPerson = response?.createdBy ?? currentUserPerson ?? {
     id: currentUserId ?? "",
     name: "Project member",
     email: null,
