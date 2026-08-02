@@ -59,14 +59,13 @@ export function StageReportList({ project, stage, workflowActive }: { project: {
     <div className="space-y-5 pb-10">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">{project.name} / Stage</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">{stage.name}</h1>
+          <p className="text-sm text-muted-foreground">{project.name} / {stage.name.replace(/^\d+[\.\s\-]+/, "")}</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">{stage.name.replace(/^\d+[\.\s\-]+/, "")}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span>{stage.reportSummary.total} {stage.reportSummary.total === 1 ? "Report" : "Reports"}</span>
             {stage.reportSummary.pendingReview ? <span>· {stage.reportSummary.pendingReview} Pending Review</span> : null}
             {stage.reportSummary.approved ? <span>· {stage.reportSummary.approved} Approved</span> : null}
           </div>
-          {stage.description ? <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm text-muted-foreground">{stage.description}</p> : null}
         </div>
         {workflowActive ? <Link href={`${baseHref}/reports/new`} className={cn(buttonVariants(), "shrink-0")}><FilePlus2 className="size-4" />Add Report</Link> : null}
       </div>
