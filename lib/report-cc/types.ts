@@ -42,7 +42,6 @@ export type ReportCcNotificationItem = {
   projectId: string
   projectName: string
   stageName: string
-  termName: string
   reportId: string
   reportNumber: string
   reportTitle: string

@@ -18,7 +18,7 @@ type TranslationRow = {
   id: string
   project_id: string
   project_stage_id: string
-  project_stage_term_id: string
+  response_id: string
   translation_status: string
   translated_content: unknown
   original_pdf_url: string | null
@@ -42,7 +42,7 @@ function safeFileName(value: string) {
 async function loadTranslation(admin: ReturnType<typeof createAdminClient>, projectId: string, translationId: string) {
   const { data, error } = await admin
     .from("translation_documents")
-    .select("id, project_id, project_stage_id, project_stage_term_id, translation_status, translated_content, original_pdf_url, arabic_pdf_url, bilingual_pdf_url")
+    .select("id, project_id, project_stage_id, response_id, translation_status, translated_content, original_pdf_url, arabic_pdf_url, bilingual_pdf_url")
     .eq("id", translationId)
     .eq("project_id", projectId)
     .maybeSingle()
@@ -51,23 +51,15 @@ async function loadTranslation(admin: ReturnType<typeof createAdminClient>, proj
 }
 
 async function translationScopeIsActive(admin: ReturnType<typeof createAdminClient>, translation: TranslationRow) {
-  const { data: term, error: termError } = await admin
-    .from("project_stage_terms")
-    .select("is_active, project_stage_id, parent_term_id")
-    .eq("id", translation.project_stage_term_id)
+  const { data: response, error: responseError } = await admin
+    .from("term_responses")
+    .select("project_stage_id")
+    .eq("id", translation.response_id)
+    .eq("project_id", translation.project_id)
     .maybeSingle()
-  if (termError) throw termError
-  if (!term || term.project_stage_id !== translation.project_stage_id) return false
-  let parentActive = true
-  if (term.parent_term_id) {
-    const { data: parent, error: parentError } = await admin
-      .from("project_stage_terms")
-      .select("is_active")
-      .eq("id", term.parent_term_id)
-      .maybeSingle()
-    if (parentError) throw parentError
-    parentActive = parent?.is_active === true
-  }
+  if (responseError) throw responseError
+  if (!response || response.project_stage_id !== translation.project_stage_id) return false
+
   const { data: stage, error: stageError } = await admin
     .from("project_stages")
     .select("status")
@@ -75,7 +67,7 @@ async function translationScopeIsActive(admin: ReturnType<typeof createAdminClie
     .eq("project_id", translation.project_id)
     .maybeSingle()
   if (stageError) throw stageError
-  return Boolean(stage && stage.status !== "disabled" && term.is_active !== false && parentActive)
+  return Boolean(stage && stage.status !== "disabled")
 }
 
 function ensureTranslationReady(translation: TranslationRow, kind: PdfKind) {
@@ -85,7 +77,7 @@ function ensureTranslationReady(translation: TranslationRow, kind: PdfKind) {
 }
 
 function expectedStoragePrefix(translation: TranslationRow, projectId: string, kind: PdfKind) {
-  return `${projectId}/${translation.project_stage_id}/${translation.project_stage_term_id}/${translation.id}/${kind}-`
+  return `${projectId}/${translation.project_stage_id}/${translation.response_id}/${translation.id}/${kind}-`
 }
 
 export async function GET(request: NextRequest) {
@@ -133,7 +125,7 @@ export async function POST(request: NextRequest) {
     const translation = await loadTranslation(admin, projectId, translationId)
     if (!translation) return NextResponse.json({ error: "Translation record not found." }, { status: 404 })
     if (!(await translationScopeIsActive(admin, translation))) {
-      return NextResponse.json({ error: "This stage or term is inactive and cannot accept new documents." }, { status: 409 })
+      return NextResponse.json({ error: "This stage is inactive and cannot accept new documents." }, { status: 409 })
     }
     ensureTranslationReady(translation, kind)
 

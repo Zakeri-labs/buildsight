@@ -15,49 +15,28 @@ export async function GET(request: NextRequest) {
   try {
     const projectId = request.nextUrl.searchParams.get("projectId")
     const stageId = request.nextUrl.searchParams.get("stageId")
-    const termId = request.nextUrl.searchParams.get("termId")
     const responseId = request.nextUrl.searchParams.get("responseId")
-    if (!validUuid(projectId) || !validUuid(stageId) || !validUuid(termId) || !validUuid(responseId)) {
-      return NextResponse.json({ error: "A valid project, stage, term, and report are required." }, { status: 400 })
-    }
-
-    const [userId, selectedProjectId] = await Promise.all([assertProjectMember(projectId), getSelectedProjectId()])
-    if (!selectedProjectId || selectedProjectId !== projectId) {
-      return NextResponse.json({ error: "The selected project is no longer active. Select the project again." }, { status: 400 })
-    }
-
-    const data = await loadStageTranslationPageData(projectId, stageId, termId, userId, responseId)
-    if (!data) return NextResponse.json({ error: "Translation document not found." }, { status: 404 })
-    return NextResponse.json({ data }, { headers: { "Cache-Control": "no-store" } })
+    if (!validUuid(projectId) || !validUuid(stageId) || !validUuid(responseId)) return NextResponse.json({ error: "A valid project, stage, and report are required." }, { status: 400 })
+    const selectedProjectId = await getSelectedProjectId()
+    if (selectedProjectId && selectedProjectId !== projectId) return NextResponse.json({ error: "Select this project before opening its report." }, { status: 403 })
+    const userId = await assertProjectMember(projectId)
+    const data = await loadStageTranslationPageData(projectId, stageId, userId, responseId)
+    if (!data) return NextResponse.json({ error: "Report not found." }, { status: 404 })
+    return NextResponse.json({ data })
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to load the document translation."
-    const status = error instanceof AuthzError ? 403 : 400
-    return NextResponse.json({ error: message }, { status, headers: { "Cache-Control": "no-store" } })
+    return NextResponse.json({ error: error instanceof AuthzError ? error.message : error instanceof Error ? error.message : "Unable to load translation." }, { status: error instanceof AuthzError ? 403 : 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json() as Record<string, unknown>
-    if (!validUuid(body.projectId) || !validUuid(body.stageId) || !validUuid(body.termId) || !validUuid(body.responseId)) {
-      return NextResponse.json({ error: "A valid project, stage, term, and report are required." }, { status: 400 })
-    }
-
+    const body = await request.json().catch(() => ({}))
+    if (!validUuid(body.projectId) || !validUuid(body.stageId) || !validUuid(body.responseId)) return NextResponse.json({ error: "A valid project, stage, and report are required." }, { status: 400 })
     const selectedProjectId = await getSelectedProjectId()
-    if (!selectedProjectId || selectedProjectId !== body.projectId) {
-      return NextResponse.json({ error: "The selected project is no longer active. Select the project again." }, { status: 400 })
-    }
-
-    const translation = await generateStageTranslation({
-      projectId: body.projectId,
-      stageId: body.stageId,
-      termId: body.termId,
-      responseId: body.responseId,
-    })
-    return NextResponse.json({ translation }, { headers: { "Cache-Control": "no-store" } })
+    if (selectedProjectId && selectedProjectId !== body.projectId) return NextResponse.json({ error: "Select this project before translating its report." }, { status: 403 })
+    const translation = await generateStageTranslation({ projectId: body.projectId, stageId: body.stageId, responseId: body.responseId })
+    return NextResponse.json({ translation })
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to generate the document translation."
-    const status = error instanceof AuthzError ? 403 : 400
-    return NextResponse.json({ error: message }, { status, headers: { "Cache-Control": "no-store" } })
+    return NextResponse.json({ error: error instanceof AuthzError ? error.message : error instanceof Error ? error.message : "Unable to generate translation." }, { status: error instanceof AuthzError ? 403 : 500 })
   }
 }

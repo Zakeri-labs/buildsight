@@ -1,4 +1,4 @@
-import { REPORT_TYPES, sanitizeReportHtml, type TermResponseContent } from "@/lib/stages/execution"
+import { REPORT_TYPES, sanitizeReportHtml, type StageReportContent } from "@/lib/stages/execution"
 import type {
   AttachmentTranslation,
   TranslationApprovalItem,
@@ -35,7 +35,7 @@ export function buildOriginalTranslationContent(input: {
   reportTitle: string
   subject: string | null
   reportType: string
-  responseContent: TermResponseContent
+  responseContent: StageReportContent
   approvals: Array<{ id: string; reviewerName: string; decision: string; comments: string | null; decidedAt: string }>
 }): TranslationReportContent {
   return {

@@ -1,4 +1,4 @@
-export const PROJECT_STAGE_TERM_STATUSES = [
+export const PROJECT_WORKFLOW_STATUSES = [
   "not_started",
   "draft",
   "in_progress",
@@ -9,7 +9,7 @@ export const PROJECT_STAGE_TERM_STATUSES = [
   "completed",
 ] as const
 
-export type ProjectStageTermStatus = (typeof PROJECT_STAGE_TERM_STATUSES)[number]
+export type ProjectWorkflowStatus = (typeof PROJECT_WORKFLOW_STATUSES)[number]
 
 export const RESPONSE_STATUSES = [
   "draft",
@@ -46,7 +46,7 @@ export function reportTypeLabel(value: string, locale: "en" | "ar" = "en") {
     .replace(/\b\w/g, (character) => character.toUpperCase())
 }
 
-export const SUBTERM_RESPONSE_TYPES = [
+export const STAGE_REPORT_RESPONSE_TYPES = [
   { value: "combined", label: "Combined Response" },
   { value: "text", label: "Text Response" },
   { value: "inspection_checklist", label: "Inspection Checklist" },
@@ -58,14 +58,14 @@ export const SUBTERM_RESPONSE_TYPES = [
   { value: "photo_evidence", label: "Photo Evidence" },
 ] as const
 
-export type SubtermResponseType = (typeof SUBTERM_RESPONSE_TYPES)[number]["value"]
+export type StageReportResponseType = (typeof STAGE_REPORT_RESPONSE_TYPES)[number]["value"]
 
-export function isSubtermResponseType(value: unknown): value is SubtermResponseType {
-  return typeof value === "string" && SUBTERM_RESPONSE_TYPES.some((item) => item.value === value)
+export function isStageReportResponseType(value: unknown): value is StageReportResponseType {
+  return typeof value === "string" && STAGE_REPORT_RESPONSE_TYPES.some((item) => item.value === value)
 }
 
-export function subtermResponseTypeLabel(value: SubtermResponseType) {
-  return SUBTERM_RESPONSE_TYPES.find((item) => item.value === value)?.label ?? "Combined Response"
+export function stageReportResponseTypeLabel(value: StageReportResponseType) {
+  return STAGE_REPORT_RESPONSE_TYPES.find((item) => item.value === value)?.label ?? "Combined Response"
 }
 
 export const STAGE_EVIDENCE_BUCKET = "project-stage-evidence"
@@ -110,7 +110,7 @@ export type ChecklistItem = {
   notes?: string
 }
 
-export type TermResponseContent = Record<ReportSectionKey, string> & {
+export type StageReportContent = Record<ReportSectionKey, string> & {
   checklist: ChecklistItem[]
   answer: string
   selection: string
@@ -119,7 +119,7 @@ export type TermResponseContent = Record<ReportSectionKey, string> & {
   dateValue: string
 }
 
-export const EMPTY_TERM_RESPONSE_CONTENT: TermResponseContent = {
+export const EMPTY_STAGE_REPORT_CONTENT: StageReportContent = {
   feedback: "",
   observation: "",
   findings: "",
@@ -150,7 +150,7 @@ export function isReportType(value: string): value is ReportTypeValue {
   return REPORT_TYPES.some((item) => item.value === value)
 }
 
-export function statusLabel(status: ProjectStageTermStatus | ResponseStatus, locale: "en" | "ar" = "en") {
+export function statusLabel(status: ProjectWorkflowStatus | ResponseStatus, locale: "en" | "ar" = "en") {
   const labels = {
     not_started: ["Not Started", "لم يبدأ"],
     draft: ["Draft", "مسودة"],
@@ -160,11 +160,11 @@ export function statusLabel(status: ProjectStageTermStatus | ResponseStatus, loc
     approved: ["Approved", "معتمد"],
     rejected: ["Rejected", "مرفوض"],
     completed: ["Completed", "مكتمل"],
-  } satisfies Record<ProjectStageTermStatus, readonly [string, string]>
+  } satisfies Record<ProjectWorkflowStatus, readonly [string, string]>
   return labels[status][locale === "ar" ? 1 : 0]
 }
 
-export function statusTone(status: ProjectStageTermStatus | ResponseStatus) {
+export function statusTone(status: ProjectWorkflowStatus | ResponseStatus) {
   switch (status) {
     case "approved":
     case "completed":

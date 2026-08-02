@@ -8,7 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 
 export type AiSummaryInspectionSource = {
   id: string
-  termId: string
+  stageId: string
   title: string
   reportNumber: string
   stageName: string
@@ -55,7 +55,7 @@ export async function loadAiSummarySources(projectId: string): Promise<AiSummary
   const [{ data: responses, error: responseError }, { data: documents, error: documentError }] = await Promise.all([
     admin
       .from("term_responses")
-      .select("id, project_stage_term_id, report_number, report_title, status, updated_at")
+      .select("id, project_stage_id, report_number, report_title, status, updated_at")
       .eq("project_id", projectId)
       .order("updated_at", { ascending: false }),
     admin
@@ -69,11 +69,11 @@ export async function loadAiSummarySources(projectId: string): Promise<AiSummary
 
   const responseRows = responses ?? []
   const responseIds = responseRows.map((row: any) => row.id as string)
-  const termIds = responseRows.map((row: any) => row.project_stage_term_id as string)
+  const stageIds = Array.from(new Set(responseRows.map((row: any) => row.project_stage_id as string).filter(Boolean)))
 
-  const [{ data: terms }, { data: attachments }, { data: approvals }] = await Promise.all([
-    termIds.length
-      ? admin.from("project_stage_terms").select("id, project_stage_id, parent_term_id, report_name, is_active").in("id", termIds)
+  const [{ data: stages }, { data: attachments }, { data: approvals }] = await Promise.all([
+    stageIds.length
+      ? admin.from("project_stages").select("id, name, status").in("id", stageIds)
       : Promise.resolve({ data: [] as any[] }),
     responseIds.length
       ? admin.from("response_attachments").select("response_id, attachment_kind").in("response_id", responseIds)
@@ -83,37 +83,7 @@ export async function loadAiSummarySources(projectId: string): Promise<AiSummary
       : Promise.resolve({ data: [] as any[] }),
   ])
 
-  const stageIds = Array.from(new Set((terms ?? []).map((row: any) => row.project_stage_id as string)))
-  const parentIds = Array.from(new Set((terms ?? []).map((row: any) => row.parent_term_id).filter(Boolean))) as string[]
-  const [{ data: stages }, { data: parents }] = await Promise.all([
-    stageIds.length
-      ? admin.from("project_stages").select("id, name, status").in("id", stageIds)
-      : Promise.resolve({ data: [] as any[] }),
-    parentIds.length
-      ? admin.from("project_stage_terms").select("id, is_active").in("id", parentIds)
-      : Promise.resolve({ data: [] as any[] }),
-  ])
-  const parentActive = new Map<string, boolean>((parents ?? []).map((row: any) => [row.id, row.is_active !== false]))
-
-  const termMap = new Map<string, { project_stage_id: string; parent_term_id: string | null; report_name: string; is_active: boolean }>(
-    (terms ?? []).map((row: any) => [row.id, {
-      project_stage_id: row.project_stage_id,
-      parent_term_id: row.parent_term_id,
-      report_name: row.report_name,
-      is_active: row.is_active !== false,
-    }]),
-  )
-  const stageMap = new Map<string, { name: string; status: string }>(
-    (stages ?? []).map((row: any) => [row.id, { name: row.name, status: row.status }]),
-  )
-  const activeTermIds = new Set(
-    Array.from(termMap.entries())
-      .filter(([, term]) => {
-        const stage = stageMap.get(term.project_stage_id)
-        return term.is_active && (!term.parent_term_id || parentActive.get(term.parent_term_id) === true) && Boolean(stage) && stage?.status !== "disabled"
-      })
-      .map(([termId]) => termId),
-  )
+  const stageMap = new Map<string, { name: string; status: string }>((stages ?? []).map((row: any) => [row.id, { name: row.name, status: row.status }]))
   const attachmentCounts = new Map<string, { images: number; documents: number }>()
   for (const row of attachments ?? []) {
     const current = attachmentCounts.get(row.response_id) ?? { images: 0, documents: 0 }
@@ -125,16 +95,15 @@ export async function loadAiSummarySources(projectId: string): Promise<AiSummary
   for (const row of approvals ?? []) approvalCounts.set(row.response_id, (approvalCounts.get(row.response_id) ?? 0) + 1)
 
   const inspectionSources: AiSummaryInspectionSource[] = responseRows
-    .filter((row: any) => activeTermIds.has(row.project_stage_term_id))
+    .filter((row: any) => stageMap.get(row.project_stage_id)?.status !== "disabled")
     .map((row: any) => {
-      const term = termMap.get(row.project_stage_term_id)
       const counts = attachmentCounts.get(row.id) ?? { images: 0, documents: 0 }
       return {
         id: row.id,
-        termId: row.project_stage_term_id,
-        title: row.report_title || term?.report_name || "Inspection report",
+        stageId: row.project_stage_id,
+        title: row.report_title || "Inspection report",
         reportNumber: row.report_number,
-        stageName: term ? stageMap.get(term.project_stage_id)?.name ?? "Project stage" : "Project stage",
+        stageName: stageMap.get(row.project_stage_id)?.name ?? "Project stage",
         status: row.status,
         updatedAt: row.updated_at,
         imageCount: counts.images,

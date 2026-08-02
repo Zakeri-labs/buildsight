@@ -34,7 +34,7 @@ export async function getAppNotificationFeed({
     reference: item.reportNumber,
     body: `${item.reportTitle}${item.reportNumber ? ` (${item.reportNumber})` : ""} was submitted for review in ${item.projectName}.`,
     projectName: item.projectName,
-    context: `${item.stageName} · ${item.subtermName ?? item.parentTermName}`,
+    context: item.stageName,
     actorId: item.submittedById,
     actorName: item.submittedBy,
     createdAt: item.submittedAt,
@@ -71,7 +71,7 @@ export async function getAppNotificationFeed({
       ? `You have been CC'd on a report translation in ${item.projectName}.`
       : `You have been CC'd on a report in ${item.projectName}.`,
     projectName: item.projectName,
-    context: `${item.stageName} · ${item.termName}`,
+    context: item.stageName,
     actorId: item.addedById,
     actorName: item.addedByName,
     createdAt: item.createdAt,

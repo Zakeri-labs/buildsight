@@ -70,7 +70,7 @@ const COPY = {
     project: "Project Name",
     projectReference: "Project Reference",
     stage: "Stage",
-    term: "Term Name",
+    report: "Report",
     document: "Document",
     documentNumber: "Report Number",
     visitNumber: "Visit Number",
@@ -117,7 +117,7 @@ const COPY = {
     project: "اسم المشروع",
     projectReference: "مرجع المشروع",
     stage: "المرحلة",
-    term: "اسم البند",
+    report: "التقرير",
     document: "المستند",
     documentNumber: "رقم التقرير",
     visitNumber: "رقم الزيارة",
@@ -151,7 +151,7 @@ type ReportLabels = {
   project: string
   projectReference: string
   stage: string
-  term: string
+  report: string
   documentNumber: string
   visitNumber: string
   date: string
@@ -223,7 +223,7 @@ export function StageTranslationViewer({
       const response = await fetch("/api/stage-translations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: data.project.id, stageId: data.stage.id, termId: data.term.id, responseId: data.response.id }),
+        body: JSON.stringify({ projectId: data.project.id, stageId: data.stage.id, responseId: data.response.id }),
       })
       const payload = await response.json().catch(() => null)
       if (!response.ok) throw new Error(payload?.error || "Unable to generate the document translation.")
@@ -303,7 +303,7 @@ export function StageTranslationViewer({
 
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
-      <Link href={`/projects/${data.project.id}/stages/${data.stage.id}/terms/${data.term.id}/reports/${data.response.id}`} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+      <Link href={`/projects/${data.project.id}/stages/${data.stage.id}/reports/${data.response.id}`} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4 flip-rtl" />{copy.back}
       </Link>
 
@@ -317,7 +317,7 @@ export function StageTranslationViewer({
               <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
                 <Badge variant="outline">{data.project.name}</Badge>
                 <Badge variant="outline">{data.stage.name}</Badge>
-                <Badge variant="outline">{data.term.name}</Badge>
+                <Badge variant="outline">{data.response.reportTitle}</Badge>
                 <Badge variant="outline" className={statusTone(data.response.status as any)}>{statusLabel(data.response.status as any, locale)}</Badge>
               </div>
             </div>
@@ -341,7 +341,7 @@ export function StageTranslationViewer({
         <CardContent className="grid gap-px bg-border p-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <HeaderMeta label={copy.project} value={data.project.name} />
           <HeaderMeta label={copy.stage} value={data.stage.name} />
-          <HeaderMeta label={copy.term} value={data.term.name} />
+          <HeaderMeta label={copy.report} value={data.response.reportTitle} />
           <HeaderMeta label={copy.documentNumber} value={data.response.reportNumber} />
           <HeaderMeta label={copy.document} value={data.response.reportTitle} />
           <HeaderMeta label={copy.date} value={formatDate(data.response.createdAt, locale)} />
@@ -794,7 +794,7 @@ function ReportHeaderCell({
         <div className="min-w-0">
           <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-blue-700"><Languages className="size-4" />{title}</div>
           <h2 className="break-words text-2xl font-bold tracking-tight text-slate-950">{content.reportTitle || data.response.reportTitle}</h2>
-          <p className="mt-1 text-sm text-slate-600">{content.termName || data.term.name}</p>
+          <p className="mt-1 text-sm text-slate-600">{data.response.reportTitle}</p>
         </div>
         <div className="shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">{isArabic ? "AR" : "EN"}</div>
       </div>
@@ -828,7 +828,7 @@ function ProjectInformationBody({
       <ReportMeta label={labels.project} value={data.project.name} empty={labels.noContent} />
       <ReportMeta label={labels.projectReference} value={data.project.code} empty={labels.noContent} />
       <ReportMeta label={labels.stage} value={content.stageName || data.stage.name} empty={labels.noContent} />
-      <ReportMeta label={labels.term} value={content.termName || data.term.name} empty={labels.noContent} />
+      <ReportMeta label={labels.report} value={data.response.reportTitle} empty={labels.noContent} />
       <ReportMeta label={labels.documentNumber} value={data.response.reportNumber} empty={labels.noContent} />
       <ReportMeta label={labels.visitNumber} value={String(data.response.visitNumber || "")} empty={labels.noContent} />
       <ReportMeta label={labels.date} value={formatDate(data.response.createdAt, language)} empty={labels.noContent} />
@@ -896,7 +896,7 @@ const LanguageReport = forwardRef<HTMLElement, {
           <div>
             <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-blue-700"><Languages className="size-4" />{title}</div>
             <h2 className="text-2xl font-bold tracking-tight text-slate-950">{content.reportTitle || data.response.reportTitle}</h2>
-            <p className="mt-1 text-sm text-slate-600">{content.termName || data.term.name}</p>
+            <p className="mt-1 text-sm text-slate-600">{data.response.reportTitle}</p>
           </div>
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">{isArabic ? "AR" : "EN"}</div>
         </div>
@@ -909,7 +909,7 @@ const LanguageReport = forwardRef<HTMLElement, {
             <ReportMeta label={labels.project} value={data.project.name} />
             <ReportMeta label={labels.projectReference} value={data.project.code || "—"} />
             <ReportMeta label={labels.stage} value={content.stageName || data.stage.name} />
-            <ReportMeta label={labels.term} value={content.termName || data.term.name} />
+            <ReportMeta label={labels.report} value={data.response.reportTitle} />
             <ReportMeta label={labels.documentNumber} value={data.response.reportNumber} />
             <ReportMeta label={labels.visitNumber} value={String(data.response.visitNumber)} />
             <ReportMeta label={labels.date} value={formatDate(data.response.createdAt, language)} />

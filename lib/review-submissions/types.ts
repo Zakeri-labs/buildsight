@@ -7,9 +7,6 @@ export type ReviewSubmissionItem = {
   projectName: string
   stageId: string
   stageName: string
-  termId: string
-  parentTermName: string
-  subtermName: string | null
   submittedById: string | null
   submittedBy: string
   submittedAt: string
@@ -19,7 +16,4 @@ export type ReviewSubmissionItem = {
   href: string
 }
 
-export type ReviewSubmissionFeed = {
-  canReview: boolean
-  items: ReviewSubmissionItem[]
-}
+export type ReviewSubmissionFeed = { canReview: boolean; items: ReviewSubmissionItem[] }
