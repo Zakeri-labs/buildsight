@@ -23,6 +23,8 @@ import {
 } from "@/lib/initial-documents/config"
 import type { InitialDocumentListItem } from "@/lib/initial-documents/types"
 import { useI18n } from "@/lib/i18n"
+import { ProjectOverviewTableColumns, projectOverviewTableCellClass } from "@/components/projects/project-overview-table-columns"
+import { cn } from "@/lib/utils"
 
 export type { InitialDocumentListItem } from "@/lib/initial-documents/types"
 
@@ -154,7 +156,7 @@ export function InitialDocumentsList({
   const otherCount = documents.filter((item) => item.uploadCategory === "additional_documents" || (!item.uploadCategory && item.category === "other")).length
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className={cn("flex flex-col", embedded ? "gap-0" : "gap-5")}>
       {!embedded ? (
         <div className="flex items-start gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300">
@@ -169,7 +171,7 @@ export function InitialDocumentsList({
       ) : null}
 
       {errorMessage ? (
-        <div role="alert" className="rounded-xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive">
+        <div role="alert" className={cn("rounded-xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive", embedded && "m-4 sm:m-5")}>
           {copy.error} {errorMessage}
         </div>
       ) : (
@@ -215,18 +217,19 @@ export function InitialDocumentsList({
 
           {filtered.length ? (
             <>
-              <div className="hidden overflow-hidden rounded-2xl border bg-card md:block">
+              <div className={cn("hidden md:block", !embedded && "overflow-hidden rounded-2xl border bg-card")}>
                 <div className="overflow-x-auto">
-                  <table className="w-full table-fixed text-sm">
-                    <thead className="border-b bg-muted/35 text-xs font-semibold text-muted-foreground">
+                  <table className={cn("w-full table-fixed text-sm", selectedProjectId && "min-w-[820px]")}>
+                    {selectedProjectId ? <ProjectOverviewTableColumns layout="documents" /> : null}
+                    <thead className="border-b bg-muted/45 text-xs font-semibold text-muted-foreground">
                       <tr>
-                        <th className="w-[30%] px-4 py-3 text-start">{copy.fileName}</th>
+                        <th className={selectedProjectId ? projectOverviewTableCellClass.headerFirst : "w-[30%] px-4 py-3 text-start"}>{copy.fileName}</th>
                         {!selectedProjectId ? <th className="w-[17%] px-4 py-3 text-start">{copy.project}</th> : null}
-                        <th className="px-4 py-3 text-start">{copy.category}</th>
-                        <th className="px-4 py-3 text-start">{copy.uploadedBy}</th>
-                        <th className="px-4 py-3 text-start">{copy.uploadedDate}</th>
-                        <th className="px-4 py-3 text-start">{copy.size}</th>
-                        <th className="px-4 py-3 text-end">{copy.actions}</th>
+                        <th className={selectedProjectId ? projectOverviewTableCellClass.headerMiddle : "px-4 py-3 text-start"}>{copy.category}</th>
+                        <th className={selectedProjectId ? projectOverviewTableCellClass.headerMiddle : "px-4 py-3 text-start"}>{copy.uploadedBy}</th>
+                        <th className={selectedProjectId ? projectOverviewTableCellClass.headerMiddle : "px-4 py-3 text-start"}>{copy.uploadedDate}</th>
+                        <th className={selectedProjectId ? projectOverviewTableCellClass.headerMiddle : "px-4 py-3 text-start"}>{copy.size}</th>
+                        <th className={selectedProjectId ? projectOverviewTableCellClass.headerLast : "px-4 py-3 text-end"}>{copy.actions}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -236,7 +239,7 @@ export function InitialDocumentsList({
                 </div>
               </div>
 
-              <div className="grid gap-3 md:hidden">
+              <div className={cn("grid gap-3 md:hidden", embedded && "p-4 sm:p-5")}>
                 {filtered.map((item) => {
                   const Icon = fileIcon(item)
                   const categoryLabel = getDisplayCategory(item, isArabic).label
@@ -262,7 +265,7 @@ export function InitialDocumentsList({
               </div>
             </>
           ) : (
-            <div className="flex flex-col items-center rounded-2xl border bg-card px-6 py-16 text-center">
+            <div className={cn("flex flex-col items-center rounded-2xl border bg-card px-6 py-16 text-center", embedded && "m-4 sm:m-5")}>
               <span className="flex size-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground"><FolderOpen className="size-6" /></span>
               <h2 className="mt-4 font-semibold">{selectedProjectId ? copy.scopedEmpty : copy.globalEmpty}</h2>
               <p className="mt-1 text-sm text-muted-foreground">{copy.helper}</p>
@@ -304,18 +307,18 @@ function DocumentRow({ item, showProject, locale, copy, onPreview }: {
   const category = getDisplayCategory(item, isArabic)
   return (
     <tr className="hover:bg-muted/20">
-      <td className="max-w-[300px] px-4 py-3.5">
-        <div className="flex items-center gap-3">
+      <td className={cn("max-w-[300px]", showProject ? "px-4 py-3.5" : projectOverviewTableCellClass.bodyFirst)}>
+        <div className="flex min-w-0 items-center gap-3">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary"><Icon className="size-4" /></span>
           <span className="truncate font-medium" title={item.fileName}>{item.fileName}</span>
         </div>
       </td>
       {showProject ? <td className="max-w-[180px] truncate px-4 py-3.5 text-muted-foreground" title={item.projectName}>{item.projectName}</td> : null}
-      <td className="whitespace-nowrap px-4 py-3.5"><span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">{category.label}</span></td>
-      <td className="whitespace-nowrap px-4 py-3.5 text-muted-foreground">{item.uploadedBy}</td>
-      <td className="whitespace-nowrap px-4 py-3.5 text-muted-foreground">{formatDate(item.createdAt, locale)}</td>
-      <td className="whitespace-nowrap px-4 py-3.5 text-muted-foreground">{formatInitialDocumentFileSize(item.fileSize)}</td>
-      <td className="whitespace-nowrap px-4 py-3.5 text-end">
+      <td className={showProject ? "whitespace-nowrap px-4 py-3.5" : cn(projectOverviewTableCellClass.bodyMiddle, "whitespace-nowrap")}><span className="inline-block max-w-full truncate rounded-md bg-muted px-2 py-1 text-xs font-medium" title={category.label}>{category.label}</span></td>
+      <td className={showProject ? "whitespace-nowrap px-4 py-3.5 text-muted-foreground" : cn(projectOverviewTableCellClass.bodyMiddle, "truncate text-muted-foreground")} title={item.uploadedBy}>{item.uploadedBy}</td>
+      <td className={showProject ? "whitespace-nowrap px-4 py-3.5 text-muted-foreground" : cn(projectOverviewTableCellClass.bodyMiddle, "whitespace-nowrap text-muted-foreground")}>{formatDate(item.createdAt, locale)}</td>
+      <td className={showProject ? "whitespace-nowrap px-4 py-3.5 text-muted-foreground" : cn(projectOverviewTableCellClass.bodyMiddle, "whitespace-nowrap text-muted-foreground")}>{formatInitialDocumentFileSize(item.fileSize)}</td>
+      <td className={showProject ? "whitespace-nowrap px-4 py-3.5 text-end" : cn(projectOverviewTableCellClass.bodyLast, "whitespace-nowrap")}>
         <div className="inline-flex items-center gap-1">
           {canPreview(item) ? <button type="button" onClick={onPreview} title={copy.preview} aria-label={`${copy.preview} ${item.fileName}`} className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"><Eye className="size-4" /></button> : null}
           <a href={`/api/initial-documents?id=${encodeURIComponent(item.id)}&download=1`} title={copy.download} aria-label={`${copy.download} ${item.fileName}`} className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"><Download className="size-4" /></a>

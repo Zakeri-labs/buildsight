@@ -22,11 +22,20 @@ export const SUPERVISION_TYPES = [
   { value: "other", label: "Other", labelAr: "أخرى" },
 ] as const
 
+export const PROJECT_PRIORITIES = [
+  { value: "low", label: "Low", labelAr: "منخفضة" },
+  { value: "medium", label: "Medium", labelAr: "متوسطة" },
+  { value: "high", label: "High", labelAr: "عالية" },
+  { value: "urgent", label: "Urgent", labelAr: "عاجلة" },
+] as const
+
 export type ProjectTypeValue = (typeof PROJECT_TYPES)[number]["value"]
 export type SupervisionTypeValue = (typeof SUPERVISION_TYPES)[number]["value"]
+export type ProjectPriorityValue = (typeof PROJECT_PRIORITIES)[number]["value"]
 
 const projectTypeValues = new Set<string>(PROJECT_TYPES.map((item) => item.value))
 const supervisionTypeValues = new Set<string>(SUPERVISION_TYPES.map((item) => item.value))
+const projectPriorityValues = new Set<string>(PROJECT_PRIORITIES.map((item) => item.value))
 
 const LEGACY_SUPERVISION_LABELS: Record<string, string> = {
   monthly_6_times: "Monthly 6 Times",
@@ -46,6 +55,17 @@ export function isProjectTypeValue(value: unknown): value is ProjectTypeValue {
 
 export function isSupervisionTypeValue(value: unknown): value is SupervisionTypeValue {
   return typeof value === "string" && supervisionTypeValues.has(value)
+}
+
+export function isProjectPriorityValue(value: unknown): value is ProjectPriorityValue {
+  return typeof value === "string" && projectPriorityValues.has(value)
+}
+
+export function projectPriorityLabel(value: string | null | undefined, isArabic = false): string {
+  if (!value?.trim()) return isArabic ? "غير محدد" : "Not set"
+  const option = PROJECT_PRIORITIES.find((item) => item.value === value)
+  if (option) return isArabic ? option.labelAr : option.label
+  return value.trim().replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase())
 }
 
 export function supervisionTypeLabel(value: string | null | undefined, otherValue?: string | null): string {

@@ -27,6 +27,7 @@ import { ProjectImageDisplay } from "@/components/projects/project-image-display
 import { ProjectLocationPreviewDialog } from "@/components/projects/project-location-preview-dialog"
 import { ProjectEditDialog } from "@/components/projects/project-edit-dialog"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,25 +49,40 @@ import {
 } from "@/components/ui/tooltip"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import type { ProjectTypeValue } from "@/lib/projects/project-options"
+import { supervisionTypeLabel, type ProjectTypeValue } from "@/lib/projects/project-options"
 import {
   deleteProject,
   getProjectDeletionImpact,
   type ProjectDeletionImpact,
 } from "@/lib/actions/projects"
+import {
+  PROJECT_STATUS_BADGE_CLASS,
+  PROJECT_STATUS_OPTIONS,
+  normalizeProjectStatus,
+  projectStatusLabel,
+  type ProjectStatusValue,
+} from "@/lib/projects/project-status"
 
-export type ProjectStatus = "In Progress" | "Planning" | "On Hold" | "Completed"
-export type OrgRole = "Consultant" | "Contractor" | "Client" | "Government" | "Third Party"
+export type ProjectStatus = ProjectStatusValue
 export type ProjectType = "Residential" | "Commercial" | "Hospitality" | "Infrastructure" | "Industrial"
 
-const PROJECT_TABLE_COLUMN_WIDTHS = ["20%", "13%", "11%", "7%", "11%", "10%", "10%", "12%", "6%"] as const
+const PROJECT_TABLE_COLUMN_WIDTHS = [
+  "19%",
+  "13%",
+  "12.5%",
+  "5.5%",
+  "10.5%",
+  "10%",
+  "10%",
+  "13.5%",
+  "6%",
+] as const
 
 export interface ProjectRow {
   id: string
   code: string
   name: string
   ownerClient: string
-  orgRole: OrgRole
   address: string
   projectType: ProjectType | "—"
   projectTypeValue?: ProjectTypeValue | null
@@ -111,10 +127,10 @@ const mockProjects: ProjectRow[] = [
     code: "PRJ-001",
     name: "Sunset Residential Tower",
     ownerClient: "Sunset Development",
-    orgRole: "Consultant",
     address: "Muscat, Al Khuwair",
+    supervisionType: "full_time",
     projectType: "Residential",
-    status: "In Progress",
+    status: "active",
     startDate: "May 10, 2024",
     progress: 62,
     imageUrl: "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=120&q=80",
@@ -124,10 +140,10 @@ const mockProjects: ProjectRow[] = [
     code: "PRJ-002",
     name: "Greenfield Office Complex",
     ownerClient: "Greenfield LLC",
-    orgRole: "Consultant",
     address: "Muscat, Ghala",
+    supervisionType: "part_time",
     projectType: "Commercial",
-    status: "In Progress",
+    status: "active",
     startDate: "Apr 02, 2024",
     progress: 45,
     imageUrl: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=120&q=80",
@@ -137,10 +153,10 @@ const mockProjects: ProjectRow[] = [
     code: "PRJ-003",
     name: "Harbor View Hotel",
     ownerClient: "Harbor Hotels",
-    orgRole: "Contractor",
     address: "Sohar, Corniche Road",
+    supervisionType: "resident",
     projectType: "Hospitality",
-    status: "In Progress",
+    status: "active",
     startDate: "Jun 01, 2024",
     progress: 58,
     imageUrl: "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=120&q=80",
@@ -150,10 +166,10 @@ const mockProjects: ProjectRow[] = [
     code: "PRJ-004",
     name: "City Center Mall",
     ownerClient: "City Center Holdings",
-    orgRole: "Consultant",
     address: "Muscat, Seeb",
+    supervisionType: "milestone_based",
     projectType: "Commercial",
-    status: "Planning",
+    status: "not_started",
     startDate: "Jul 01, 2024",
     progress: 18,
     imageUrl: "https://images.unsplash.com/photo-1519999482648-25049ddd37b1?auto=format&fit=crop&w=120&q=80",
@@ -163,10 +179,10 @@ const mockProjects: ProjectRow[] = [
     code: "PRJ-005",
     name: "Airport Road Bridge",
     ownerClient: "Oman Transport Authority",
-    orgRole: "Client",
     address: "Muscat, Airport Road",
+    supervisionType: "periodic",
     projectType: "Infrastructure",
-    status: "On Hold",
+    status: "stopped",
     startDate: "Mar 14, 2024",
     progress: 35,
     imageUrl: "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=120&q=80",
@@ -176,10 +192,10 @@ const mockProjects: ProjectRow[] = [
     code: "PRJ-006",
     name: "Al Raha Beach Villas",
     ownerClient: "Al Raha Properties",
-    orgRole: "Consultant",
     address: "Muscat, Qurum",
+    supervisionType: "full_time",
     projectType: "Residential",
-    status: "In Progress",
+    status: "active",
     startDate: "Feb 09, 2024",
     progress: 71,
     imageUrl: "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=120&q=80",
@@ -189,10 +205,10 @@ const mockProjects: ProjectRow[] = [
     code: "PRJ-007",
     name: "Muscat Industrial Park",
     ownerClient: "Industrial Dev. Co.",
-    orgRole: "Government",
     address: "Muscat, Rusayl",
+    supervisionType: "consultancy_only",
     projectType: "Industrial",
-    status: "Completed",
+    status: "completed",
     startDate: "Sep 03, 2023",
     progress: 100,
     imageUrl: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?auto=format&fit=crop&w=120&q=80",
@@ -202,10 +218,10 @@ const mockProjects: ProjectRow[] = [
     code: "PRJ-008",
     name: "Al Mouj Marina",
     ownerClient: "Al Mouj LLC",
-    orgRole: "Third Party",
     address: "Muscat, Al Mouj",
+    supervisionType: "on_call",
     projectType: "Infrastructure",
-    status: "Planning",
+    status: "not_started",
     startDate: "Aug 12, 2024",
     progress: 8,
     imageUrl: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=120&q=80",
@@ -266,9 +282,9 @@ export function ProjectsList({
   }, [projectRows, searchQuery, selectedStatus, selectedType, selectedOwner])
 
   const totalProjects = projectRows.length
-  const activeProjects = projectRows.filter((project) => project.status === "In Progress").length
-  const onHoldProjects = projectRows.filter((project) => project.status === "On Hold").length
-  const completedProjects = projectRows.filter((project) => project.status === "Completed").length
+  const activeProjects = projectRows.filter((project) => project.status === "active").length
+  const stoppedProjects = projectRows.filter((project) => project.status === "stopped").length
+  const completedProjects = projectRows.filter((project) => project.status === "completed").length
   const typeOptions = Array.from(new Set(projectRows.map((project) => project.projectType).filter((type) => type !== "—")))
   const ownerOptions = Array.from(new Set(projectRows.map((project) => project.ownerClient).filter((owner) => owner !== "—")))
   const createdProject = createdProjectId ? projectRows.find((project) => project.id === createdProjectId) : undefined
@@ -350,16 +366,16 @@ export function ProjectsList({
           </div>
         </div>
 
-        {/* Card 3: On Hold */}
+        {/* Card 3: Stopped */}
         <div className="flex items-center gap-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
+          <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400">
             <PauseCircle className="size-6" />
           </div>
           <div className="flex flex-col">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              {locale === "ar" ? "المتوقفة مؤقتاً" : "On Hold"}
+              {locale === "ar" ? "المتوقفة" : "Stopped"}
             </span>
-            <span className="text-2xl font-extrabold text-amber-600 dark:text-amber-400">{onHoldProjects}</span>
+            <span className="text-2xl font-extrabold text-red-600 dark:text-red-400">{stoppedProjects}</span>
           </div>
         </div>
 
@@ -421,11 +437,11 @@ export function ProjectsList({
           value={selectedStatus}
           onChange={setSelectedStatus}
           options={[
-            { label: "All Statuses", value: "all" },
-            { label: "In Progress", value: "In Progress" },
-            { label: "Planning", value: "Planning" },
-            { label: "On Hold", value: "On Hold" },
-            { label: "Completed", value: "Completed" },
+            { label: locale === "ar" ? "جميع الحالات" : "All Statuses", value: "all" },
+            ...PROJECT_STATUS_OPTIONS.map((status) => ({
+              label: locale === "ar" ? status.labelAr : status.label,
+              value: status.value,
+            })),
           ]}
         />
 
@@ -467,8 +483,8 @@ export function ProjectsList({
 
       {/* Main Data Table */}
       <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900">
-        <div className="w-full overflow-hidden">
-          <table className="w-full table-fixed text-start text-sm">
+        <div className="w-full overflow-x-auto">
+          <table className="w-full min-w-[960px] table-fixed text-start text-sm">
             <colgroup>
               {PROJECT_TABLE_COLUMN_WIDTHS.map((width, index) => (
                 <col key={`${width}-${index}`} style={{ width }} />
@@ -476,15 +492,15 @@ export function ProjectsList({
             </colgroup>
             <thead>
               <tr className="border-b border-slate-200/80 bg-slate-50/80 text-xs font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-400">
-                <th className="truncate px-3 py-3.5 text-start font-semibold">Project</th>
-                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Owner / Client</th>
-                <th className="truncate px-2.5 py-3.5 text-start font-semibold" title="Organization Role">Organization Role</th>
-                <th className="truncate px-1 py-3.5 text-center font-semibold">Location</th>
-                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Project Type</th>
-                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Status</th>
-                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Start Date</th>
-                <th className="truncate px-2.5 py-3.5 text-start font-semibold">Progress</th>
-                <th className="truncate px-2 py-3.5 text-end font-semibold">Actions</th>
+                <th className="truncate px-3 py-3.5 text-start align-middle font-semibold">Project</th>
+                <th className="truncate px-2 py-3.5 text-start align-middle font-semibold">Owner / Client</th>
+                <th className="truncate px-2 py-3.5 text-start align-middle font-semibold" title="Supervision Type">Supervision Type</th>
+                <th className="truncate px-1 py-3.5 text-center align-middle font-semibold">Location</th>
+                <th className="truncate px-2 py-3.5 text-start align-middle font-semibold">Project Type</th>
+                <th className="truncate px-1.5 py-3.5 text-center align-middle font-semibold">Status</th>
+                <th className="truncate px-1.5 py-3.5 text-center align-middle font-semibold">Start Date</th>
+                <th className="truncate px-2 py-3.5 text-start align-middle font-semibold">Progress</th>
+                <th className="truncate px-2 py-3.5 text-end align-middle font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -498,7 +514,7 @@ export function ProjectsList({
               {filteredProjects.map((row) => (
                 <tr key={row.id} className="transition-colors hover:bg-slate-50/60 dark:hover:bg-slate-800/30">
                   {/* Project info with thumbnail */}
-                  <td className="min-w-0 overflow-hidden px-3 py-4">
+                  <td className="min-w-0 overflow-hidden px-3 py-4 align-middle">
                     <div className="flex min-w-0 items-center gap-2.5">
                       <ProjectImageDisplay
                         src={row.imageUrl}
@@ -522,79 +538,83 @@ export function ProjectsList({
                   </td>
 
                   {/* Owner / Client */}
-                  <td className="min-w-0 overflow-hidden px-2.5 py-4 text-xs font-medium text-slate-700 dark:text-slate-300">
+                  <td className="min-w-0 overflow-hidden px-2 py-4 align-middle text-xs font-medium text-slate-700 dark:text-slate-300">
                     <TruncatedText>{row.ownerClient}</TruncatedText>
                   </td>
 
-                  {/* Organization Role */}
-                  <td className="min-w-0 overflow-hidden px-2.5 py-4">
-                    <div className="min-w-0 overflow-hidden">
-                      <OrgRoleBadge role={row.orgRole} />
-                    </div>
+                  {/* Supervision Type */}
+                  <td className="min-w-0 overflow-hidden px-2 py-4 align-middle text-xs font-medium text-slate-700 dark:text-slate-300">
+                    <TruncatedText>
+                      {row.supervisionType?.trim()
+                        ? supervisionTypeLabel(row.supervisionType, row.supervisionTypeOther)
+                        : "Not set"}
+                    </TruncatedText>
                   </td>
 
                   {/* Location */}
-                  <td className="min-w-0 overflow-hidden px-1 py-4 text-center">
-                    {(() => {
-                      const hasAddress = row.address.trim().length > 0 && row.address.trim() !== "—"
-                      const hasCoordinates =
-                        Number.isFinite(row.latitude) &&
-                        Number.isFinite(row.longitude) &&
-                        Number(row.latitude) >= -90 &&
-                        Number(row.latitude) <= 90 &&
-                        Number(row.longitude) >= -180 &&
-                        Number(row.longitude) <= 180
-                      const hasLocation = hasAddress || hasCoordinates
-                      const locationLabel = locale === "ar" ? "عرض موقع المشروع" : "View project location"
+                  <td className="min-w-0 overflow-hidden px-1 py-4 text-center align-middle">
+                    <div className="flex w-full items-center justify-center">
+                      {(() => {
+                        const hasAddress = row.address.trim().length > 0 && row.address.trim() !== "—"
+                        const hasCoordinates =
+                          Number.isFinite(row.latitude) &&
+                          Number.isFinite(row.longitude) &&
+                          Number(row.latitude) >= -90 &&
+                          Number(row.latitude) <= 90 &&
+                          Number(row.longitude) >= -180 &&
+                          Number(row.longitude) <= 180
+                        const hasLocation = hasAddress || hasCoordinates
+                        const locationLabel = locale === "ar" ? "عرض موقع المشروع" : "View project location"
 
-                      return (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={<span className="inline-flex rounded-lg" />}
-                          >
-                            <Button
-                              type="button"
-                              size="icon-sm"
-                              variant="outline"
-                              disabled={!hasLocation}
-                              onClick={() => hasLocation && setLocationTarget(row)}
-                              aria-label={locationLabel}
-                              className="size-7 rounded-lg border-slate-200 text-slate-500 shadow-2xs hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-blue-800 dark:hover:bg-blue-950/40 dark:hover:text-blue-400"
+                        return (
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={<span className="inline-flex rounded-lg" />}
                             >
-                              <MapPin className="size-3.5" aria-hidden="true" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {hasLocation
-                              ? locationLabel
-                              : locale === "ar"
-                                ? "موقع المشروع غير متاح"
-                                : "Project location unavailable"}
-                          </TooltipContent>
-                        </Tooltip>
-                      )
-                    })()}
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="outline"
+                                disabled={!hasLocation}
+                                onClick={() => hasLocation && setLocationTarget(row)}
+                                aria-label={locationLabel}
+                                className="size-7 rounded-lg border-slate-200 text-slate-500 shadow-2xs hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-blue-800 dark:hover:bg-blue-950/40 dark:hover:text-blue-400"
+                              >
+                                <MapPin className="size-3.5" aria-hidden="true" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {hasLocation
+                                ? locationLabel
+                                : locale === "ar"
+                                  ? "موقع المشروع غير متاح"
+                                  : "Project location unavailable"}
+                            </TooltipContent>
+                          </Tooltip>
+                        )
+                      })()}
+                    </div>
                   </td>
 
                   {/* Project Type */}
-                  <td className="min-w-0 overflow-hidden px-2.5 py-4 text-xs text-slate-600 dark:text-slate-400">
+                  <td className="min-w-0 overflow-hidden px-2 py-4 align-middle text-xs text-slate-600 dark:text-slate-400">
                     <TruncatedText>{row.projectType}</TruncatedText>
                   </td>
 
                   {/* Status Badge */}
-                  <td className="min-w-0 overflow-hidden px-2.5 py-4">
-                    <div className="min-w-0 overflow-hidden">
+                  <td className="min-w-0 overflow-hidden px-1.5 py-4 text-center align-middle">
+                    <div className="flex min-w-0 items-center justify-center overflow-hidden">
                       <ProjectStatusBadge status={row.status} />
                     </div>
                   </td>
 
                   {/* Start Date */}
-                  <td className="min-w-0 overflow-hidden px-2.5 py-4 text-xs text-slate-600 dark:text-slate-400">
-                    <TruncatedText>{row.startDate}</TruncatedText>
+                  <td className="min-w-0 overflow-hidden px-1.5 py-4 text-center align-middle text-xs text-slate-600 dark:text-slate-400">
+                    <TruncatedText className="text-center">{row.startDate}</TruncatedText>
                   </td>
 
                   {/* Progress bar */}
-                  <td className="min-w-0 overflow-hidden px-2.5 py-4">
+                  <td className="min-w-0 overflow-hidden px-2 py-4 align-middle">
                     <div className="flex min-w-0 flex-col gap-1.5">
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                         {row.progress}%
@@ -609,7 +629,7 @@ export function ProjectsList({
                   </td>
 
                   {/* Actions */}
-                  <td className="overflow-hidden px-2 py-4 text-end">
+                  <td className="overflow-hidden px-2 py-4 text-end align-middle">
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         render={
@@ -739,6 +759,7 @@ export function ProjectsList({
                     projectTypeValue: updated.projectTypeValue,
                     supervisionType: updated.supervisionType,
                     supervisionTypeOther: updated.supervisionTypeOther,
+                    status: normalizeProjectStatus(updated.status),
                     description: updated.description,
                     latitude: updated.latitude,
                     longitude: updated.longitude,
@@ -881,33 +902,15 @@ function DropdownFilter({
   )
 }
 
-function OrgRoleBadge({ role }: { role: OrgRole }) {
-  const styles: Record<OrgRole, string> = {
-    Consultant: "bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400",
-    Contractor: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400",
-    Client: "bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400",
-    Government: "bg-cyan-50 text-cyan-600 dark:bg-cyan-950/60 dark:text-cyan-400",
-    "Third Party": "bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400",
-  }
-
-  return (
-    <span className={cn("inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-medium", styles[role])}>
-      {role}
-    </span>
-  )
-}
-
 function ProjectStatusBadge({ status }: { status: ProjectStatus }) {
-  const styles: Record<ProjectStatus, string> = {
-    "In Progress": "bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400",
-    Planning: "bg-purple-50 text-purple-600 dark:bg-purple-950/60 dark:text-purple-400",
-    "On Hold": "bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400",
-    Completed: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400",
-  }
+  const { locale } = useI18n()
 
   return (
-    <span className={cn("inline-flex items-center rounded-full px-3 py-0.5 text-xs font-medium", styles[status])}>
-      {status}
-    </span>
+    <Badge
+      variant="outline"
+      className={cn("h-6 rounded-md px-2 text-[11px] font-medium shadow-none", PROJECT_STATUS_BADGE_CLASS[status])}
+    >
+      {projectStatusLabel(status, locale === "ar")}
+    </Badge>
   )
 }

@@ -12,12 +12,20 @@ import type { ActionResult } from "@/lib/actions/invitations"
 import { coordinateLabel } from "@/lib/locations/types"
 import { SELECTED_PROJECT_COOKIE } from "@/lib/project-scope"
 import {
+  isProjectPriorityValue,
   isProjectTypeValue,
   isSupervisionTypeValue,
+  type ProjectPriorityValue,
   type ProjectTypeValue,
   type SupervisionTypeValue,
 } from "@/lib/projects/project-options"
 import { validateOwnerIdCardFile } from "@/lib/projects/owner-id-card"
+import {
+  calculateProjectOutstandingAmount,
+  normalizeOptionalProjectAmount,
+  PROJECT_FINANCIAL_NOTE_MAX_LENGTH,
+  PROJECT_INITIAL_REMARKS_MAX_LENGTH,
+} from "@/lib/projects/project-financial"
 import {
   detectProjectImageMimeType,
   isAllowedProjectImageType,
@@ -41,6 +49,15 @@ export type ProjectDeletionImpact = {
 }
 
 const MAX_SUPERVISION_TYPE_OTHER_LENGTH = 150
+
+const PROJECT_STATUS_VALUES = new Set([
+  "active",
+  "inactive",
+  "completed",
+  "stopped",
+  "final_visit",
+  "not_started",
+])
 
 const PROJECT_STORAGE_BUCKETS = [
   "project-images",
@@ -168,6 +185,34 @@ async function removeProjectStorageObjects(admin: ReturnType<typeof createAdminC
   return failedBuckets
 }
 
+function normalizeOptionalProjectDate(value: string | null | undefined, fieldLabel: string) {
+  const date = value?.trim()
+  if (!date) return { ok: true as const, date: null }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return { ok: false as const, error: `Enter a valid ${fieldLabel}.` }
+  }
+
+  const [year, month, day] = date.split("-").map(Number)
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return { ok: false as const, error: `Enter a valid ${fieldLabel}.` }
+  }
+
+  return { ok: true as const, date }
+}
+
+function normalizeOptionalVisitCount(value: number | null | undefined, fieldLabel: string) {
+  if (value == null) return { ok: true as const, value: null }
+  if (!Number.isInteger(value) || value < 0) {
+    return { ok: false as const, error: `${fieldLabel} must be a non-negative whole number.` }
+  }
+  return { ok: true as const, value }
+}
+
 function normalizeProjectCoordinates(latitude?: number | null, longitude?: number | null) {
   const hasLatitude = latitude != null
   const hasLongitude = longitude != null
@@ -287,7 +332,21 @@ export async function updateProject(input: {
   projectType?: ProjectTypeValue
   supervisionType?: SupervisionTypeValue
   supervisionTypeOther?: string | null
+  status?: "active" | "inactive" | "completed" | "stopped" | "final_visit" | "not_started"
+  plotNo?: string
+  supervisionStartDate?: string | null
+  priority?: ProjectPriorityValue | null
+  includedStructureVisits?: number | null
+  includedFinishingVisits?: number | null
+  structureSupervisionFee?: string | number | null
+  finishingSupervisionFee?: string | number | null
+  receivedAmount?: string | number | null
+  nextPaymentAmount?: string | number | null
+  nextPaymentDueDate?: string | null
+  invoiceReferencePaymentNote?: string | null
+  initialRemarks?: string | null
   description?: string
+  region?: string
   location?: string
   latitude?: number | null
   longitude?: number | null
@@ -297,6 +356,34 @@ export async function updateProject(input: {
     if (name.length < 2) return { ok: false, error: "Project name is too short." }
     if (input.projectType !== undefined && !isProjectTypeValue(input.projectType)) {
       return { ok: false, error: "Select a valid project type." }
+    }
+    if (input.status !== undefined && !PROJECT_STATUS_VALUES.has(input.status)) {
+      return { ok: false, error: "Select a valid project status." }
+    }
+    if (input.priority !== undefined && input.priority !== null && !isProjectPriorityValue(input.priority)) {
+      return { ok: false, error: "Select a valid project priority." }
+    }
+    const supervisionStartDate = normalizeOptionalProjectDate(input.supervisionStartDate, "supervision start date")
+    if (!supervisionStartDate.ok) return { ok: false, error: supervisionStartDate.error }
+    const includedStructureVisits = normalizeOptionalVisitCount(input.includedStructureVisits, "Included structure visits")
+    if (!includedStructureVisits.ok) return { ok: false, error: includedStructureVisits.error }
+    const includedFinishingVisits = normalizeOptionalVisitCount(input.includedFinishingVisits, "Included finishing visits")
+    if (!includedFinishingVisits.ok) return { ok: false, error: includedFinishingVisits.error }
+    const structureSupervisionFee = normalizeOptionalProjectAmount(input.structureSupervisionFee, "Structure Supervision Fee")
+    if (!structureSupervisionFee.ok) return { ok: false, error: structureSupervisionFee.error }
+    const finishingSupervisionFee = normalizeOptionalProjectAmount(input.finishingSupervisionFee, "Finishing Supervision Fee")
+    if (!finishingSupervisionFee.ok) return { ok: false, error: finishingSupervisionFee.error }
+    const receivedAmount = normalizeOptionalProjectAmount(input.receivedAmount, "Received Amount")
+    if (!receivedAmount.ok) return { ok: false, error: receivedAmount.error }
+    const nextPaymentAmount = normalizeOptionalProjectAmount(input.nextPaymentAmount, "Next Payment Amount")
+    if (!nextPaymentAmount.ok) return { ok: false, error: nextPaymentAmount.error }
+    const nextPaymentDueDate = normalizeOptionalProjectDate(input.nextPaymentDueDate, "next payment due date")
+    if (!nextPaymentDueDate.ok) return { ok: false, error: nextPaymentDueDate.error }
+    if ((input.invoiceReferencePaymentNote?.trim().length ?? 0) > PROJECT_FINANCIAL_NOTE_MAX_LENGTH) {
+      return { ok: false, error: `Invoice Reference / Payment Note must be ${PROJECT_FINANCIAL_NOTE_MAX_LENGTH} characters or fewer.` }
+    }
+    if ((input.initialRemarks?.trim().length ?? 0) > PROJECT_INITIAL_REMARKS_MAX_LENGTH) {
+      return { ok: false, error: `Initial Remarks must be ${PROJECT_INITIAL_REMARKS_MAX_LENGTH} characters or fewer.` }
     }
     let supervisionTypeOther: string | null | undefined
     if (input.supervisionType !== undefined) {
@@ -325,11 +412,33 @@ export async function updateProject(input: {
 
     const { data: project, error: lookupError } = await admin
       .from("projects")
-      .select("supervising_organization_id")
+      .select("supervising_organization_id, structure_supervision_fee, finishing_supervision_fee, received_amount")
       .eq("id", input.projectId)
       .maybeSingle()
     if (lookupError) throw lookupError
     if (!project) return { ok: false, error: "Project not found." }
+
+    const hasRelatedFinancialUpdate =
+      input.structureSupervisionFee !== undefined ||
+      input.finishingSupervisionFee !== undefined ||
+      input.receivedAmount !== undefined
+    const effectiveStructureFee = input.structureSupervisionFee !== undefined
+      ? structureSupervisionFee.value
+      : (project.structure_supervision_fee == null ? null : Number(project.structure_supervision_fee))
+    const effectiveFinishingFee = input.finishingSupervisionFee !== undefined
+      ? finishingSupervisionFee.value
+      : (project.finishing_supervision_fee == null ? null : Number(project.finishing_supervision_fee))
+    const effectiveReceivedAmount = input.receivedAmount !== undefined
+      ? receivedAmount.value
+      : (project.received_amount == null ? null : Number(project.received_amount))
+    const recalculatedOutstandingAmount = calculateProjectOutstandingAmount(
+      effectiveStructureFee,
+      effectiveFinishingFee,
+      effectiveReceivedAmount,
+    )
+    if (hasRelatedFinancialUpdate && recalculatedOutstandingAmount < 0) {
+      return { ok: false, error: "Received Amount cannot exceed the total supervision fees." }
+    }
 
     const updates: Record<string, unknown> = {
       name,
@@ -344,7 +453,29 @@ export async function updateProject(input: {
       updates.supervision_type = input.supervisionType
       updates.supervision_type_other = supervisionTypeOther ?? null
     }
+    if (input.status !== undefined) updates.status = input.status
+    if (input.plotNo !== undefined) updates.plot_no = input.plotNo.trim() || null
+    if (input.supervisionStartDate !== undefined) updates.supervision_start_date = supervisionStartDate.date
+    if (input.priority !== undefined) updates.priority = input.priority
+    if (input.includedStructureVisits !== undefined) updates.included_structure_visits = includedStructureVisits.value
+    if (input.includedFinishingVisits !== undefined) updates.included_finishing_visits = includedFinishingVisits.value
+    if (input.structureSupervisionFee !== undefined) updates.structure_supervision_fee = structureSupervisionFee.value
+    if (input.finishingSupervisionFee !== undefined) updates.finishing_supervision_fee = finishingSupervisionFee.value
+    if (input.receivedAmount !== undefined) updates.received_amount = receivedAmount.value
+    if (hasRelatedFinancialUpdate) {
+      updates.outstanding_amount =
+        effectiveStructureFee != null || effectiveFinishingFee != null || effectiveReceivedAmount != null
+          ? recalculatedOutstandingAmount
+          : null
+    }
+    if (input.nextPaymentAmount !== undefined) updates.next_payment_amount = nextPaymentAmount.value
+    if (input.nextPaymentDueDate !== undefined) updates.next_payment_due_date = nextPaymentDueDate.date
+    if (input.invoiceReferencePaymentNote !== undefined) {
+      updates.invoice_reference_payment_note = input.invoiceReferencePaymentNote?.trim() || null
+    }
+    if (input.initialRemarks !== undefined) updates.initial_remarks = input.initialRemarks?.trim() || null
     if (input.description !== undefined) updates.description = input.description.trim() || null
+    if (input.region !== undefined) updates.region = input.region.trim() || null
 
     const { error } = await admin
       .from("projects")
@@ -604,8 +735,21 @@ export async function createProject(input: {
   projectType?: ProjectTypeValue
   supervisionType?: SupervisionTypeValue
   supervisionTypeOther?: string
+  plotNo?: string
+  supervisionStartDate?: string
+  priority?: ProjectPriorityValue
+  includedStructureVisits?: number | null
+  includedFinishingVisits?: number | null
+  structureSupervisionFee?: string | number | null
+  finishingSupervisionFee?: string | number | null
+  receivedAmount?: string | number | null
+  nextPaymentAmount?: string | number | null
+  nextPaymentDueDate?: string | null
+  invoiceReferencePaymentNote?: string | null
+  initialRemarks?: string | null
   region?: string
   description?: string
+  startDate?: string
   location?: string
   latitude?: number | null
   longitude?: number | null
@@ -644,6 +788,40 @@ export async function createProject(input: {
     }
     if (supervisionTypeOther && supervisionTypeOther.length > MAX_SUPERVISION_TYPE_OTHER_LENGTH) {
       return { ok: false, error: "Supervision type must be 150 characters or fewer." }
+    }
+    const projectStartDate = normalizeOptionalProjectDate(input.startDate, "project start date")
+    if (!projectStartDate.ok) return { ok: false, error: projectStartDate.error }
+    const supervisionStartDate = normalizeOptionalProjectDate(input.supervisionStartDate, "supervision start date")
+    if (!supervisionStartDate.ok) return { ok: false, error: supervisionStartDate.error }
+    const priority = input.priority ?? "medium"
+    if (!isProjectPriorityValue(priority)) return { ok: false, error: "Select a valid project priority." }
+    const includedStructureVisits = normalizeOptionalVisitCount(input.includedStructureVisits, "Included structure visits")
+    if (!includedStructureVisits.ok) return { ok: false, error: includedStructureVisits.error }
+    const includedFinishingVisits = normalizeOptionalVisitCount(input.includedFinishingVisits, "Included finishing visits")
+    if (!includedFinishingVisits.ok) return { ok: false, error: includedFinishingVisits.error }
+    const structureSupervisionFee = normalizeOptionalProjectAmount(input.structureSupervisionFee, "Structure Supervision Fee")
+    if (!structureSupervisionFee.ok) return { ok: false, error: structureSupervisionFee.error }
+    const finishingSupervisionFee = normalizeOptionalProjectAmount(input.finishingSupervisionFee, "Finishing Supervision Fee")
+    if (!finishingSupervisionFee.ok) return { ok: false, error: finishingSupervisionFee.error }
+    const receivedAmount = normalizeOptionalProjectAmount(input.receivedAmount ?? 0, "Received Amount")
+    if (!receivedAmount.ok) return { ok: false, error: receivedAmount.error }
+    const nextPaymentAmount = normalizeOptionalProjectAmount(input.nextPaymentAmount, "Next Payment Amount")
+    if (!nextPaymentAmount.ok) return { ok: false, error: nextPaymentAmount.error }
+    const nextPaymentDueDate = normalizeOptionalProjectDate(input.nextPaymentDueDate, "next payment due date")
+    if (!nextPaymentDueDate.ok) return { ok: false, error: nextPaymentDueDate.error }
+    if ((input.invoiceReferencePaymentNote?.trim().length ?? 0) > PROJECT_FINANCIAL_NOTE_MAX_LENGTH) {
+      return { ok: false, error: `Invoice Reference / Payment Note must be ${PROJECT_FINANCIAL_NOTE_MAX_LENGTH} characters or fewer.` }
+    }
+    if ((input.initialRemarks?.trim().length ?? 0) > PROJECT_INITIAL_REMARKS_MAX_LENGTH) {
+      return { ok: false, error: `Initial Remarks must be ${PROJECT_INITIAL_REMARKS_MAX_LENGTH} characters or fewer.` }
+    }
+    const outstandingAmount = calculateProjectOutstandingAmount(
+      structureSupervisionFee.value,
+      finishingSupervisionFee.value,
+      receivedAmount.value,
+    )
+    if (outstandingAmount < 0) {
+      return { ok: false, error: "Received Amount cannot exceed the total supervision fees." }
     }
 
     const owners = (input.owners ?? []).map((owner) => ({
@@ -733,8 +911,22 @@ export async function createProject(input: {
         project_type: input.projectType || null,
         supervision_type: input.supervisionType || null,
         supervision_type_other: supervisionTypeOther,
+        plot_no: input.plotNo?.trim() || null,
+        supervision_start_date: supervisionStartDate.date,
+        priority,
+        included_structure_visits: includedStructureVisits.value,
+        included_finishing_visits: includedFinishingVisits.value,
+        structure_supervision_fee: structureSupervisionFee.value,
+        finishing_supervision_fee: finishingSupervisionFee.value,
+        received_amount: receivedAmount.value,
+        outstanding_amount: outstandingAmount,
+        next_payment_amount: nextPaymentAmount.value,
+        next_payment_due_date: nextPaymentDueDate.date,
+        invoice_reference_payment_note: input.invoiceReferencePaymentNote?.trim() || null,
+        initial_remarks: input.initialRemarks?.trim() || null,
         region: input.region?.trim() || null,
         description: input.description?.trim() || null,
+        start_date: projectStartDate.date,
         location,
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,

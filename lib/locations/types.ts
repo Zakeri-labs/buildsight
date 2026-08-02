@@ -18,6 +18,7 @@ export type LocationSuggestion = {
   state?: string
   city?: string
   district?: string
+  area?: string
   street?: string
   postcode?: string
 }
@@ -38,4 +39,8 @@ export function hasCoordinates<T extends { latitude: number | null; longitude: n
 
 export function coordinateLabel(latitude: number, longitude: number) {
   return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+}
+
+export function locationAreaName(suggestion: LocationSuggestion | null | undefined) {
+  return suggestion?.area?.trim() || suggestion?.district?.trim() || suggestion?.city?.trim() || ""
 }
