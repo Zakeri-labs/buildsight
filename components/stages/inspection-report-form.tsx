@@ -681,6 +681,18 @@ export function InspectionReportForm({
     }
   }
 
+  const formattedVisitNo = String(visitNumber).padStart(3, "0")
+  const projectCode = project.code?.trim() || "PROJ"
+  const displayReportNo = response?.reportNumber && response.reportNumber.includes("/")
+    ? response.reportNumber
+    : `${projectCode}/${formattedVisitNo}`
+  const creatorPerson = response?.createdBy ?? {
+    id: currentUserId ?? "",
+    name: "Project member",
+    email: null,
+    avatarUrl: null,
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 pb-24">
       <Link href={reportsHref} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
@@ -738,15 +750,17 @@ export function InspectionReportForm({
             </div>
           </div>
         </div>
-        <CardContent className="grid gap-px bg-border p-0 sm:grid-cols-2 lg:grid-cols-4">
+        <CardContent className="grid gap-px bg-border p-0 sm:grid-cols-2 lg:grid-cols-3">
           <HeaderCell label={copy.project} value={project.name} />
           <HeaderCell label={copy.stage} value={cleanStageName} />
-          <HeaderCell label={copy.reportNo} value={reportNumber} />
-          <HeaderCell label={copy.visitNo} value={String(visitNumber)} />
+          <HeaderCell label={copy.visitNo} value={formattedVisitNo} />
+          <HeaderCell label={copy.reportNo} value={displayReportNo} />
           <HeaderCell label={copy.date} value={formatDate(reportDate, locale)} />
-          <HeaderCell label={copy.responsible} value={reportDefinition.responsibleUser?.name ?? copy.noResponsible} person={reportDefinition.responsibleUser} />
-          <HeaderCell label={copy.status} value={statusLabel(status, locale)} />
-          <HeaderCell label={copy.report} value={cleanTermReportName} />
+          <HeaderCell
+            label={locale === "ar" ? "مقدم التقرير" : "Created By"}
+            value={creatorPerson.name}
+            person={creatorPerson}
+          />
         </CardContent>
       </Card>
 

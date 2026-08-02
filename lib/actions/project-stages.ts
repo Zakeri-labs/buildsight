@@ -288,59 +288,50 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         throw error
       }
     } else {
-      let created = false
-      for (const candidate of reportNumberCandidates(input.responseId)) {
-        reportNumber = candidate
-        const { error } = await userClient.from("term_responses").insert({
-          id: input.responseId,
-          project_id: input.projectId,
-          project_stage_id: projectStageId,
-          project_stage_term_id: legacyTermId,
-          report_number: reportNumber,
-          visit_number: 1,
-          report_type: input.reportType,
-          subject: input.subject?.trim() || null,
-          report_title: title,
-          response_content: content,
-          status: nextStatus,
-          responsible_user_id: responsibleUserId,
-          approval_required: approvalRequired,
-          response_type: configuredResponseType,
-          template_reference: directStage ? input.templateReference?.trim() || null : term!.template_reference ?? null,
-          instructions: directStage ? input.instructions?.trim() || null : term!.instructions ?? null,
-          created_by: actorId,
-          updated_by: actorId,
-          submitted_at: input.submit ? now : null,
-          completed_at: input.submit && !approvalRequired ? now : null,
-        })
-        if (!error) {
-          created = true
-          break
-        }
-        if (error.code !== "23505") throw error
-
-        const { data: retry, error: retryError } = await admin
-          .from("term_responses")
-          .select("id, project_id, project_stage_id, project_stage_term_id, report_number, visit_number, status")
-          .eq("id", input.responseId)
-          .maybeSingle()
-        if (retryError) throw retryError
-        if (retry) {
-          if (retry.project_id !== input.projectId || retry.project_stage_id !== projectStageId || retry.project_stage_term_id !== legacyTermId) {
-            return { ok: false, error: "The report identifier is already in use." }
-          }
-          return { ok: true, data: { responseId: retry.id, reportNumber: retry.report_number, visitNumber: retry.visit_number, status: retry.status } }
-        }
-      }
-      if (!created) return { ok: false, error: "Could not allocate a unique report number. Try again." }
-      const { data: inserted, error: insertedError } = await admin
+      const { data: maxVisit } = await admin
         .from("term_responses")
         .select("visit_number")
-        .eq("id", input.responseId)
         .eq("project_id", input.projectId)
-        .single()
-      if (insertedError) throw insertedError
-      assignedVisitNumber = inserted.visit_number
+        .order("visit_number", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      assignedVisitNumber = (maxVisit?.visit_number ?? 0) + 1
+      const formattedVisitNo = String(assignedVisitNumber).padStart(3, "0")
+
+      const { data: proj } = await admin
+        .from("projects")
+        .select("code")
+        .eq("id", input.projectId)
+        .maybeSingle()
+      const projCode = proj?.code?.trim() || "PROJ"
+      reportNumber = `${projCode}/${formattedVisitNo}`
+
+      const { error: insertError } = await userClient.from("term_responses").insert({
+        id: input.responseId,
+        project_id: input.projectId,
+        project_stage_id: projectStageId,
+        project_stage_term_id: legacyTermId,
+        report_number: reportNumber,
+        visit_number: assignedVisitNumber,
+        report_type: input.reportType,
+        subject: input.subject?.trim() || null,
+        report_title: title,
+        response_content: content,
+        status: nextStatus,
+        responsible_user_id: responsibleUserId,
+        approval_required: approvalRequired,
+        response_type: configuredResponseType,
+        template_reference: directStage ? input.templateReference?.trim() || null : term!.template_reference ?? null,
+        instructions: directStage ? input.instructions?.trim() || null : term!.instructions ?? null,
+        created_by: actorId,
+        updated_by: actorId,
+        submitted_at: input.submit ? now : null,
+        completed_at: input.submit && !approvalRequired ? now : null,
+      })
+      if (insertError) {
+        if (insertError.code === "23505") return { ok: false, error: "A report with this identifier already exists." }
+        throw insertError
+      }
     }
 
     await audit({
