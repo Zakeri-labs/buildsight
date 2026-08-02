@@ -103,6 +103,29 @@ async function stageScope(projectId: string, stageId: string) {
   if (errorTemplate) throw errorTemplate
   if (byTemplateId) return byTemplateId
 
+  // Fallback: check if stageId is actually a termId
+  const { data: termStage } = await admin
+    .from("project_stage_terms")
+    .select("project_stage_id, project_stages!inner(id, project_id, name, description, status)")
+    .eq("id", stageId)
+    .eq("project_stages.project_id", projectId)
+    .maybeSingle()
+  if (termStage?.project_stages) {
+    const s = Array.isArray(termStage.project_stages) ? termStage.project_stages[0] : termStage.project_stages
+    if (s) return s
+  }
+
+  // Fallback: get first non-disabled stage of project
+  const { data: firstStage } = await admin
+    .from("project_stages")
+    .select("id, project_id, name, description, status")
+    .eq("project_id", projectId)
+    .neq("status", "disabled")
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (firstStage) return firstStage
+
   throw new Error("Project stage not found.")
 }
 
