@@ -53,7 +53,7 @@ async function termScope(projectId: string, termId: string) {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from("project_stage_terms")
-    .select("id, report_name, approval_required, response_type, instructions, responsible_user_id, project_stage_id, parent_term_id, is_active, project_stages!inner(project_id, name, status)")
+    .select("id, report_name, approval_required, response_type, template_reference, instructions, responsible_user_id, project_stage_id, parent_term_id, is_active, project_stages!inner(project_id, name, status)")
     .eq("id", termId)
     .eq("project_stages.project_id", projectId)
     .maybeSingle()
@@ -70,6 +70,25 @@ async function termScope(projectId: string, termId: string) {
     parentActive = parent?.is_active === true
   }
   return { ...data, parent_active: parentActive }
+}
+
+async function stageScope(projectId: string, stageId: string) {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("project_stages")
+    .select("id, project_id, name, description, status")
+    .eq("id", stageId)
+    .eq("project_id", projectId)
+    .maybeSingle()
+  if (error) throw error
+  if (!data) throw new Error("Project stage not found.")
+  return data
+}
+
+function assertActiveStageScope(stage: { status: string }) {
+  if (stage.status === "disabled") {
+    throw new Error("This stage is inactive and cannot accept new work.")
+  }
 }
 
 function assertActiveTermScope(term: any) {
@@ -146,43 +165,57 @@ function revalidateProjectStageViews(projectId: string) {
 
 export async function saveTermResponseAction(input: {
   projectId: string
-  termId: string
+  stageId?: string
+  termId?: string
   responseId: string
   reportType: ReportTypeValue
   subject?: string
   reportTitle: string
   content: Partial<TermResponseContent>
+  approvalRequired?: boolean
+  responseType?: SubtermResponseType
+  responsibleUserId?: string | null
+  templateReference?: string | null
+  instructions?: string | null
   submit?: boolean
   saveStatus?: "draft" | "in_progress"
 }): Promise<StageActionResult<{ responseId: string; reportNumber: string; visitNumber: number; status: string }>> {
   try {
     const actorId = await assertProjectMember(input.projectId)
-    const term = await termScope(input.projectId, input.termId)
-    assertActiveTermScope(term)
+    const directStage = input.stageId ? await stageScope(input.projectId, input.stageId) : null
+    const term = !directStage && input.termId ? await termScope(input.projectId, input.termId) : null
+    if (!directStage && !term) return { ok: false, error: "Select a valid project stage." }
+    if (directStage) assertActiveStageScope(directStage)
+    if (term) assertActiveTermScope(term)
+
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.responseId)) {
       return { ok: false, error: "Invalid report identifier." }
     }
     const title = input.reportTitle.trim()
     if (!title) return { ok: false, error: "Report title is required." }
     if (!isReportType(input.reportType)) return { ok: false, error: "Select a valid report type." }
+
     const content = normalizeContent(input.content)
     const admin = createAdminClient()
-    // Perform user-owned response writes with the authenticated server client so
-    // auth.uid() is available to the existing RLS policies. The admin client is
-    // kept only for trusted scope/validation reads after authorization.
     const userClient = await createServerClient()
     const { data: existing, error: existingError } = await admin
       .from("term_responses")
-      .select("id, report_number, visit_number, status, created_by, project_stage_term_id")
+      .select("id, report_number, visit_number, status, created_by, project_stage_id, project_stage_term_id, responsible_user_id, approval_required, response_type")
       .eq("id", input.responseId)
       .eq("project_id", input.projectId)
       .maybeSingle()
     if (existingError) throw existingError
-    if (existing && existing.project_stage_term_id !== input.termId) {
-      return { ok: false, error: "This report does not belong to the selected term." }
+
+    const projectStageId = directStage?.id ?? term!.project_stage_id
+    const legacyTermId = directStage ? null : input.termId ?? null
+    if (existing && existing.project_stage_id !== projectStageId) {
+      return { ok: false, error: "This report does not belong to the selected stage." }
+    }
+    if (existing && existing.project_stage_term_id !== legacyTermId) {
+      return { ok: false, error: directStage ? "This report does not belong to the selected stage." : "This report does not belong to the selected term." }
     }
 
-    if (!term.parent_term_id) {
+    if (term && !term.parent_term_id) {
       const { count: activeSubtermCount, error: subtermError } = await admin
         .from("project_stage_terms")
         .select("id", { count: "exact", head: true })
@@ -194,11 +227,26 @@ export async function saveTermResponseAction(input: {
       }
     }
 
-    if (existing && existing.created_by !== actorId && term.responsible_user_id !== actorId) {
+    const responsibleUserId = directStage
+      ? existing?.responsible_user_id ?? input.responsibleUserId ?? null
+      : term!.responsible_user_id
+    if (existing && existing.created_by !== actorId && responsibleUserId !== actorId) {
       await assertProjectAdmin(input.projectId)
     }
 
-    const configuredResponseType: SubtermResponseType = isSubtermResponseType(term.response_type) ? term.response_type : "combined"
+    const configuredResponseType: SubtermResponseType = directStage
+      ? isSubtermResponseType(existing?.response_type)
+        ? existing.response_type
+        : isSubtermResponseType(input.responseType)
+          ? input.responseType
+          : "combined"
+      : isSubtermResponseType(term!.response_type)
+        ? term!.response_type
+        : "combined"
+    const approvalRequired = directStage
+      ? existing?.approval_required ?? input.approvalRequired ?? true
+      : term!.approval_required
+
     if (input.submit) {
       const validationError = await validateConfiguredSubmission(admin, configuredResponseType, content, input.responseId)
       if (validationError) return { ok: false, error: validationError }
@@ -212,7 +260,7 @@ export async function saveTermResponseAction(input: {
     }
 
     const nextStatus = input.submit
-      ? term.approval_required ? "submitted" : "completed"
+      ? approvalRequired ? "submitted" : "completed"
       : input.saveStatus === "in_progress" ? "in_progress" : "draft"
     const now = new Date().toISOString()
     let reportNumber = existing?.report_number ?? reportNumberCandidates(input.responseId)[0]
@@ -226,7 +274,7 @@ export async function saveTermResponseAction(input: {
         response_content: content,
         status: nextStatus,
         updated_by: actorId,
-        completed_at: input.submit && !term.approval_required ? now : null,
+        completed_at: input.submit && !approvalRequired ? now : null,
       }
       if (input.submit) updatePayload.submitted_at = now
       else if (existing.status === "rejected") updatePayload.submitted_at = null
@@ -242,7 +290,8 @@ export async function saveTermResponseAction(input: {
         const { error } = await userClient.from("term_responses").insert({
           id: input.responseId,
           project_id: input.projectId,
-          project_stage_term_id: input.termId,
+          project_stage_id: projectStageId,
+          project_stage_term_id: legacyTermId,
           report_number: reportNumber,
           visit_number: 1,
           report_type: input.reportType,
@@ -250,10 +299,15 @@ export async function saveTermResponseAction(input: {
           report_title: title,
           response_content: content,
           status: nextStatus,
+          responsible_user_id: responsibleUserId,
+          approval_required: approvalRequired,
+          response_type: configuredResponseType,
+          template_reference: directStage ? input.templateReference?.trim() || null : term!.template_reference ?? null,
+          instructions: directStage ? input.instructions?.trim() || null : term!.instructions ?? null,
           created_by: actorId,
           updated_by: actorId,
           submitted_at: input.submit ? now : null,
-          completed_at: input.submit && !term.approval_required ? now : null,
+          completed_at: input.submit && !approvalRequired ? now : null,
         })
         if (!error) {
           created = true
@@ -263,18 +317,16 @@ export async function saveTermResponseAction(input: {
 
         const { data: retry, error: retryError } = await admin
           .from("term_responses")
-          .select("id, project_id, report_number, visit_number, status, project_stage_term_id")
+          .select("id, project_id, project_stage_id, project_stage_term_id, report_number, visit_number, status")
           .eq("id", input.responseId)
           .maybeSingle()
         if (retryError) throw retryError
         if (retry) {
-          if (retry.project_id !== input.projectId || retry.project_stage_term_id !== input.termId) {
+          if (retry.project_id !== input.projectId || retry.project_stage_id !== projectStageId || retry.project_stage_term_id !== legacyTermId) {
             return { ok: false, error: "The report identifier is already in use." }
           }
           return { ok: true, data: { responseId: retry.id, reportNumber: retry.report_number, visitNumber: retry.visit_number, status: retry.status } }
         }
-
-        // A rare report-number collision can safely retry with a longer UUID suffix.
       }
       if (!created) return { ok: false, error: "Could not allocate a unique report number. Try again." }
       const { data: inserted, error: insertedError } = await admin
@@ -293,11 +345,15 @@ export async function saveTermResponseAction(input: {
       entityType: "term_response",
       entityId: input.responseId,
       projectId: input.projectId,
-      metadata: { termId: input.termId, reportNumber, reportName: term.report_name },
+      metadata: { stageId: projectStageId, termId: legacyTermId, reportNumber, reportName: directStage?.name ?? term!.report_name },
     })
     revalidateProjectStageViews(input.projectId)
-    revalidatePath(`/projects/${input.projectId}/stages/${term.project_stage_id}/terms/${input.termId}`)
-    revalidatePath(`/projects/${input.projectId}/stages/${term.project_stage_id}/terms/${input.termId}/reports/${input.responseId}`)
+    revalidatePath(`/projects/${input.projectId}/stages/${projectStageId}`)
+    revalidatePath(
+      directStage
+        ? `/projects/${input.projectId}/stages/${projectStageId}/reports/${input.responseId}`
+        : `/projects/${input.projectId}/stages/${projectStageId}/terms/${legacyTermId}/reports/${input.responseId}`,
+    )
     return { ok: true, data: { responseId: input.responseId, reportNumber, visitNumber: assignedVisitNumber, status: nextStatus } }
   } catch (error) {
     return actionError(error, "Could not save the inspection report.")
