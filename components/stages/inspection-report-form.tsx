@@ -326,10 +326,7 @@ export function InspectionReportForm({
   const router = useRouter()
   const reportDefinition = stageReportConfig ?? legacyTerm
   if (!reportDefinition) throw new Error("Report configuration is missing.")
-  const isDirectStageReport = Boolean(stageReportConfig)
-  const reportsHref = isDirectStageReport
-    ? `/projects/${project.id}/stages/${stage.id}`
-    : `/projects/${project.id}/stages/${stage.id}/terms/${reportDefinition.id}`
+  const reportsHref = `/projects/${project.id}/stages/${stage.id}`
   const { locale } = useI18n()
   const copy = COPY[locale]
   const cleanStageName = stage.name.replace(/^\d+[\.\s\-]+/, "")
@@ -574,11 +571,7 @@ export function InspectionReportForm({
         setSuccess(copy.saved)
       }
       if (!response) {
-        router.replace(
-          isDirectStageReport
-            ? `/projects/${project.id}/stages/${stage.id}/reports/${id}`
-            : `/projects/${project.id}/stages/${stage.id}/terms/${reportDefinition.id}/reports/${id}`,
-        )
+        router.replace(`/projects/${project.id}/stages/${stage.id}/reports/${id}`)
       }
       router.refresh()
     } catch (saveError) {
@@ -710,11 +703,6 @@ export function InspectionReportForm({
 
       <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
         <span>{project.name}</span><span aria-hidden>/</span><span>{cleanStageName}</span>
-        {isDirectStageReport ? null : parentTerm ? (
-          <><span aria-hidden>/</span><span>{parentTerm.name.replace(/^\d+[\.\s\-]+/, "")}</span><span aria-hidden>/</span><span>{cleanTermReportName}</span></>
-        ) : (
-          <><span aria-hidden>/</span><span>{cleanTermReportName}</span></>
-        )}
         <span aria-hidden>/</span><span className="font-medium text-foreground">{response ? response.reportTitle.replace(/^\d+[\.\s\-]+/, "") : (locale === "ar" ? "تقرير جديد" : "New Report")}</span>
       </nav>
 
