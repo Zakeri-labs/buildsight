@@ -805,6 +805,21 @@ function drawCcMetadata(flow: Flow, x: number, y: number, width: number, recipie
   return height
 }
 
+function formatDateShort(dateStr?: string | null, rtl: boolean = false) {
+  if (!dateStr) return "—"
+  try {
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return dateStr
+    return date.toLocaleDateString(rtl ? "ar-SA" : "en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    })
+  } catch {
+    return dateStr
+  }
+}
+
 function drawFirstPageHeader(flow: Flow) {
   const { doc, template, pageWidth, rtl } = flow
   const margin = PAGE.margin
@@ -841,10 +856,155 @@ function drawFirstPageHeader(flow: Flow) {
   doc.line(margin, headerH + 13, pageWidth - margin, headerH + 13)
   doc.setLineWidth(0.2)
 
-  // ── UNIFIED EXECUTIVE METADATA CARD ──────────────────────────────────────
+  // ── UNIFIED EXECUTIVE METADATA CARD (Recipients + 8 Metadata Cells) ──────
+  const cardX = margin
+  const cardWidth = pageWidth - margin * 2
+  const gridTop = headerH + 15
+
+  const reportTo = template.reportToRecipients || []
+  const ccTo = template.ccRecipients || []
+
+  // Helper to calculate recipient column height
+  const getRecipientHeight = (rList: typeof reportTo) => {
+    if (!rList.length) return 7
+    let lines = 0
+    rList.forEach((r) => {
+      lines += 1 // Name
+      if (r.role) lines += 1
+      if (r.company) lines += 1
+      if (r.email) lines += 1
+      lines += 0.4 // gap between recipients
+    })
+    return Math.max(7, 4.5 + lines * 3.4)
+  }
+
+  const reportToH = getRecipientHeight(reportTo)
+  const ccToH = getRecipientHeight(ccTo)
+  const recipientsRowH = Math.max(reportToH, ccToH, 13)
+
+  const cols = 4
+  const cellW = cardWidth / cols
+  const metaRowH = 11
+  const gridHeight = recipientsRowH + 2 * metaRowH
+
+  // Single outer container
+  doc.setDrawColor(226, 232, 240)
+  doc.setFillColor(248, 250, 252)
+  doc.roundedRect(cardX, gridTop, cardWidth, gridHeight, 1.5, 1.5, "FD")
+
+  // Internal grid lines
+  doc.setDrawColor(226, 232, 240)
+  doc.setLineWidth(0.15)
+
+  // Horizontal divider between Recipients Row (Row 1) and Meta Row 1 (Row 2)
+  doc.line(cardX, gridTop + recipientsRowH, cardX + cardWidth, gridTop + recipientsRowH)
+
+  // Horizontal divider between Meta Row 1 (Row 2) and Meta Row 2 (Row 3)
+  doc.line(cardX, gridTop + recipientsRowH + metaRowH, cardX + cardWidth, gridTop + recipientsRowH + metaRowH)
+
+  // Vertical divider between Report to (Left) and CC to (Right) in Row 1
+  const recHalfW = cardWidth / 2
+  doc.line(cardX + recHalfW, gridTop, cardX + recHalfW, gridTop + recipientsRowH)
+
+  // Vertical lines between 4 columns in Row 2 & Row 3
+  for (let c = 1; c < cols; c += 1) {
+    doc.line(cardX + c * cellW, gridTop + recipientsRowH, cardX + c * cellW, gridTop + gridHeight)
+  }
+
+  // ── RENDER ROW 1: RECIPIENTS (Report to / Primary on Left, CC to on Right) ──
+  const drawRecipientColumn = (
+    recList: typeof reportTo,
+    colLabel: string,
+    x: number,
+    w: number,
+    isRtl: boolean,
+  ) => {
+    // Header Label
+    setLanguage(doc, isRtl, 6.2, true)
+    doc.setTextColor(100, 116, 139)
+    writePdfText(
+      doc,
+      colLabel,
+      isRtl ? x + w - 3 : x + 3,
+      gridTop + 3.5,
+      { align: isRtl ? "right" : "left" },
+      isRtl,
+    )
+
+    if (!recList.length) {
+      setLanguage(doc, isRtl, 7.5, false)
+      doc.setTextColor(148, 163, 184)
+      writePdfText(
+        doc,
+        "—",
+        isRtl ? x + w - 3 : x + 3,
+        gridTop + 8,
+        { align: isRtl ? "right" : "left" },
+        isRtl,
+      )
+      return
+    }
+
+    let currY = gridTop + 7.8
+    recList.forEach((r) => {
+      // Name (Bold Dark)
+      const nameRtl = containsArabic(r.name)
+      setLanguage(doc, nameRtl, 7.5, true)
+      doc.setTextColor(15, 23, 42)
+      writePdfText(doc, r.name, isRtl ? x + w - 3 : x + 3, currY, { align: isRtl ? "right" : "left" }, nameRtl)
+      currY += 3.4
+
+      // Role
+      if (r.role) {
+        const roleRtl = containsArabic(r.role)
+        setLanguage(doc, roleRtl, 6.5, false)
+        doc.setTextColor(71, 85, 105)
+        writePdfText(doc, r.role, isRtl ? x + w - 3 : x + 3, currY, { align: isRtl ? "right" : "left" }, roleRtl)
+        currY += 3.2
+      }
+
+      // Company
+      if (r.company) {
+        const compRtl = containsArabic(r.company)
+        setLanguage(doc, compRtl, 6.5, false)
+        doc.setTextColor(71, 85, 105)
+        writePdfText(doc, r.company, isRtl ? x + w - 3 : x + 3, currY, { align: isRtl ? "right" : "left" }, compRtl)
+        currY += 3.2
+      }
+
+      // Email
+      if (r.email) {
+        setLanguage(doc, false, 6.2, false)
+        doc.setTextColor(37, 99, 235)
+        writePdfText(doc, r.email, isRtl ? x + w - 3 : x + 3, currY, { align: isRtl ? "right" : "left" }, false)
+        currY += 3.2
+      }
+
+      currY += 1.2
+    })
+  }
+
+  const leftColX = rtl ? cardX + recHalfW : cardX
+  const rightColX = rtl ? cardX : cardX + recHalfW
+  const reportToLabel = rtl ? "ارسال به / الموجه إليه:" : "Report to:"
+  const ccToLabel = rtl ? "نسخة إلى:" : "CC to:"
+
+  if (rtl) {
+    drawRecipientColumn(reportTo, reportToLabel, leftColX, recHalfW, true)
+    drawRecipientColumn(ccTo, ccToLabel, rightColX, recHalfW, true)
+  } else {
+    drawRecipientColumn(reportTo, reportToLabel, leftColX, recHalfW, false)
+    drawRecipientColumn(ccTo, ccToLabel, rightColX, recHalfW, false)
+  }
+
+  // ── RENDER ROW 2 & 3: THE 8 METADATA CELLS (Matching details page 1:1) ──────
+  const formattedDate = formatDateShort(template.createdAt, rtl)
+  const formattedStatus = template.status ? statusLabel(template.status as any, rtl ? "ar" : "en") : "—"
+
   const labels = rtl
-    ? ["المشروع", "مرجع المشروع", "المرحلة", "البند", "رقم المستند", "رقم الزيارة", "النوع", "الموضوع"]
-    : ["Project", "Project Reference", "Stage", "Term", "Document Number", "Visit Number", "Type", "Subject"]
+    ? ["المشروع", "مرجع المشروع", "المرحلة", "البند", "رقم المستند", "رقم الزيارة", "التاريخ", "الحالة"]
+    : ["Project", "Project Reference", "Stage", "Term", "Document Number", "Visit Number", "Date", "Status"]
+
   const values = [
     template.projectName,
     template.projectReference,
@@ -852,64 +1012,20 @@ function drawFirstPageHeader(flow: Flow) {
     template.termName,
     template.reportNumber,
     template.visitNumber,
-    template.reportType,
-    template.subject || "—",
+    formattedDate,
+    formattedStatus,
   ]
 
-  const cardX = margin
-  const cardWidth = pageWidth - margin * 2
-  const gridTop = headerH + 15
-  const cols = 4
-  const cellW = cardWidth / cols
-  const rowH = 11
+  const metaTop = gridTop + recipientsRowH
 
-  const gridHeight = 2 * rowH
-
-  // Parse CC Recipients
-  const rawCc = template.ccRecipients || []
-  const parsedCc = rawCc.map((rec) => {
-    const parts = rec.split("\n").map((s) => s.trim()).filter(Boolean)
-    const name = parts[0] || "—"
-    const details = parts.slice(1).join(" · ")
-    return { name, details }
-  })
-
-  // CC height (compact horizontal layout)
-  const ccRows = parsedCc.length > 0 ? (parsedCc.length > 1 ? Math.ceil(parsedCc.length / 2) : 1) : 0
-  const ccHeight = ccRows > 0 ? 5.5 + ccRows * 4 : 0
-  const totalCardHeight = gridHeight + ccHeight
-
-  // Single outer container with rounded corners and light fill
-  doc.setDrawColor(226, 232, 240)
-  doc.setFillColor(248, 250, 252)
-  doc.roundedRect(cardX, gridTop, cardWidth, totalCardHeight, 1.5, 1.5, "FD")
-
-  // Internal grid lines
-  doc.setDrawColor(226, 232, 240)
-  doc.setLineWidth(0.15)
-
-  // Horizontal line between row 1 and row 2
-  doc.line(cardX, gridTop + rowH, cardX + cardWidth, gridTop + rowH)
-
-  // Vertical lines between 4 columns
-  for (let c = 1; c < cols; c += 1) {
-    doc.line(cardX + c * cellW, gridTop, cardX + c * cellW, gridTop + gridHeight)
-  }
-
-  // Horizontal divider above CC section if present
-  if (ccHeight > 0) {
-    doc.line(cardX, gridTop + gridHeight, cardX + cardWidth, gridTop + gridHeight)
-  }
-
-  // Render Grid Cells
   for (let index = 0; index < values.length; index += 1) {
     const row = Math.floor(index / cols)
     const logicalColumn = index % cols
     const physicalColumn = rtl ? (cols - 1) - logicalColumn : logicalColumn
     const cellX = cardX + physicalColumn * cellW
-    const cellY = gridTop + row * rowH
+    const cellY = metaTop + row * metaRowH
 
-    // Label (small uppercase gray)
+    // Label
     setLanguage(doc, rtl, 6, false)
     doc.setTextColor(100, 116, 139)
     writePdfText(
@@ -921,7 +1037,7 @@ function drawFirstPageHeader(flow: Flow) {
       rtl,
     )
 
-    // Value (bold dark)
+    // Value
     const val = values[index] || "—"
     const valHasArabic = containsArabic(val)
     setLanguage(doc, valHasArabic, 7.5, true)
@@ -937,59 +1053,7 @@ function drawFirstPageHeader(flow: Flow) {
     )
   }
 
-  // Render CC Strip inside card
-  if (ccHeight > 0 && parsedCc.length > 0) {
-    const ccTop = gridTop + gridHeight
-    const ccLabel = rtl ? "نسخة إلى:" : "CC To:"
-
-    setLanguage(doc, rtl, 6.5, true)
-    doc.setTextColor(100, 116, 139)
-    writePdfText(
-      doc,
-      ccLabel,
-      rtl ? cardX + cardWidth - 3 : cardX + 3,
-      ccTop + 4.2,
-      { align: rtl ? "right" : "left" },
-      rtl,
-    )
-
-    const isMultiCol = parsedCc.length > 1
-    const startOffset = rtl ? 20 : 18
-    const availW = cardWidth - startOffset - 3
-    const ccColW = isMultiCol ? availW / 2 : availW
-
-    parsedCc.forEach((rec, idx) => {
-      const colIdx = isMultiCol ? idx % 2 : 0
-      const rowIdx = isMultiCol ? Math.floor(idx / 2) : idx
-      const physCol = rtl && isMultiCol ? 1 - colIdx : colIdx
-      const recX = rtl
-        ? cardX + cardWidth - startOffset - physCol * ccColW
-        : cardX + startOffset + physCol * ccColW
-      const recY = ccTop + 4.2 + rowIdx * 4.2
-
-      // Blue Bullet dot
-      setLanguage(doc, false, 7, true)
-      doc.setTextColor(37, 99, 235)
-      doc.text("•", rtl ? recX + 2 : recX - 3.5, recY, { align: rtl ? "right" : "left" })
-
-      // Recipient info
-      const recText = rec.details ? `${rec.name} (${rec.details})` : rec.name
-      const recRtl = containsArabic(recText)
-      setLanguage(doc, recRtl, 7, false)
-      doc.setTextColor(30, 41, 59)
-      const lines = textLines(doc, recText, ccColW - 5).slice(0, 1)
-      writePdfText(
-        doc,
-        lines,
-        rtl && recRtl ? recX : recX,
-        recY,
-        { align: rtl ? "right" : "left" },
-        recRtl,
-      )
-    })
-  }
-
-  flow.y = gridTop + totalCardHeight + 6
+  flow.y = gridTop + gridHeight + 6
 }
 
 function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>) {
@@ -1195,80 +1259,132 @@ function renderRtlTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>)
   flow.y += 5
 }
 
+function drawChecklistVectorBadge(
+  doc: jsPDF,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  isPassed: boolean,
+  isFailed: boolean,
+  isInProgress: boolean,
+) {
+  if (isPassed) {
+    doc.setFillColor(22, 163, 74)
+    doc.roundedRect(x, y, w, h, 1, 1, "F")
+    doc.setDrawColor(255, 255, 255)
+    doc.setLineWidth(0.65)
+    doc.line(x + 1.1, y + 2.5, x + 2.1, y + 3.7)
+    doc.line(x + 2.1, y + 3.7, x + 3.9, y + 1.3)
+  } else if (isFailed) {
+    doc.setFillColor(225, 29, 72)
+    doc.roundedRect(x, y, w, h, 1, 1, "F")
+    doc.setDrawColor(255, 255, 255)
+    doc.setLineWidth(0.65)
+    doc.line(x + 1.3, y + 1.3, x + 3.7, y + 3.7)
+    doc.line(x + 3.7, y + 1.3, x + 1.3, y + 3.7)
+  } else if (isInProgress) {
+    doc.setFillColor(217, 119, 6)
+    doc.roundedRect(x, y, w, h, 1, 1, "F")
+    doc.setDrawColor(255, 255, 255)
+    doc.setLineWidth(0.5)
+    doc.line(x + 1.2, y + 1.2, x + 3.8, y + 1.2)
+    doc.line(x + 1.2, y + 3.8, x + 3.8, y + 3.8)
+    doc.line(x + 1.2, y + 1.2, x + 3.8, y + 3.8)
+    doc.line(x + 3.8, y + 1.2, x + 1.2, y + 3.8)
+  } else {
+    doc.setFillColor(241, 245, 249)
+    doc.setDrawColor(203, 213, 225)
+    doc.roundedRect(x, y, w, h, 1, 1, "FD")
+    doc.setDrawColor(148, 163, 184)
+    doc.setLineWidth(0.5)
+    doc.line(x + 1.5, y + 1.5, x + 3.5, y + 3.5)
+    doc.line(x + 3.5, y + 1.5, x + 1.5, y + 3.5)
+  }
+}
+
 function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
   const rows = (block && Array.isArray(block.rows)) ? block.rows : []
   if (!rows.length) return
 
-  const boxSize = 3.8
-  const gap = 2.5
+  const badgeW = 5.0
+  const badgeH = 5.0
+  const gap = 3.0
+
+  // 3 Columns: Col 1 = Icon (5mm), Col 2 = Label (62% width), Col 3 = Notes (Remaining width)
+  const availableW = flow.width - badgeW - gap
+  const labelW = Math.floor(availableW * 0.62)
+  const notesW = availableW - labelW - gap
 
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i]
     if (!row.length) continue
 
-    const labelText = row.length >= 3 ? row[1] : row[0]
-    const statusText = row.length >= 3 ? row[2] : (row[1] || "")
-    const isChecked = Boolean(
-      statusText && (
-        statusText.toLowerCase().includes("complete") ||
-        statusText.includes("مكتمل") ||
-        statusText.includes("مكتملة") ||
-        statusText.includes("تم")
-      )
-    )
+    const labelText = row.length >= 2 ? row[1] : row[0]
+    const resultText = row.length >= 3 ? row[2] : (row[1] || "")
+    const notesText = row.length >= 4 ? row[3] : ""
 
-    const textAvailable = flow.width - boxSize - gap - 2
+    const isPassed = resultText === "pass" || resultText.toLowerCase().includes("complete") || resultText.includes("مكتمل") || resultText.includes("تم")
+    const isFailed = resultText === "fail" || resultText.includes("غير مطابق")
+    const isInProgress = resultText === "in_progress" || resultText.includes("قيد التنفيذ")
+
     setLanguage(flow.doc, flow.rtl, 8.5, false)
-    const lines = textLines(flow.doc, labelText, textAvailable)
-    const lineH = 4.2
-    const itemH = Math.max(6, lines.length * lineH + 2.5)
+    const labelLines = textLines(flow.doc, labelText, labelW)
+
+    setLanguage(flow.doc, flow.rtl, 7.5, false)
+    const notesLines = notesText ? textLines(flow.doc, notesText, notesW) : []
+
+    const lineH = 4.0
+    const maxTextLines = Math.max(labelLines.length, notesLines.length, 1)
+    const itemH = Math.max(7, maxTextLines * lineH + 3.0)
 
     ensureSpace(flow, itemH)
 
-    const boxY = flow.y + 0.6
+    const badgeY = flow.y + 0.5
 
     if (flow.rtl) {
-      const boxX = flow.x + flow.width - boxSize
-      const textX = boxX - gap
+      const badgeX = flow.x + flow.width - badgeW
+      const labelX = badgeX - gap
+      const notesX = flow.x
 
-      if (isChecked) {
-        flow.doc.setFillColor(22, 163, 74)
-        flow.doc.roundedRect(boxX, boxY, boxSize, boxSize, 0.6, 0.6, "F")
-        setLanguage(flow.doc, false, 6.5, true)
-        flow.doc.setTextColor(255, 255, 255)
-        flow.doc.text("v", boxX + 1.1, boxY + 2.8, { align: "left" })
-      } else {
-        flow.doc.setDrawColor(203, 213, 225)
-        flow.doc.setFillColor(255, 255, 255)
-        flow.doc.roundedRect(boxX, boxY, boxSize, boxSize, 0.6, 0.6, "FD")
-      }
+      // Draw Badge Icon in vector
+      drawChecklistVectorBadge(flow.doc, badgeX, badgeY, badgeW, badgeH, isPassed, isFailed, isInProgress)
 
-      setLanguage(flow.doc, true, 8.5, false)
+      // Draw Label (Col 2)
+      setLanguage(flow.doc, true, 8.5, true)
       flow.doc.setTextColor(15, 23, 42)
-      writePdfText(flow.doc, lines, textX, flow.y + 3, { align: "right", lineHeightFactor: 1.15 }, true)
+      writePdfText(flow.doc, labelLines, labelX, flow.y + 3.2, { align: "right", lineHeightFactor: 1.15 }, true)
+
+      // Draw Notes (Col 3)
+      if (notesLines.length > 0) {
+        setLanguage(flow.doc, true, 7.5, false)
+        flow.doc.setTextColor(100, 116, 139)
+        writePdfText(flow.doc, notesLines, notesX + notesW, flow.y + 3.2, { align: "right", lineHeightFactor: 1.15 }, true)
+      }
     } else {
-      const boxX = flow.x
-      const textX = boxX + boxSize + gap
+      const badgeX = flow.x
+      const labelX = badgeX + badgeW + gap
+      const notesX = labelX + labelW + gap
 
-      if (isChecked) {
-        flow.doc.setFillColor(22, 163, 74)
-        flow.doc.roundedRect(boxX, boxY, boxSize, boxSize, 0.6, 0.6, "F")
-        setLanguage(flow.doc, false, 6.5, true)
-        flow.doc.setTextColor(255, 255, 255)
-        flow.doc.text("v", boxX + 1.1, boxY + 2.8, { align: "left" })
-      } else {
-        flow.doc.setDrawColor(203, 213, 225)
-        flow.doc.setFillColor(255, 255, 255)
-        flow.doc.roundedRect(boxX, boxY, boxSize, boxSize, 0.6, 0.6, "FD")
-      }
+      // Draw Badge Icon in vector
+      drawChecklistVectorBadge(flow.doc, badgeX, badgeY, badgeW, badgeH, isPassed, isFailed, isInProgress)
 
-      setLanguage(flow.doc, false, 8.5, false)
+      // Draw Label (Col 2)
+      setLanguage(flow.doc, false, 8.5, true)
       flow.doc.setTextColor(15, 23, 42)
-      writePdfText(flow.doc, lines, textX, flow.y + 3, { align: "left", lineHeightFactor: 1.15 }, false)
+      writePdfText(flow.doc, labelLines, labelX, flow.y + 3.2, { align: "left", lineHeightFactor: 1.15 }, false)
+
+      // Draw Notes (Col 3)
+      if (notesLines.length > 0) {
+        setLanguage(flow.doc, false, 7.5, false)
+        flow.doc.setTextColor(100, 116, 139)
+        writePdfText(flow.doc, notesLines, notesX, flow.y + 3.2, { align: "left", lineHeightFactor: 1.15 }, false)
+      }
     }
 
     flow.y += itemH
     flow.doc.setDrawColor(241, 245, 249)
+    flow.doc.setLineWidth(0.1)
     flow.doc.line(flow.x, flow.y - 0.5, flow.x + flow.width, flow.y - 0.5)
   }
   flow.y += 2
@@ -3543,7 +3659,7 @@ export async function exportTranslationPdf({
     }
   }
 
-  const rawEnglishTemplate = buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument, ccRecipients: ccMetadata })
+  const rawEnglishTemplate = buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument, ccRecipientsList: ccRecipients, ccRecipients: ccMetadata })
   // Static company/footer lines are already drawn by the fixed PDF footer.
   // Remove them from attachment body content in both languages before the
   // English structure becomes the canonical mirrored document schema.
@@ -3558,7 +3674,7 @@ export async function exportTranslationPdf({
   }
 
   if (!translation?.translatedContent) throw new Error("Generate the Arabic translation before exporting PDFs.")
-  const rawArabicTemplate = buildLanguagePdfTemplate({ data, translation, language: "ar", sourceDocument, ccRecipients: ccMetadata })
+  const rawArabicTemplate = buildLanguagePdfTemplate({ data, translation, language: "ar", sourceDocument, ccRecipientsList: ccRecipients, ccRecipients: ccMetadata })
   const footerCleanArabicTemplate = stripStaticFooterFromDocumentTemplate(rawArabicTemplate, sourceDocument)
   const arabicTemplate = synchronizeMirroredDocumentStructures(englishTemplate, footerCleanArabicTemplate)
   validateTemplateAssets(arabicTemplate, sourceDocument)
