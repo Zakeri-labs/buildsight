@@ -9,12 +9,12 @@ import {
   ChevronUp,
   CircleDot,
   ClipboardList,
-  FileText,
   ListPlus,
   MoreHorizontal,
   Pencil,
   Plus,
   ShieldCheck,
+  SquareCheck,
   Trash2,
   X,
 } from "lucide-react"
@@ -78,35 +78,35 @@ import { subtermResponseTypeLabel } from "@/lib/stages/execution"
 
 const COPY = {
   en: {
-    eyebrow: "Stages Library",
-    intro: "Define reusable stages, terms, and sub-terms for all projects. Each project can independently choose which definitions are available.",
+    eyebrow: "Stages & Checklists Library",
+    intro: "Define reusable construction stages and inspection checklists for all projects. Each project can independently choose which definitions are available.",
     addStage: "Add Stage",
     stages: "Stages",
-    reports: "Terms",
-    requiredReports: "Required terms",
+    reports: "Checklist Items",
+    requiredReports: "Required Items",
     required: "Required",
     active: "Active",
     disabled: "Disabled",
     stage: "Stage",
-    reportsLabel: "Terms",
-    addReport: "Add Term",
+    reportsLabel: "Checklist Items",
+    addReport: "Add Checkbox",
     editStage: "Edit stage",
     disableStage: "Disable stage",
     enableStage: "Enable stage",
     deleteStage: "Delete stage",
     moveUp: "Move up",
     moveDown: "Move down",
-    reportName: "Term Name",
+    reportName: "Checkbox Item Name",
     requirement: "Required / Optional",
     approval: "Approval",
     status: "Status",
     actions: "Actions",
     optional: "Optional",
     approvalRequired: "Required",
-    editReport: "Edit Term",
-    disableReport: "Disable Term",
-    enableReport: "Enable Term",
-    deleteReport: "Delete Term",
+    editReport: "Edit Checkbox",
+    disableReport: "Disable Checkbox",
+    enableReport: "Enable Checkbox",
+    deleteReport: "Delete Checkbox",
     createStageTitle: "Create stage",
     editStageTitle: "Edit stage",
     stageDialogDescription: "Set the stage name and a short description for administrators.",
@@ -116,50 +116,50 @@ const COPY = {
     cancel: "Cancel",
     create: "Create",
     save: "Save changes",
-    addReportTitle: "Add Term",
-    editReportTitle: "Edit Term",
-    termDialogDescription: "Set the term name, requirement, approval, and status.",
+    addReportTitle: "Add Checkbox Item",
+    editReportTitle: "Edit Checkbox Item",
+    termDialogDescription: "Set the checkbox item name, requirement, approval, and status.",
     requiredToggle: "Required / Optional",
     approvalToggle: "Approval is required",
     deleteTitle: "Confirm deletion",
     deleteStageDescription: "Stages already used by projects are archived safely. Unused empty stages may be deleted.",
-    deleteTermDescription: "Terms and Sub-terms already used by projects are archived safely. Unused definitions may be deleted.",
+    deleteTermDescription: "Checklist items already used by projects are archived safely. Unused definitions may be deleted.",
     delete: "Delete",
     emptyTitle: "No stages yet",
     emptyDescription: "Create the first construction stage to begin building your template library.",
-    noReports: "No terms have been added to this stage yet.",
+    noReports: "No checklist items have been added to this stage yet.",
     success: "Changes saved successfully.",
   },
   ar: {
-    eyebrow: "مكتبة المراحل",
-    intro: "حدّد المراحل والبنود والبنود الفرعية القابلة لإعادة الاستخدام في جميع المشاريع، ثم اختر ما يناسب كل مشروع بشكل مستقل.",
+    eyebrow: "مكتبة المراحل وقوائم الفحص",
+    intro: "حدّد المراحل وقوائم فحص التفتيش القابلة لإعادة الاستخدام في جميع المشاريع، ثم اختر ما يناسب كل مشروع بشكل مستقل.",
     addStage: "إضافة مرحلة",
     stages: "المراحل",
-    reports: "البنود",
-    requiredReports: "البنود الإلزامية",
+    reports: "عناصر قائمة الفحص",
+    requiredReports: "العناصر الإلزامية",
     required: "إلزامي",
     active: "نشط",
     disabled: "معطّل",
     stage: "المرحلة",
-    reportsLabel: "البنود",
-    addReport: "إضافة بند",
+    reportsLabel: "عناصر قائمة الفحص",
+    addReport: "إضافة مربع فحص",
     editStage: "تعديل المرحلة",
     disableStage: "تعطيل المرحلة",
     enableStage: "تفعيل المرحلة",
     deleteStage: "حذف المرحلة",
     moveUp: "تحريك لأعلى",
     moveDown: "تحريك لأسفل",
-    reportName: "اسم البند",
+    reportName: "اسم عنصر مربع الفحص",
     requirement: "إلزامي / اختياري",
     approval: "الموافقة",
     status: "الحالة",
     actions: "الإجراءات",
     optional: "اختياري",
     approvalRequired: "مطلوبة",
-    editReport: "تعديل البند",
-    disableReport: "تعطيل البند",
-    enableReport: "تفعيل البند",
-    deleteReport: "حذف البند",
+    editReport: "تعديل مربع الفحص",
+    disableReport: "تعطيل مربع الفحص",
+    enableReport: "تفعيل مربع الفحص",
+    deleteReport: "حذف مربع الفحص",
     createStageTitle: "إنشاء مرحلة",
     editStageTitle: "تعديل المرحلة",
     stageDialogDescription: "حدّد اسم المرحلة ووصفًا مختصرًا للمسؤولين.",
@@ -169,18 +169,18 @@ const COPY = {
     cancel: "إلغاء",
     create: "إنشاء",
     save: "حفظ التغييرات",
-    addReportTitle: "إضافة بند",
-    editReportTitle: "تعديل البند",
-    termDialogDescription: "حدّد اسم البند ومتطلباته والموافقة والحالة.",
+    addReportTitle: "إضافة مربع فحص",
+    editReportTitle: "تعديل مربع الفحص",
+    termDialogDescription: "حدّد اسم عنصر مربع الفحص ومتطلباته والموافقة والحالة.",
     requiredToggle: "إلزامي / اختياري",
     approvalToggle: "الموافقة مطلوبة",
     deleteTitle: "تأكيد الحذف",
-    deleteStageDescription: "سيؤدي حذف المرحلة إلى حذف جميع البنود بداخلها. لا يمكن التراجع عن هذا الإجراء.",
-    deleteTermDescription: "لا يمكن التراجع عن حذف هذا البند.",
+    deleteStageDescription: "سيؤدي حذف المرحلة إلى حذف جميع العناصر بداخلها. لا يمكن التراجع عن هذا الإجراء.",
+    deleteTermDescription: "لا يمكن التراجع عن حذف هذا العنصر.",
     delete: "حذف",
     emptyTitle: "لا توجد مراحل بعد",
     emptyDescription: "أنشئ أول مرحلة إنشائية لبدء بناء مكتبة القوالب.",
-    noReports: "لم تتم إضافة بنود إلى هذه المرحلة بعد.",
+    noReports: "لم تتم إضافة عناصر إلى قائمة الفحص لهذه المرحلة بعد.",
     success: "تم حفظ التغييرات بنجاح.",
   },
 } as const
@@ -288,8 +288,6 @@ export function StageManagement({
         return
       }
 
-      // Close immediately as a normal state update. Refreshing the server data is
-      // intentionally scheduled afterwards so it cannot keep the dialog mounted.
       if (stageDialogVersion.current === dialogVersion) closeStageDialog()
       setFeedback({ tone: "success", message: c.success })
       startTransition(() => router.refresh())
@@ -325,7 +323,7 @@ export function StageManagement({
 
       <div className="grid gap-3 sm:grid-cols-3">
         <SummaryCard icon={ClipboardList} label={c.stages} value={data.stages.length} />
-        <SummaryCard icon={FileText} label={c.reports} value={totalReports} />
+        <SummaryCard icon={SquareCheck} label={c.reports} value={totalReports} />
         <SummaryCard icon={ShieldCheck} label={c.requiredReports} value={requiredReports} />
       </div>
 
@@ -360,6 +358,7 @@ export function StageManagement({
         <div className="space-y-3">
           {data.stages.map((stage, stageIndex) => {
             const isExpanded = expanded.has(stage.id)
+            const stageItemCount = stage.terms.reduce((acc, t) => acc + 1 + t.subterms.length, 0)
             return (
               <Card key={stage.id} className={`overflow-hidden !gap-0 !py-0${!stage.active ? " opacity-75" : ""}`}>
                 <CardHeader className="border-b !px-4 !py-3">
@@ -384,7 +383,7 @@ export function StageManagement({
                         </Badge>
                       </div>
                       <CardDescription className="mt-1">
-                        {stage.description || `${stage.terms.length} ${c.reportsLabel}`}
+                        {stage.description || `${stageItemCount} ${c.reportsLabel}`}
                       </CardDescription>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
@@ -465,7 +464,7 @@ export function StageManagement({
                   <CardContent className="!px-0 !pb-0">
                     {stage.terms.length === 0 ? (
                       <div className="flex flex-col items-center px-4 py-10 text-center">
-                        <FileText className="size-7 text-muted-foreground" />
+                        <SquareCheck className="size-7 text-muted-foreground" />
                         <p className="mt-2 text-sm text-muted-foreground">{c.noReports}</p>
                         <Button
                           className="mt-4"
@@ -496,9 +495,10 @@ export function StageManagement({
                                   <TableRow className={term.status === "disabled" ? "opacity-60" : undefined}>
                                     <TableCell className="px-3 py-2.5 align-middle font-medium whitespace-normal">
                                       <div className="flex min-w-0 items-center gap-2">
-                                        <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">{termIndex + 1}</span>
+                                        <SquareCheck className="size-4 shrink-0 text-primary" />
+                                        <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-muted text-[11px] font-semibold text-muted-foreground">{termIndex + 1}</span>
                                         <span className="min-w-0 break-words leading-5">{term.reportName}</span>
-                                        {term.subterms.length ? <Badge variant="secondary" className="h-6 px-2 text-xs">{term.subterms.length} Sub-terms</Badge> : null}
+                                        {term.subterms.length ? <Badge variant="secondary" className="h-6 px-2 text-xs">{term.subterms.length} Sub-items</Badge> : null}
                                       </div>
                                     </TableCell>
                                     <TableCell className="px-3 py-2.5 align-middle"><Badge variant={term.required ? "default" : "outline"} className="h-6 min-w-16 justify-center px-2 text-xs">{term.required ? c.required : c.optional}</Badge></TableCell>
@@ -519,6 +519,7 @@ export function StageManagement({
                                       <TableCell className="px-3 py-2 align-middle font-medium whitespace-normal">
                                         <div className="flex min-w-0 items-center gap-2 ps-8">
                                           <span className="h-5 border-s border-border" aria-hidden="true" />
+                                          <SquareCheck className="size-3.5 shrink-0 text-muted-foreground" />
                                           <span className="min-w-0 break-words text-sm leading-5">{subterm.reportName}</span>
                                           <Badge variant="outline" className="h-5 px-1.5 text-[10px]">{subtermResponseTypeLabel(subterm.responseType)}</Badge>
                                         </div>
@@ -548,8 +549,9 @@ export function StageManagement({
                               <div className="space-y-3 px-4 py-3">
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="flex min-w-0 items-start gap-2">
-                                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">{termIndex + 1}</span>
-                                    <div className="min-w-0"><p className="break-words font-medium leading-5">{term.reportName}</p>{term.subterms.length ? <p className="mt-1 text-xs text-muted-foreground">{term.subterms.length} Sub-terms</p> : null}</div>
+                                    <SquareCheck className="mt-1 size-4 shrink-0 text-primary" />
+                                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">{termIndex + 1}</span>
+                                    <div className="min-w-0"><p className="break-words font-medium leading-5">{term.reportName}</p>{term.subterms.length ? <p className="mt-1 text-xs text-muted-foreground">{term.subterms.length} Sub-items</p> : null}</div>
                                   </div>
                                   <TermActions term={term} kind="parent" termIndex={termIndex} termCount={stage.terms.length} disabled={isPending} labels={c}
                                     onAddSubterm={() => setSubtermDialog({ mode: "create", parent: term, subterm: null })}
@@ -710,24 +712,24 @@ function TermActions({
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onEdit}>
           <Pencil />
-          {kind === "subterm" ? "Edit Sub-term" : labels.editReport}
+          {kind === "subterm" ? "Edit Sub-item" : labels.editReport}
         </DropdownMenuItem>
         {kind === "parent" && onAddSubterm ? (
           <DropdownMenuItem onClick={onAddSubterm}>
             <ListPlus />
-            Add Sub-term
+            Add Sub-item
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuItem onClick={onToggle}>
           <CircleDot />
           {term.status === "active"
-            ? kind === "subterm" ? "Disable Sub-term" : labels.disableReport
-            : kind === "subterm" ? "Enable Sub-term" : labels.enableReport}
+            ? kind === "subterm" ? "Disable Sub-item" : labels.disableReport
+            : kind === "subterm" ? "Enable Sub-item" : labels.enableReport}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={onDelete}>
           <Trash2 />
-          {kind === "subterm" ? "Delete or Archive Sub-term" : labels.deleteReport}
+          {kind === "subterm" ? "Delete Sub-item" : labels.deleteReport}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -898,7 +900,7 @@ function TermEditorDialog({
 
             <div className="flex min-h-20 items-center justify-between gap-4 rounded-xl border p-3">
               <div className="flex min-w-0 items-center gap-2">
-                <FileText className="size-4 shrink-0 text-muted-foreground" />
+                <SquareCheck className="size-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
                   <Label htmlFor="term-required" className="cursor-pointer">
                     {labels.requiredToggle}

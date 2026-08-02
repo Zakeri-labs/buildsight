@@ -48,7 +48,7 @@ export async function sendReportCcEmails(input: ReportCcEmailInput) {
       "",
       `Project: ${input.projectName}`,
       `Stage: ${input.stageName}`,
-      `Report context: ${input.termName}`,
+      `Term: ${input.termName}`,
       `Report: ${input.reportTitle}`,
       `Report Number: ${input.reportNumber}`,
       "",

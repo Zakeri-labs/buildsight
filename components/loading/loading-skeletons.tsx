@@ -5,7 +5,7 @@ type LoadingMessage =
   | "Loading workspace..."
   | "Loading projects..."
   | "Loading project data..."
-  | "Loading stages and reports..."
+  | "Loading stages and terms..."
   | "Preparing letters..."
   | "Preparing AI Summary..."
   | "Preparing translation workspace..."
@@ -185,7 +185,7 @@ export function DocumentsLoadingSkeleton() {
 
 export function StagesLoadingSkeleton() {
   return (
-    <RouteLoadingFrame message="Loading stages and reports..." className="max-w-7xl">
+    <RouteLoadingFrame message="Loading stages and terms..." className="max-w-7xl">
       <CardShell>
         <SkeletonBlock className="h-7 w-52" />
         <SkeletonBlock className="mt-3 h-4 w-96 max-w-full" />
@@ -196,7 +196,7 @@ export function StagesLoadingSkeleton() {
             <div className="flex items-center gap-4 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
               <SkeletonBlock className="size-10 rounded-xl" /><div className="flex-1 space-y-2"><SkeletonBlock className="h-5 w-52 max-w-full" /><SkeletonBlock className="h-3 w-32" /></div><SkeletonBlock className="h-8 w-24 rounded-full" />
             </div>
-            <div className="space-y-3 p-5">{Array.from({ length: stage % 2 ? 2 : 3 }).map((_, report) => <SkeletonBlock key={report} className="h-16 w-full rounded-xl" />)}</div>
+            <div className="space-y-3 p-5">{Array.from({ length: stage % 2 ? 2 : 3 }).map((_, term) => <SkeletonBlock key={term} className="h-16 w-full rounded-xl" />)}</div>
           </CardShell>
         ))}
       </div>

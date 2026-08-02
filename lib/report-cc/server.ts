@@ -141,20 +141,14 @@ export async function loadReportCcRecipients(
 
 async function accessibleProjectIdsForUser(userId: string) {
   const admin = createAdminClient()
-  const [projectMembershipResult, orgMembershipResult] = await Promise.all([
+  const [{ data: projectMemberships }, { data: orgMemberships }] = await Promise.all([
     admin.from("project_user_memberships").select("project_id").eq("user_id", userId).eq("status", "active"),
     admin.from("organization_memberships").select("organization_id").eq("user_id", userId).eq("status", "active"),
   ])
-  if (projectMembershipResult.error) throw projectMembershipResult.error
-  if (orgMembershipResult.error) throw orgMembershipResult.error
-  const projectMemberships = projectMembershipResult.data
-  const orgMemberships = orgMembershipResult.data
   const organizationIds = Array.from(new Set((orgMemberships ?? []).map((row: any) => row.organization_id as string)))
-  const orgProjectsResult = organizationIds.length
+  const { data: orgProjects } = organizationIds.length
     ? await admin.from("projects").select("id").in("supervising_organization_id", organizationIds)
-    : { data: [] as any[], error: null }
-  if (orgProjectsResult.error) throw orgProjectsResult.error
-  const orgProjects = orgProjectsResult.data
+    : { data: [] as any[] }
   return Array.from(new Set([
     ...(projectMemberships ?? []).map((row: any) => row.project_id as string),
     ...(orgProjects ?? []).map((row: any) => row.id as string),
@@ -187,13 +181,18 @@ export async function getReportCcNotificationFeed(input: {
   const responseIds = Array.from(new Set(recipientRows.map((row: any) => row.response_id as string)))
   const { data: responses, error: responseError } = await admin
     .from("term_responses")
-    .select("id, project_id, project_stage_id, report_number, report_title")
+    .select("id, project_id, project_stage_term_id, report_number, report_title")
     .in("id", responseIds)
   if (responseError) throw responseError
-  const stageIds = Array.from(new Set((responses ?? []).map((row: any) => row.project_stage_id as string).filter(Boolean)))
+  const termIds = Array.from(new Set((responses ?? []).map((row: any) => row.project_stage_term_id as string)))
+  const { data: terms, error: termError } = termIds.length
+    ? await admin.from("project_stage_terms").select("id, report_name, project_stage_id").in("id", termIds)
+    : { data: [] as any[], error: null }
+  if (termError) throw termError
+  const stageIds = Array.from(new Set((terms ?? []).map((row: any) => row.project_stage_id as string)))
   const actorIds = Array.from(new Set(recipientRows.map((row: any) => row.added_by as string).filter(Boolean)))
   const [{ data: stages, error: stageError }, { data: projects, error: projectError }, { data: actors, error: actorError }] = await Promise.all([
-    stageIds.length ? admin.from("project_stages").select("id, project_id, name").in("id", stageIds) : Promise.resolve({ data: [] as any[], error: null }),
+    stageIds.length ? admin.from("project_stages").select("id, name").in("id", stageIds) : Promise.resolve({ data: [] as any[], error: null }),
     admin.from("projects").select("id, name").in("id", projectIds),
     actorIds.length ? admin.from("profiles").select("id, full_name, email").in("id", actorIds) : Promise.resolve({ data: [] as any[], error: null }),
   ])
@@ -202,6 +201,7 @@ export async function getReportCcNotificationFeed(input: {
   if (actorError) throw actorError
 
   const responseById = new Map<string, any>((responses ?? []).map((row: any) => [row.id as string, row]))
+  const termById = new Map<string, any>((terms ?? []).map((row: any) => [row.id as string, row]))
   const stageById = new Map<string, any>((stages ?? []).map((row: any) => [row.id as string, row]))
   const projectById = new Map<string, any>((projects ?? []).map((row: any) => [row.id as string, row]))
   const actorById = new Map<string, any>((actors ?? []).map((row: any) => [row.id as string, row]))
@@ -210,9 +210,10 @@ export async function getReportCcNotificationFeed(input: {
   for (const recipient of recipientRows as any[]) {
     const response = responseById.get(recipient.response_id)
     if (!response || response.project_id !== recipient.project_id) continue
-    const stage = stageById.get(response.project_stage_id)
+    const term = termById.get(response.project_stage_term_id)
+    const stage = term ? stageById.get(term.project_stage_id) : null
     const project = projectById.get(response.project_id)
-    if (!stage || stage.project_id !== response.project_id || !project) continue
+    if (!term || !stage || !project) continue
     const actor = recipient.added_by ? actorById.get(recipient.added_by) : null
     const translateSuffix = recipient.recipient_context === "translation" ? "/translate" : ""
     items.push({
@@ -222,13 +223,14 @@ export async function getReportCcNotificationFeed(input: {
       projectId: response.project_id,
       projectName: project.name,
       stageName: stage.name,
+      termName: term.report_name,
       reportId: response.id,
       reportNumber: response.report_number,
       reportTitle: response.report_title,
       addedById: recipient.added_by ?? null,
       addedByName: personName(actor),
       createdAt: recipient.created_at,
-      href: `/projects/${response.project_id}/stages/${stage.id}/reports/${response.id}${translateSuffix}`,
+      href: `/projects/${response.project_id}/stages/${stage.id}/terms/${term.id}/reports/${response.id}${translateSuffix}`,
     })
   }
   return { canNotify: true, items }

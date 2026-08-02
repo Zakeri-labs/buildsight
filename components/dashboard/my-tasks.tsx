@@ -41,6 +41,8 @@ function ReviewTask({ task }: { task: TaskRow }) {
         {task.reference ? <p className="truncate font-mono text-[11px] text-muted-foreground">{task.reference}</p> : null}
         <p className="truncate text-xs font-medium text-foreground">{task.projectName}</p>
         <p className="truncate text-xs text-muted-foreground">Stage: {task.stageName}</p>
+        <p className="truncate text-xs text-muted-foreground">Term: {task.parentTermName}</p>
+        {task.subtermName ? <p className="truncate text-xs text-muted-foreground">Sub-term: {task.subtermName}</p> : null}
         <p className="mt-1 text-[11px] text-muted-foreground">
           Submitted by {task.submittedBy ?? "Unknown user"} · {dateTime(task.submittedAt)}
         </p>
@@ -55,7 +57,7 @@ function ReviewTask({ task }: { task: TaskRow }) {
     <Link
       href={task.href}
       className="flex items-start gap-3 rounded-lg px-1 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      aria-label={`Open ${task.reportTitle ?? "report"} review submission`}
+      aria-label={`Open ${task.subtermName ?? task.parentTermName} review submission`}
     >
       {content}
     </Link>
@@ -106,7 +108,7 @@ function CcTask({ task }: { task: TaskRow }) {
         <p className="mt-1 truncate text-xs font-semibold text-foreground">{task.reportTitle ?? task.reference ?? "Report"}</p>
         {task.reference ? <p className="truncate font-mono text-[11px] text-muted-foreground">{task.reference}</p> : null}
         <p className="truncate text-xs font-medium text-foreground">{task.projectName}</p>
-        <p className="truncate text-xs text-muted-foreground">Stage: {task.stageName}</p>
+        <p className="truncate text-xs text-muted-foreground">{task.stageName} · {task.parentTermName}</p>
         <p className="mt-1 text-[11px] text-muted-foreground">Added by {task.ccAddedBy ?? "Project member"} · {dateTime(task.submittedAt)}</p>
       </div>
       <div className="shrink-0 text-end"><span className={cn("text-xs font-medium", dueTone[task.dueTone])}>{task.dueLabel}</span></div>

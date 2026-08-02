@@ -40,6 +40,7 @@ function pdfPath(translation: ProjectStageTranslationSummary, kind: PdfKind) {
 export function StageTranslationActions({
   projectId,
   stageId,
+  termId,
   responseId,
   responseUpdatedAt = new Date().toISOString(),
   translation: initialTranslation,
@@ -47,6 +48,7 @@ export function StageTranslationActions({
 }: {
   projectId: string
   stageId: string
+  termId: string
   responseId: string
   responseUpdatedAt?: string
   translation?: ProjectStageTranslationSummary | null
@@ -73,7 +75,7 @@ export function StageTranslationActions({
   )
 
   async function generateAndStore(kind: PdfKind) {
-    const params = new URLSearchParams({ projectId, stageId, responseId })
+    const params = new URLSearchParams({ projectId, stageId, termId, responseId })
     const response = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
     const payload = await response.json().catch(() => null)
     if (!response.ok) throw new Error(payload?.error || copy.failed)
@@ -138,7 +140,7 @@ export function StageTranslationActions({
     <div className={cn("flex min-w-0 flex-col gap-1.5", inHeader ? "items-start sm:items-end" : "items-end")} onClick={(event) => event.stopPropagation()}>
       <div className="flex flex-wrap items-center gap-1.5">
         <Link
-          href={`/projects/${projectId}/stages/${stageId}/reports/${responseId}/translate`}
+          href={`/projects/${projectId}/stages/${stageId}/terms/${termId}/reports/${responseId}/translate`}
           className={cn(buttonVariants({ size: btnSize, variant: inHeader ? "secondary" : "secondary" }), translateBtnClass)}
         >
           <Languages className="size-4" />{copy.translate}

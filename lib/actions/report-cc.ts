@@ -33,31 +33,42 @@ async function reportScope(projectId: string, responseId: string) {
   const supabase = await createClient()
   const { data: response, error: responseError } = await supabase
     .from("term_responses")
-    .select("id, project_id, project_stage_id, report_number, report_title, status, created_by, responsible_user_id")
+    .select("id, project_id, project_stage_term_id, report_number, report_title, status, created_by")
     .eq("id", responseId)
     .eq("project_id", projectId)
     .maybeSingle()
   if (responseError) throw responseError
   if (!response) throw new Error("Report not found.")
 
-  const [{ data: stage, error: stageError }, { data: project, error: projectError }] = await Promise.all([
-    supabase.from("project_stages").select("id, name, project_id").eq("id", response.project_stage_id).eq("project_id", projectId).maybeSingle(),
+  const [{ data: term, error: termError }, { data: project, error: projectError }] = await Promise.all([
+    supabase
+      .from("project_stage_terms")
+      .select("id, report_name, responsible_user_id, project_stage_id, project_stages!inner(id, name, project_id)")
+      .eq("id", response.project_stage_term_id)
+      .eq("project_stages.project_id", projectId)
+      .maybeSingle(),
     supabase.from("projects").select("id, name").eq("id", projectId).maybeSingle(),
   ])
-  if (stageError) throw stageError
+  if (termError) throw termError
   if (projectError) throw projectError
-  if (!stage || !project) throw new Error("Report project context could not be resolved.")
-  return { ...response, stage, project } as any
+  if (!term || !project) throw new Error("Report project context could not be resolved.")
+
+  return {
+    ...response,
+    project_stage_terms: term,
+    projects: project,
+  } as any
 }
 
 async function assertCanManage(projectId: string, responseId: string, context: ReportCcContext) {
   const actorId = await assertProjectMember(projectId)
   const response = await reportScope(projectId, responseId)
-  if (response.created_by !== actorId && response.responsible_user_id !== actorId) await assertProjectAdmin(projectId)
+  const term = Array.isArray(response.project_stage_terms) ? response.project_stage_terms[0] : response.project_stage_terms
+  if (response.created_by !== actorId && term?.responsible_user_id !== actorId) await assertProjectAdmin(projectId)
   if (context === "report" && ["submitted", "under_review", "approved", "completed"].includes(response.status)) {
     throw new Error("CC recipients cannot be changed while this report is awaiting review or finalized.")
   }
-  return { actorId, response }
+  return { actorId, response, term }
 }
 
 function appHref(path: string) {
@@ -80,7 +91,7 @@ export async function saveReportCcRecipientsAction(input: {
       return { ok: false, error: "Invalid CC recipient context." }
     }
 
-    const { actorId, response } = await assertCanManage(input.projectId, input.responseId, input.context)
+    const { actorId, response, term } = await assertCanManage(input.projectId, input.responseId, input.context)
     const internalIds = Array.from(new Set(input.internalUserIds.filter((id) => UUID_PATTERN.test(id)))).slice(0, 100)
     const candidates = await loadProjectCcCandidates(input.projectId)
     const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]))
@@ -156,9 +167,9 @@ export async function saveReportCcRecipientsAction(input: {
       if (data) inserted.push(data)
     }
 
-    const stage = response.stage
-    const project = response.project
-    const reportPath = `/projects/${input.projectId}/stages/${stage.id}/reports/${input.responseId}`
+    const stage = Array.isArray(term?.project_stages) ? term.project_stages[0] : term?.project_stages
+    const project = Array.isArray(response.projects) ? response.projects[0] : response.projects
+    const reportPath = `/projects/${input.projectId}/stages/${stage.id}/terms/${response.project_stage_term_id}/reports/${input.responseId}`
     const href = input.context === "translation" ? `${reportPath}/translate` : reportPath
     const emailRecipients = inserted.map((row) => {
       if (row.recipient_type === "internal") {
@@ -172,7 +183,7 @@ export async function saveReportCcRecipientsAction(input: {
           context: input.context,
           projectName: project?.name ?? "Project",
           stageName: stage?.name ?? "Stage",
-          termName: response.report_title || stage?.name || "Report",
+          termName: term?.report_name ?? "Term",
           reportTitle: response.report_title,
           reportNumber: response.report_number,
           href: appHref(href),

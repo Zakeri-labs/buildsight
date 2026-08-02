@@ -2,12 +2,13 @@ import "server-only"
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import {
-  EMPTY_STAGE_REPORT_CONTENT,
+  EMPTY_TERM_RESPONSE_CONTENT,
   sanitizeReportHtml,
+  type ProjectStageTermStatus,
   type ResponseStatus,
-  type StageReportResponseType,
-  type StageReportContent,
-  isStageReportResponseType,
+  type SubtermResponseType,
+  type TermResponseContent,
+  isSubtermResponseType,
 } from "@/lib/stages/execution"
 import { roleLabel } from "@/lib/db/types"
 
@@ -18,6 +19,8 @@ export type ProjectStagePerson = {
   avatarUrl: string | null
   role?: string | null
 }
+
+export type ProjectStageOrganization = { id: string; name: string }
 
 export type ProjectStageApproval = {
   id: string
@@ -38,6 +41,25 @@ export type ProjectStageAttachment = {
   createdAt: string
 }
 
+export type ProjectTermResponse = {
+  id: string
+  reportNumber: string
+  visitNumber: number
+  reportType: string
+  subject: string | null
+  reportTitle: string
+  content: TermResponseContent
+  status: ResponseStatus
+  createdBy: ProjectStagePerson
+  createdAt: string
+  updatedAt: string
+  submittedAt: string | null
+  completedAt: string | null
+  attachments: ProjectStageAttachment[]
+  approvals: ProjectStageApproval[]
+  translation: ProjectStageTranslationSummary | null
+}
+
 export type ProjectStageTranslationSummary = {
   id: string
   status: "pending" | "completed" | "failed"
@@ -48,28 +70,30 @@ export type ProjectStageTranslationSummary = {
   translatedContent?: unknown
 }
 
-export type ProjectStageReport = {
+export type ProjectStageTermExecution = {
   id: string
-  reportNumber: string
-  visitNumber: number
-  reportType: string
-  subject: string | null
-  reportTitle: string
-  content: StageReportContent
-  status: ResponseStatus
-  createdBy: ProjectStagePerson
+  projectStageId: string
+  templateTermId: string | null
+  parentTermId: string | null
+  reportName: string
+  required: boolean
+  responsibleOrganization: ProjectStageOrganization | null
   responsibleUser: ProjectStagePerson | null
+  dueDateRule: string
+  dueDate: string | null
   approvalRequired: boolean
-  responseType: StageReportResponseType
   templateReference: string | null
+  responseType: SubtermResponseType
   instructions: string | null
-  createdAt: string
-  updatedAt: string
-  submittedAt: string | null
-  completedAt: string | null
-  attachments: ProjectStageAttachment[]
-  approvals: ProjectStageApproval[]
+  status: ProjectStageTermStatus
+  sortOrder: number
+  isActive: boolean
+  hasLinkedData: boolean
+  response: ProjectTermResponse | null
+  responses: ProjectTermResponse[]
+  reportSummary: { total: number; draft: number; inProgress: number; pendingReview: number; approved: number; rejected: number }
   translation: ProjectStageTranslationSummary | null
+  subterms: ProjectStageTermExecution[]
 }
 
 export type ProjectStageExecution = {
@@ -79,15 +103,21 @@ export type ProjectStageExecution = {
   description: string | null
   status: "not_started" | "in_progress" | "completed" | "disabled"
   sortOrder: number
-  reports: ProjectStageReport[]
-  reportSummary: {
-    total: number
-    draft: number
-    inProgress: number
-    pendingReview: number
-    approved: number
-    rejected: number
-  }
+  terms: ProjectStageTermExecution[]
+}
+
+export type ProjectTermSelectionOption = {
+  templateTermId: string
+  projectTermId: string | null
+  parentTemplateTermId: string | null
+  name: string
+  required: boolean
+  responseType: SubtermResponseType
+  sortOrder: number
+  active: boolean
+  hasData: boolean
+  hasPendingReview: boolean
+  subterms: ProjectTermSelectionOption[]
 }
 
 export type ProjectStageSelectionOption = {
@@ -99,6 +129,7 @@ export type ProjectStageSelectionOption = {
   active: boolean
   hasData: boolean
   hasPendingReview: boolean
+  terms: ProjectTermSelectionOption[]
 }
 
 export type ProjectStageExecutionData = {
@@ -110,8 +141,8 @@ export type ProjectStageExecutionData = {
   currentUserId: string
 }
 
-function parseContent(value: unknown): StageReportContent {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return EMPTY_STAGE_REPORT_CONTENT
+function parseContent(value: unknown): TermResponseContent {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return EMPTY_TERM_RESPONSE_CONTENT
   const row = value as Record<string, unknown>
   return {
     feedback: sanitizeReportHtml(row.feedback),
@@ -148,7 +179,7 @@ async function projectAccess(projectId: string, userId: string) {
   if (error) throw error
   if (!project) return null
 
-  const [projectMembershipResult, orgMembershipResult] = await Promise.all([
+  const [{ data: projectMembership }, { data: orgMembership }] = await Promise.all([
     admin
       .from("project_user_memberships")
       .select("access_role")
@@ -166,13 +197,11 @@ async function projectAccess(projectId: string, userId: string) {
       .limit(1)
       .maybeSingle(),
   ])
-  if (projectMembershipResult.error) throw projectMembershipResult.error
-  if (orgMembershipResult.error) throw orgMembershipResult.error
-  const projectMembership = projectMembershipResult.data
-  const orgMembership = orgMembershipResult.data
 
   if (!projectMembership && !orgMembership) return null
-  const canManage = projectMembership?.access_role === "project_admin" || orgMembership?.role === "org_admin"
+  const canManage =
+    projectMembership?.access_role === "project_admin" ||
+    orgMembership?.role === "org_admin"
   const canReview =
     canManage ||
     projectMembership?.access_role === "project_manager" ||
@@ -182,15 +211,15 @@ async function projectAccess(projectId: string, userId: string) {
   return { project, canReview, canManage }
 }
 
-function reportSummary(reports: ProjectStageReport[]) {
-  return {
-    total: reports.length,
-    draft: reports.filter((item) => item.status === "draft").length,
-    inProgress: reports.filter((item) => item.status === "in_progress").length,
-    pendingReview: reports.filter((item) => item.status === "submitted" || item.status === "under_review").length,
-    approved: reports.filter((item) => item.status === "approved" || item.status === "completed").length,
-    rejected: reports.filter((item) => item.status === "rejected").length,
-  }
+function derivedParentStatus(children: ProjectStageTermExecution[]): ProjectStageTermStatus {
+  const active = children.filter((child) => child.isActive)
+  const required = active.filter((child) => child.required)
+  const counted = required.length ? required : active
+  if (counted.some((child) => child.status === "rejected")) return "rejected"
+  if (counted.some((child) => child.status === "submitted" || child.status === "under_review")) return "under_review"
+  if (counted.length && counted.every((child) => child.status === "approved" || child.status === "completed")) return "completed"
+  if (counted.some((child) => child.status !== "not_started")) return "in_progress"
+  return "not_started"
 }
 
 export async function loadProjectStageExecution(
@@ -202,7 +231,11 @@ export async function loadProjectStageExecution(
   if (!access) return null
   const admin = createAdminClient()
 
-  const [{ data: allStages, error: stagesError }, { data: libraryStages, error: libraryError }] = await Promise.all([
+  const [
+    { data: allStages, error: stagesError },
+    { data: libraryStages, error: libraryError },
+    { data: libraryTerms, error: libraryTermsError },
+  ] = await Promise.all([
     admin
       .from("project_stages")
       .select("id, template_stage_id, name, description, status, sort_order")
@@ -213,52 +246,63 @@ export async function loadProjectStageExecution(
       .select("id, name, description, sort_order, is_active")
       .eq("organization_id", access.project.supervising_organization_id)
       .order("sort_order", { ascending: true }),
+    admin
+      .from("stage_terms")
+      .select("id, stage_id, parent_term_id, report_name, is_required, response_type, status, sort_order, stages!inner(organization_id)")
+      .eq("stages.organization_id", access.project.supervising_organization_id)
+      .order("sort_order", { ascending: true }),
   ])
   if (stagesError) throw stagesError
   if (libraryError) throw libraryError
+  if (libraryTermsError) throw libraryTermsError
 
   const stageRows = allStages ?? []
   const stageIds = stageRows.map((stage: any) => stage.id as string)
-  const { data: responseRows, error: responseError } = stageIds.length
+  const { data: allTerms, error: termsError } = stageIds.length
+    ? await admin
+        .from("project_stage_terms")
+        .select("id, project_stage_id, template_term_id, parent_term_id, report_name, is_required, responsible_organization_id, responsible_user_id, due_date_rule, due_date, approval_required, template_reference, response_type, instructions, status, sort_order, is_active")
+        .in("project_stage_id", stageIds)
+        .order("sort_order", { ascending: true })
+    : { data: [], error: null }
+  if (termsError) throw termsError
+
+  const termRows = allTerms ?? []
+  const termIds = termRows.map((term: any) => term.id as string)
+  const { data: responses, error: responseError } = termIds.length
     ? await admin
         .from("term_responses")
-        .select("id, project_stage_id, report_number, visit_number, report_type, subject, report_title, response_content, status, created_by, responsible_user_id, approval_required, response_type, template_reference, instructions, created_at, updated_at, submitted_at, completed_at")
-        .in("project_stage_id", stageIds)
+        .select("id, project_stage_term_id, report_number, visit_number, report_type, subject, report_title, response_content, status, created_by, created_at, updated_at, submitted_at, completed_at")
+        .in("project_stage_term_id", termIds)
         .order("created_at", { ascending: false })
     : { data: [], error: null }
   if (responseError) throw responseError
 
-  const responseIds = (responseRows ?? []).map((response: any) => response.id as string)
-  const [{ data: attachments, error: attachmentError }, { data: approvals, error: approvalError }, { data: translations, error: translationError }] = await Promise.all([
+  const responseIds = (responses ?? []).map((response: any) => response.id as string)
+  const [{ data: attachments }, { data: approvals }, { data: translations }] = await Promise.all([
     responseIds.length
       ? admin.from("response_attachments").select("id, response_id, storage_path, original_filename, mime_type, size_bytes, attachment_kind, sort_order, created_at").in("response_id", responseIds).order("sort_order", { ascending: true })
-      : Promise.resolve({ data: [] as any[], error: null }),
+      : Promise.resolve({ data: [] as any[] }),
     responseIds.length
       ? admin.from("approvals").select("id, response_id, reviewer_id, decision, comments, decided_at").in("response_id", responseIds).order("decided_at", { ascending: false })
-      : Promise.resolve({ data: [] as any[], error: null }),
+      : Promise.resolve({ data: [] as any[] }),
     responseIds.length
       ? admin.from("translation_documents").select("id, response_id, translation_status, generated_at, original_pdf_url, arabic_pdf_url, bilingual_pdf_url").in("response_id", responseIds)
-      : Promise.resolve({ data: [] as any[], error: null }),
+      : Promise.resolve({ data: [] as any[] }),
   ])
-  if (attachmentError) throw attachmentError
-  if (approvalError) throw approvalError
-  if (translationError) throw translationError
 
   const profileIds = Array.from(new Set([
-    ...(responseRows ?? []).flatMap((response: any) => [response.created_by, response.responsible_user_id]).filter(Boolean),
+    ...termRows.map((term: any) => term.responsible_user_id).filter(Boolean),
+    ...(responses ?? []).map((response: any) => response.created_by).filter(Boolean),
     ...(approvals ?? []).map((approval: any) => approval.reviewer_id).filter(Boolean),
   ])) as string[]
+  const organizationIds = Array.from(new Set(termRows.map((term: any) => term.responsible_organization_id).filter(Boolean))) as string[]
 
-  const [{ data: profiles, error: profileError }, { data: memberships, error: membershipError }] = await Promise.all([
-    profileIds.length
-      ? admin.from("profiles").select("id, full_name, email, avatar_url").in("id", profileIds)
-      : Promise.resolve({ data: [] as any[], error: null }),
-    profileIds.length
-      ? admin.from("organization_memberships").select("user_id, role").in("user_id", profileIds).eq("status", "active")
-      : Promise.resolve({ data: [] as any[], error: null }),
+  const [{ data: profiles }, { data: organizations }, { data: memberships }] = await Promise.all([
+    profileIds.length ? admin.from("profiles").select("id, full_name, email, avatar_url").in("id", profileIds) : Promise.resolve({ data: [] as any[] }),
+    organizationIds.length ? admin.from("organizations").select("id, name").in("id", organizationIds) : Promise.resolve({ data: [] as any[] }),
+    profileIds.length ? admin.from("organization_memberships").select("user_id, role").in("user_id", profileIds).eq("status", "active") : Promise.resolve({ data: [] as any[] }),
   ])
-  if (profileError) throw profileError
-  if (membershipError) throw membershipError
 
   const rolesByUser = new Map<string, string>((memberships ?? []).map((membership: any) => [membership.user_id, membership.role]))
   const people = new Map<string, ProjectStagePerson>((profiles ?? []).map((profile: any) => {
@@ -268,9 +312,10 @@ export async function loadProjectStageExecution(
       name: profile.full_name?.trim() || profile.email || "Project member",
       email: profile.email,
       avatarUrl: profile.avatar_url,
-      role: rawRole ? roleLabel(rawRole) : "Project Member",
+      role: rawRole ? roleLabel(rawRole) : "Admin",
     }]
   }))
+  const orgs = new Map<string, ProjectStageOrganization>((organizations ?? []).map((organization: any) => [organization.id, { id: organization.id, name: organization.name }]))
 
   const attachmentByResponse = new Map<string, ProjectStageAttachment[]>()
   for (const attachment of attachments ?? []) {
@@ -309,11 +354,10 @@ export async function loadProjectStageExecution(
     })
   }
 
-  const reportsByStage = new Map<string, ProjectStageReport[]>()
-  for (const response of responseRows ?? []) {
+  const responsesByTerm = new Map<string, ProjectTermResponse[]>()
+  for (const response of responses ?? []) {
     const createdBy = people.get(response.created_by) ?? { id: response.created_by, name: "Project member", email: null, avatarUrl: null }
-    const responsibleUser = response.responsible_user_id ? people.get(response.responsible_user_id) ?? null : createdBy
-    const mapped: ProjectStageReport = {
+    const mapped: ProjectTermResponse = {
       id: response.id,
       reportNumber: response.report_number,
       visitNumber: response.visit_number,
@@ -323,11 +367,6 @@ export async function loadProjectStageExecution(
       content: parseContent(response.response_content),
       status: response.status,
       createdBy,
-      responsibleUser,
-      approvalRequired: response.approval_required !== false,
-      responseType: isStageReportResponseType(response.response_type) ? response.response_type : "combined",
-      templateReference: response.template_reference,
-      instructions: response.instructions,
       createdAt: response.created_at,
       updatedAt: response.updated_at,
       submittedAt: response.submitted_at,
@@ -336,36 +375,149 @@ export async function loadProjectStageExecution(
       approvals: approvalByResponse.get(response.id) ?? [],
       translation: translationByResponse.get(response.id) ?? null,
     }
-    const items = reportsByStage.get(response.project_stage_id) ?? []
+    const items = responsesByTerm.get(response.project_stage_term_id) ?? []
     items.push(mapped)
-    reportsByStage.set(response.project_stage_id, items)
+    responsesByTerm.set(response.project_stage_term_id, items)
   }
-  for (const items of reportsByStage.values()) items.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
+  for (const items of responsesByTerm.values()) {
+    items.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
+  }
+
+  const termMap = new Map<string, ProjectStageTermExecution>()
+  for (const term of termRows) {
+    const termResponses = responsesByTerm.get(term.id) ?? []
+    const response = termResponses[0] ?? null
+    termMap.set(term.id, {
+      id: term.id,
+      projectStageId: term.project_stage_id,
+      templateTermId: term.template_term_id,
+      parentTermId: term.parent_term_id,
+      reportName: term.report_name,
+      required: term.is_required,
+      responsibleOrganization: term.responsible_organization_id ? orgs.get(term.responsible_organization_id) ?? null : null,
+      responsibleUser: term.responsible_user_id ? people.get(term.responsible_user_id) ?? null : null,
+      dueDateRule: term.due_date_rule,
+      dueDate: term.due_date,
+      approvalRequired: term.approval_required ?? true,
+      templateReference: term.template_reference,
+      responseType: isSubtermResponseType(term.response_type) ? term.response_type : "combined",
+      instructions: typeof term.instructions === "string" && term.instructions.trim() ? term.instructions : null,
+      status: term.status,
+      sortOrder: term.sort_order,
+      isActive: term.is_active !== false,
+      hasLinkedData: termResponses.length > 0,
+      response,
+      responses: termResponses,
+      reportSummary: {
+        total: termResponses.length,
+        draft: termResponses.filter((item) => item.status === "draft").length,
+        inProgress: termResponses.filter((item) => item.status === "in_progress").length,
+        pendingReview: termResponses.filter((item) => item.status === "submitted" || item.status === "under_review").length,
+        approved: termResponses.filter((item) => item.status === "approved" || item.status === "completed").length,
+        rejected: termResponses.filter((item) => item.status === "rejected").length,
+      },
+      translation: response?.translation ?? null,
+      subterms: [],
+    })
+  }
+
+  for (const term of termMap.values()) {
+    if (!term.parentTermId) continue
+    const parent = termMap.get(term.parentTermId)
+    if (parent) parent.subterms.push(term)
+  }
+  for (const term of termMap.values()) {
+    term.subterms.sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName))
+    if (term.subterms.some((child) => child.isActive)) term.status = derivedParentStatus(term.subterms)
+  }
 
   const includeInactive = includeInactiveForReview && access.canReview
   const visibleStages = includeInactive ? stageRows : stageRows.filter((stage: any) => stage.status !== "disabled")
-  const stages: ProjectStageExecution[] = visibleStages.map((stage: any) => {
-    const reports = reportsByStage.get(stage.id) ?? []
-    return {
-      id: stage.id,
-      templateStageId: stage.template_stage_id,
-      name: stage.name,
-      description: stage.description,
-      status: stage.status,
-      sortOrder: stage.sort_order,
-      reports,
-      reportSummary: reportSummary(reports),
-    }
-  })
+  const stages: ProjectStageExecution[] = visibleStages.map((stage: any) => ({
+    id: stage.id,
+    templateStageId: stage.template_stage_id,
+    name: stage.name,
+    description: stage.description,
+    status: stage.status,
+    sortOrder: stage.sort_order,
+    terms: Array.from(termMap.values())
+      .filter((term) => term.projectStageId === stage.id && !term.parentTermId && (includeInactive || term.isActive))
+      .map((term) => includeInactive ? term : { ...term, subterms: term.subterms.filter((subterm) => subterm.isActive) })
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName)),
+  }))
 
   const projectStageByTemplate = new Map<string, any>(
-    stageRows.filter((stage: any) => stage.template_stage_id).map((stage: any) => [stage.template_stage_id as string, stage]),
+    stageRows
+      .filter((stage: any) => stage.template_stage_id)
+      .map((stage: any) => [stage.template_stage_id as string, stage]),
   )
+  const projectTermByTemplate = new Map<string, any>(
+    termRows
+      .filter((term: any) => term.template_term_id)
+      .map((term: any) => [term.template_term_id as string, term]),
+  )
+  const responseTermIds = new Set<string>((responses ?? []).map((response: any) => response.project_stage_term_id as string))
+  const pendingResponseTermIds = new Set<string>((responses ?? [])
+    .filter((response: any) => response.status === "submitted" || response.status === "under_review")
+    .map((response: any) => response.project_stage_term_id as string))
+  const libraryTermDefinitionById = new Map<string, any>(
+    (libraryTerms ?? []).map((definition: any) => [definition.id as string, definition]),
+  )
+
+  const libraryTermMap = new Map<string, ProjectTermSelectionOption>()
+  for (const definition of libraryTerms ?? []) {
+    const projectTerm = projectTermByTemplate.get(definition.id)
+    libraryTermMap.set(definition.id, {
+      templateTermId: definition.id,
+      projectTermId: projectTerm?.id ?? null,
+      parentTemplateTermId: definition.parent_term_id,
+      name: definition.report_name,
+      required: definition.is_required,
+      responseType: isSubtermResponseType(definition.response_type) ? definition.response_type : "combined",
+      sortOrder: definition.sort_order,
+      active: Boolean(projectTerm && projectTerm.is_active !== false),
+      hasData: Boolean(projectTerm && responseTermIds.has(projectTerm.id)),
+      hasPendingReview: Boolean(projectTerm && pendingResponseTermIds.has(projectTerm.id)),
+      subterms: [],
+    })
+  }
+
+  for (const term of libraryTermMap.values()) {
+    if (!term.parentTemplateTermId) continue
+    const parent = libraryTermMap.get(term.parentTemplateTermId)
+    const definition = libraryTermDefinitionById.get(term.templateTermId)
+    if (parent && (definition?.status !== "disabled" || Boolean(term.projectTermId))) {
+      parent.subterms.push(term)
+    }
+  }
+  for (const term of libraryTermMap.values()) {
+    term.subterms.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+  }
+
+  const libraryTermsByStage = new Map<string, ProjectTermSelectionOption[]>()
+  for (const definition of libraryTerms ?? []) {
+    if (definition.parent_term_id) continue
+    const mapped = libraryTermMap.get(definition.id)
+    if (!mapped || (definition.status === "disabled" && !mapped.projectTermId)) continue
+    const rows = libraryTermsByStage.get(definition.stage_id) ?? []
+    rows.push(mapped)
+    libraryTermsByStage.set(definition.stage_id, rows)
+  }
+  for (const rows of libraryTermsByStage.values()) {
+    rows.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+  }
+
   const availableStages: ProjectStageSelectionOption[] = (libraryStages ?? [])
     .filter((stage: any) => stage.is_active !== false || projectStageByTemplate.has(stage.id))
     .map((stage: any) => {
       const projectStage = projectStageByTemplate.get(stage.id)
-      const reports = projectStage ? reportsByStage.get(projectStage.id) ?? [] : []
+      const terms = libraryTermsByStage.get(stage.id) ?? []
+      const legacyProjectTerms = projectStage
+        ? termRows.filter((term: any) => term.project_stage_id === projectStage.id && !term.template_term_id)
+        : []
+      const allItems = terms.flatMap((term) => [term, ...term.subterms])
+      const legacyHasData = legacyProjectTerms.some((term: any) => responseTermIds.has(term.id))
+      const legacyHasPendingReview = legacyProjectTerms.some((term: any) => pendingResponseTermIds.has(term.id))
       return {
         templateStageId: stage.id,
         projectStageId: projectStage?.id ?? null,
@@ -373,10 +525,15 @@ export async function loadProjectStageExecution(
         description: stage.description,
         sortOrder: stage.sort_order,
         active: Boolean(projectStage && projectStage.status !== "disabled"),
-        hasData: reports.length > 0 || Boolean(projectStage && ["in_progress", "completed"].includes(projectStage.status)),
-        hasPendingReview: reports.some((report) => report.status === "submitted" || report.status === "under_review"),
+        hasData:
+          allItems.some((item) => item.hasData) ||
+          legacyHasData ||
+          Boolean(projectStage && ["in_progress", "completed"].includes(projectStage.status)),
+        hasPendingReview: allItems.some((item) => item.hasPendingReview) || legacyHasPendingReview,
+        terms,
       }
     })
+
 
   return {
     project: { id: access.project.id, name: access.project.name, code: access.project.code },
@@ -388,13 +545,20 @@ export async function loadProjectStageExecution(
   }
 }
 
-export async function loadProjectStage(projectId: string, stageId: string, userId: string) {
+export async function loadProjectStageTerm(projectId: string, termId: string, userId: string) {
   const data = await loadProjectStageExecution(projectId, userId, true)
   if (!data) return null
-  const stage = data.stages.find((item) => item.id === stageId)
-  if (!stage) return null
-  return { ...data, stage }
+  for (const stage of data.stages) {
+    for (const term of stage.terms) {
+      if (term.id === termId) return { ...data, stage, term, parentTerm: null }
+      const subterm = term.subterms.find((item) => item.id === termId && (item.isActive || data.canReview))
+      if (subterm) return { ...data, stage, term: subterm, parentTerm: term }
+    }
+  }
+  return null
 }
+
+
 
 export async function loadNextProjectVisitNumber(projectId: string) {
   const admin = createAdminClient()
@@ -409,10 +573,10 @@ export async function loadNextProjectVisitNumber(projectId: string) {
   return (data?.visit_number ?? 0) + 1
 }
 
-export async function loadProjectStageReport(projectId: string, stageId: string, reportId: string, userId: string) {
-  const execution = await loadProjectStage(projectId, stageId, userId)
+export async function loadProjectStageReport(projectId: string, termId: string, reportId: string, userId: string) {
+  const execution = await loadProjectStageTerm(projectId, termId, userId)
   if (!execution) return null
-  const response = execution.stage.reports.find((item) => item.id === reportId)
+  const response = execution.term.responses.find((item) => item.id === reportId)
   if (!response) return null
   return { ...execution, response }
 }

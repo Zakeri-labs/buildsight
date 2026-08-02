@@ -78,6 +78,22 @@ export async function resolveStageManagementOrganization(
 }
 
 
+export type StageTermRecord = {
+  id: string
+  stageId: string
+  parentTermId: string | null
+  reportName: string
+  required: boolean
+  approvalRequired: boolean
+  responseType: import("@/lib/stages/execution").SubtermResponseType
+  instructions: string | null
+  status: "active" | "disabled"
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+  subterms: StageTermRecord[]
+}
+
 export type StageRecord = {
   id: string
   organizationId: string
@@ -87,6 +103,7 @@ export type StageRecord = {
   sortOrder: number
   createdAt: string
   updatedAt: string
+  terms: StageTermRecord[]
 }
 
 export type StageManagementData = {
@@ -95,6 +112,7 @@ export type StageManagementData = {
 
 export async function canManageStageTemplates(organizationId: string, userId: string): Promise<boolean> {
   const admin = createAdminClient()
+
   const { data: orgMembership, error: orgMembershipError } = await admin
     .from("organization_memberships")
     .select("id")
@@ -102,45 +120,106 @@ export async function canManageStageTemplates(organizationId: string, userId: st
     .eq("user_id", userId)
     .eq("status", "active")
     .in("role", ["org_admin", "org_manager"])
-    .limit(1)
     .maybeSingle()
-  if (!orgMembershipError && orgMembership) return true
 
-  const { data: projects, error: projectsError } = await admin
-    .from("projects")
-    .select("id")
-    .eq("supervising_organization_id", organizationId)
-  if (projectsError || !projects?.length) return false
-  const { data: membership, error: membershipError } = await admin
+  if (orgMembershipError) return false
+  if (orgMembership) return true
+
+  const { data: projectMemberships, error: membershipError } = await admin
     .from("project_user_memberships")
-    .select("id")
-    .in("project_id", projects.map((project: any) => project.id))
+    .select("project_id")
     .eq("user_id", userId)
     .eq("status", "active")
     .in("access_role", ["project_admin", "project_manager"])
+  if (membershipError) return false
+
+  const projectIds = (projectMemberships ?? []).map((membership: any) => membership.project_id as string)
+  if (projectIds.length === 0) return false
+
+  const { data: managedProject, error: projectError } = await admin
+    .from("projects")
+    .select("id")
+    .in("id", projectIds)
+    .eq("supervising_organization_id", organizationId)
     .limit(1)
     .maybeSingle()
-  return !membershipError && Boolean(membership)
+
+  return !projectError && Boolean(managedProject)
 }
 
 export async function loadStageManagement(organizationId: string): Promise<StageManagementData> {
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from("stages")
-    .select("id, organization_id, name, description, is_active, sort_order, created_at, updated_at")
-    .eq("organization_id", organizationId)
-    .order("sort_order", { ascending: true })
-  if (error) throw error
+
+  const [{ data: stageRows, error: stageError }, { data: termRows, error: termError }] = await Promise.all([
+    admin
+      .from("stages")
+      .select("id, organization_id, name, description, is_active, sort_order, created_at, updated_at")
+      .eq("organization_id", organizationId)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true }),
+    admin
+      .from("stage_terms")
+      .select(
+        "id, stage_id, parent_term_id, report_name, is_required, approval_required, response_type, instructions, status, sort_order, created_at, updated_at, stages!inner(organization_id)",
+      )
+      .eq("stages.organization_id", organizationId)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true }),
+  ])
+
+  if (stageError) throw stageError
+  if (termError) throw termError
+
+  const termMap = new Map<string, StageTermRecord>()
+  for (const term of termRows ?? []) {
+    termMap.set(term.id, {
+      id: term.id,
+      stageId: term.stage_id,
+      parentTermId: term.parent_term_id,
+      reportName: term.report_name,
+      required: term.is_required,
+      approvalRequired: term.approval_required,
+      responseType: term.response_type ?? "combined",
+      instructions: typeof term.instructions === "string" && term.instructions.trim() ? term.instructions : null,
+      status: term.status,
+      sortOrder: term.sort_order,
+      createdAt: term.created_at,
+      updatedAt: term.updated_at,
+      subterms: [],
+    })
+  }
+
+  for (const term of termMap.values()) {
+    if (!term.parentTermId) continue
+    const parent = termMap.get(term.parentTermId)
+    if (parent && parent.stageId === term.stageId) parent.subterms.push(term)
+  }
+  for (const term of termMap.values()) {
+    term.subterms.sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName))
+  }
+
+  const termsByStage = new Map<string, StageTermRecord[]>()
+  for (const term of termMap.values()) {
+    if (term.parentTermId) continue
+    const current = termsByStage.get(term.stageId) ?? []
+    current.push(term)
+    termsByStage.set(term.stageId, current)
+  }
+  for (const terms of termsByStage.values()) {
+    terms.sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName))
+  }
+
   return {
-    stages: (data ?? []).map((stage: any) => ({
+    stages: (stageRows ?? []).map((stage: any) => ({
       id: stage.id,
       organizationId: stage.organization_id,
       name: stage.name,
       description: stage.description,
-      active: stage.is_active !== false,
+      active: stage.is_active,
       sortOrder: stage.sort_order,
       createdAt: stage.created_at,
       updatedAt: stage.updated_at,
+      terms: termsByStage.get(stage.id) ?? [],
     })),
   }
 }

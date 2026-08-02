@@ -32,10 +32,10 @@ import {
   X,
 } from "lucide-react"
 import {
-  decideStageReportAction,
+  decideTermResponseAction,
   deleteResponseAttachmentAction,
   registerResponseAttachmentsAction,
-  saveStageReportAction,
+  saveTermResponseAction,
   type AttachmentRegistration,
 } from "@/lib/actions/project-stages"
 import { saveReportCcRecipientsAction } from "@/lib/actions/report-cc"
@@ -44,7 +44,7 @@ import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
 import type { ProjectStageAttachment, ProjectStageApproval, ProjectStagePerson, ProjectStageTranslationSummary } from "@/lib/db/project-stages"
 import type { ProjectCcCandidate, ReportCcRecipient, ReportCcSelection } from "@/lib/report-cc/types"
 import {
-  EMPTY_STAGE_REPORT_CONTENT,
+  EMPTY_TERM_RESPONSE_CONTENT,
   REPORT_TYPES,
   reportTypeLabel,
   STAGE_DOCUMENT_ACCEPT,
@@ -55,15 +55,15 @@ import {
   sanitizeEvidenceFileName,
   statusLabel,
   statusTone,
-  stageReportResponseTypeLabel,
+  subtermResponseTypeLabel,
   validateEvidenceImage,
   validateStageDocument,
   type ChecklistItem,
   type ReportSectionKey,
   type ReportTypeValue,
   type ResponseStatus,
-  type StageReportResponseType,
-  type StageReportContent,
+  type SubtermResponseType,
+  type TermResponseContent,
 } from "@/lib/stages/execution"
 import { uploadStageEvidence } from "@/lib/stages/evidence-upload"
 import { createClient } from "@/lib/supabase/client"
@@ -180,10 +180,9 @@ type InitialResponse = {
   reportType: string
   subject: string | null
   reportTitle: string
-  content: StageReportContent
+  content: TermResponseContent
   status: ResponseStatus
   createdBy: ProjectStagePerson
-  responsibleUser: ProjectStagePerson | null
   createdAt: string
   updatedAt: string
   attachments: ProjectStageAttachment[]
@@ -221,8 +220,8 @@ function plainResponseText(value: string) {
 }
 
 function configuredResponseError(
-  responseType: StageReportResponseType,
-  content: StageReportContent,
+  responseType: SubtermResponseType,
+  content: TermResponseContent,
   imageCount: number,
   documentCount: number,
 ) {
@@ -259,12 +258,11 @@ function formatDate(value: string | Date, locale: "en" | "ar") {
 export function InspectionReportForm({
   project,
   stage,
-  reportConfig,
+  term,
+  parentTerm,
   response,
   translation,
   canReview,
-  canManage,
-  currentUserId,
   workflowActive,
   canEdit,
   suggestedVisitNumber,
@@ -274,22 +272,21 @@ export function InspectionReportForm({
 }: {
   project: { id: string; name: string; code: string | null }
   stage: { id: string; name: string }
-  reportConfig: {
+  term: {
     id: string
     reportName: string
     required: boolean
     responsibleUser: ProjectStagePerson | null
     templateReference: string | null
-    responseType: StageReportResponseType
+    responseType: SubtermResponseType
     instructions: string | null
     approvalRequired: boolean
     status: string
   }
+  parentTerm: { id: string; name: string } | null
   response: InitialResponse
   translation?: ProjectStageTranslationSummary | null
   canReview: boolean
-  canManage: boolean
-  currentUserId: string
   workflowActive: boolean
   canEdit: boolean
   suggestedVisitNumber: number
@@ -304,15 +301,14 @@ export function InspectionReportForm({
   const [reportType, setReportType] = useState<ReportTypeValue>((REPORT_TYPES.some((item) => item.value === response?.reportType) ? response?.reportType : "inspection_report") as ReportTypeValue)
   const [visitNumber, setVisitNumber] = useState(response?.visitNumber ?? suggestedVisitNumber)
   const [subject, setSubject] = useState(response?.subject ?? "")
-  const [reportTitle, setReportTitle] = useState(response?.reportTitle ?? reportConfig.reportName)
-  const [content, setContent] = useState<StageReportContent>(() => ({
-    ...(response?.content ?? EMPTY_STAGE_REPORT_CONTENT),
-    checklist: response?.content.checklist.length ? response.content.checklist : checklistFromTemplate(reportConfig.templateReference),
+  const [reportTitle, setReportTitle] = useState(response?.reportTitle ?? term.reportName)
+  const [content, setContent] = useState<TermResponseContent>(() => ({
+    ...(response?.content ?? EMPTY_TERM_RESPONSE_CONTENT),
+    checklist: response?.content.checklist.length ? response.content.checklist : checklistFromTemplate(term.templateReference),
   }))
   const [responseId, setResponseId] = useState(response?.id ?? null)
   const [reportNumber, setReportNumber] = useState(response?.reportNumber ?? "Auto-generated on save")
   const [status, setStatus] = useState<ResponseStatus>(response?.status ?? "draft")
-  const [responsibleUserId, setResponsibleUserId] = useState(response?.responsibleUser?.id ?? reportConfig.responsibleUser?.id ?? currentUserId)
   const [existingAttachments, setExistingAttachments] = useState(response?.attachments ?? [])
   const [pendingImages, setPendingImages] = useState<PendingFile[]>([])
   const [pendingDocuments, setPendingDocuments] = useState<PendingFile[]>([])
@@ -361,16 +357,6 @@ export function InspectionReportForm({
   const pendingReview = status === "submitted" || status === "under_review"
   const isEditable = canEdit && !statusLocked && !pendingReview
   const isLocked = !isEditable || !workflowActive
-  const selectedResponsibleCandidate = ccCandidates.find((candidate) => candidate.id === responsibleUserId)
-  const selectedResponsiblePerson: ProjectStagePerson | null = selectedResponsibleCandidate
-    ? {
-        id: selectedResponsibleCandidate.id,
-        name: selectedResponsibleCandidate.name,
-        email: selectedResponsibleCandidate.email,
-        avatarUrl: selectedResponsibleCandidate.avatarUrl,
-        role: selectedResponsibleCandidate.role,
-      }
-    : response?.responsibleUser ?? reportConfig.responsibleUser
 
   const updateSection = useCallback((key: ReportSectionKey, value: string) => {
     setContent((current) => ({ ...current, [key]: value }))
@@ -378,15 +364,14 @@ export function InspectionReportForm({
 
   const ensureResponse = async (saveStatus: "draft" | "in_progress" = "draft") => {
     const targetResponseId = responseId ?? initialResponseId
-    const result = await saveStageReportAction({
+    const result = await saveTermResponseAction({
       projectId: project.id,
-      stageId: stage.id,
+      termId: term.id,
       responseId: targetResponseId,
       reportType,
       subject,
       reportTitle,
       content,
-      responsibleUserId,
       saveStatus,
     })
     if (!result.ok) throw new Error(result.error)
@@ -472,7 +457,7 @@ export function InspectionReportForm({
     }
     if (mode === "submit") {
       const validationError = configuredResponseError(
-        reportConfig.responseType,
+        term.responseType,
         content,
         evidenceImages.length + pendingImages.length,
         documentAttachments.length + pendingDocuments.length,
@@ -498,15 +483,14 @@ export function InspectionReportForm({
       await uploadFiles(id, pendingImages, "evidence_image")
       await uploadFiles(id, pendingDocuments, "document")
       if (mode === "submit") {
-        const result = await saveStageReportAction({
+        const result = await saveTermResponseAction({
           projectId: project.id,
-          stageId: stage.id,
+          termId: term.id,
           responseId: id,
           reportType,
           subject,
           reportTitle,
           content,
-          responsibleUserId,
           submit: true,
         })
         if (!result.ok) throw new Error(result.error)
@@ -518,7 +502,7 @@ export function InspectionReportForm({
         setSuccess(copy.saved)
       }
       if (!response) {
-        router.replace(`/projects/${project.id}/stages/${stage.id}/reports/${id}`)
+        router.replace(`/projects/${project.id}/stages/${stage.id}/terms/${term.id}/reports/${id}`)
       }
       router.refresh()
     } catch (saveError) {
@@ -617,7 +601,7 @@ export function InspectionReportForm({
       const id = responseId ?? await ensureResponse("draft")
       await uploadFiles(id, pendingImages, "evidence_image")
       await uploadFiles(id, pendingDocuments, "document")
-      const result = await decideStageReportAction({ projectId: project.id, responseId: id, decision, comments: reviewComments })
+      const result = await decideTermResponseAction({ projectId: project.id, responseId: id, decision, comments: reviewComments })
       if (!result.ok) throw new Error(result.error)
       setStatus(decision)
       setReviewComments("")
@@ -632,12 +616,13 @@ export function InspectionReportForm({
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 pb-24">
-      <Link href={`/projects/${project.id}/stages/${stage.id}`} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+      <Link href={`/projects/${project.id}/stages/${stage.id}/terms/${term.id}`} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4 flip-rtl" />{copy.back}
       </Link>
 
       <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
         <span>{project.name}</span><span aria-hidden>/</span><span>{stage.name}</span>
+        {parentTerm ? <><span aria-hidden>/</span><span>{parentTerm.name}</span><span aria-hidden>/</span><span>{term.reportName}</span></> : <><span aria-hidden>/</span><span>{term.reportName}</span></>}
         <span aria-hidden>/</span><span className="font-medium text-foreground">{response ? response.reportTitle : "New Report"}</span>
       </nav>
 
@@ -647,10 +632,18 @@ export function InspectionReportForm({
             <div className="flex items-center gap-3">
               <span className="flex size-11 items-center justify-center rounded-xl bg-white/15"><ClipboardCheck className="size-6" /></span>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-white/70">Stage Report</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-white/70">{parentTerm ? "Sub-term Response" : "Construction Inspection / Report"}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl font-semibold sm:text-2xl">{reportConfig.reportName}</h1>
-                  <Badge variant="outline" className="border-white/30 bg-white/10 text-white">{stageReportResponseTypeLabel(reportConfig.responseType)}</Badge>
+                  <h1 className="text-xl font-semibold sm:text-2xl">{term.reportName}</h1>
+                  <Badge
+                    variant="outline"
+                    className={term.required
+                      ? "border-amber-200 bg-amber-50 text-amber-800"
+                      : "border-white/30 bg-white/10 text-white"}
+                  >
+                    {term.required ? copy.required : copy.optional}
+                  </Badge>
+                  {parentTerm ? <Badge variant="outline" className="border-white/30 bg-white/10 text-white">{subtermResponseTypeLabel(term.responseType)}</Badge> : null}
                 </div>
               </div>
             </div>
@@ -659,6 +652,7 @@ export function InspectionReportForm({
                 <StageTranslationActions
                   projectId={project.id}
                   stageId={stage.id}
+                  termId={term.id}
                   responseId={responseId}
                   responseUpdatedAt={response?.updatedAt ?? new Date().toISOString()}
                   translation={translation}
@@ -679,9 +673,9 @@ export function InspectionReportForm({
           <HeaderCell label={copy.reportNo} value={reportNumber} />
           <HeaderCell label={copy.visitNo} value={String(visitNumber)} />
           <HeaderCell label={copy.date} value={formatDate(reportDate, locale)} />
-          <HeaderCell label={copy.responsible} value={selectedResponsiblePerson?.name ?? copy.noResponsible} person={selectedResponsiblePerson} />
+          <HeaderCell label={copy.responsible} value={term.responsibleUser?.name ?? copy.noResponsible} person={term.responsibleUser} />
           <HeaderCell label={copy.status} value={statusLabel(status, locale)} />
-          <HeaderCell label={copy.report} value={reportTitle} />
+          <HeaderCell label={copy.report} value={term.reportName} />
         </CardContent>
       </Card>
 
@@ -691,17 +685,6 @@ export function InspectionReportForm({
           <div className="space-y-2 sm:col-span-2 lg:col-span-4"><Label htmlFor="report-title">{copy.title} <span className="text-destructive">*</span></Label><Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} /></div>
           <div className="space-y-2"><Label>{copy.type}</Label><Select value={reportType} onValueChange={(value) => setReportType(value as ReportTypeValue)} disabled={isLocked}><SelectTrigger className="w-full"><SelectValue>{(value) => reportTypeLabel(String(value ?? reportType), locale)}</SelectValue></SelectTrigger><SelectContent>{REPORT_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{reportTypeLabel(item.value, locale)}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-2"><Label htmlFor="visit-no">{copy.visitNo}</Label><Input id="visit-no" type="number" min={1} value={visitNumber} readOnly aria-readonly="true" className="bg-muted/40" /></div>
-          <div className="space-y-2 sm:col-span-2 lg:col-span-2">
-            <Label>{copy.responsible}</Label>
-            {canManage ? (
-              <Select value={responsibleUserId} onValueChange={setResponsibleUserId} disabled={isLocked}>
-                <SelectTrigger className="w-full"><SelectValue placeholder={copy.noResponsible} /></SelectTrigger>
-                <SelectContent>{ccCandidates.map((candidate) => <SelectItem key={candidate.id} value={candidate.id}>{candidate.name}{candidate.role ? ` · ${candidate.role}` : ""}</SelectItem>)}</SelectContent>
-              </Select>
-            ) : (
-              <Input value={selectedResponsiblePerson?.name ?? copy.noResponsible} readOnly aria-readonly="true" className="bg-muted/40" />
-            )}
-          </div>
           <div className="space-y-2 sm:col-span-2 lg:col-span-2"><Label htmlFor="report-subject">{copy.subject}</Label><Input id="report-subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Inspection location, package, activity, or reference" disabled={isLocked} /></div>
         </CardContent>
       </Card>
@@ -713,38 +696,38 @@ export function InspectionReportForm({
         disabled={isLocked || busy !== null}
       />
 
-      {reportConfig.templateReference ? <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"><FileText className="mt-0.5 size-4 shrink-0" /><div><p className="font-semibold">{copy.template}</p><p className="mt-0.5 text-xs opacity-80">{reportConfig.templateReference}</p></div></div> : null}
-      {reportConfig.instructions ? <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm"><p className="font-semibold">Description / Instructions</p><p className="mt-1 whitespace-pre-wrap text-muted-foreground">{reportConfig.instructions}</p></div> : null}
+      {term.templateReference ? <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"><FileText className="mt-0.5 size-4 shrink-0" /><div><p className="font-semibold">{copy.template}</p><p className="mt-0.5 text-xs opacity-80">{term.templateReference}</p></div></div> : null}
+      {term.instructions ? <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm"><p className="font-semibold">Description / Instructions</p><p className="mt-1 whitespace-pre-wrap text-muted-foreground">{term.instructions}</p></div> : null}
 
-      {reportConfig.responseType !== "combined" && reportConfig.responseType !== "inspection_checklist" ? (
+      {term.responseType !== "combined" && term.responseType !== "inspection_checklist" ? (
         <Card className="gap-0 py-0">
           <CardHeader className="border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6">
-            <CardTitle className="text-base font-semibold text-blue-950 dark:text-blue-100">{stageReportResponseTypeLabel(reportConfig.responseType)}</CardTitle>
+            <CardTitle className="text-base font-semibold text-blue-950 dark:text-blue-100">{subtermResponseTypeLabel(term.responseType)}</CardTitle>
           </CardHeader>
           <CardContent className="p-5 sm:p-6">
-            {reportConfig.responseType === "text" ? (
+            {term.responseType === "text" ? (
               <div className="space-y-2">
                 <Label htmlFor="configured-text-response">Written Response <span className="text-destructive">*</span></Label>
                 <textarea id="configured-text-response" value={content.answer} onChange={(event) => setContent((current) => ({ ...current, answer: event.target.value.slice(0, 10000) }))} rows={7} disabled={isLocked} className="w-full resize-y rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/20" placeholder="Enter the required response" />
               </div>
-            ) : reportConfig.responseType === "yes_no" || reportConfig.responseType === "pass_fail" ? (
+            ) : term.responseType === "yes_no" || term.responseType === "pass_fail" ? (
               <div className="space-y-3">
                 <Label>Result <span className="text-destructive">*</span></Label>
                 <div className="flex flex-wrap gap-2">
-                  {(reportConfig.responseType === "yes_no" ? [{ value: "yes", label: "Yes" }, { value: "no", label: "No" }] : [{ value: "pass", label: "Pass" }, { value: "fail", label: "Fail" }, { value: "na", label: "N/A" }]).map((option) => (
+                  {(term.responseType === "yes_no" ? [{ value: "yes", label: "Yes" }, { value: "no", label: "No" }] : [{ value: "pass", label: "Pass" }, { value: "fail", label: "Fail" }, { value: "na", label: "N/A" }]).map((option) => (
                     <Button key={option.value} type="button" variant={content.selection === option.value ? "default" : "outline"} disabled={isLocked} onClick={() => setContent((current) => ({ ...current, selection: option.value }))}>{option.label}</Button>
                   ))}
                 </div>
               </div>
-            ) : reportConfig.responseType === "measurement" ? (
+            ) : term.responseType === "measurement" ? (
               <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(140px,0.45fr)]">
                 <div className="space-y-2"><Label htmlFor="measurement-value">Value <span className="text-destructive">*</span></Label><Input id="measurement-value" inputMode="decimal" value={content.measurementValue} onChange={(event) => setContent((current) => ({ ...current, measurementValue: event.target.value }))} placeholder="Enter numeric value" disabled={isLocked} /></div>
                 <div className="space-y-2"><Label htmlFor="measurement-unit">Unit</Label><Input id="measurement-unit" value={content.measurementUnit} onChange={(event) => setContent((current) => ({ ...current, measurementUnit: event.target.value.slice(0, 100) }))} placeholder="mm, m², MPa…" disabled={isLocked} /></div>
               </div>
-            ) : reportConfig.responseType === "date" ? (
+            ) : term.responseType === "date" ? (
               <div className="max-w-sm space-y-2"><Label htmlFor="configured-date">Date <span className="text-destructive">*</span></Label><Input id="configured-date" type="date" value={content.dateValue} onChange={(event) => setContent((current) => ({ ...current, dateValue: event.target.value }))} disabled={isLocked} /></div>
             ) : (
-              <p className="text-sm text-muted-foreground">{reportConfig.responseType === "file_upload" ? "Upload at least one supporting file before submitting for review." : "Upload at least one evidence photo before submitting for review."}</p>
+              <p className="text-sm text-muted-foreground">{term.responseType === "file_upload" ? "Upload at least one supporting file before submitting for review." : "Upload at least one evidence photo before submitting for review."}</p>
             )}
           </CardContent>
         </Card>
@@ -784,7 +767,7 @@ export function InspectionReportForm({
         </AttachmentCard>
       </div>
 
-      {reportConfig.responseType === "combined" || reportConfig.responseType === "inspection_checklist" ? (
+      {term.responseType === "combined" || term.responseType === "inspection_checklist" ? (
         <Card className="gap-0 py-0">
           <div className="flex items-center justify-between border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6">
             <CardTitle className="text-base font-semibold text-blue-950 dark:text-blue-100">{copy.checklist}</CardTitle>
@@ -792,8 +775,8 @@ export function InspectionReportForm({
           </div>
           <CardContent className="space-y-3 p-5 sm:p-6">
             {content.checklist.length ? content.checklist.map((item, index) => (
-              <div key={item.id} className={cn("grid gap-2 rounded-xl border bg-muted/20 p-3 sm:items-center", reportConfig.responseType === "inspection_checklist" ? "sm:grid-cols-[minmax(0,1fr)_150px_minmax(180px,0.55fr)_auto]" : "sm:grid-cols-[auto_minmax(0,1fr)_minmax(180px,0.55fr)_auto]")}>
-                {reportConfig.responseType === "inspection_checklist" ? (
+              <div key={item.id} className={cn("grid gap-2 rounded-xl border bg-muted/20 p-3 sm:items-center", term.responseType === "inspection_checklist" ? "sm:grid-cols-[minmax(0,1fr)_150px_minmax(180px,0.55fr)_auto]" : "sm:grid-cols-[auto_minmax(0,1fr)_minmax(180px,0.55fr)_auto]")}>
+                {term.responseType === "inspection_checklist" ? (
                   <>
                     <Input value={item.label} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))} placeholder={`Check item ${index + 1}`} />
                     <Select value={item.result || "pending"} onValueChange={(value) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, result: value === "pending" ? "" : (value as "pass" | "fail" | "na"), checked: value === "pass" } : row) }))} disabled={isLocked}>
@@ -815,11 +798,11 @@ export function InspectionReportForm({
         </Card>
       ) : null}
 
-      {reportConfig.responseType === "combined" ? SECTION_META.map((section) => (
+      {term.responseType === "combined" ? SECTION_META.map((section) => (
         <RichSectionEditor key={section.key} title={locale === "ar" ? section.titleAr : section.title} description={section.description} value={content[section.key]} onChange={(value) => updateSection(section.key, value)} allowTable={section.key === "feedback"} disabled={isLocked} uploadInlineImage={uploadInlineImage} />
-      )) : reportConfig.responseType === "inspection_checklist" ? (
+      )) : term.responseType === "inspection_checklist" ? (
         <RichSectionEditor title="Overall Notes" description="Add overall inspection observations or follow-up notes." value={content.feedback} onChange={(value) => updateSection("feedback", value)} allowTable={false} disabled={isLocked} uploadInlineImage={uploadInlineImage} />
-      ) : reportConfig.responseType === "text" ? null : (
+      ) : term.responseType === "text" ? null : (
         <RichSectionEditor title="Comments / Notes" description="Add context, observations, or supporting notes." value={content.feedback} onChange={(value) => updateSection("feedback", value)} allowTable={false} disabled={isLocked} uploadInlineImage={uploadInlineImage} />
       )}
 

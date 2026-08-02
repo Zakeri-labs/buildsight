@@ -135,7 +135,7 @@ export async function generateAiSummary(rawInput: GenerateAiSummaryInput) {
     responseIds.length
       ? admin
           .from("term_responses")
-          .select("id, project_stage_id, report_number, visit_number, report_type, subject, report_title, response_content, status, created_by, approval_required, created_at, updated_at, submitted_at, completed_at")
+          .select("id, project_stage_term_id, report_number, visit_number, report_type, subject, report_title, response_content, status, created_by, created_at, updated_at, submitted_at, completed_at")
           .eq("project_id", projectId)
           .in("id", responseIds)
       : Promise.resolve({ data: [] as any[], error: null }),
@@ -153,28 +153,67 @@ export async function generateAiSummary(rawInput: GenerateAiSummaryInput) {
     throw new Error("One or more selected sources are unavailable or do not belong to this project.")
   }
 
-  const stageIds = Array.from(new Set((responses ?? []).map((row: any) => row.project_stage_id as string).filter(Boolean)))
+  const termIds = (responses ?? []).map((row: any) => row.project_stage_term_id as string)
   const responseRowIds = (responses ?? []).map((row: any) => row.id as string)
-  const [{ data: stages }, { data: attachments }, { data: approvals }] = await Promise.all([
-    stageIds.length
-      ? admin.from("project_stages").select("id, name, status").in("id", stageIds)
+  const [{ data: terms }, { data: attachments }, { data: approvals }] = await Promise.all([
+    termIds.length
+      ? admin.from("project_stage_terms").select("id, project_stage_id, parent_term_id, report_name, is_required, approval_required, is_active").in("id", termIds)
       : Promise.resolve({ data: [] as any[] }),
     responseRowIds.length
-      ? admin.from("response_attachments").select("id, response_id, storage_path, original_filename, mime_type, attachment_kind, sort_order, created_at").in("response_id", responseRowIds).order("sort_order", { ascending: true })
+      ? admin
+          .from("response_attachments")
+          .select("id, response_id, storage_path, original_filename, mime_type, attachment_kind, sort_order, created_at")
+          .in("response_id", responseRowIds)
+          .order("sort_order", { ascending: true })
       : Promise.resolve({ data: [] as any[] }),
     responseRowIds.length
-      ? admin.from("approvals").select("id, response_id, reviewer_id, decision, comments, decided_at").in("response_id", responseRowIds).order("decided_at", { ascending: true })
+      ? admin
+          .from("approvals")
+          .select("id, response_id, reviewer_id, decision, comments, decided_at")
+          .in("response_id", responseRowIds)
+          .order("decided_at", { ascending: true })
       : Promise.resolve({ data: [] as any[] }),
   ])
-  const reviewerIds = Array.from(new Set((approvals ?? []).map((row: any) => row.reviewer_id as string)))
-  const { data: reviewers } = reviewerIds.length
-    ? await admin.from("profiles").select("id, full_name, email").in("id", reviewerIds)
-    : { data: [] as any[] }
-  const stageMap = new Map<string, { name: string; status: string }>((stages ?? []).map((row: any) => [row.id, { name: row.name, status: row.status }]))
-  if ((responses ?? []).some((response: any) => !stageMap.has(response.project_stage_id) || stageMap.get(response.project_stage_id)?.status === "disabled")) {
-    throw new Error("One or more selected inspection reports belong to an inactive stage.")
-  }
 
+  const stageIds = Array.from(new Set((terms ?? []).map((row: any) => row.project_stage_id as string)))
+  const parentIds = Array.from(new Set((terms ?? []).map((row: any) => row.parent_term_id).filter(Boolean))) as string[]
+  const reviewerIds = Array.from(new Set((approvals ?? []).map((row: any) => row.reviewer_id as string)))
+  const [{ data: stages }, { data: reviewers }, { data: parents }] = await Promise.all([
+    stageIds.length ? admin.from("project_stages").select("id, name, status").in("id", stageIds) : Promise.resolve({ data: [] as any[] }),
+    reviewerIds.length ? admin.from("profiles").select("id, full_name, email").in("id", reviewerIds) : Promise.resolve({ data: [] as any[] }),
+    parentIds.length ? admin.from("project_stage_terms").select("id, is_active").in("id", parentIds) : Promise.resolve({ data: [] as any[] }),
+  ])
+  const parentActive = new Map<string, boolean>((parents ?? []).map((row: any) => [row.id, row.is_active !== false]))
+
+  const termMap = new Map<string, {
+    project_stage_id: string
+    parent_term_id: string | null
+    report_name: string
+    is_required: boolean
+    approval_required: boolean
+    is_active: boolean
+  }>(
+    (terms ?? []).map((row: any) => [row.id, {
+      project_stage_id: row.project_stage_id,
+      parent_term_id: row.parent_term_id,
+      report_name: row.report_name,
+      is_required: row.is_required === true,
+      approval_required: row.approval_required === true,
+      is_active: row.is_active !== false,
+    }]),
+  )
+  const stageMap = new Map<string, { name: string; status: string }>(
+    (stages ?? []).map((row: any) => [row.id, { name: row.name, status: row.status }]),
+  )
+  const selectedInactiveTerm = termIds.some((termId) => {
+    const term = termMap.get(termId)
+    if (!term || !term.is_active || (term.parent_term_id && parentActive.get(term.parent_term_id) !== true)) return true
+    const stage = stageMap.get(term.project_stage_id)
+    return !stage || stage.status === "disabled"
+  })
+  if (selectedInactiveTerm) {
+    throw new Error("One or more selected inspection reports belong to an inactive stage or term.")
+  }
   const reviewerMap = new Map<string, string>((reviewers ?? []).map((row: any) => [row.id, row.full_name?.trim() || row.email || "Reviewer"]))
   const attachmentsByResponse = new Map<string, any[]>()
   for (const row of attachments ?? []) {
@@ -204,7 +243,8 @@ export async function generateAiSummary(rawInput: GenerateAiSummaryInput) {
   })
 
   for (const response of responses ?? []) {
-    const stageName = stageMap.get(response.project_stage_id)?.name ?? "Project stage"
+    const term = termMap.get(response.project_stage_term_id)
+    const stageName = term ? stageMap.get(term.project_stage_id)?.name ?? "Project stage" : "Project stage"
     const responseContent = safeObject(response.response_content)
     const approvalRows = approvalsByResponse.get(response.id) ?? []
     const approvalText = approvalRows.length
@@ -222,12 +262,14 @@ export async function generateAiSummary(rawInput: GenerateAiSummaryInput) {
       text: [
         `\nSOURCE: INSPECTION REPORT`,
         `Stage: ${stageName}`,
+        `Term: ${term?.report_name ?? response.report_title}`,
         `Report title: ${response.report_title}`,
         `Report number: ${response.report_number}`,
         `Visit number: ${response.visit_number}`,
         `Type: ${response.report_type}`,
         `Status: ${response.status}`,
-        `Approval required: ${response.approval_required !== false ? "Yes" : "No"}`,
+        `Required: ${term?.is_required ? "Yes" : "No"}`,
+        `Approval required: ${term?.approval_required ? "Yes" : "No"}`,
         `Subject: ${response.subject ?? "—"}`,
         `Created: ${response.created_at}`,
         `Updated: ${response.updated_at}`,

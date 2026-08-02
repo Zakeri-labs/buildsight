@@ -790,7 +790,7 @@ export function ProjectsList({
                 </p>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs text-slate-700 dark:text-slate-300">
                   <ImpactRow label={locale === "ar" ? "المراحل" : "Stages"} value={deletionImpact.stages} />
-                  <ImpactRow label={locale === "ar" ? "إعدادات قديمة" : "Legacy setup"} value={deletionImpact.terms} />
+                  <ImpactRow label={locale === "ar" ? "البنود" : "Terms"} value={deletionImpact.terms} />
                   <ImpactRow label={locale === "ar" ? "الفحوصات" : "Inspections"} value={deletionImpact.inspections} />
                   <ImpactRow label={locale === "ar" ? "المراسلات" : "Letters"} value={deletionImpact.documents} />
                   <ImpactRow label={locale === "ar" ? "المستندات" : "Documents"} value={deletionImpact.initialDocuments} />
