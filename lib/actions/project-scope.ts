@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
-import { SELECTED_PROJECT_COOKIE } from "@/lib/project-scope"
+import { isValidProjectId, SELECTED_PROJECT_COOKIE } from "@/lib/project-scope"
 
 /**
  * Persists the selected project (or "all") in a cookie and revalidates the
@@ -10,7 +10,8 @@ import { SELECTED_PROJECT_COOKIE } from "@/lib/project-scope"
  */
 export async function selectProject(projectId: string) {
   const store = await cookies()
-  store.set(SELECTED_PROJECT_COOKIE, projectId || "all", {
+  const selectedProjectId = projectId === "all" || !isValidProjectId(projectId) ? "all" : projectId
+  store.set(SELECTED_PROJECT_COOKIE, selectedProjectId, {
     path: "/",
     maxAge: 60 * 60 * 24 * 365,
     sameSite: "lax",
