@@ -85,6 +85,8 @@ async function termScope(projectId: string, termId: string) {
 
 async function stageScope(projectId: string, stageId: string) {
   const admin = createAdminClient()
+
+  // 1. Direct match on project_stages.id
   const { data: byId, error: errorId } = await admin
     .from("project_stages")
     .select("id, project_id, name, description, status")
@@ -94,6 +96,7 @@ async function stageScope(projectId: string, stageId: string) {
   if (errorId) throw errorId
   if (byId) return byId
 
+  // 2. Match on project_stages.template_stage_id
   const { data: byTemplateId, error: errorTemplate } = await admin
     .from("project_stages")
     .select("id, project_id, name, description, status")
@@ -103,7 +106,40 @@ async function stageScope(projectId: string, stageId: string) {
   if (errorTemplate) throw errorTemplate
   if (byTemplateId) return byTemplateId
 
-  // Fallback: check if stageId is actually a termId
+  // 3. Match on library stages template (stages table) -> auto-provision project_stages row
+  const { data: libraryStage } = await admin
+    .from("stages")
+    .select("id, name, description, sort_order")
+    .eq("id", stageId)
+    .maybeSingle()
+
+  if (libraryStage) {
+    const { data: existingPs } = await admin
+      .from("project_stages")
+      .select("id, project_id, name, description, status")
+      .eq("project_id", projectId)
+      .eq("template_stage_id", libraryStage.id)
+      .maybeSingle()
+
+    if (existingPs) return existingPs
+
+    const { data: insertedPs, error: insertErr } = await admin
+      .from("project_stages")
+      .insert({
+        project_id: projectId,
+        template_stage_id: libraryStage.id,
+        name: libraryStage.name,
+        description: libraryStage.description,
+        status: "in_progress",
+        sort_order: libraryStage.sort_order ?? 0,
+      })
+      .select("id, project_id, name, description, status")
+      .single()
+
+    if (!insertErr && insertedPs) return insertedPs
+  }
+
+  // 4. Fallback: check if stageId is actually a termId
   const { data: termStage } = await admin
     .from("project_stage_terms")
     .select("project_stage_id, project_stages!inner(id, project_id, name, description, status)")
@@ -115,7 +151,7 @@ async function stageScope(projectId: string, stageId: string) {
     if (s) return s
   }
 
-  // Fallback: get first non-disabled stage of project
+  // 5. Fallback: get first non-disabled stage of project
   const { data: firstStage } = await admin
     .from("project_stages")
     .select("id, project_id, name, description, status")
@@ -125,6 +161,31 @@ async function stageScope(projectId: string, stageId: string) {
     .limit(1)
     .maybeSingle()
   if (firstStage) return firstStage
+
+  // 6. Fallback: create first stage from library templates
+  const { data: anyStage } = await admin
+    .from("stages")
+    .select("id, name, description, sort_order")
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (anyStage) {
+    const { data: createdDefaultPs } = await admin
+      .from("project_stages")
+      .insert({
+        project_id: projectId,
+        template_stage_id: anyStage.id,
+        name: anyStage.name,
+        description: anyStage.description,
+        status: "in_progress",
+        sort_order: anyStage.sort_order ?? 0,
+      })
+      .select("id, project_id, name, description, status")
+      .single()
+
+    if (createdDefaultPs) return createdDefaultPs
+  }
 
   throw new Error("Project stage not found.")
 }
