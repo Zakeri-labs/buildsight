@@ -281,7 +281,7 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
 // allowed to fall back to organisation-wide data when it is missing or stale.
 async function resolveScopedProjects(orgId: string, projectId: string | null, userId?: string) {
   const projects = await getOrgProjects(orgId, userId)
-  const scoped = projectId ? projects.filter((p) => p.id === projectId) : projects
+  const scoped = projectId ? projects.filter((p) => p.id === projectId || p.code === projectId) : projects
   const ids = scoped.map((p) => p.id)
   return { projects, scoped, ids }
 }

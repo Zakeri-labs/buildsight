@@ -839,14 +839,14 @@ export function ProjectParticipants({
       </Card>
 
       <EditContractorDialog
-        key={editContractor?.id ?? "none"}
+        key={editContractor ? `edit-${editContractor.id}` : "edit-contractor"}
         projectId={projectId}
         participant={editContractor}
         open={Boolean(editContractor)}
         onOpenChange={(nextOpen) => { if (!nextOpen) setEditContractor(null) }}
       />
       <RemoveParticipantDialog
-        key={removeParticipant?.id ?? "none"}
+        key={removeParticipant ? `remove-${removeParticipant.id}` : "remove-participant"}
         projectId={projectId}
         participant={removeParticipant}
         open={Boolean(removeParticipant)}

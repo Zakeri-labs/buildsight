@@ -11,12 +11,16 @@ import {
   Circle,
   ClipboardCheck,
   Clock3,
+  Eye,
   FileCheck2,
+  FileText,
+  Plus,
   ShieldCheck,
   UserRound,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { ManageProjectStagesButton } from "@/components/stages/project-stage-admin-controls"
@@ -28,7 +32,7 @@ import { profileAvatarDisplayUrl } from "@/lib/profile-avatar"
 
 const COPY = {
   en: {
-    title: "Project Stages",
+    title: "Visit Report",
     subtitle: "Track construction lifecycle reports, responsibilities, and approvals.",
     complete: "complete",
     completed: "completed",
@@ -41,14 +45,17 @@ const COPY = {
     pendingApproval: "Pending approval",
     noStages: "No active project stages are available.",
     noStagesHint: "An administrator can activate the construction stages used by this project.",
-    noTerms: "No terms have been added to this stage.",
+    noTerms: "No inspection reports have been created for this stage yet.",
     openReport: "Open reports",
     archived: "Archived",
     parentRecord: "Open parent reports",
     subterms: "Sub-terms",
+    addReport: "Add Report",
+    reports: "Reports",
+    viewReport: "View / Edit Report",
   },
   ar: {
-    title: "مراحل المشروع",
+    title: "تقارير الزيارة",
     subtitle: "متابعة تقارير دورة حياة الإنشاء والمسؤوليات والموافقات.",
     complete: "مكتمل",
     completed: "مكتمل",
@@ -61,11 +68,14 @@ const COPY = {
     pendingApproval: "بانتظار الموافقة",
     noStages: "لا توجد مراحل نشطة لهذا المشروع.",
     noStagesHint: "يمكن للمسؤول تفعيل مراحل الإنشاء المستخدمة في هذا المشروع.",
-    noTerms: "لم تتم إضافة بنود إلى هذه المرحلة.",
+    noTerms: "لا توجد تقارير معاينة مسجلة لهذه المرحلة بعد.",
     openReport: "فتح التقارير",
     archived: "مؤرشف",
     parentRecord: "فتح تقارير البند الرئيسي",
     subterms: "البنود الفرعية",
+    addReport: "إضافة تقرير",
+    reports: "التقارير",
+    viewReport: "عرض / تعديل التقرير",
   },
 } as const
 
@@ -77,10 +87,9 @@ function isComplete(term: ProjectStageTermExecution) {
   return term.status === "approved" || term.status === "completed"
 }
 
-function isOverdue(term: ProjectStageTermExecution) {
-  if (!term.dueDate || isComplete(term)) return false
-  const due = new Date(`${term.dueDate}T23:59:59`)
-  return Number.isFinite(due.getTime()) && due.getTime() < Date.now()
+function formatDate(value: string, locale: "en" | "ar") {
+  const date = new Date(value)
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar" : "en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date)
 }
 
 function actionableTerms(terms: ProjectStageTermExecution[]) {
@@ -141,51 +150,104 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
         </Card>
       ) : (
         <div className="flex flex-col gap-4">
-          {data.stages.map((stage) => {
+          {data.stages.map((stage, index) => {
             const open = openStages.has(stage.id)
+            const cleanStageName = stage.name.replace(/^\d+[\.\s\-]+/, "")
             const stageTerms = progressTerms(stage.terms)
             const completed = stageTerms.filter(isComplete).length
             const total = stageTerms.length
             const percentage = total ? Math.round((completed / total) * 100) : 0
+            const primaryTermId = stage.terms[0]?.id
+
+            const stageReportsMap = new Map<string, any>()
+            for (const term of stage.terms) {
+              const responses = term.responses ?? (term.response ? [term.response] : [])
+              for (const resp of responses) {
+                if (!stageReportsMap.has(resp.id)) {
+                  stageReportsMap.set(resp.id, { ...resp, termId: term.id })
+                }
+              }
+            }
+            const stageReports = Array.from(stageReportsMap.values())
+
             return (
               <Card key={stage.id} className="gap-0 overflow-hidden py-0">
-                <CardHeader className="border-b px-4 py-4 sm:px-5">
-                  <button
-                    type="button"
-                    aria-expanded={open}
-                    onClick={() => setOpenStages((current) => {
-                      const next = new Set(current)
-                      if (next.has(stage.id)) next.delete(stage.id)
-                      else next.add(stage.id)
-                      return next
-                    })}
-                    className="flex w-full items-center gap-4 text-start"
-                  >
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                      {open ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5 flip-rtl" />}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <CardTitle className="truncate text-base sm:text-lg">{stage.name}</CardTitle>
-                        <span className="text-xs font-semibold tabular-nums text-muted-foreground">{percentage}% {copy.complete}</span>
-                      </div>
-                      <div className="mt-2 flex items-center gap-3">
-                        <Progress value={percentage} className="h-2 flex-1" />
-                        <span className="whitespace-nowrap text-xs text-muted-foreground">{completed}/{total}</span>
-                      </div>
-                    </div>
-                  </button>
+                <CardHeader className="border-b px-4 py-3.5 sm:px-5">
+                  <div className="flex w-full items-center justify-between gap-4">
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      onClick={() => setOpenStages((current) => {
+                        const next = new Set(current)
+                        if (next.has(stage.id)) next.delete(stage.id)
+                        else next.add(stage.id)
+                        return next
+                      })}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-start"
+                    >
+                      <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4 flip-rtl" />}
+                      </span>
+                      <CardTitle className="truncate text-base font-semibold text-foreground">{cleanStageName}</CardTitle>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">({stageReports.length} {copy.reports})</span>
+                    </button>
+
+                    {primaryTermId ? (
+                      <Link
+                        href={`/projects/${data.project.id}/stages/${stage.id}/terms/${primaryTermId}/reports/new`}
+                        className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5 px-3 text-xs font-medium shrink-0")}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Plus className="size-3.5" />
+                        {copy.addReport}
+                      </Link>
+                    ) : null}
+                  </div>
                 </CardHeader>
 
                 {open ? (
                   <CardContent className="p-0">
-                    {stage.terms.length ? (
+                    {stageReports.length ? (
                       <div className="divide-y">
-                        {stage.terms.map((term) => (
-                          <TermGroup key={term.id} projectId={data.project.id} stageId={stage.id} term={term} copy={copy} locale={language} />
+                        {stageReports.map((report) => (
+                          <div key={report.id} className="flex flex-wrap items-center justify-between gap-3 p-4 transition-colors hover:bg-muted/30">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <FileText className="size-4 text-muted-foreground shrink-0" />
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-semibold text-sm text-foreground">{report.reportTitle || report.reportNumber}</span>
+                                  <Badge variant="outline" className={cn("text-[11px]", statusTone(report.status))}>
+                                    {statusLabel(report.status, language)}
+                                  </Badge>
+                                </div>
+                                <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                                  <span>{report.reportNumber}</span>
+                                  <span>•</span>
+                                  <span>{language === "ar" ? `زيارة #${report.visitNumber}` : `Visit #${report.visitNumber}`}</span>
+                                  {report.createdBy?.name ? (
+                                    <>
+                                      <span>•</span>
+                                      <span>{report.createdBy.name}</span>
+                                    </>
+                                  ) : null}
+                                  <span>•</span>
+                                  <span>{formatDate(report.createdAt, language)}</span>
+                                </p>
+                              </div>
+                            </div>
+                            <Link
+                              href={`/projects/${data.project.id}/stages/${stage.id}/terms/${report.termId || primaryTermId}/reports/${report.id}`}
+                              className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-8 gap-1 text-xs text-primary font-medium")}
+                            >
+                              <Eye className="size-3.5" />
+                              {copy.viewReport}
+                            </Link>
+                          </div>
                         ))}
                       </div>
-                    ) : <p className="p-6 text-center text-sm text-muted-foreground">{copy.noTerms}</p>}
+                    ) : (
+                      <p className="p-6 text-center text-sm text-muted-foreground">{copy.noTerms}</p>
+                    )}
                   </CardContent>
                 ) : null}
               </Card>

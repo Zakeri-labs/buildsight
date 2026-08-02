@@ -8,8 +8,36 @@ export default async function NewTermReportPage({ params }: { params: Promise<{ 
   const [{ projectId, stageId, termId }, session] = await Promise.all([params, requireOnboarded()])
   const data = await loadProjectStageTerm(projectId, termId, session.userId)
   if (!data || data.stage.id !== stageId) notFound()
-  const workflowActive = data.stage.status !== "disabled" && data.term.isActive && (!data.parentTerm || data.parentTerm.isActive)
-  if (!workflowActive || (!data.parentTerm && data.term.subterms.some((item) => item.isActive))) notFound()
+  const workflowActive = data.stage.status !== "disabled"
+  if (!workflowActive) notFound()
   const [ccCandidates, nextVisitNumber] = await Promise.all([loadProjectCcCandidates(projectId), loadNextProjectVisitNumber(projectId)])
-  return <InspectionReportForm project={data.project} stage={{ id: data.stage.id, name: data.stage.name }} term={{ id: data.term.id, reportName: data.term.reportName, required: data.term.required, responsibleUser: data.term.responsibleUser, templateReference: data.term.templateReference, responseType: data.term.responseType, instructions: data.term.instructions, approvalRequired: data.term.approvalRequired, status: data.term.status }} parentTerm={data.parentTerm ? { id: data.parentTerm.id, name: data.parentTerm.reportName } : null} response={null} translation={null} canReview={data.canReview} workflowActive={workflowActive} canEdit={true} suggestedVisitNumber={nextVisitNumber} initialResponseId={crypto.randomUUID()} ccCandidates={ccCandidates} initialCcRecipients={[]} />
+  const stageSubterms = data.stage.terms.flatMap((t) => [t, ...t.subterms])
+  return (
+    <InspectionReportForm
+      project={data.project}
+      stage={{ id: data.stage.id, name: data.stage.name }}
+      term={{
+        id: data.term.id,
+        reportName: data.term.reportName,
+        required: data.term.required,
+        responsibleUser: data.term.responsibleUser,
+        templateReference: data.term.templateReference,
+        responseType: data.term.responseType,
+        instructions: data.term.instructions,
+        approvalRequired: data.term.approvalRequired,
+        status: data.term.status,
+      }}
+      parentTerm={data.parentTerm ? { id: data.parentTerm.id, name: data.parentTerm.reportName } : null}
+      response={null}
+      translation={null}
+      canReview={data.canReview}
+      workflowActive={workflowActive}
+      canEdit={true}
+      suggestedVisitNumber={nextVisitNumber}
+      initialResponseId={crypto.randomUUID()}
+      ccCandidates={ccCandidates}
+      initialCcRecipients={[]}
+      stageSubterms={stageSubterms}
+    />
+  )
 }

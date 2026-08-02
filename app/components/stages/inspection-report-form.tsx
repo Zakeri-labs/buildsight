@@ -79,11 +79,18 @@ import { useI18n } from "@/lib/i18n"
 import { profileAvatarDisplayUrl } from "@/lib/profile-avatar"
 
 const SECTION_META: Array<{ key: ReportSectionKey; title: string; titleAr: string; description: string }> = [
-  { key: "feedback", title: "Feedback", titleAr: "الملاحظات العامة", description: "Record the inspection outcome, contractor feedback, and agreed actions." },
-  { key: "observation", title: "Observation", titleAr: "المعاينة", description: "Document detailed site observations, locations, materials, and workmanship." },
-  { key: "findings", title: "Findings", titleAr: "النتائج", description: "Summarize compliance, non-conformance, test results, and key findings." },
-  { key: "recommendations", title: "Recommendations", titleAr: "التوصيات", description: "Provide clear technical recommendations and next steps." },
-  { key: "correctiveActions", title: "Corrective Actions", titleAr: "الإجراءات التصحيحية", description: "Define corrective actions, owners, and expected completion requirements." },
+  {
+    key: "observation",
+    title: "Observation / Work Progress",
+    titleAr: "المعاينة وسير العمل",
+    description: "Document detailed site observations, locations, materials, and work progress.",
+  },
+  {
+    key: "recommendations",
+    title: "Instructions / Recommendations",
+    titleAr: "التوصيات والتعليمات",
+    description: "Provide clear technical instructions, recommendations, and next steps.",
+  },
 ]
 
 const COPY = {
@@ -269,6 +276,7 @@ export function InspectionReportForm({
   initialResponseId,
   ccCandidates,
   initialCcRecipients,
+  stageSubterms,
 }: {
   project: { id: string; name: string; code: string | null }
   stage: { id: string; name: string }
@@ -293,19 +301,37 @@ export function InspectionReportForm({
   initialResponseId: string
   ccCandidates: ProjectCcCandidate[]
   initialCcRecipients: ReportCcRecipient[]
+  stageSubterms?: Array<{ id: string; reportName: string }>
 }) {
   const router = useRouter()
   const { locale } = useI18n()
   const copy = COPY[locale]
+  const cleanStageName = stage.name.replace(/^\d+[\.\s\-]+/, "")
+  const cleanTermReportName = term.reportName.replace(/^\d+[\.\s\-]+/, "")
   const reportDate = response?.createdAt ?? new Date().toISOString()
   const [reportType, setReportType] = useState<ReportTypeValue>((REPORT_TYPES.some((item) => item.value === response?.reportType) ? response?.reportType : "inspection_report") as ReportTypeValue)
   const [visitNumber, setVisitNumber] = useState(response?.visitNumber ?? suggestedVisitNumber)
   const [subject, setSubject] = useState(response?.subject ?? "")
-  const [reportTitle, setReportTitle] = useState(response?.reportTitle ?? term.reportName)
-  const [content, setContent] = useState<TermResponseContent>(() => ({
-    ...(response?.content ?? EMPTY_TERM_RESPONSE_CONTENT),
-    checklist: response?.content.checklist.length ? response.content.checklist : checklistFromTemplate(term.templateReference),
-  }))
+  const [reportTitle, setReportTitle] = useState(response?.reportTitle ?? cleanTermReportName)
+  const [content, setContent] = useState<TermResponseContent>(() => {
+    let initialChecklist: ChecklistItem[] = []
+    if (response?.content.checklist?.length) {
+      initialChecklist = response.content.checklist
+    } else if (stageSubterms?.length) {
+      initialChecklist = stageSubterms.map((item) => ({
+        id: crypto.randomUUID(),
+        label: item.reportName.replace(/^\d+[\.\s\-]+/, ""),
+        checked: false,
+        result: "" as const,
+      }))
+    } else {
+      initialChecklist = checklistFromTemplate(term.templateReference)
+    }
+    return {
+      ...(response?.content ?? EMPTY_TERM_RESPONSE_CONTENT),
+      checklist: initialChecklist,
+    }
+  })
   const [responseId, setResponseId] = useState(response?.id ?? null)
   const [reportNumber, setReportNumber] = useState(response?.reportNumber ?? "Auto-generated on save")
   const [status, setStatus] = useState<ResponseStatus>(response?.status ?? "draft")

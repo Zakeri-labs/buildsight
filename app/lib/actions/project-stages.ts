@@ -731,8 +731,9 @@ export async function saveProjectStageSelectionAction(
 
     const selectedStageSet = new Set(requestedStageIds)
     for (const projectStage of projectStages) {
-      if (!projectStage.template_stage_id) continue
-      const shouldEnable = selectedStageSet.has(projectStage.template_stage_id)
+      const shouldEnable = projectStage.template_stage_id
+        ? selectedStageSet.has(projectStage.template_stage_id) || selectedStageSet.has(projectStage.id)
+        : selectedStageSet.has(projectStage.id)
       const nextStatus = shouldEnable
         ? projectStage.status === "disabled" ? await deriveProjectStageStatus(projectStage.id) : projectStage.status
         : "disabled"
@@ -791,6 +792,58 @@ export async function saveProjectStageSelectionAction(
     return { ok: true }
   } catch (error) {
     return actionError(error, "Could not update the project workflow configuration.")
+  }
+}
+
+export async function createProjectStageAction(input: {
+  projectId: string
+  name: string
+  description?: string
+}): Promise<StageActionResult<{ stageId: string }>> {
+  try {
+    const actorId = await assertProjectAdmin(input.projectId)
+    const name = input.name.trim()
+    if (!name) return { ok: false, error: "Stage name is required." }
+
+    const admin = createAdminClient()
+
+    const { data: maxStage } = await admin
+      .from("project_stages")
+      .select("sort_order")
+      .eq("project_id", input.projectId)
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const sortOrder = (maxStage?.sort_order ?? 0) + 1
+
+    const { data: newStage, error } = await admin
+      .from("project_stages")
+      .insert({
+        project_id: input.projectId,
+        name,
+        description: input.description?.trim() || null,
+        status: "not_started",
+        sort_order: sortOrder,
+      })
+      .select("id")
+      .single()
+
+    if (error) throw error
+
+    await audit({
+      actorId,
+      action: "project_stage.created",
+      entityType: "project_stage",
+      entityId: newStage.id,
+      projectId: input.projectId,
+      metadata: { name },
+    })
+
+    revalidateProjectStageViews(input.projectId)
+    return { ok: true, data: { stageId: newStage.id } }
+  } catch (error) {
+    return actionError(error, "Could not create project stage.")
   }
 }
 

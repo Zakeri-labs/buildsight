@@ -4,9 +4,10 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { AlertTriangle, ArrowLeft, ClipboardList, FolderOpen, Images, Pencil } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 import { ProjectStatusBadge } from "@/components/status-badge"
 import { DonutChart } from "@/components/dashboard/donut-chart"
 import { useI18n } from "@/lib/i18n"
@@ -199,15 +200,13 @@ export function ProjectDetail({
                     </div>
                   ) : null}
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-3 w-full justify-center"
-                  render={<Link href={`/projects/${currentProject.id}/gallery`} />}
+                <Link
+                  href={`/projects/${currentProject.id}/gallery`}
+                  className={cn(buttonVariants({ variant: "outline" }), "mt-3 w-full justify-center")}
                 >
                   <Images className="size-4" />
                   {labels.viewGallery}
-                </Button>
+                </Link>
               </div>
 
               <div className="min-w-0 py-0.5">
@@ -300,16 +299,14 @@ export function ProjectDetail({
             <FolderOpen className="size-5 shrink-0 text-primary" />
             {labels.projectDocuments}
           </CardTitle>
-          <Button
-            variant="outline"
-            size="lg"
-            className="h-9 shrink-0"
+          <Link
+            href={`/initial-documents?project=${encodeURIComponent(currentProject.id)}`}
+            className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-9 shrink-0")}
             aria-label={labels.viewAllDocuments}
-            render={<Link href={`/initial-documents?project=${encodeURIComponent(currentProject.id)}`} />}
           >
             <FolderOpen className="size-4" />
             <span className="hidden sm:inline">{labels.viewAllDocuments}</span>
-          </Button>
+          </Link>
         </CardHeader>
         <CardContent className="p-4 sm:p-5">
           <InitialDocumentsList

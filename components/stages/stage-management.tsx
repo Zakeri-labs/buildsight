@@ -78,35 +78,35 @@ import { subtermResponseTypeLabel } from "@/lib/stages/execution"
 
 const COPY = {
   en: {
-    eyebrow: "Stages & Checklists Library",
-    intro: "Define reusable construction stages and inspection checklists for all projects. Each project can independently choose which definitions are available.",
+    eyebrow: "All Stages",
+    intro: "Define reusable construction stages and inspection reports for all projects. Each project can independently choose which definitions are available.",
     addStage: "Add Stage",
     stages: "Stages",
-    reports: "Checklist Items",
+    reports: "Items",
     requiredReports: "Required Items",
     required: "Required",
     active: "Active",
     disabled: "Disabled",
     stage: "Stage",
-    reportsLabel: "Checklist Items",
-    addReport: "Add Checkbox",
+    reportsLabel: "Items",
+    addReport: "Add Item",
     editStage: "Edit stage",
     disableStage: "Disable stage",
     enableStage: "Enable stage",
     deleteStage: "Delete stage",
     moveUp: "Move up",
     moveDown: "Move down",
-    reportName: "Checkbox Item Name",
+    reportName: "Item Name",
     requirement: "Required / Optional",
     approval: "Approval",
     status: "Status",
     actions: "Actions",
     optional: "Optional",
     approvalRequired: "Required",
-    editReport: "Edit Checkbox",
-    disableReport: "Disable Checkbox",
-    enableReport: "Enable Checkbox",
-    deleteReport: "Delete Checkbox",
+    editReport: "Edit Item",
+    disableReport: "Disable Item",
+    enableReport: "Enable Item",
+    deleteReport: "Delete Item",
     createStageTitle: "Create stage",
     editStageTitle: "Edit stage",
     stageDialogDescription: "Set the stage name and a short description for administrators.",
@@ -116,50 +116,50 @@ const COPY = {
     cancel: "Cancel",
     create: "Create",
     save: "Save changes",
-    addReportTitle: "Add Checkbox Item",
-    editReportTitle: "Edit Checkbox Item",
-    termDialogDescription: "Set the checkbox item name, requirement, approval, and status.",
+    addReportTitle: "Add Item",
+    editReportTitle: "Edit Item",
+    termDialogDescription: "Set item name, requirement, approval, and status.",
     requiredToggle: "Required / Optional",
     approvalToggle: "Approval is required",
     deleteTitle: "Confirm deletion",
     deleteStageDescription: "Stages already used by projects are archived safely. Unused empty stages may be deleted.",
-    deleteTermDescription: "Checklist items already used by projects are archived safely. Unused definitions may be deleted.",
+    deleteTermDescription: "Items already used by projects are archived safely. Unused definitions may be deleted.",
     delete: "Delete",
     emptyTitle: "No stages yet",
     emptyDescription: "Create the first construction stage to begin building your template library.",
-    noReports: "No checklist items have been added to this stage yet.",
+    noReports: "No items have been added to this stage yet.",
     success: "Changes saved successfully.",
   },
   ar: {
-    eyebrow: "مكتبة المراحل وقوائم الفحص",
-    intro: "حدّد المراحل وقوائم فحص التفتيش القابلة لإعادة الاستخدام في جميع المشاريع، ثم اختر ما يناسب كل مشروع بشكل مستقل.",
+    eyebrow: "جميع المراحل",
+    intro: "حدّد مراحل الإنشاء والتقارير القابلة لإعادة الاستخدام لجميع المشاريع، ثم اختر ما يناسب كل مشروع بشكل مستقل.",
     addStage: "إضافة مرحلة",
     stages: "المراحل",
-    reports: "عناصر قائمة الفحص",
+    reports: "العناصر",
     requiredReports: "العناصر الإلزامية",
     required: "إلزامي",
     active: "نشط",
     disabled: "معطّل",
     stage: "المرحلة",
-    reportsLabel: "عناصر قائمة الفحص",
-    addReport: "إضافة مربع فحص",
+    reportsLabel: "العناصر",
+    addReport: "إضافة بند",
     editStage: "تعديل المرحلة",
     disableStage: "تعطيل المرحلة",
     enableStage: "تفعيل المرحلة",
     deleteStage: "حذف المرحلة",
     moveUp: "تحريك لأعلى",
     moveDown: "تحريك لأسفل",
-    reportName: "اسم عنصر مربع الفحص",
+    reportName: "اسم البند",
     requirement: "إلزامي / اختياري",
     approval: "الموافقة",
     status: "الحالة",
     actions: "الإجراءات",
     optional: "اختياري",
     approvalRequired: "مطلوبة",
-    editReport: "تعديل مربع الفحص",
-    disableReport: "تعطيل مربع الفحص",
-    enableReport: "تفعيل مربع الفحص",
-    deleteReport: "حذف مربع الفحص",
+    editReport: "تعديل البند",
+    disableReport: "تعطيل البند",
+    enableReport: "تفعيل البند",
+    deleteReport: "حذف البند",
     createStageTitle: "إنشاء مرحلة",
     editStageTitle: "تعديل المرحلة",
     stageDialogDescription: "حدّد اسم المرحلة ووصفًا مختصرًا للمسؤولين.",
@@ -169,9 +169,9 @@ const COPY = {
     cancel: "إلغاء",
     create: "إنشاء",
     save: "حفظ التغييرات",
-    addReportTitle: "إضافة مربع فحص",
-    editReportTitle: "تعديل مربع الفحص",
-    termDialogDescription: "حدّد اسم عنصر مربع الفحص ومتطلباته والموافقة والحالة.",
+    addReportTitle: "إضافة بند",
+    editReportTitle: "تعديل البند",
+    termDialogDescription: "حدّد اسم البند ومتطلباته والموافقة والحالة.",
     requiredToggle: "إلزامي / اختياري",
     approvalToggle: "الموافقة مطلوبة",
     deleteTitle: "تأكيد الحذف",
@@ -700,7 +700,7 @@ function TermActions({
           </button>
         }
       />
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" className="min-w-40">
         <DropdownMenuItem disabled={disabled || termIndex === 0} onClick={() => onMove("up")}>
           <ArrowUp />
           {labels.moveUp}
@@ -712,7 +712,7 @@ function TermActions({
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onEdit}>
           <Pencil />
-          {kind === "subterm" ? "Edit Sub-item" : labels.editReport}
+          Edit
         </DropdownMenuItem>
         {kind === "parent" && onAddSubterm ? (
           <DropdownMenuItem onClick={onAddSubterm}>
@@ -722,14 +722,12 @@ function TermActions({
         ) : null}
         <DropdownMenuItem onClick={onToggle}>
           <CircleDot />
-          {term.status === "active"
-            ? kind === "subterm" ? "Disable Sub-item" : labels.disableReport
-            : kind === "subterm" ? "Enable Sub-item" : labels.enableReport}
+          {term.status === "active" ? "Disable" : "Enable"}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={onDelete}>
           <Trash2 />
-          {kind === "subterm" ? "Delete Sub-item" : labels.deleteReport}
+          Delete
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
