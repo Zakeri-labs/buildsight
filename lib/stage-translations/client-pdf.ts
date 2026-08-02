@@ -808,7 +808,7 @@ function drawCcMetadata(flow: Flow, x: number, y: number, width: number, recipie
 function drawFirstPageHeader(flow: Flow) {
   const { doc, template, pageWidth, rtl } = flow
   const margin = PAGE.margin
-  const headerH = 17   // compact height for 3 rows
+  const headerH = 17
 
   drawHeaderColumns(doc, flow, headerH)
 
@@ -841,7 +841,7 @@ function drawFirstPageHeader(flow: Flow) {
   doc.line(margin, headerH + 13, pageWidth - margin, headerH + 13)
   doc.setLineWidth(0.2)
 
-  // ── METADATA GRID (2 rows × 4 cells) ─────────────────────────────────────
+  // ── UNIFIED EXECUTIVE METADATA CARD ──────────────────────────────────────
   const labels = rtl
     ? ["المشروع", "مرجع المشروع", "المرحلة", "البند", "رقم المستند", "رقم الزيارة", "النوع", "الموضوع"]
     : ["Project", "Project Reference", "Stage", "Term", "Document Number", "Visit Number", "Type", "Subject"]
@@ -853,27 +853,143 @@ function drawFirstPageHeader(flow: Flow) {
     template.reportNumber,
     template.visitNumber,
     template.reportType,
-    template.subject,
+    template.subject || "—",
   ]
-  const gap = 2
-  const cellWidth = (pageWidth - margin * 2 - gap * 3) / 4
+
+  const cardX = margin
+  const cardWidth = pageWidth - margin * 2
   const gridTop = headerH + 15
+  const cols = 4
+  const cellW = cardWidth / cols
+  const rowH = 11
+
+  const gridHeight = 2 * rowH
+
+  // Parse CC Recipients
+  const rawCc = template.ccRecipients || []
+  const parsedCc = rawCc.map((rec) => {
+    const parts = rec.split("\n").map((s) => s.trim()).filter(Boolean)
+    const name = parts[0] || "—"
+    const details = parts.slice(1).join(" · ")
+    return { name, details }
+  })
+
+  // CC height (compact horizontal layout)
+  const ccRows = parsedCc.length > 0 ? (parsedCc.length > 1 ? Math.ceil(parsedCc.length / 2) : 1) : 0
+  const ccHeight = ccRows > 0 ? 5.5 + ccRows * 4 : 0
+  const totalCardHeight = gridHeight + ccHeight
+
+  // Single outer container with rounded corners and light fill
+  doc.setDrawColor(226, 232, 240)
+  doc.setFillColor(248, 250, 252)
+  doc.roundedRect(cardX, gridTop, cardWidth, totalCardHeight, 1.5, 1.5, "FD")
+
+  // Internal grid lines
+  doc.setDrawColor(226, 232, 240)
+  doc.setLineWidth(0.15)
+
+  // Horizontal line between row 1 and row 2
+  doc.line(cardX, gridTop + rowH, cardX + cardWidth, gridTop + rowH)
+
+  // Vertical lines between 4 columns
+  for (let c = 1; c < cols; c += 1) {
+    doc.line(cardX + c * cellW, gridTop, cardX + c * cellW, gridTop + gridHeight)
+  }
+
+  // Horizontal divider above CC section if present
+  if (ccHeight > 0) {
+    doc.line(cardX, gridTop + gridHeight, cardX + cardWidth, gridTop + gridHeight)
+  }
+
+  // Render Grid Cells
   for (let index = 0; index < values.length; index += 1) {
-    const row = Math.floor(index / 4)
-    const logicalColumn = index % 4
-    const physicalColumn = rtl ? 3 - logicalColumn : logicalColumn
-    drawMetaCell(
-      flow,
-      margin + physicalColumn * (cellWidth + gap),
-      gridTop + row * 15.5,
-      cellWidth,
+    const row = Math.floor(index / cols)
+    const logicalColumn = index % cols
+    const physicalColumn = rtl ? (cols - 1) - logicalColumn : logicalColumn
+    const cellX = cardX + physicalColumn * cellW
+    const cellY = gridTop + row * rowH
+
+    // Label (small uppercase gray)
+    setLanguage(doc, rtl, 6, false)
+    doc.setTextColor(100, 116, 139)
+    writePdfText(
+      doc,
       labels[index],
-      values[index],
+      rtl ? cellX + cellW - 3 : cellX + 3,
+      cellY + 3.5,
+      { align: rtl ? "right" : "left" },
+      rtl,
+    )
+
+    // Value (bold dark)
+    const val = values[index] || "—"
+    const valHasArabic = containsArabic(val)
+    setLanguage(doc, valHasArabic, 7.5, true)
+    doc.setTextColor(15, 23, 42)
+    const valLines = textLines(doc, val, cellW - 6).slice(0, 1)
+    writePdfText(
+      doc,
+      valLines,
+      rtl && valHasArabic ? cellX + cellW - 3 : cellX + 3,
+      cellY + 7.5,
+      { align: rtl && valHasArabic ? "right" : "left" },
+      valHasArabic,
     )
   }
-  const metadataBottom = gridTop + 2 * 15.5
-  const ccHeight = drawCcMetadata(flow, margin, metadataBottom + 1, pageWidth - margin * 2, template.ccRecipients)
-  flow.y = metadataBottom + (ccHeight ? ccHeight + 5 : 8)
+
+  // Render CC Strip inside card
+  if (ccHeight > 0 && parsedCc.length > 0) {
+    const ccTop = gridTop + gridHeight
+    const ccLabel = rtl ? "نسخة إلى:" : "CC To:"
+
+    setLanguage(doc, rtl, 6.5, true)
+    doc.setTextColor(100, 116, 139)
+    writePdfText(
+      doc,
+      ccLabel,
+      rtl ? cardX + cardWidth - 3 : cardX + 3,
+      ccTop + 4.2,
+      { align: rtl ? "right" : "left" },
+      rtl,
+    )
+
+    const isMultiCol = parsedCc.length > 1
+    const startOffset = rtl ? 20 : 18
+    const availW = cardWidth - startOffset - 3
+    const ccColW = isMultiCol ? availW / 2 : availW
+
+    parsedCc.forEach((rec, idx) => {
+      const colIdx = isMultiCol ? idx % 2 : 0
+      const rowIdx = isMultiCol ? Math.floor(idx / 2) : idx
+      const physCol = rtl && isMultiCol ? 1 - colIdx : colIdx
+      const recX = rtl
+        ? cardX + cardWidth - startOffset - physCol * ccColW
+        : cardX + startOffset + physCol * ccColW
+      const recY = ccTop + 4.2 + rowIdx * 4.2
+
+      // Blue Bullet dot
+      setLanguage(doc, false, 7, true)
+      doc.setTextColor(37, 99, 235)
+      doc.text("•", rtl ? recX + 2 : recX - 3.5, recY, { align: rtl ? "right" : "left" })
+
+      // Recipient info
+      const recText = rec.details ? `${rec.name} (${rec.details})` : rec.name
+      const recRtl = containsArabic(recText)
+      setLanguage(doc, recRtl, 7, false)
+      doc.setTextColor(30, 41, 59)
+      const lines = textLines(doc, recText, ccColW - 5).slice(0, 1)
+      writePdfText(
+        doc,
+        lines,
+        rtl && recRtl ? recX : recX,
+        recY,
+        { align: rtl ? "right" : "left" },
+        recRtl,
+      )
+    })
+  }
+
+  flow.y = gridTop + totalCardHeight + 6
 }
 
 function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>) {
@@ -2428,13 +2544,18 @@ async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
   }
   drawFirstPageHeader(flow)
   for (const section of template.sections) {
-    // Skip redundant Project Information table since the 8 metadata cards at top already present this data
-    const isProjectInfoSection = section.key === "projectInformation"
+    // Skip redundant Project Information & Report Details tables since the executive metadata card at top presents this data
+    const titleLower = section.title.toLowerCase()
+    const isRedundantSection = section.key === "projectInformation"
       || section.key === "project-info"
-      || section.title.toLowerCase().includes("project information")
+      || section.key === "reportDetails"
+      || section.key === "report-details"
+      || titleLower.includes("project information")
+      || titleLower.includes("report details")
       || section.title.includes("معلومات المشروع")
+      || section.title.includes("تفاصيل التقرير")
 
-    if (isProjectInfoSection) {
+    if (isRedundantSection) {
       continue
     }
 
@@ -3153,8 +3274,16 @@ async function buildNativeBilingualPdfBlob(input: {
   const arSectionMap = new Map(arSections.map((s) => [s.key, s]))
 
   for (const engSection of engSections) {
-    if (engSection.key === "projectInformation" || engSection.key === "project-info") {
-      continue // Skip redundant top project info table
+    const engTitleLower = engSection.title.toLowerCase()
+    if (
+      engSection.key === "projectInformation" ||
+      engSection.key === "project-info" ||
+      engSection.key === "reportDetails" ||
+      engSection.key === "report-details" ||
+      engTitleLower.includes("project information") ||
+      engTitleLower.includes("report details")
+    ) {
+      continue // Skip redundant top project info & report details table
     }
 
     const arSection = arSectionMap.get(engSection.key)
