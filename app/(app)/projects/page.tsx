@@ -42,7 +42,8 @@ export default async function ProjectsPage({
 }: {
   searchParams: Promise<{ created?: string }>
 }) {
-  const [params, session] = await Promise.all([searchParams, requireOnboarded()])
+  const session = await requireOnboarded()
+  const params = await searchParams
   const primaryMembership = session.memberships[0]
   const organizationId = session.supervisingOrg?.id ?? primaryMembership?.organization?.id
   const projects = organizationId ? await getOrgProjects(organizationId, session.userId) : []

@@ -12,8 +12,8 @@ export default async function NewDocumentPage({
 }: {
   searchParams: Promise<{ project?: string }>
 }) {
-  const [, queryParams, selectedProjectId, supabase] = await Promise.all([
-    requireOnboarded(),
+  const session = await requireOnboarded()
+  const [queryParams, selectedProjectId, supabase] = await Promise.all([
     searchParams,
     getSelectedProjectId(),
     createClient(),

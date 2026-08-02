@@ -5,8 +5,8 @@ import { getSelectedProjectId } from "@/lib/project-scope"
 import { createClient } from "@/lib/supabase/server"
 
 export default async function InitialDocumentsPage({ searchParams }: { searchParams: Promise<{ project?: string }> }) {
-  const [session, params, selectedProjectId, supabase] = await Promise.all([
-    requireOnboarded(),
+  const session = await requireOnboarded()
+  const [params, selectedProjectId, supabase] = await Promise.all([
     searchParams,
     getSelectedProjectId(),
     createClient(),

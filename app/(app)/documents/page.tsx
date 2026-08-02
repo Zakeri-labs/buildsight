@@ -10,8 +10,8 @@ function initials(name: string) {
 }
 
 export default async function DocumentsPage({ searchParams }: { searchParams: Promise<{ uploaded?: string; project?: string }> }) {
-  const [session, queryParams, selectedProjectId, supabase] = await Promise.all([
-    requireOnboarded(),
+  const session = await requireOnboarded()
+  const [queryParams, selectedProjectId, supabase] = await Promise.all([
     searchParams,
     getSelectedProjectId(),
     createClient(),

@@ -4,7 +4,8 @@ import { loadAiSummarySources } from "@/lib/ai-summary/sources"
 import { getSelectedProjectId } from "@/lib/project-scope"
 
 export default async function AiSummaryPage() {
-  const [, selectedProjectId] = await Promise.all([requireOnboarded(), getSelectedProjectId()])
+  await requireOnboarded()
+  const selectedProjectId = await getSelectedProjectId()
   const data = selectedProjectId ? await loadAiSummarySources(selectedProjectId) : null
   return <AiSummaryBuilder data={data} />
 }

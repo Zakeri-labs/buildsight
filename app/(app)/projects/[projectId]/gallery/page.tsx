@@ -10,7 +10,8 @@ export default async function ProjectGalleryPage({
 }: {
   params: Promise<{ projectId: string }>
 }) {
-  const [{ projectId }, session] = await Promise.all([params, requireOnboarded()])
+  const session = await requireOnboarded()
+  const { projectId } = await params
   const organizationId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id
   if (!organizationId) notFound()
 
