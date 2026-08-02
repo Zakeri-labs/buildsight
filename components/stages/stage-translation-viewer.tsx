@@ -301,9 +301,14 @@ export function StageTranslationViewer({
     }
   }
 
+  const isDirectStage = !data.term?.id || data.term.id === data.stage.id
+  const backHref = isDirectStage
+    ? `/projects/${data.project.id}/stages/${data.stage.id}/reports/${data.response.id}`
+    : `/projects/${data.project.id}/stages/${data.stage.id}/terms/${data.term.id}/reports/${data.response.id}`
+
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
-      <Link href={`/projects/${data.project.id}/stages/${data.stage.id}/terms/${data.term.id}/reports/${data.response.id}`} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+      <Link href={backHref} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4 flip-rtl" />{copy.back}
       </Link>
 
@@ -317,7 +322,7 @@ export function StageTranslationViewer({
               <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
                 <Badge variant="outline">{data.project.name}</Badge>
                 <Badge variant="outline">{data.stage.name}</Badge>
-                <Badge variant="outline">{data.term.name}</Badge>
+                {!isDirectStage ? <Badge variant="outline">{data.term.name}</Badge> : null}
                 <Badge variant="outline" className={statusTone(data.response.status as any)}>{statusLabel(data.response.status as any, locale)}</Badge>
               </div>
             </div>
@@ -338,10 +343,10 @@ export function StageTranslationViewer({
             </div>
           </div>
         </div>
-        <CardContent className="grid gap-px bg-border p-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <CardContent className={cn("grid gap-px bg-border p-0 sm:grid-cols-2", isDirectStage ? "lg:grid-cols-5" : "lg:grid-cols-3 xl:grid-cols-6")}>
           <HeaderMeta label={copy.project} value={data.project.name} />
           <HeaderMeta label={copy.stage} value={data.stage.name} />
-          <HeaderMeta label={copy.term} value={data.term.name} />
+          {!isDirectStage ? <HeaderMeta label={copy.term} value={data.term.name} /> : null}
           <HeaderMeta label={copy.documentNumber} value={data.response.reportNumber} />
           <HeaderMeta label={copy.document} value={data.response.reportTitle} />
           <HeaderMeta label={copy.date} value={formatDate(data.response.createdAt, locale)} />
@@ -788,13 +793,14 @@ function ReportHeaderCell({
   generatedAt: string | null
 }) {
   const isArabic = language === "ar"
+  const isDirectStage = !data.term?.id || data.term.id === data.stage.id
   return (
     <header className="stage-translation-no-break h-full rounded-2xl border border-slate-200 bg-white px-5 py-5 sm:px-7">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-blue-700"><Languages className="size-4" />{title}</div>
           <h2 className="break-words text-2xl font-bold tracking-tight text-slate-950">{content.reportTitle || data.response.reportTitle}</h2>
-          <p className="mt-1 text-sm text-slate-600">{content.termName || data.term.name}</p>
+          <p className="mt-1 text-sm text-slate-600">{!isDirectStage ? (content.termName || data.term.name) : (content.stageName || data.stage.name)}</p>
         </div>
         <div className="shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">{isArabic ? "AR" : "EN"}</div>
       </div>
@@ -823,12 +829,13 @@ function ProjectInformationBody({
   labels: ReportLabels
   language: "en" | "ar"
 }) {
+  const isDirectStage = !data.term?.id || data.term.id === data.stage.id
   return (
     <dl className="grid gap-3 text-sm sm:grid-cols-2">
       <ReportMeta label={labels.project} value={data.project.name} empty={labels.noContent} />
       <ReportMeta label={labels.projectReference} value={data.project.code} empty={labels.noContent} />
       <ReportMeta label={labels.stage} value={content.stageName || data.stage.name} empty={labels.noContent} />
-      <ReportMeta label={labels.term} value={content.termName || data.term.name} empty={labels.noContent} />
+      {!isDirectStage ? <ReportMeta label={labels.term} value={content.termName || data.term.name} empty={labels.noContent} /> : null}
       <ReportMeta label={labels.documentNumber} value={data.response.reportNumber} empty={labels.noContent} />
       <ReportMeta label={labels.visitNumber} value={String(data.response.visitNumber || "")} empty={labels.noContent} />
       <ReportMeta label={labels.date} value={formatDate(data.response.createdAt, language)} empty={labels.noContent} />
@@ -885,6 +892,7 @@ const LanguageReport = forwardRef<HTMLElement, {
   sourcePdf?: StageTranslationPageData["response"]["attachments"][number] | null
 }>(function LanguageReport({ language, title, data, content, labels, generatedAt, sourcePdf }, ref) {
   const isArabic = language === "ar"
+  const isDirectStage = !data.term?.id || data.term.id === data.stage.id
   const evidence = data.response.attachments.filter((item) => item.attachmentKind === "evidence_image" || item.attachmentKind === "inline_image")
   const documents = data.response.attachments.filter((item) => item.attachmentKind === "document")
 
@@ -896,7 +904,7 @@ const LanguageReport = forwardRef<HTMLElement, {
           <div>
             <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-blue-700"><Languages className="size-4" />{title}</div>
             <h2 className="text-2xl font-bold tracking-tight text-slate-950">{content.reportTitle || data.response.reportTitle}</h2>
-            <p className="mt-1 text-sm text-slate-600">{content.termName || data.term.name}</p>
+            <p className="mt-1 text-sm text-slate-600">{!isDirectStage ? (content.termName || data.term.name) : (content.stageName || data.stage.name)}</p>
           </div>
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">{isArabic ? "AR" : "EN"}</div>
         </div>
@@ -909,7 +917,7 @@ const LanguageReport = forwardRef<HTMLElement, {
             <ReportMeta label={labels.project} value={data.project.name} />
             <ReportMeta label={labels.projectReference} value={data.project.code || "—"} />
             <ReportMeta label={labels.stage} value={content.stageName || data.stage.name} />
-            <ReportMeta label={labels.term} value={content.termName || data.term.name} />
+            {!isDirectStage ? <ReportMeta label={labels.term} value={content.termName || data.term.name} /> : null}
             <ReportMeta label={labels.documentNumber} value={data.response.reportNumber} />
             <ReportMeta label={labels.visitNumber} value={String(data.response.visitNumber)} />
             <ReportMeta label={labels.date} value={formatDate(data.response.createdAt, language)} />
