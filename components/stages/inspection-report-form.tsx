@@ -332,8 +332,12 @@ export function InspectionReportForm({
   const reportDate = response?.createdAt ?? new Date().toISOString()
   const [reportType, setReportType] = useState<ReportTypeValue>((REPORT_TYPES.some((item) => item.value === response?.reportType) ? response?.reportType : "inspection_report") as ReportTypeValue)
   const [visitNumber, setVisitNumber] = useState(response?.visitNumber ?? suggestedVisitNumber)
+  const initialVisitFormatted = String(visitNumber).padStart(3, "0")
+  const defaultReportTitlePattern = locale === "ar"
+    ? `زيارة ${initialVisitFormatted} - ${cleanStageName} Report`
+    : `Visit ${initialVisitFormatted} - ${cleanStageName} Report`
   const [subject, setSubject] = useState(response?.subject ?? "")
-  const [reportTitle, setReportTitle] = useState(response?.reportTitle ? response.reportTitle.replace(/^\d+[\.\s\-]+/, "") : cleanTermReportName)
+  const [reportTitle, setReportTitle] = useState(response?.reportTitle ?? defaultReportTitlePattern)
   const [content, setContent] = useState<TermResponseContent>(() => {
     let initialChecklist: ChecklistItem[] = []
     if (response?.content.checklist?.length) {
@@ -765,12 +769,18 @@ export function InspectionReportForm({
       </Card>
 
       <Card className="gap-0 py-0">
-        <CardHeader className="border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6"><CardTitle className="text-base font-semibold text-blue-950 dark:text-blue-100">{copy.basic}</CardTitle></CardHeader>
-        <CardContent className="grid gap-5 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-4">
-          <div className="space-y-2 sm:col-span-2 lg:col-span-4"><Label htmlFor="report-title">{copy.title} <span className="text-destructive">*</span></Label><Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} /></div>
-          <div className="space-y-2"><Label>{copy.type}</Label><Select value={reportType} onValueChange={(value) => setReportType(value as ReportTypeValue)} disabled={isLocked}><SelectTrigger className="w-full"><SelectValue>{(value) => reportTypeLabel(String(value ?? reportType), locale)}</SelectValue></SelectTrigger><SelectContent>{REPORT_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{reportTypeLabel(item.value, locale)}</SelectItem>)}</SelectContent></Select></div>
-          <div className="space-y-2"><Label htmlFor="visit-no">{copy.visitNo}</Label><Input id="visit-no" type="number" min={1} value={visitNumber} readOnly aria-readonly="true" className="bg-muted/40" /></div>
-          <div className="space-y-2 sm:col-span-2 lg:col-span-2"><Label htmlFor="report-subject">{copy.subject}</Label><Input id="report-subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Inspection location, package, activity, or reference" disabled={isLocked} /></div>
+        <CardHeader className="border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6">
+          <CardTitle className="text-base font-semibold text-blue-950 dark:text-blue-100">{copy.basic}</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-5 p-5 sm:p-6">
+          <div className="space-y-2">
+            <Label htmlFor="report-title">{copy.title} <span className="text-destructive">*</span></Label>
+            <Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="report-subject">{copy.subject}</Label>
+            <Input id="report-subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Inspection location, package, activity, or reference" disabled={isLocked} />
+          </div>
         </CardContent>
       </Card>
 
