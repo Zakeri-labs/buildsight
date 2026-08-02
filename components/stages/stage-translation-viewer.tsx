@@ -206,7 +206,7 @@ export function StageTranslationViewer({
   const labelsEn = COPY.en
   const labelsAr = COPY.ar
   const translated = translation?.translatedContent ?? null
-  const original = translation?.originalContent ?? data.response.content
+  const original = data.response.content
   const sourcePdf = getSourcePdfAttachment(data)
   const translationIsStale = Boolean(
     translation?.generatedAt && new Date(data.response.updatedAt).getTime() > new Date(translation.generatedAt).getTime(),
@@ -853,6 +853,7 @@ function ProjectInformationBody({
 function ReportDetailsBody({ content, labels }: { content: TranslationReportContent; labels: ReportLabels }) {
   return (
     <dl className="grid gap-3 text-sm sm:grid-cols-2">
+      <ReportMeta label={labels.document} value={content.reportTitle} empty={labels.noContent} />
       <ReportMeta label={labels.subject} value={content.subject} empty={labels.noContent} />
       <ReportMeta label={labels.type} value={content.reportType} empty={labels.noContent} />
     </dl>
