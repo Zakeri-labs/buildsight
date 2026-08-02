@@ -8,6 +8,7 @@ import {
   type ExtractedPdfLayoutBlock,
   type ExtractedSourceDocument,
   type LanguagePdfTemplate,
+  type PdfImageTemplate,
   type PdfKind,
   type PdfSectionTemplate,
 } from "@/lib/stage-translations/pdf-templates"
@@ -3439,7 +3440,12 @@ export async function exportTranslationPdf({
     return { blob: arabicBlob, filename: `${base}-${report}-arabic-translation.pdf` }
   }
 
-  const englishBlob = await buildLanguagePdfBlob(englishTemplate)
-  const bilingualBlob = await buildPageComposedBilingualPdfBlob({ data, englishBlob, arabicBlob })
+  const bilingualBlob = await buildNativeBilingualPdfBlob({
+    data,
+    translation,
+    englishTemplate,
+    arabicTemplate,
+    sourceDocument,
+  })
   return { blob: bilingualBlob, filename: `${base}-${report}-bilingual.pdf` }
 }
