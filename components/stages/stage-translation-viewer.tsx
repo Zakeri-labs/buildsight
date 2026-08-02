@@ -527,7 +527,7 @@ function MirroredBilingualReport({
             }
             arabic={
               <MirroredSectionCard title={labelsAr.checklist} icon={<CheckCircle2 className="size-4" />}>
-                <ChecklistBody content={arabic} labels={labelsAr} language="ar" />
+                <ChecklistBody content={arabic} referenceContent={englishDocument} labels={labelsAr} language="ar" />
                 <SourcePdfImageGrid
                   images={sourceImages.filter((image) => image.sectionHint === "checklist")}
                   content={arabic}
@@ -1045,47 +1045,57 @@ function ChecklistSection({ content, labels, language }: { content: TranslationR
   return <section><SectionHeading icon={<CheckCircle2 className="size-4" />} title={labels.checklist} /><ChecklistBody content={content} labels={labels} language={language} /></section>
 }
 
-function ChecklistBody({ content, labels, language }: { content: TranslationReportContent; labels: ReportLabels; language: "en" | "ar" }) {
+function ChecklistBody({
+  content,
+  referenceContent,
+  labels,
+  language,
+}: {
+  content: TranslationReportContent
+  referenceContent?: TranslationReportContent
+  labels: ReportLabels
+  language: "en" | "ar"
+}) {
   if (!content.checklist.length) return <p className="text-sm italic text-slate-500">{labels.noContent}</p>
-  const isAr = language === "ar"
+  const refList = referenceContent?.checklist ?? content.checklist
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
       <table className="w-full border-collapse text-sm">
         <tbody>{content.checklist.map((item, index) => {
-          const itemResult = item.result || (item.checked ? "pass" : "pending")
-          const isPassed = itemResult === "pass" || item.checked
+          const refItem = refList[index] ?? item
+          const itemResult = item.result || refItem.result || (item.checked || refItem.checked ? "pass" : "pending")
+          const isPassed = itemResult === "pass" || item.checked || refItem.checked
           const isFailed = itemResult === "fail"
           const isInProgress = itemResult === "in_progress"
 
-          let badgeClasses = "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300"
-          let icon = <X className="size-3.5 text-amber-600 dark:text-amber-400" />
-          let labelText = isAr ? "غير مكتمل" : "Open"
+          let badgeClasses = "border-slate-200 bg-slate-100 text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
+          let icon = <X className="size-3.5 stroke-[2] opacity-40" />
+          let titleTooltip = language === "ar" ? "غير مكتمل" : "Open"
 
           if (isPassed) {
-            badgeClasses = "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300"
-            icon = <Check className="size-4 stroke-[2.5] text-emerald-600 dark:text-emerald-400" />
-            labelText = isAr ? "مكتمل / مطابق" : "Completed"
+            badgeClasses = "border-emerald-600 bg-emerald-600 text-white shadow-2xs dark:border-emerald-600 dark:bg-emerald-600"
+            icon = <Check className="size-4 stroke-[3]" />
+            titleTooltip = language === "ar" ? "مكتمل / مطابق" : "Passed"
           } else if (isFailed) {
-            badgeClasses = "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300"
-            icon = <X className="size-4 stroke-[2.5] text-rose-600 dark:text-rose-400" />
-            labelText = isAr ? "غير مطابق" : "Failed"
+            badgeClasses = "border-rose-600 bg-rose-600 text-white shadow-2xs dark:border-rose-600 dark:bg-rose-600"
+            icon = <X className="size-4 stroke-[3]" />
+            titleTooltip = language === "ar" ? "غير مطابق" : "Failed"
           } else if (isInProgress) {
-            badgeClasses = "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300"
-            icon = <Hourglass className="size-3.5 text-amber-600 dark:text-amber-400" />
-            labelText = isAr ? "قيد التنفيذ" : "In Progress"
+            badgeClasses = "border-amber-500 bg-amber-500 text-white shadow-2xs dark:border-amber-500 dark:bg-amber-500"
+            icon = <Hourglass className="size-3.5 stroke-[2.5]" />
+            titleTooltip = language === "ar" ? "قيد التنفيذ" : "In Progress"
           }
 
           return (
-            <tr key={item.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
+            <tr key={item.id || `check-${index}`} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
               <td className="w-12 bg-slate-50 px-3.5 py-3 text-center font-bold text-slate-500">{index + 1}</td>
               <td className="px-4 py-3">
                 <p className="font-semibold text-slate-900">{item.label}</p>
                 {item.notes ? <p className="mt-1 text-xs text-slate-500">{item.notes}</p> : null}
               </td>
-              <td className="w-40 px-4 py-3 text-end">
-                <span className={cn("inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold shadow-2xs", badgeClasses)}>
+              <td className="w-16 px-4 py-3 text-end">
+                <span title={titleTooltip} className={cn("inline-flex size-7 items-center justify-center rounded-lg border", badgeClasses)}>
                   {icon}
-                  <span>{labelText}</span>
                 </span>
               </td>
             </tr>
