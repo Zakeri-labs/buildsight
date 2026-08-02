@@ -326,6 +326,7 @@ export function InspectionReportForm({
   const router = useRouter()
   const reportDefinition = stageReportConfig ?? legacyTerm
   if (!reportDefinition) throw new Error("Report configuration is missing.")
+  const isDirectStageReport = Boolean(stageReportConfig)
   const reportsHref = `/projects/${project.id}/stages/${stage.id}`
   const { locale } = useI18n()
   const copy = COPY[locale]
