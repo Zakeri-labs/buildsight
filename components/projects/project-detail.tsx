@@ -353,7 +353,7 @@ export function ProjectDetail({
         {t.projects.title}
       </Link>
 
-      <div className="grid grid-cols-1 items-stretch gap-6 min-[1180px]:grid-cols-[minmax(0,3.75fr)_minmax(220px,1fr)]">
+      <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
         <Card className="h-full gap-0 overflow-hidden py-0">
           <CardHeader className="flex flex-row items-center justify-between gap-3 border-b px-5 py-3.5 sm:px-6">
             <CardTitle className="min-w-0 text-base font-semibold tracking-tight">{labels.details}</CardTitle>
@@ -504,19 +504,19 @@ export function ProjectDetail({
         </Card>
 
         <Card className="h-full min-h-[420px] w-full self-stretch gap-0 overflow-hidden py-0">
-          <CardHeader className="border-b px-5 py-3.5 sm:px-6">
+          <CardHeader className="shrink-0 border-b px-5 py-3.5 sm:px-6">
             <CardTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">
               <MapPin className="size-4 text-primary" aria-hidden="true" />
               {isArabic ? "موقع المشروع" : "Project Location"}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex min-h-[360px] flex-1 p-0 min-[1180px]:min-h-0">
+          <CardContent className="flex min-h-[360px] flex-1 p-0 lg:min-h-0">
             <div
               ref={mapShellRef}
               role="region"
               aria-label={isArabic ? "خريطة موقع المشروع" : "Project location map"}
               className={cn(
-                "relative isolate min-h-[360px] w-full flex-1 overflow-hidden bg-muted/40",
+                "relative isolate min-h-[360px] w-full flex-1 overflow-hidden bg-muted/40 lg:min-h-0",
                 isFullscreen
                   ? "fixed inset-0 z-[1200] h-screen max-h-none max-w-none rounded-none border-0 bg-background"
                   : "h-full",
