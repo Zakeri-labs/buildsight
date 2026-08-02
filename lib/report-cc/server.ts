@@ -91,6 +91,55 @@ export async function loadProjectCcCandidates(projectId: string): Promise<Projec
     .sort((left: ProjectCcCandidate, right: ProjectCcCandidate) => left.name.localeCompare(right.name))
 }
 
+/**
+ * Returns only project participants (contractor, owner, consultant, etc.)
+ * excluding internal team members and organization members.
+ * Used for the Report to / CC to dropdowns.
+ */
+export async function loadProjectParticipantsOnly(projectId: string): Promise<ProjectCcCandidate[]> {
+  await assertProjectMember(projectId)
+  const admin = createAdminClient()
+
+  const { data: participants, error: participantError } = await admin
+    .from("project_participants")
+    .select("key_contact_user_id, participant_role_label, project_role, organization_name, status")
+    .eq("project_id", projectId)
+    .eq("status", "active")
+    .not("key_contact_user_id", "is", null)
+  if (participantError) throw participantError
+
+  const userIds = Array.from(new Set(
+    (participants ?? []).map((row: any) => row.key_contact_user_id).filter(Boolean),
+  )) as string[]
+  if (!userIds.length) return []
+
+  const { data: profiles, error: profileError } = await admin
+    .from("profiles")
+    .select("id, full_name, email, avatar_url")
+    .in("id", userIds)
+  if (profileError) throw profileError
+
+  const participantByUser = new Map<string, any>()
+  for (const participant of participants ?? []) {
+    if (!participant.key_contact_user_id || participantByUser.has(participant.key_contact_user_id)) continue
+    participantByUser.set(participant.key_contact_user_id, participant)
+  }
+
+  return (profiles ?? [])
+    .map((profile: any) => {
+      const participant = participantByUser.get(profile.id)
+      return {
+        id: profile.id,
+        name: personName(profile),
+        email: profile.email ?? null,
+        avatarUrl: profile.avatar_url ?? null,
+        role: normalizedRole(participant?.participant_role_label || participant?.project_role),
+        organizationName: participant?.organization_name?.trim() || null,
+      } satisfies ProjectCcCandidate
+    })
+    .sort((left: ProjectCcCandidate, right: ProjectCcCandidate) => left.name.localeCompare(right.name))
+}
+
 export async function loadReportCcRecipients(
   projectId: string,
   responseId: string,
