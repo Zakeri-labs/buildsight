@@ -836,6 +836,7 @@ function ProjectInformationBody({
   language: "en" | "ar"
 }) {
   const isDirectStage = !data.term?.id || data.term.id === data.stage.id
+  const authorName = data.response.createdBy?.name || "—"
   return (
     <dl className="grid gap-3 text-sm sm:grid-cols-2">
       <ReportMeta label={labels.project} value={data.project.name} empty={labels.noContent} />
@@ -846,6 +847,7 @@ function ProjectInformationBody({
       <ReportMeta label={labels.visitNumber} value={String(data.response.visitNumber || "")} empty={labels.noContent} />
       <ReportMeta label={labels.date} value={formatDate(data.response.createdAt, language)} empty={labels.noContent} />
       <ReportMeta label={labels.status} value={statusLabel(data.response.status as any, language)} empty={labels.noContent} />
+      <ReportMeta label={language === "ar" ? "تم الإنشاء بواسطة" : "Created By"} value={authorName} empty={labels.noContent} />
     </dl>
   )
 }
