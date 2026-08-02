@@ -25,16 +25,6 @@ function actionError(error: unknown, fallback: string): StageActionResult<never>
   return { ok: false, error: error instanceof AuthzError ? error.message : error instanceof Error ? error.message : fallback }
 }
 
-function logSupabaseActionError(action: string, error: unknown) {
-  const value = error && typeof error === "object" ? error as Record<string, unknown> : null
-  console.error(`[${action}] Supabase error`, {
-    message: value?.message ?? (error instanceof Error ? error.message : String(error)),
-    code: value?.code ?? null,
-    details: value?.details ?? null,
-    hint: value?.hint ?? null,
-  })
-}
-
 function normalizeContent(value: Partial<TermResponseContent>): TermResponseContent {
   return {
     feedback: sanitizeReportHtml(value.feedback),
@@ -277,7 +267,6 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       ? approvalRequired ? "submitted" : "completed"
       : input.saveStatus === "in_progress" ? "in_progress" : "draft"
     const now = new Date().toISOString()
-    let savedResponseId = existing?.id ?? input.responseId
     let reportNumber = existing?.report_number ?? reportNumberCandidates(input.responseId)[0]
     let assignedVisitNumber = existing?.visit_number ?? 1
 
@@ -346,12 +335,11 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       if (!created) return { ok: false, error: "Could not allocate a unique report number. Try again." }
       const { data: inserted, error: insertedError } = await admin
         .from("term_responses")
-        .select("id, visit_number")
+        .select("visit_number")
         .eq("id", input.responseId)
         .eq("project_id", input.projectId)
         .single()
       if (insertedError) throw insertedError
-      savedResponseId = inserted.id
       assignedVisitNumber = inserted.visit_number
     }
 
@@ -359,7 +347,7 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       actorId,
       action: input.submit ? "stage_report.submitted" : "stage_report.saved",
       entityType: "term_response",
-      entityId: savedResponseId,
+      entityId: input.responseId,
       projectId: input.projectId,
       metadata: { stageId: projectStageId, termId: legacyTermId, reportNumber, reportName: directStage?.name ?? term!.report_name },
     })
@@ -367,10 +355,10 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
     revalidatePath(`/projects/${input.projectId}/stages/${projectStageId}`)
     revalidatePath(
       directStage
-        ? `/projects/${input.projectId}/stages/${projectStageId}/reports/${savedResponseId}`
-        : `/projects/${input.projectId}/stages/${projectStageId}/terms/${legacyTermId}/reports/${savedResponseId}`,
+        ? `/projects/${input.projectId}/stages/${projectStageId}/reports/${input.responseId}`
+        : `/projects/${input.projectId}/stages/${projectStageId}/terms/${legacyTermId}/reports/${input.responseId}`,
     )
-    return { ok: true, data: { responseId: savedResponseId, reportNumber, visitNumber: assignedVisitNumber, status: nextStatus } }
+    return { ok: true, data: { responseId: input.responseId, reportNumber, visitNumber: assignedVisitNumber, status: nextStatus } }
   } catch (error) {
     return actionError(error, "Could not save the inspection report.")
   }
@@ -410,21 +398,15 @@ export async function registerResponseAttachmentsAction(input: {
     const userClient = await createServerClient()
     const { data: response, error: responseError } = await admin
       .from("term_responses")
-      .select("id, status, project_stage_id, project_stage_term_id, created_by, responsible_user_id")
+      .select("id, status, project_stage_term_id, created_by")
       .eq("id", input.responseId)
       .eq("project_id", input.projectId)
       .maybeSingle()
     if (responseError) throw responseError
     if (!response) return { ok: false, error: "Report response not found." }
-    if (response.project_stage_term_id) {
-      const scope = await termScope(input.projectId, response.project_stage_term_id)
-      assertActiveTermScope(scope)
-      if (response.created_by !== actorId && scope.responsible_user_id !== actorId) await assertProjectAdmin(input.projectId)
-    } else {
-      const scope = await stageScope(input.projectId, response.project_stage_id)
-      assertActiveStageScope(scope)
-      if (response.created_by !== actorId && response.responsible_user_id !== actorId) await assertProjectAdmin(input.projectId)
-    }
+    const scope = await termScope(input.projectId, response.project_stage_term_id)
+    assertActiveTermScope(scope)
+    if (response.created_by !== actorId && scope.responsible_user_id !== actorId) await assertProjectAdmin(input.projectId)
     if (["submitted", "under_review", "approved", "completed"].includes(response.status)) {
       return { ok: false, error: "Attachments cannot be changed while this report is awaiting review or finalized." }
     }
@@ -461,7 +443,6 @@ export async function registerResponseAttachmentsAction(input: {
     revalidatePath(`/projects/${input.projectId}/stages`, "page")
     return { ok: true, data: { ids: (data ?? []).map((row: any) => row.id as string) } }
   } catch (error) {
-    logSupabaseActionError("registerResponseAttachmentsAction", error)
     return actionError(error, "Could not save attachment metadata.")
   }
 }
