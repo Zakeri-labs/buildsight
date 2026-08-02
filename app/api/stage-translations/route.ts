@@ -15,12 +15,13 @@ export async function GET(request: NextRequest) {
   try {
     const projectId = request.nextUrl.searchParams.get("projectId")
     const stageId = request.nextUrl.searchParams.get("stageId")
+    const termId = request.nextUrl.searchParams.get("termId")
     const responseId = request.nextUrl.searchParams.get("responseId")
     if (!validUuid(projectId) || !validUuid(stageId) || !validUuid(responseId)) return NextResponse.json({ error: "A valid project, stage, and report are required." }, { status: 400 })
     const selectedProjectId = await getSelectedProjectId()
     if (selectedProjectId && selectedProjectId !== projectId) return NextResponse.json({ error: "Select this project before opening its report." }, { status: 403 })
     const userId = await assertProjectMember(projectId)
-    const data = await loadStageTranslationPageData(projectId, stageId, userId, responseId)
+    const data = await loadStageTranslationPageData(projectId, stageId, userId, responseId, termId)
     if (!data) return NextResponse.json({ error: "Report not found." }, { status: 404 })
     return NextResponse.json({ data })
   } catch (error) {
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
     if (!validUuid(body.projectId) || !validUuid(body.stageId) || !validUuid(body.responseId)) return NextResponse.json({ error: "A valid project, stage, and report are required." }, { status: 400 })
     const selectedProjectId = await getSelectedProjectId()
     if (selectedProjectId && selectedProjectId !== body.projectId) return NextResponse.json({ error: "Select this project before translating its report." }, { status: 403 })
-    const translation = await generateStageTranslation({ projectId: body.projectId, stageId: body.stageId, responseId: body.responseId })
+    const translation = await generateStageTranslation({ projectId: body.projectId, stageId: body.stageId, termId: body.termId, responseId: body.responseId })
     return NextResponse.json({ translation })
   } catch (error) {
     return NextResponse.json({ error: error instanceof AuthzError ? error.message : error instanceof Error ? error.message : "Unable to generate translation." }, { status: error instanceof AuthzError ? 403 : 500 })

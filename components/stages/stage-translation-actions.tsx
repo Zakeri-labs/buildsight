@@ -140,7 +140,11 @@ export function StageTranslationActions({
     <div className={cn("flex min-w-0 flex-col gap-1.5", inHeader ? "items-start sm:items-end" : "items-end")} onClick={(event) => event.stopPropagation()}>
       <div className="flex flex-wrap items-center gap-1.5">
         <Link
-          href={`/projects/${projectId}/stages/${stageId}/terms/${termId}/reports/${responseId}/translate`}
+          href={
+            !termId || termId === stageId
+              ? `/projects/${projectId}/stages/${stageId}/reports/${responseId}/translate`
+              : `/projects/${projectId}/stages/${stageId}/terms/${termId}/reports/${responseId}/translate`
+          }
           className={cn(buttonVariants({ size: btnSize, variant: inHeader ? "secondary" : "secondary" }), translateBtnClass)}
         >
           <Languages className="size-4" />{copy.translate}
