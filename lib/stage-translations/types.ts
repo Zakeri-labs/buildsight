@@ -14,6 +14,7 @@ export type TranslationChecklistItem = {
   id: string
   label: string
   checked: boolean
+  result?: "pass" | "fail" | "na" | "in_progress" | string
   notes: string
 }
 

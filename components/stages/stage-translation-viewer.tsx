@@ -5,16 +5,19 @@ import { forwardRef, useEffect, useState, type ReactNode } from "react"
 import {
   AlertCircle,
   ArrowLeft,
+  Check,
   CheckCircle2,
   ClipboardCheck,
   Download,
   FileText,
+  Hourglass,
   ImageIcon,
   Languages,
   Loader2,
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  X,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -1044,16 +1047,50 @@ function ChecklistSection({ content, labels, language }: { content: TranslationR
 
 function ChecklistBody({ content, labels, language }: { content: TranslationReportContent; labels: ReportLabels; language: "en" | "ar" }) {
   if (!content.checklist.length) return <p className="text-sm italic text-slate-500">{labels.noContent}</p>
+  const isAr = language === "ar"
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200">
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
       <table className="w-full border-collapse text-sm">
-        <tbody>{content.checklist.map((item, index) => (
-          <tr key={item.id} className="border-b border-slate-100 last:border-0">
-            <td className="w-12 bg-slate-50 px-3 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
-            <td className="px-3 py-3"><p className="font-semibold text-slate-900">{item.label}</p>{item.notes ? <p className="mt-1 text-xs text-slate-500">{item.notes}</p> : null}</td>
-            <td className="w-28 px-3 py-3 text-end"><span className={cn("inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold", item.checked ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>{item.checked ? labels.checked : labels.unchecked}</span></td>
-          </tr>
-        ))}</tbody>
+        <tbody>{content.checklist.map((item, index) => {
+          const itemResult = item.result || (item.checked ? "pass" : "pending")
+          const isPassed = itemResult === "pass" || item.checked
+          const isFailed = itemResult === "fail"
+          const isInProgress = itemResult === "in_progress"
+
+          let badgeClasses = "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300"
+          let icon = <X className="size-3.5 text-amber-600 dark:text-amber-400" />
+          let labelText = isAr ? "غير مكتمل" : "Open"
+
+          if (isPassed) {
+            badgeClasses = "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300"
+            icon = <Check className="size-4 stroke-[2.5] text-emerald-600 dark:text-emerald-400" />
+            labelText = isAr ? "مكتمل / مطابق" : "Completed"
+          } else if (isFailed) {
+            badgeClasses = "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300"
+            icon = <X className="size-4 stroke-[2.5] text-rose-600 dark:text-rose-400" />
+            labelText = isAr ? "غير مطابق" : "Failed"
+          } else if (isInProgress) {
+            badgeClasses = "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300"
+            icon = <Hourglass className="size-3.5 text-amber-600 dark:text-amber-400" />
+            labelText = isAr ? "قيد التنفيذ" : "In Progress"
+          }
+
+          return (
+            <tr key={item.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
+              <td className="w-12 bg-slate-50 px-3.5 py-3 text-center font-bold text-slate-500">{index + 1}</td>
+              <td className="px-4 py-3">
+                <p className="font-semibold text-slate-900">{item.label}</p>
+                {item.notes ? <p className="mt-1 text-xs text-slate-500">{item.notes}</p> : null}
+              </td>
+              <td className="w-40 px-4 py-3 text-end">
+                <span className={cn("inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold shadow-2xs", badgeClasses)}>
+                  {icon}
+                  <span>{labelText}</span>
+                </span>
+              </td>
+            </tr>
+          )
+        })}</tbody>
       </table>
     </div>
   )
