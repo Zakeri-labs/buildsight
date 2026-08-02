@@ -5,7 +5,7 @@ import { useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { ArrowRight, Eye, EyeOff, Lock, Mail, ShieldCheck } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
+import { signInWithPassword } from "@/lib/actions/auth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -26,27 +26,17 @@ function LoginCard() {
     setLoading(true)
     setError(null)
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    if (!supabaseUrl || supabaseUrl.includes("placeholder")) {
-      router.push(next)
-      router.refresh()
-      setLoading(false)
-      return
-    }
-
     try {
-      const supabase = createClient()
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) {
-        setError(error.message)
-        setLoading(false)
+      const result = await signInWithPassword(email, password)
+      if (result.error) {
+        setError(result.error)
         return
       }
+
       router.push(next)
       router.refresh()
-    } catch {
-      router.push(next)
-      router.refresh()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to sign in. Please try again.")
     } finally {
       setLoading(false)
     }
