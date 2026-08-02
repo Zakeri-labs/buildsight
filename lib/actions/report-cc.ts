@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache"
 import { assertProjectAdmin, assertProjectMember, audit, AuthzError } from "@/lib/auth/guards"
 import { sendReportCcEmails } from "@/lib/email/report-cc"
-import { loadProjectCcCandidates, loadReportCcRecipients } from "@/lib/report-cc/server"
-import type { ExternalCcRecipientInput, ReportCcContext, ReportCcRecipient } from "@/lib/report-cc/types"
+import { loadProjectCcCandidates, loadProjectParticipantsOnly, loadReportCcRecipients } from "@/lib/report-cc/server"
+import type { ExternalCcRecipientInput, ProjectCcCandidate, ReportCcContext, ReportCcRecipient } from "@/lib/report-cc/types"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -106,15 +107,44 @@ export async function saveReportCcRecipientsAction(input: {
     }
 
     const { actorId, response, term } = await assertCanManage(input.projectId, input.responseId, input.context)
-    const internalIds = Array.from(new Set(input.internalUserIds.filter((id) => UUID_PATTERN.test(id)))).slice(0, 100)
-    const candidates = await loadProjectCcCandidates(input.projectId)
-    const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]))
-    const invalidInternal = internalIds.find((id) => !candidateById.has(id))
-    if (invalidInternal) return { ok: false, error: "One or more internal CC recipients no longer have access to this project." }
-    const externalRows = normalizeExternal(input.externalRecipients)
+    const rawInternalIds = Array.from(new Set(input.internalUserIds.filter((id) => UUID_PATTERN.test(id)))).slice(0, 100)
 
-    const supabase = await createClient()
-    const { data: existing, error: existingError } = await supabase
+    const [internalCandidates, participantCandidates] = await Promise.all([
+      loadProjectCcCandidates(input.projectId),
+      loadProjectParticipantsOnly(input.projectId),
+    ])
+    const internalCandidateMap = new Map(internalCandidates.map((c) => [c.id, c]))
+    const candidateById = new Map<string, ProjectCcCandidate>([
+      ...internalCandidates.map((c) => [c.id, c] as const),
+      ...participantCandidates.map((c) => [c.id, c] as const),
+    ])
+
+    const validInternalUserIds: string[] = []
+    const convertedExternalRecipients: ExternalCcRecipientInput[] = [...input.externalRecipients]
+
+    for (const id of rawInternalIds) {
+      if (internalCandidateMap.has(id)) {
+        validInternalUserIds.push(id)
+      } else {
+        const participant = candidateById.get(id)
+        if (participant && participant.email) {
+          convertedExternalRecipients.push({
+            clientId: participant.id,
+            name: participant.name,
+            email: participant.email,
+            company: participant.organizationName ?? "",
+            role: participant.role ?? "",
+          })
+        } else if (!candidateById.has(id)) {
+          return { ok: false, error: "One or more internal CC recipients no longer have access to this project." }
+        }
+      }
+    }
+
+    const externalRows = normalizeExternal(convertedExternalRecipients)
+
+    const admin = createAdminClient()
+    const { data: existing, error: existingError } = await admin
       .from("report_cc_recipients")
       .select("id, recipient_type, user_id, external_name, external_email, external_company, external_role")
       .eq("project_id", input.projectId)
@@ -124,20 +154,20 @@ export async function saveReportCcRecipientsAction(input: {
 
     const existingInternal = new Map<string, any>((existing ?? []).filter((row: any) => row.recipient_type === "internal").map((row: any) => [row.user_id as string, row]))
     const existingExternal = new Map<string, any>((existing ?? []).filter((row: any) => row.recipient_type === "external").map((row: any) => [String(row.external_email).toLowerCase(), row]))
-    const keepInternal = new Set(internalIds)
+    const keepInternal = new Set(validInternalUserIds)
     const keepExternal = new Set(externalRows.map((row) => row.email))
     const removeIds = (existing ?? [])
       .filter((row: any) => row.recipient_type === "internal" ? !keepInternal.has(row.user_id) : !keepExternal.has(String(row.external_email).toLowerCase()))
       .map((row: any) => row.id as string)
     if (removeIds.length) {
-      const { error } = await supabase.from("report_cc_recipients").delete().in("id", removeIds)
+      const { error } = await admin.from("report_cc_recipients").delete().in("id", removeIds)
       if (error) throw error
     }
 
     for (const external of externalRows) {
       const current = existingExternal.get(external.email)
       if (!current) continue
-      const { error } = await supabase
+      const { error } = await admin
         .from("report_cc_recipients")
         .update({ external_name: external.name, external_company: external.company, external_role: external.role })
         .eq("id", current.id)
@@ -145,8 +175,8 @@ export async function saveReportCcRecipientsAction(input: {
     }
 
     const inserted: any[] = []
-    for (const userId of internalIds.filter((id) => !existingInternal.has(id))) {
-      const { data, error } = await supabase
+    for (const userId of validInternalUserIds.filter((id) => !existingInternal.has(id))) {
+      const { data, error } = await admin
         .from("report_cc_recipients")
         .insert({
           project_id: input.projectId,
@@ -162,7 +192,7 @@ export async function saveReportCcRecipientsAction(input: {
       if (data) inserted.push(data)
     }
     for (const external of externalRows.filter((row) => !existingExternal.has(row.email))) {
-      const { data, error } = await supabase
+      const { data, error } = await admin
         .from("report_cc_recipients")
         .insert({
           project_id: input.projectId,
@@ -181,9 +211,11 @@ export async function saveReportCcRecipientsAction(input: {
       if (data) inserted.push(data)
     }
 
-    const stage = Array.isArray(term?.project_stages) ? term.project_stages[0] : term?.project_stages
+    const stage = Array.isArray(term?.project_stages) ? term.project_stages[0] : term?.project_stages || response.project_stages
     const project = Array.isArray(response.projects) ? response.projects[0] : response.projects
-    const reportPath = `/projects/${input.projectId}/stages/${stage.id}/terms/${response.project_stage_term_id}/reports/${input.responseId}`
+    const reportPath = response.project_stage_term_id
+      ? `/projects/${input.projectId}/stages/${stage.id}/terms/${response.project_stage_term_id}/reports/${input.responseId}`
+      : `/projects/${input.projectId}/stages/${stage.id}/reports/${input.responseId}`
     const href = input.context === "translation" ? `${reportPath}/translate` : reportPath
     const emailRecipients = inserted.map((row) => {
       if (row.recipient_type === "internal") {
@@ -197,37 +229,44 @@ export async function saveReportCcRecipientsAction(input: {
           context: input.context,
           projectName: project?.name ?? "Project",
           stageName: stage?.name ?? "Stage",
-          termName: term?.report_name ?? "Term",
-          reportTitle: response.report_title,
+          termName: term?.report_name ?? stage?.name ?? "Report",
           reportNumber: response.report_number,
+          reportTitle: response.report_title,
           href: appHref(href),
           recipients: emailRecipients,
         })
       : []
-    for (const result of emailResults) {
-      await supabase
+
+    const emailFailures = emailResults.filter((result) => !result.ok).length
+    for (const emailResult of emailResults) {
+      await admin
         .from("report_cc_recipients")
-        .update({ email_status: result.status, email_sent_at: result.status === "sent" ? new Date().toISOString() : null })
-        .eq("id", result.recipientRowId)
+        .update({
+          email_sent_at: emailResult.ok ? new Date().toISOString() : null,
+          email_status: emailResult.ok ? "sent" : emailResult.reason === "no_email" ? "skipped_no_email" : emailResult.reason === "unconfigured" ? "skipped_unconfigured" : "failed",
+        })
+        .eq("id", emailResult.recipientRowId)
     }
 
     await audit({
-      actorId,
-      action: input.context === "translation" ? "translation.cc_updated" : "stage_report.cc_updated",
-      entityType: "term_response",
-      entityId: input.responseId,
+      action: "save_report_cc_recipients",
+      targetType: "term_response",
+      targetId: input.responseId,
       projectId: input.projectId,
-      metadata: { internalCount: internalIds.length, externalCount: externalRows.length, addedCount: inserted.length },
+      details: {
+        context: input.context,
+        internalCount: validInternalUserIds.length,
+        externalCount: externalRows.length,
+        insertedCount: inserted.length,
+        emailFailures,
+      },
     })
 
-    revalidatePath(reportPath)
-    revalidatePath(`${reportPath}/translate`)
-    revalidatePath("/", "layout")
-    revalidatePath("/")
     const recipients = await loadReportCcRecipients(input.projectId, input.responseId, input.context)
-    return { ok: true, recipients, emailFailures: emailResults.filter((row) => row.status === "failed").length }
+    revalidatePath(`/projects/${input.projectId}`)
+
+    return { ok: true, recipients, emailFailures }
   } catch (error) {
-    const message = error instanceof AuthzError ? error.message : error instanceof Error ? error.message : "Could not save CC recipients."
-    return { ok: false, error: message }
+    return { ok: false, error: error instanceof Error ? error.message : "Unable to save CC recipients." }
   }
 }
