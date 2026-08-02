@@ -14,6 +14,16 @@ export type ReportCcActionResult =
   | { ok: true; recipients: ReportCcRecipient[]; emailFailures: number }
   | { ok: false; error: string }
 
+function logSupabaseActionError(action: string, error: unknown) {
+  const value = error && typeof error === "object" ? error as Record<string, unknown> : null
+  console.error(`[${action}] Supabase error`, {
+    message: value?.message ?? (error instanceof Error ? error.message : String(error)),
+    code: value?.code ?? null,
+    details: value?.details ?? null,
+    hint: value?.hint ?? null,
+  })
+}
+
 function normalizeExternal(rows: ExternalCcRecipientInput[]) {
   const byEmail = new Map<string, { name: string; email: string; company: string | null; role: string | null }>()
   for (const row of rows.slice(0, 50)) {
@@ -33,29 +43,43 @@ async function reportScope(projectId: string, responseId: string) {
   const supabase = await createClient()
   const { data: response, error: responseError } = await supabase
     .from("term_responses")
-    .select("id, project_id, project_stage_term_id, report_number, report_title, status, created_by")
+    .select("id, project_id, project_stage_id, project_stage_term_id, report_number, report_title, status, created_by, responsible_user_id")
     .eq("id", responseId)
     .eq("project_id", projectId)
     .maybeSingle()
   if (responseError) throw responseError
   if (!response) throw new Error("Report not found.")
 
-  const [{ data: term, error: termError }, { data: project, error: projectError }] = await Promise.all([
+  const [{ data: stage, error: stageError }, { data: project, error: projectError }] = await Promise.all([
     supabase
-      .from("project_stage_terms")
-      .select("id, report_name, responsible_user_id, project_stage_id, project_stages!inner(id, name, project_id)")
-      .eq("id", response.project_stage_term_id)
-      .eq("project_stages.project_id", projectId)
+      .from("project_stages")
+      .select("id, name, project_id")
+      .eq("id", response.project_stage_id)
+      .eq("project_id", projectId)
       .maybeSingle(),
     supabase.from("projects").select("id, name").eq("id", projectId).maybeSingle(),
   ])
-  if (termError) throw termError
+  if (stageError) throw stageError
   if (projectError) throw projectError
-  if (!term || !project) throw new Error("Report project context could not be resolved.")
+  if (!stage || !project) throw new Error("Report project context could not be resolved.")
+
+  let term: any = null
+  if (response.project_stage_term_id) {
+    const { data, error } = await supabase
+      .from("project_stage_terms")
+      .select("id, report_name, responsible_user_id, project_stage_id")
+      .eq("id", response.project_stage_term_id)
+      .eq("project_stage_id", stage.id)
+      .maybeSingle()
+    if (error) throw error
+    if (!data) throw new Error("Report term context could not be resolved.")
+    term = data
+  }
 
   return {
     ...response,
     project_stage_terms: term,
+    project_stages: stage,
     projects: project,
   } as any
 }
@@ -64,7 +88,8 @@ async function assertCanManage(projectId: string, responseId: string, context: R
   const actorId = await assertProjectMember(projectId)
   const response = await reportScope(projectId, responseId)
   const term = Array.isArray(response.project_stage_terms) ? response.project_stage_terms[0] : response.project_stage_terms
-  if (response.created_by !== actorId && term?.responsible_user_id !== actorId) await assertProjectAdmin(projectId)
+  const responsibleUserId = response.responsible_user_id ?? term?.responsible_user_id ?? null
+  if (response.created_by !== actorId && responsibleUserId !== actorId) await assertProjectAdmin(projectId)
   if (context === "report" && ["submitted", "under_review", "approved", "completed"].includes(response.status)) {
     throw new Error("CC recipients cannot be changed while this report is awaiting review or finalized.")
   }
@@ -167,9 +192,11 @@ export async function saveReportCcRecipientsAction(input: {
       if (data) inserted.push(data)
     }
 
-    const stage = Array.isArray(term?.project_stages) ? term.project_stages[0] : term?.project_stages
+    const stage = Array.isArray(response.project_stages) ? response.project_stages[0] : response.project_stages
     const project = Array.isArray(response.projects) ? response.projects[0] : response.projects
-    const reportPath = `/projects/${input.projectId}/stages/${stage.id}/terms/${response.project_stage_term_id}/reports/${input.responseId}`
+    const reportPath = response.project_stage_term_id
+      ? `/projects/${input.projectId}/stages/${stage.id}/terms/${response.project_stage_term_id}/reports/${input.responseId}`
+      : `/projects/${input.projectId}/stages/${stage.id}/reports/${input.responseId}`
     const href = input.context === "translation" ? `${reportPath}/translate` : reportPath
     const emailRecipients = inserted.map((row) => {
       if (row.recipient_type === "internal") {
@@ -183,7 +210,7 @@ export async function saveReportCcRecipientsAction(input: {
           context: input.context,
           projectName: project?.name ?? "Project",
           stageName: stage?.name ?? "Stage",
-          termName: term?.report_name ?? "Term",
+          termName: term?.report_name ?? response.report_title,
           reportTitle: response.report_title,
           reportNumber: response.report_number,
           href: appHref(href),
@@ -213,6 +240,7 @@ export async function saveReportCcRecipientsAction(input: {
     const recipients = await loadReportCcRecipients(input.projectId, input.responseId, input.context)
     return { ok: true, recipients, emailFailures: emailResults.filter((row) => row.status === "failed").length }
   } catch (error) {
+    logSupabaseActionError("saveReportCcRecipientsAction", error)
     const message = error instanceof AuthzError ? error.message : error instanceof Error ? error.message : "Could not save CC recipients."
     return { ok: false, error: message }
   }

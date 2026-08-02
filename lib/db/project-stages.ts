@@ -50,6 +50,12 @@ export type ProjectTermResponse = {
   reportTitle: string
   content: TermResponseContent
   status: ResponseStatus
+  projectStageTermId: string | null
+  responsibleUser: ProjectStagePerson | null
+  approvalRequired: boolean
+  responseType: SubtermResponseType
+  templateReference: string | null
+  instructions: string | null
   createdBy: ProjectStagePerson
   createdAt: string
   updatedAt: string
@@ -103,6 +109,8 @@ export type ProjectStageExecution = {
   description: string | null
   status: "not_started" | "in_progress" | "completed" | "disabled"
   sortOrder: number
+  reports: ProjectTermResponse[]
+  reportSummary: { total: number; draft: number; inProgress: number; pendingReview: number; approved: number; rejected: number }
   terms: ProjectStageTermExecution[]
 }
 
@@ -268,12 +276,11 @@ export async function loadProjectStageExecution(
   if (termsError) throw termsError
 
   const termRows = allTerms ?? []
-  const termIds = termRows.map((term: any) => term.id as string)
-  const { data: responses, error: responseError } = termIds.length
+  const { data: responses, error: responseError } = stageIds.length
     ? await admin
         .from("term_responses")
-        .select("id, project_stage_term_id, report_number, visit_number, report_type, subject, report_title, response_content, status, created_by, created_at, updated_at, submitted_at, completed_at")
-        .in("project_stage_term_id", termIds)
+        .select("id, project_stage_id, project_stage_term_id, report_number, visit_number, report_type, subject, report_title, response_content, status, responsible_user_id, approval_required, response_type, template_reference, instructions, created_by, created_at, updated_at, submitted_at, completed_at")
+        .in("project_stage_id", stageIds)
         .order("created_at", { ascending: false })
     : { data: [], error: null }
   if (responseError) throw responseError
@@ -294,6 +301,7 @@ export async function loadProjectStageExecution(
   const profileIds = Array.from(new Set([
     ...termRows.map((term: any) => term.responsible_user_id).filter(Boolean),
     ...(responses ?? []).map((response: any) => response.created_by).filter(Boolean),
+    ...(responses ?? []).map((response: any) => response.responsible_user_id).filter(Boolean),
     ...(approvals ?? []).map((approval: any) => approval.reviewer_id).filter(Boolean),
   ])) as string[]
   const organizationIds = Array.from(new Set(termRows.map((term: any) => term.responsible_organization_id).filter(Boolean))) as string[]
@@ -355,8 +363,10 @@ export async function loadProjectStageExecution(
   }
 
   const responsesByTerm = new Map<string, ProjectTermResponse[]>()
+  const responsesByStage = new Map<string, ProjectTermResponse[]>()
   for (const response of responses ?? []) {
     const createdBy = people.get(response.created_by) ?? { id: response.created_by, name: "Project member", email: null, avatarUrl: null }
+    const responsibleUser = response.responsible_user_id ? people.get(response.responsible_user_id) ?? null : null
     const mapped: ProjectTermResponse = {
       id: response.id,
       reportNumber: response.report_number,
@@ -366,6 +376,12 @@ export async function loadProjectStageExecution(
       reportTitle: response.report_title,
       content: parseContent(response.response_content),
       status: response.status,
+      projectStageTermId: response.project_stage_term_id,
+      responsibleUser,
+      approvalRequired: response.approval_required ?? true,
+      responseType: isSubtermResponseType(response.response_type) ? response.response_type : "combined",
+      templateReference: response.template_reference,
+      instructions: typeof response.instructions === "string" && response.instructions.trim() ? response.instructions : null,
       createdBy,
       createdAt: response.created_at,
       updatedAt: response.updated_at,
@@ -375,11 +391,17 @@ export async function loadProjectStageExecution(
       approvals: approvalByResponse.get(response.id) ?? [],
       translation: translationByResponse.get(response.id) ?? null,
     }
-    const items = responsesByTerm.get(response.project_stage_term_id) ?? []
-    items.push(mapped)
-    responsesByTerm.set(response.project_stage_term_id, items)
+    if (response.project_stage_term_id) {
+      const items = responsesByTerm.get(response.project_stage_term_id) ?? []
+      items.push(mapped)
+      responsesByTerm.set(response.project_stage_term_id, items)
+    } else {
+      const items = responsesByStage.get(response.project_stage_id) ?? []
+      items.push(mapped)
+      responsesByStage.set(response.project_stage_id, items)
+    }
   }
-  for (const items of responsesByTerm.values()) {
+  for (const items of [...responsesByTerm.values(), ...responsesByStage.values()]) {
     items.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
   }
 
@@ -475,23 +497,37 @@ export async function loadProjectStageExecution(
         description: stage.description,
         status: "not_started",
         sortOrder: stage.sort_order,
+        reports: [],
+        reportSummary: { total: 0, draft: 0, inProgress: 0, pendingReview: 0, approved: 0, rejected: 0 },
         terms: (libTermsByStage.get(stage.id) ?? []).sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName)),
       }))
   } else {
     const includeInactive = includeInactiveForReview && access.canReview
     const visibleStages = includeInactive ? stageRows : stageRows.filter((stage: any) => stage.status !== "disabled")
-    stages = visibleStages.map((stage: any) => ({
-      id: stage.id,
-      templateStageId: stage.template_stage_id,
-      name: stage.name,
-      description: stage.description,
-      status: stage.status,
-      sortOrder: stage.sort_order,
-      terms: Array.from(termMap.values())
-        .filter((term) => term.projectStageId === stage.id && !term.parentTermId && (includeInactive || term.isActive))
-        .map((term) => includeInactive ? term : { ...term, subterms: term.subterms.filter((subterm) => subterm.isActive) })
-        .sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName)),
-    }))
+    stages = visibleStages.map((stage: any) => {
+      const stageReports = responsesByStage.get(stage.id) ?? []
+      return {
+        id: stage.id,
+        templateStageId: stage.template_stage_id,
+        name: stage.name,
+        description: stage.description,
+        status: stage.status,
+        sortOrder: stage.sort_order,
+        reports: stageReports,
+        reportSummary: {
+          total: stageReports.length,
+          draft: stageReports.filter((item) => item.status === "draft").length,
+          inProgress: stageReports.filter((item) => item.status === "in_progress").length,
+          pendingReview: stageReports.filter((item) => item.status === "submitted" || item.status === "under_review").length,
+          approved: stageReports.filter((item) => item.status === "approved" || item.status === "completed").length,
+          rejected: stageReports.filter((item) => item.status === "rejected").length,
+        },
+        terms: Array.from(termMap.values())
+          .filter((term) => term.projectStageId === stage.id && !term.parentTermId && (includeInactive || term.isActive))
+          .map((term) => includeInactive ? term : { ...term, subterms: term.subterms.filter((subterm) => subterm.isActive) })
+          .sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName)),
+      }
+    })
   }
 
   const projectStageByTemplate = new Map<string, any>(
@@ -642,6 +678,14 @@ export async function loadNextProjectVisitNumber(projectId: string) {
     .maybeSingle()
   if (error) throw error
   return (data?.visit_number ?? 0) + 1
+}
+
+export async function loadDirectProjectStageReport(projectId: string, stageId: string, reportId: string, userId: string) {
+  const execution = await loadProjectStage(projectId, stageId, userId)
+  if (!execution) return null
+  const response = execution.stage.reports.find((item) => item.id === reportId)
+  if (!response) return null
+  return { ...execution, response }
 }
 
 export async function loadProjectStageReport(projectId: string, termId: string, reportId: string, userId: string) {

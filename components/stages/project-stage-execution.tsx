@@ -176,7 +176,6 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
           {data.stages.map((stage, index) => {
             const open = openStages.has(stage.id)
             const cleanStageName = stage.name.replace(/^\d+[\.\s\-]+/, "")
-            const primaryTermId = stage.terms[0]?.id
 
             const stageReportsMap = new Map<string, any>()
             for (const term of stage.terms) {
@@ -185,6 +184,11 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
                 if (!stageReportsMap.has(resp.id)) {
                   stageReportsMap.set(resp.id, { ...resp, termId: term.id })
                 }
+              }
+            }
+            for (const report of stage.reports) {
+              if (!stageReportsMap.has(report.id)) {
+                stageReportsMap.set(report.id, { ...report, termId: null })
               }
             }
             const stageReports = Array.from(stageReportsMap.values())
@@ -234,16 +238,14 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
                       <span className="text-xs font-medium tabular-nums text-muted-foreground whitespace-nowrap">
                         {stageCheckedCheckboxes} / {stageTotalCheckboxes} ({stageCheckboxPercentage}%)
                       </span>
-                      {primaryTermId ? (
-                        <Link
-                          href={`/projects/${data.project.id}/stages/${stage.id}/terms/${primaryTermId}/reports/new`}
-                          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5 px-3 text-xs font-medium shrink-0")}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Plus className="size-3.5" />
-                          {copy.addReport}
-                        </Link>
-                      ) : null}
+                      <Link
+                        href={`/projects/${data.project.id}/stages/${stage.id}/reports/new`}
+                        className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5 px-3 text-xs font-medium shrink-0")}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Plus className="size-3.5" />
+                        {copy.addReport}
+                      </Link>
                     </div>
                   </div>
                 </CardHeader>
@@ -279,7 +281,9 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
                               </div>
                             </div>
                             <Link
-                              href={`/projects/${data.project.id}/stages/${stage.id}/terms/${report.termId || primaryTermId}/reports/${report.id}`}
+                              href={report.termId
+                                ? `/projects/${data.project.id}/stages/${stage.id}/terms/${report.termId}/reports/${report.id}`
+                                : `/projects/${data.project.id}/stages/${stage.id}/reports/${report.id}`}
                               className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-8 gap-1 text-xs text-primary font-medium")}
                             >
                               <Eye className="size-3.5" />

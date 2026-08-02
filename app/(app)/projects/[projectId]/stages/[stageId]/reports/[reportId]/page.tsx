@@ -1,12 +1,12 @@
 import { notFound } from "next/navigation"
 import { InspectionReportForm } from "@/components/stages/inspection-report-form"
 import { requireOnboarded } from "@/lib/auth/session"
-import { loadProjectStageReport } from "@/lib/db/project-stages"
+import { loadDirectProjectStageReport } from "@/lib/db/project-stages"
 import { loadProjectCcCandidates, loadReportCcRecipients } from "@/lib/report-cc/server"
 
 export default async function StageReportPage({ params }: { params: Promise<{ projectId: string; stageId: string; reportId: string }> }) {
   const [{ projectId, stageId, reportId }, session] = await Promise.all([params, requireOnboarded()])
-  const data = await loadProjectStageReport(projectId, stageId, reportId, session.userId)
+  const data = await loadDirectProjectStageReport(projectId, stageId, reportId, session.userId)
   if (!data) notFound()
   const [ccCandidates, ccRecipients] = await Promise.all([
     loadProjectCcCandidates(projectId),
