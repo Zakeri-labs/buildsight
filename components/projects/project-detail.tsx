@@ -1,9 +1,10 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
-import { AlertTriangle, ArrowLeft, ClipboardList, FolderOpen, Images, Pencil } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { AlertTriangle, ArrowLeft, ClipboardList, ExternalLink, FolderOpen, Images, Loader2, MapPin, Maximize2, Minimize2, Pencil } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -23,6 +24,27 @@ import { ProjectImageDisplay } from "@/components/projects/project-image-display
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 import type { ProjectSiteVisitSummary } from "@/lib/site-visits/types"
 import { ProjectSiteVisitsSection } from "@/components/site-visits/project-site-visits-section"
+import { MAP_TILE_ATTRIBUTION, MAP_TILE_URL } from "@/lib/locations/config"
+import type { MapPoint } from "@/components/projects/location-map-canvas"
+
+const DynamicLocationMapCanvas = dynamic(
+  () => import("@/components/projects/location-map-canvas").then((module) => module.LocationMapCanvas),
+  { ssr: false, loading: () => null },
+)
+
+function validCoordinates(
+  latitude: number | null | undefined,
+  longitude: number | null | undefined,
+): boolean {
+  return (
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    Number(latitude) >= -90 &&
+    Number(latitude) <= 90 &&
+    Number(longitude) >= -180 &&
+    Number(longitude) <= 180
+  )
+}
 
 function projectDocuments(project: ProjectRecord): ProjectDocument[] {
   return [
@@ -93,6 +115,11 @@ export function ProjectDetail({
   const [currentProject, setCurrentProject] = useState(project)
   const [currentEditProject, setCurrentEditProject] = useState(editProject)
   const [editOpen, setEditOpen] = useState(false)
+  const mapShellRef = useRef<HTMLDivElement | null>(null)
+  const [mapState, setMapState] = useState<"loading" | "ready" | "error">("loading")
+  const [nativeFullscreen, setNativeFullscreen] = useState(false)
+  const [fallbackFullscreen, setFallbackFullscreen] = useState(false)
+  const [resizeRequest, setResizeRequest] = useState(0)
   const [projectImage, setProjectImage] = useState<string | null>(projectImageDisplayUrl(project.image, project.id))
 
   useEffect(() => {
@@ -143,6 +170,107 @@ export function ProjectDetail({
       }
 
   const progress = Math.max(0, Math.min(100, currentProject.progress.actual))
+  const hasProjectCoordinates = validCoordinates(currentEditProject.latitude, currentEditProject.longitude)
+  const projectPoint = useMemo<MapPoint | null>(() => {
+    if (!hasProjectCoordinates) return null
+    return {
+      latitude: Number(currentEditProject.latitude),
+      longitude: Number(currentEditProject.longitude),
+    }
+  }, [currentEditProject.latitude, currentEditProject.longitude, hasProjectCoordinates])
+  const googleMapsUrl = projectPoint
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${projectPoint.latitude},${projectPoint.longitude}`)}`
+    : null
+  const handleMapReady = useCallback(() => setMapState("ready"), [])
+  const handleMapError = useCallback(() => setMapState("error"), [])
+  const isFullscreen = nativeFullscreen || fallbackFullscreen
+  const requestMapResize = useCallback(() => {
+    setResizeRequest((request) => request + 1)
+  }, [])
+
+  useEffect(() => {
+    setMapState(hasProjectCoordinates ? "loading" : "error")
+  }, [hasProjectCoordinates, currentEditProject.latitude, currentEditProject.longitude])
+
+  useEffect(() => {
+    if (!hasProjectCoordinates || mapState !== "loading") return
+    const timeout = window.setTimeout(() => {
+      setMapState((current) => (current === "loading" ? "error" : current))
+    }, 10_000)
+    return () => window.clearTimeout(timeout)
+  }, [hasProjectCoordinates, mapState])
+
+  useEffect(() => {
+    function handleFullscreenChange() {
+      setNativeFullscreen(document.fullscreenElement === mapShellRef.current)
+      window.requestAnimationFrame(requestMapResize)
+      window.setTimeout(requestMapResize, 120)
+      window.setTimeout(requestMapResize, 360)
+    }
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange)
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange)
+  }, [requestMapResize])
+
+  useEffect(() => {
+    if (!fallbackFullscreen) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return
+      event.preventDefault()
+      event.stopPropagation()
+      setFallbackFullscreen(false)
+      window.requestAnimationFrame(requestMapResize)
+    }
+
+    window.addEventListener("keydown", handleEscape, true)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener("keydown", handleEscape, true)
+    }
+  }, [fallbackFullscreen, requestMapResize])
+
+  useEffect(() => {
+    if (!isFullscreen) return
+    window.requestAnimationFrame(requestMapResize)
+    const first = window.setTimeout(requestMapResize, 120)
+    const second = window.setTimeout(requestMapResize, 360)
+    return () => {
+      window.clearTimeout(first)
+      window.clearTimeout(second)
+    }
+  }, [isFullscreen, requestMapResize])
+
+  async function toggleMapFullscreen() {
+    if (!projectPoint) return
+
+    if (nativeFullscreen && document.fullscreenElement) {
+      await document.exitFullscreen().catch(() => undefined)
+      return
+    }
+
+    if (fallbackFullscreen) {
+      setFallbackFullscreen(false)
+      window.requestAnimationFrame(requestMapResize)
+      return
+    }
+
+    const shell = mapShellRef.current
+    if (shell?.requestFullscreen) {
+      try {
+        await shell.requestFullscreen()
+        return
+      } catch {
+        // Fall through to the CSS fullscreen mode when the browser rejects the native API.
+      }
+    }
+
+    setFallbackFullscreen(true)
+    window.requestAnimationFrame(requestMapResize)
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -174,7 +302,7 @@ export function ProjectDetail({
             ) : null}
           </CardHeader>
           <CardContent className="p-4 sm:p-5">
-            <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+            <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)] 2xl:grid-cols-[220px_minmax(0,1fr)_190px]">
               <div className="min-w-0">
                 <div className="relative">
                   <ProjectImageDisplay
@@ -234,6 +362,137 @@ export function ProjectDetail({
                     <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${progress}%` }} />
                   </div>
                   <span className="shrink-0 text-xs font-semibold tabular-nums text-muted-foreground">{progress}%</span>
+                </div>
+              </div>
+
+              <div className="min-w-0 lg:col-start-2 lg:justify-self-end 2xl:col-start-auto">
+                <div
+                  ref={mapShellRef}
+                  role="region"
+                  aria-label={isArabic ? "خريطة موقع المشروع" : "Project location map"}
+                  className={cn(
+                    "relative isolate mx-auto w-full overflow-hidden border bg-muted/40 shadow-sm lg:mx-0",
+                    isFullscreen
+                      ? "fixed inset-0 z-[1200] h-screen max-h-none max-w-none rounded-none border-0 bg-background"
+                      : "aspect-square max-w-[22rem] rounded-lg lg:max-w-[220px] 2xl:max-w-[190px]",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "absolute overflow-hidden",
+                      isFullscreen ? "inset-3 rounded-xl border sm:inset-4" : "inset-0",
+                    )}
+                  >
+                    {projectPoint ? (
+                      <DynamicLocationMapCanvas
+                        key={`${currentProject.id}-${projectPoint.latitude}-${projectPoint.longitude}`}
+                        initialCenter={projectPoint}
+                        initialZoom={15}
+                        marker={projectPoint}
+                        centerRequest={null}
+                        resizeRequest={resizeRequest}
+                        tileUrl={MAP_TILE_URL}
+                        tileAttribution={MAP_TILE_ATTRIBUTION}
+                        markerTitle={currentProject.name}
+                        onReady={handleMapReady}
+                        onTileError={handleMapError}
+                        readOnly
+                      />
+                    ) : null}
+
+                    {mapState === "loading" ? (
+                      <div className="pointer-events-none absolute inset-0 z-[500] flex items-center justify-center bg-background/88 text-xs text-muted-foreground backdrop-blur-[1px]">
+                        <Loader2 className="me-2 size-3.5 animate-spin" aria-hidden="true" />
+                        {isArabic ? "جارٍ تحميل الخريطة..." : "Loading map..."}
+                      </div>
+                    ) : null}
+
+                    {mapState === "error" ? (
+                      <div className="absolute inset-0 z-[501] flex flex-col items-center justify-center gap-2 px-4 text-center text-xs text-muted-foreground">
+                        <MapPin className="size-6" aria-hidden="true" />
+                        <span>{isArabic ? "إحداثيات الموقع غير متاحة." : "Location coordinates unavailable."}</span>
+                      </div>
+                    ) : null}
+
+                    {projectPoint && mapState !== "error" ? (
+                      <div
+                        className="pointer-events-none absolute bottom-2 start-2 z-[700] rounded-md bg-background/92 px-2 py-1 font-mono text-[10px] font-medium text-foreground shadow-sm backdrop-blur-sm"
+                        dir="ltr"
+                      >
+                        {projectPoint.latitude.toFixed(6)}, {projectPoint.longitude.toFixed(6)}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className={cn("absolute end-2 top-2 z-[900] flex items-center gap-1.5", isFullscreen && "end-6 top-6")}>
+                    <Tooltip>
+                      <TooltipTrigger render={<span className="inline-flex rounded-md" />}>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="icon-sm"
+                          className="size-8 bg-background/95 shadow-md backdrop-blur-sm hover:bg-background"
+                          disabled={!projectPoint}
+                          onClick={toggleMapFullscreen}
+                          aria-label={
+                            isFullscreen
+                              ? isArabic
+                                ? "الخروج من وضع ملء الشاشة"
+                                : "Exit fullscreen"
+                              : isArabic
+                                ? "فتح الخريطة بملء الشاشة"
+                                : "Open map fullscreen"
+                          }
+                        >
+                          {isFullscreen ? (
+                            <Minimize2 className="size-3.5" aria-hidden="true" />
+                          ) : (
+                            <Maximize2 className="size-3.5" aria-hidden="true" />
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {isFullscreen
+                          ? isArabic
+                            ? "الخروج من وضع ملء الشاشة"
+                            : "Exit fullscreen"
+                          : isArabic
+                            ? "فتح الخريطة بملء الشاشة"
+                            : "Open map fullscreen"}
+                      </TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                      <TooltipTrigger render={<span className="inline-flex rounded-md" />}>
+                        {googleMapsUrl ? (
+                          <a
+                            href={googleMapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={cn(
+                              buttonVariants({ variant: "secondary", size: "icon-sm" }),
+                              "size-8 bg-background/95 shadow-md backdrop-blur-sm hover:bg-background",
+                            )}
+                            aria-label={isArabic ? "فتح في خرائط Google" : "Open in Google Maps"}
+                          >
+                            <ExternalLink className="size-3.5" aria-hidden="true" />
+                          </a>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="icon-sm"
+                            className="size-8 bg-background/95 shadow-md backdrop-blur-sm"
+                            disabled
+                            aria-label={isArabic ? "فتح في خرائط Google" : "Open in Google Maps"}
+                          >
+                            <ExternalLink className="size-3.5" aria-hidden="true" />
+                          </Button>
+                        )}
+                      </TooltipTrigger>
+                      <TooltipContent>{isArabic ? "فتح في خرائط Google" : "Open in Google Maps"}</TooltipContent>
+                    </Tooltip>
+                  </div>
                 </div>
               </div>
             </div>
