@@ -534,7 +534,6 @@ export async function loadProjectStageExecution(
       }
     })
 
-
   return {
     project: { id: access.project.id, name: access.project.name, code: access.project.code },
     stages,
@@ -543,6 +542,14 @@ export async function loadProjectStageExecution(
     canManage: access.canManage,
     currentUserId: userId,
   }
+}
+
+export async function loadProjectStage(projectId: string, stageId: string, userId: string) {
+  const data = await loadProjectStageExecution(projectId, userId, true)
+  if (!data) return null
+  const stage = data.stages.find((item) => item.id === stageId)
+  if (!stage) return null
+  return { ...data, stage }
 }
 
 export async function loadProjectStageTerm(projectId: string, termId: string, userId: string) {
@@ -557,8 +564,6 @@ export async function loadProjectStageTerm(projectId: string, termId: string, us
   }
   return null
 }
-
-
 
 export async function loadNextProjectVisitNumber(projectId: string) {
   const admin = createAdminClient()

@@ -28,6 +28,7 @@ function LoginCard() {
     if (!supabaseUrl || supabaseUrl.includes("placeholder")) {
       router.push(next)
       router.refresh()
+      setLoading(false)
       return
     }
 
@@ -44,6 +45,8 @@ function LoginCard() {
     } catch {
       router.push(next)
       router.refresh()
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -111,4 +114,3 @@ export default function LoginPage() {
     </Suspense>
   )
 }
-
