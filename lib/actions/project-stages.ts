@@ -51,13 +51,24 @@ function normalizeContent(value: Partial<TermResponseContent>): TermResponseCont
 
 async function termScope(projectId: string, termId: string) {
   const admin = createAdminClient()
-  const { data, error } = await admin
+  const { data: byId, error: errorId } = await admin
     .from("project_stage_terms")
     .select("id, report_name, approval_required, response_type, template_reference, instructions, responsible_user_id, project_stage_id, parent_term_id, is_active, project_stages!inner(project_id, name, status)")
     .eq("id", termId)
     .eq("project_stages.project_id", projectId)
     .maybeSingle()
-  if (error) throw error
+  if (errorId) throw errorId
+  let data = byId
+  if (!data) {
+    const { data: byTemplateId, error: errorTemplate } = await admin
+      .from("project_stage_terms")
+      .select("id, report_name, approval_required, response_type, template_reference, instructions, responsible_user_id, project_stage_id, parent_term_id, is_active, project_stages!inner(project_id, name, status)")
+      .eq("template_term_id", termId)
+      .eq("project_stages.project_id", projectId)
+      .maybeSingle()
+    if (errorTemplate) throw errorTemplate
+    data = byTemplateId
+  }
   if (!data) throw new Error("Project report term not found.")
   let parentActive = true
   if (data.parent_term_id) {
@@ -74,15 +85,25 @@ async function termScope(projectId: string, termId: string) {
 
 async function stageScope(projectId: string, stageId: string) {
   const admin = createAdminClient()
-  const { data, error } = await admin
+  const { data: byId, error: errorId } = await admin
     .from("project_stages")
     .select("id, project_id, name, description, status")
     .eq("id", stageId)
     .eq("project_id", projectId)
     .maybeSingle()
-  if (error) throw error
-  if (!data) throw new Error("Project stage not found.")
-  return data
+  if (errorId) throw errorId
+  if (byId) return byId
+
+  const { data: byTemplateId, error: errorTemplate } = await admin
+    .from("project_stages")
+    .select("id, project_id, name, description, status")
+    .eq("template_stage_id", stageId)
+    .eq("project_id", projectId)
+    .maybeSingle()
+  if (errorTemplate) throw errorTemplate
+  if (byTemplateId) return byTemplateId
+
+  throw new Error("Project stage not found.")
 }
 
 function assertActiveStageScope(stage: { status: string }) {
