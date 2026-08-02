@@ -12,6 +12,7 @@ import {
   ClipboardCheck,
   FileDown,
   FileText,
+  Hourglass,
   ImagePlus,
   Italic,
   Link2,
@@ -884,7 +885,62 @@ export function InspectionReportForm({
                   </>
                 ) : (
                   <>
-                    <button type="button" disabled={isLocked} onClick={() => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, checked: !row.checked, result: !row.checked ? "pass" : "" } : row) }))} className={cn("flex size-7 items-center justify-center rounded-lg border", item.checked ? "border-emerald-600 bg-emerald-600 text-white" : "bg-background")} aria-label={`Mark checklist item ${index + 1}`}><Check className="size-4" /></button>
+                    {(() => {
+                      const itemResult = item.result || (item.checked ? "pass" : "")
+                      let btnClasses = "border-slate-300 bg-slate-100/90 text-slate-400 hover:bg-slate-200/90 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
+                      let icon = <Check className="size-3.5" />
+                      let statusTooltip = "Empty / Click to change state"
+
+                      if (itemResult === "pass") {
+                        btnClasses = "border-emerald-600 bg-emerald-600 text-white shadow-2xs hover:bg-emerald-700 dark:border-emerald-600 dark:bg-emerald-600"
+                        icon = <Check className="size-4 stroke-[2.5]" />
+                        statusTooltip = "Done / Passed"
+                      } else if (itemResult === "fail") {
+                        btnClasses = "border-rose-600 bg-rose-600 text-white shadow-2xs hover:bg-rose-700 dark:border-rose-600 dark:bg-rose-600"
+                        icon = <X className="size-4 stroke-[2.5]" />
+                        statusTooltip = "Not Done / Failed"
+                      } else if (itemResult === "in_progress") {
+                        btnClasses = "border-amber-500 bg-amber-500 text-white shadow-2xs hover:bg-amber-600 dark:border-amber-500 dark:bg-amber-500"
+                        icon = <Hourglass className="size-3.5" />
+                        statusTooltip = "In Progress"
+                      }
+
+                      return (
+                        <button
+                          type="button"
+                          disabled={isLocked}
+                          onClick={() => {
+                            let nextResult: ChecklistResult = ""
+                            let nextChecked = false
+                            if (!itemResult) {
+                              nextResult = "pass"
+                              nextChecked = true
+                            } else if (itemResult === "pass") {
+                              nextResult = "fail"
+                              nextChecked = false
+                            } else if (itemResult === "fail") {
+                              nextResult = "in_progress"
+                              nextChecked = false
+                            } else {
+                              nextResult = ""
+                              nextChecked = false
+                            }
+
+                            setContent((current) => ({
+                              ...current,
+                              checklist: current.checklist.map((row) =>
+                                row.id === item.id ? { ...row, result: nextResult, checked: nextChecked } : row
+                              ),
+                            }))
+                          }}
+                          className={cn("flex size-7 shrink-0 items-center justify-center rounded-lg border transition-all duration-150", btnClasses)}
+                          title={statusTooltip}
+                          aria-label={`Mark checklist item ${index + 1}: ${statusTooltip}`}
+                        >
+                          {icon}
+                        </button>
+                      )
+                    })()}
                     <Input value={item.label} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))} placeholder={`Checklist item ${index + 1}`} />
                   </>
                 )}

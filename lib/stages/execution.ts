@@ -100,7 +100,7 @@ export type ReportSectionKey =
   | "recommendations"
   | "correctiveActions"
 
-export type ChecklistResult = "" | "pass" | "fail" | "na"
+export type ChecklistResult = "" | "pass" | "fail" | "na" | "in_progress"
 
 export type ChecklistItem = {
   id: string

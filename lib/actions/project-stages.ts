@@ -37,7 +37,7 @@ function normalizeContent(value: Partial<TermResponseContent>): TermResponseCont
           id: String(item.id || crypto.randomUUID()).slice(0, 100),
           label: String(item.label || "").trim().slice(0, 500),
           checked: Boolean(item.checked),
-          result: (item.result === "pass" || item.result === "fail" || item.result === "na" ? item.result : item.checked ? "pass" : "") as "" | "pass" | "fail" | "na",
+          result: (item.result === "pass" || item.result === "fail" || item.result === "na" || item.result === "in_progress" ? item.result : item.checked ? "pass" : "") as ChecklistResult,
           notes: item.notes ? String(item.notes).slice(0, 2_000) : undefined,
         })).filter((item) => item.label.length > 0)
       : EMPTY_TERM_RESPONSE_CONTENT.checklist,
@@ -115,7 +115,7 @@ async function validateConfiguredSubmission(
     case "inspection_checklist": {
       const rows = content.checklist.filter((item) => item.label.trim())
       if (!rows.length) return "Add at least one checklist item before submission."
-      return rows.every((item) => item.result === "pass" || item.result === "fail" || item.result === "na")
+      return rows.every((item) => item.result === "pass" || item.result === "fail" || item.result === "na" || item.result === "in_progress")
         ? null
         : "Complete every checklist item before submission."
     }

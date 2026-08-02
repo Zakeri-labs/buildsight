@@ -165,7 +165,7 @@ function parseContent(value: unknown): TermResponseContent {
             id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
             label: typeof item.label === "string" ? item.label : "Checklist item",
             checked: item.checked === true,
-            result: item.result === "pass" || item.result === "fail" || item.result === "na" ? item.result : item.checked === true ? "pass" : "",
+            result: item.result === "pass" || item.result === "fail" || item.result === "na" || item.result === "in_progress" ? item.result : item.checked === true ? "pass" : "",
             notes: typeof item.notes === "string" ? item.notes : undefined,
           }))
       : [],

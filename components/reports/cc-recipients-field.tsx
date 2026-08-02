@@ -92,31 +92,56 @@ export function CcRecipientsField({
     })
   }
 
-  // Toggle internal candidate selection
+  const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+  // Toggle candidate selection
   function toggleCandidate(candidateId: string, group: "reportTo" | "ccTo") {
     if (disabled) return
-    let nextReportTo = [...reportToUserIds]
-    let nextCcTo = [...ccToUserIds]
+    const candidate = candidateMap.get(candidateId)
+    const isRealUser = UUID_PATTERN.test(candidateId)
 
-    if (group === "reportTo") {
-      if (nextReportTo.includes(candidateId)) {
-        nextReportTo = nextReportTo.filter((id) => id !== candidateId)
+    if (isRealUser || !candidate) {
+      let nextReportTo = [...reportToUserIds]
+      let nextCcTo = [...ccToUserIds]
+
+      if (group === "reportTo") {
+        if (nextReportTo.includes(candidateId)) {
+          nextReportTo = nextReportTo.filter((id) => id !== candidateId)
+        } else {
+          nextReportTo.push(candidateId)
+          nextCcTo = nextCcTo.filter((id) => id !== candidateId)
+        }
       } else {
-        nextReportTo.push(candidateId)
-        nextCcTo = nextCcTo.filter((id) => id !== candidateId)
+        if (nextCcTo.includes(candidateId)) {
+          nextCcTo = nextCcTo.filter((id) => id !== candidateId)
+        } else {
+          nextCcTo.push(candidateId)
+          nextReportTo = nextReportTo.filter((id) => id !== candidateId)
+        }
       }
+
+      setReportToUserIds(nextReportTo)
+      setCcToUserIds(nextCcTo)
+      emitChanges(nextReportTo, nextCcTo, externalMap)
     } else {
-      if (nextCcTo.includes(candidateId)) {
-        nextCcTo = nextCcTo.filter((id) => id !== candidateId)
+      const nextMap = new Map(externalMap)
+      const existing = nextMap.get(candidateId)
+      if (existing) {
+        nextMap.delete(candidateId)
       } else {
-        nextCcTo.push(candidateId)
-        nextReportTo = nextReportTo.filter((id) => id !== candidateId)
+        const safeEmail = candidate.email?.trim() || `${candidate.name.toLowerCase().replace(/[^a-z0-9]/g, "")}@project.contact`
+        nextMap.set(candidateId, {
+          clientId: candidateId,
+          name: candidate.name,
+          email: safeEmail,
+          company: candidate.organizationName || "",
+          role: candidate.role || "",
+          group,
+        })
       }
+      setExternalMap(nextMap)
+      emitChanges(reportToUserIds, ccToUserIds, nextMap)
     }
-
-    setReportToUserIds(nextReportTo)
-    setCcToUserIds(nextCcTo)
-    emitChanges(nextReportTo, nextCcTo, externalMap)
   }
 
   // Remove external candidate
@@ -262,7 +287,7 @@ export function CcRecipientsField({
                   <div className="max-h-52 overflow-y-auto space-y-1">
                     {filteredForReport.length ? (
                       filteredForReport.map((candidate) => {
-                        const isSelected = reportToUserIds.includes(candidate.id)
+                        const isSelected = reportToUserIds.includes(candidate.id) || (externalMap.has(candidate.id) && externalMap.get(candidate.id)?.group === "reportTo")
                         return (
                           <DropdownMenuItem
                             key={candidate.id}
@@ -435,7 +460,7 @@ export function CcRecipientsField({
                   <div className="max-h-52 overflow-y-auto space-y-1">
                     {filteredForCc.length ? (
                       filteredForCc.map((candidate) => {
-                        const isSelected = ccToUserIds.includes(candidate.id)
+                        const isSelected = ccToUserIds.includes(candidate.id) || (externalMap.has(candidate.id) && externalMap.get(candidate.id)?.group === "ccTo")
                         return (
                           <DropdownMenuItem
                             key={candidate.id}
