@@ -112,10 +112,33 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
   const [openStages, setOpenStages] = useState<Set<string>>(() => new Set(data.stages.slice(0, 2).map((stage) => stage.id)))
 
   const totals = useMemo(() => {
-    const terms = data.stages.flatMap((stage) => progressTerms(stage.terms))
-    const completed = terms.filter(isComplete).length
-    const percentage = terms.length ? Math.round((completed / terms.length) * 100) : 0
-    return { total: terms.length, completed, percentage }
+    let totalItems = 0
+    let checkedItems = 0
+
+    for (const stage of data.stages) {
+      for (const term of stage.terms) {
+        const responses = term.responses ?? (term.response ? [term.response] : [])
+        for (const resp of responses) {
+          const checklist = resp.content?.checklist ?? []
+          for (const item of checklist) {
+            totalItems++
+            if (item.checked || item.result === "pass") {
+              checkedItems++
+            }
+          }
+        }
+      }
+    }
+
+    if (totalItems === 0) {
+      totalItems = data.stages.reduce((sum, s) => {
+        const termsCount = s.terms.flatMap((t) => (t.subterms?.length ? t.subterms : [t])).length
+        return sum + (termsCount || 10)
+      }, 0)
+    }
+
+    const percentage = totalItems > 0 ? Math.round((checkedItems / totalItems) * 100) : 0
+    return { total: totalItems, completed: checkedItems, percentage }
   }, [data.stages])
 
   return (
@@ -133,8 +156,8 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
           <p className="mt-1 text-sm text-muted-foreground">{copy.subtitle}</p>
         </div>
         <div className="grid min-w-0 grid-cols-3 gap-2 sm:min-w-[270px] sm:gap-3">
-          <Metric value={totals.total} label={language === "ar" ? "عناصر سير العمل" : "Workflow Items"} />
-          <Metric value={totals.completed} label={copy.completed} />
+          <Metric value={totals.total} label={language === "ar" ? "بنود الفحص" : "Checklist Items"} />
+          <Metric value={totals.completed} label={language === "ar" ? "تم فحصها" : "Checked"} />
           <Metric value={`${totals.percentage}%`} label={language === "ar" ? "نسبة الإنجاز" : "Progress"} />
         </div>
       </div>
@@ -153,10 +176,6 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
           {data.stages.map((stage, index) => {
             const open = openStages.has(stage.id)
             const cleanStageName = stage.name.replace(/^\d+[\.\s\-]+/, "")
-            const stageTerms = progressTerms(stage.terms)
-            const completed = stageTerms.filter(isComplete).length
-            const total = stageTerms.length
-            const percentage = total ? Math.round((completed / total) * 100) : 0
             const primaryTermId = stage.terms[0]?.id
 
             const stageReportsMap = new Map<string, any>()
@@ -169,6 +188,25 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
               }
             }
             const stageReports = Array.from(stageReportsMap.values())
+
+            let stageTotalCheckboxes = 0
+            let stageCheckedCheckboxes = 0
+
+            for (const report of stageReports) {
+              const checklist = report.content?.checklist ?? []
+              for (const item of checklist) {
+                stageTotalCheckboxes++
+                if (item.checked || item.result === "pass") {
+                  stageCheckedCheckboxes++
+                }
+              }
+            }
+
+            if (stageTotalCheckboxes === 0) {
+              stageTotalCheckboxes = stage.terms.flatMap((t) => (t.subterms?.length ? t.subterms : [t])).length || 10
+            }
+
+            const stageCheckboxPercentage = stageTotalCheckboxes > 0 ? Math.round((stageCheckedCheckboxes / stageTotalCheckboxes) * 100) : 0
 
             return (
               <Card key={stage.id} className="gap-0 overflow-hidden py-0">
@@ -193,8 +231,8 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
                     </button>
 
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-xs font-medium tabular-nums text-muted-foreground">
-                        {percentage}% {copy.complete}
+                      <span className="text-xs font-medium tabular-nums text-muted-foreground whitespace-nowrap">
+                        {stageCheckedCheckboxes} / {stageTotalCheckboxes} ({stageCheckboxPercentage}%)
                       </span>
                       {primaryTermId ? (
                         <Link
