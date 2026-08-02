@@ -12,7 +12,6 @@ import {
   FolderOpen,
   MoreVertical,
   Pencil,
-  Upload,
 } from "lucide-react"
 import { CreateDocumentDialog } from "@/components/documents/create-document-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -93,13 +92,6 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
             triggerLabel="Create Letter"
             triggerClassName="h-9 w-full sm:w-auto"
           />
-          <Link
-            href={`/documents/new?project=${projectQuery}`}
-            className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-9 w-full sm:w-auto")}
-          >
-            <Upload className="size-4" />
-            Upload File
-          </Link>
           <Link
             href={`/documents?project=${projectQuery}`}
             className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-9 w-full sm:w-auto")}

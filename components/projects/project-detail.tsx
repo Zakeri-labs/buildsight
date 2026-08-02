@@ -31,8 +31,6 @@ import { ProjectImageDisplay } from "@/components/projects/project-image-display
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 import { projectPriorityLabel } from "@/lib/projects/project-options"
 import { formatProjectAmountOmr } from "@/lib/projects/project-financial"
-import type { ProjectSiteVisitSummary } from "@/lib/site-visits/types"
-import { ProjectSiteVisitsSection } from "@/components/site-visits/project-site-visits-section"
 import { MAP_TILE_ATTRIBUTION, MAP_TILE_URL } from "@/lib/locations/config"
 import type { MapPoint } from "@/components/projects/location-map-canvas"
 
@@ -99,9 +97,9 @@ function projectDocuments(project: ProjectRecord): ProjectDocument[] {
 
 function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)] items-start gap-3 py-1.5">
-      <dt className="text-xs font-medium leading-5 text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-words text-sm font-semibold leading-5 text-foreground">{value}</dd>
+    <div className="grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)] items-start gap-2.5 py-1">
+      <dt className="text-xs font-medium leading-[1.15rem] text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words text-sm font-semibold leading-[1.15rem] text-foreground">{value}</dd>
     </div>
   )
 }
@@ -144,7 +142,6 @@ export function ProjectDetail({
   participantUsers = [],
   canManageImages = false,
   canEditProject = false,
-  siteVisitSummary,
 }: {
   project: ProjectRecord
   editProject: ProjectEditData
@@ -155,7 +152,6 @@ export function ProjectDetail({
   participantUsers?: ProjectParticipantUserOption[]
   canManageImages?: boolean
   canEditProject?: boolean
-  siteVisitSummary: ProjectSiteVisitSummary
 }) {
   const { t, locale } = useI18n()
   const router = useRouter()
@@ -357,7 +353,7 @@ export function ProjectDetail({
         {t.projects.title}
       </Link>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-[minmax(0,1fr)_380px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
         <Card className="gap-0 overflow-hidden py-0">
           <CardHeader className="flex flex-row items-center justify-between gap-3 border-b px-5 py-3.5 sm:px-6">
             <CardTitle className="min-w-0 text-base font-semibold tracking-tight">{labels.details}</CardTitle>
@@ -380,14 +376,14 @@ export function ProjectDetail({
             ) : null}
           </CardHeader>
           <CardContent className="p-4 sm:p-5">
-            <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+            <div className="grid gap-4 lg:grid-cols-[288px_minmax(0,1fr)]">
               <div className="min-w-0">
                 <div className="relative">
                   <ProjectImageDisplay
                     src={projectImage}
                     projectId={currentProject.id}
                     alt={currentProject.name}
-                    className="h-[260px] w-full rounded-lg border bg-muted/40 shadow-sm sm:h-[300px] lg:h-[260px]"
+                    className="h-[280px] w-full rounded-lg border bg-muted/40 shadow-sm sm:h-[310px] lg:h-[288px]"
                     imageClassName="object-cover"
                     iconClassName="size-10"
                   />
@@ -416,7 +412,7 @@ export function ProjectDetail({
               </div>
 
               <div className="min-w-0 py-0.5">
-                <dl className="grid min-w-0 gap-x-7 md:grid-cols-2">
+                <dl className="grid min-w-0 gap-x-5 md:grid-cols-2">
                   <DetailField label={labels.name} value={currentProject.name} />
                   <DetailField label={labels.type} value={currentProject.projectType} />
                   <DetailField label={labels.supervisionType} value={currentProject.supervisionType} />
@@ -448,14 +444,18 @@ export function ProjectDetail({
                   <DetailField label={labels.progress} value={`${progress}%`} />
                 </dl>
 
-                <div className="mt-3 border-t pt-3">
-                  <p className="text-xs font-medium text-muted-foreground">{labels.description}</p>
-                  <p className="mt-1.5 whitespace-pre-wrap text-sm leading-6 text-foreground/90">{currentProject.description}</p>
+                <div className="mt-2.5 border-t pt-2.5">
+                  <div className="grid min-w-0 gap-1.5 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,3.15fr)] sm:items-start sm:gap-2.5">
+                    <p className="text-xs font-medium leading-5 text-muted-foreground">{labels.description}</p>
+                    <p className="min-w-0 whitespace-pre-wrap break-words text-sm leading-5 text-foreground/90">
+                      {currentProject.description}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="mt-3 border-t pt-3">
+                <div className="mt-2.5 border-t pt-2.5">
                   <p className="text-xs font-semibold text-foreground">{labels.financialSummary}</p>
-                  <dl className="mt-1 grid min-w-0 gap-x-7 md:grid-cols-2">
+                  <dl className="mt-0.5 grid min-w-0 gap-x-5 md:grid-cols-2">
                     <DetailField
                       label={labels.structureFee}
                       value={formatProjectAmountOmr(currentEditProject.structureSupervisionFee, labels.notSet)}
@@ -491,7 +491,7 @@ export function ProjectDetail({
                   </dl>
                 </div>
 
-                <div className="mt-4 flex items-center gap-3" aria-label={`${labels.progress}: ${progress}%`}>
+                <div className="mt-3 flex items-center gap-3" aria-label={`${labels.progress}: ${progress}%`}>
                   <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
                     <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${progress}%` }} />
                   </div>
@@ -503,23 +503,23 @@ export function ProjectDetail({
           </CardContent>
         </Card>
 
-        <Card className="gap-0 overflow-hidden py-0">
+        <Card className="h-full w-full max-w-[520px] justify-self-center gap-0 overflow-hidden py-0 xl:max-w-none xl:justify-self-stretch">
           <CardHeader className="border-b px-5 py-3.5 sm:px-6">
             <CardTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">
               <MapPin className="size-4 text-primary" aria-hidden="true" />
               {isArabic ? "موقع المشروع" : "Project Location"}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex min-h-[300px] flex-1 p-0">
+          <CardContent className="flex min-h-0 flex-1 p-0">
             <div
               ref={mapShellRef}
               role="region"
               aria-label={isArabic ? "خريطة موقع المشروع" : "Project location map"}
               className={cn(
-                "relative isolate min-h-[300px] w-full flex-1 overflow-hidden bg-muted/40",
+                "relative isolate w-full overflow-hidden bg-muted/40",
                 isFullscreen
                   ? "fixed inset-0 z-[1200] h-screen max-h-none max-w-none rounded-none border-0 bg-background"
-                  : "h-full",
+                  : "min-h-[320px] flex-1 sm:min-h-[360px] xl:min-h-0",
               )}
             >
               <div
@@ -691,10 +691,6 @@ export function ProjectDetail({
         </CardContent>
       </Card>
       <ProjectDocuments projectId={currentProject.id} documents={letters ?? projectDocuments(currentProject)} />
-      <ProjectSiteVisitsSection
-        project={{ id: currentProject.id, name: currentProject.name, canRequest: siteVisitSummary.canRequest, canManage: siteVisitSummary.canManage }}
-        summary={siteVisitSummary}
-      />
 
       {editOpen ? (
         <ProjectEditDialog

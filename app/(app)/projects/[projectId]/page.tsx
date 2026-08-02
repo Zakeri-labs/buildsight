@@ -7,7 +7,6 @@ import { getDashboardData, getOrgProjects } from "@/lib/db/domain"
 import { getProjectParticipants, getProjectParticipantUserOptions } from "@/lib/db/project-participants"
 import { normalizeDocumentType } from "@/lib/documents/document-types"
 import { getInitialDocumentsForScope } from "@/lib/initial-documents/server"
-import { getProjectSiteVisitSummary } from "@/lib/site-visits/server"
 import { toProjectRecord } from "@/lib/projects/project-record"
 import { isProjectTypeValue } from "@/lib/projects/project-options"
 import { createClient } from "@/lib/supabase/server"
@@ -101,7 +100,7 @@ export default async function ProjectDetailPage({
   const project = projects.find((item) => item.id === projectId)
   if (!project) return notFound()
 
-  const [dashboardData, letters, initialDocumentsResult, participants, canManageImages, siteVisitSummary] = await Promise.all([
+  const [dashboardData, letters, initialDocumentsResult, participants, canManageImages] = await Promise.all([
     getDashboardData(organizationId, project.id, session.userId),
     getProjectDocuments(project.id, session.userId, session.email),
     getInitialDocumentsForScope({
@@ -111,7 +110,6 @@ export default async function ProjectDetailPage({
     }),
     getProjectParticipants(project.id),
     canAdministerProject(project.id),
-    getProjectSiteVisitSummary({ userId: session.userId, projectId: project.id }),
   ])
   const participantUsers = canManageImages ? await getProjectParticipantUserOptions(project.id) : []
   const projectCounts = dashboardData.projects.find((item) => item.id === project.id)
@@ -156,7 +154,6 @@ export default async function ProjectDetailPage({
       participantUsers={participantUsers}
       canManageImages={canManageImages}
       canEditProject={canManageImages}
-      siteVisitSummary={siteVisitSummary}
     />
   )
 }

@@ -212,10 +212,10 @@ export function ProjectCreateForm({
         title: "إضافة مشروع جديد",
         subtitle: `سيتم إنشاء هذا المشروع ضمن ${supervisingOrg.name}.`,
         org: "الجهة المشرفة",
-        steps: ["تفاصيل المشروع", "معلومات الموقع / نطاق الإشراف", "المقاول", "المستندات"],
+        steps: ["تفاصيل المشروع", "بيانات المالك / العميل", "المقاول", "المستندات"],
         stepDescriptions: [
-          "أدخل معلومات المشروع وموقعه وعيّن المستخدم والمشرف.",
-          "حدد الزيارات المشمولة وأضف بيانات المالك أو العميل.",
+          "أدخل معلومات المشروع وموقعه وعيّن المستخدم والمشرف وحدد الزيارات المشمولة.",
+          "أضف بيانات المالك أو العميل ومعلومات الاتصال.",
           "عيّن المقاول وسجّل بيانات الشركة.",
           "أرفق المستندات الأولية للمشروع.",
         ],
@@ -306,10 +306,10 @@ export function ProjectCreateForm({
         title: "Add New Project",
         subtitle: `This project will be created under ${supervisingOrg.name}.`,
         org: "Supervising organization",
-        steps: ["Project Details", "Site Information / Supervision Scope", "Contractor", "Documents"],
+        steps: ["Project Details", "Owner / Client Information", "Contractor", "Documents"],
         stepDescriptions: [
-          "Enter project details, location, assigned user, and supervisor.",
-          "Set included supervision visits and capture owner or client contact details.",
+          "Enter project details, location, assignments, and included supervision visits.",
+          "Capture owner or client details and contact information.",
           "Assign the contractor and company information.",
           "Attach the initial project documents.",
         ],
@@ -439,12 +439,12 @@ export function ProjectCreateForm({
       if (supervisionType === "other" && !supervisionTypeOther.trim()) {
         return copy.requiredSupervisionTypeOther
       }
-      return null
-    }
-    if (targetStep === 2) {
       if (!isOptionalWholeNumber(includedStructureVisits) || !isOptionalWholeNumber(includedFinishingVisits)) {
         return copy.invalidVisitCounts
       }
+      return null
+    }
+    if (targetStep === 2) {
       if (owners.some((owner) => owner.name.trim().length < 2)) return copy.requiredOwners
       const invalidEmail = owners.some((owner) => {
         const email = owner.contactEmail.trim()
@@ -1149,13 +1149,9 @@ export function ProjectCreateForm({
                     </Select>
                   </Field>
                 </div>
-              </div>
-            ) : null}
 
-            {step === 2 ? (
-              <div className="space-y-5">
                 <section className="rounded-2xl border bg-muted/10 p-4 sm:p-5" aria-labelledby="project-supervision-scope-title">
-                  <h3 id="project-supervision-scope-title" className="mb-4 text-sm font-semibold">{copy.includedVisits}</h3>
+                  <h3 id="project-supervision-scope-title" className="mb-3 text-sm font-semibold">{copy.includedVisits}</h3>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Field label={`${copy.includedStructureVisits} (${copy.optional})`} htmlFor="included-structure-visits">
                       <Input
@@ -1193,7 +1189,11 @@ export function ProjectCreateForm({
                     </Field>
                   </div>
                 </section>
+              </div>
+            ) : null}
 
+            {step === 2 ? (
+              <div className="space-y-5">
                 <div className="max-w-xs space-y-2">
                   <Label htmlFor="owner-count">{copy.ownerCount}</Label>
                   <Select value={String(owners.length)} onValueChange={(value) => setOwnerCount(Number(value ?? 1))} disabled={pending}>
