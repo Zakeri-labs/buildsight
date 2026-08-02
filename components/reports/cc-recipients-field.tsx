@@ -78,7 +78,6 @@ export function CcRecipientsField({
 
   const candidateMap = useMemo(() => new Map(candidates.map((c) => [c.id, c])), [candidates])
 
-  // Helper to emit changes up
   function emitChanges(
     nextReportToIds: string[],
     nextCcToIds: string[],
@@ -89,6 +88,8 @@ export function CcRecipientsField({
     onChange({
       internalUserIds: allInternalIds,
       externalRecipients: allExternals,
+      reportToUserIds: nextReportToIds,
+      ccToUserIds: nextCcToIds,
     })
   }
 
