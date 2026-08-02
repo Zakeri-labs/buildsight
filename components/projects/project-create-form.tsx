@@ -52,7 +52,7 @@ import {
 import { saveInitialDocumentAction } from "@/lib/actions/initial-documents"
 import { useI18n } from "@/lib/i18n"
 import { EMPTY_PROJECT_LOCATION, type ProjectLocationValue } from "@/lib/locations/types"
-import { DOCUMENT_ASSET_BUCKET } from "@/lib/documents/simple-upload"
+import { DOCUMENT_ASSET_BUCKET, sanitizeStorageFileName } from "@/lib/documents/simple-upload"
 import {
   INITIAL_DOCUMENTS_BUCKET,
   sanitizeInitialDocumentFileName,
