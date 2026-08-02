@@ -494,15 +494,22 @@ export async function registerResponseAttachmentsAction(input: {
     const userClient = await createServerClient()
     const { data: response, error: responseError } = await admin
       .from("term_responses")
-      .select("id, status, project_stage_term_id, created_by")
+      .select("id, status, project_stage_term_id, project_stage_id, created_by")
       .eq("id", input.responseId)
       .eq("project_id", input.projectId)
       .maybeSingle()
     if (responseError) throw responseError
     if (!response) return { ok: false, error: "Report response not found." }
-    const scope = await termScope(input.projectId, response.project_stage_term_id)
-    assertActiveTermScope(scope)
-    if (response.created_by !== actorId && scope.responsible_user_id !== actorId) await assertProjectAdmin(input.projectId)
+
+    if (response.project_stage_term_id) {
+      const scope = await termScope(input.projectId, response.project_stage_term_id)
+      assertActiveTermScope(scope)
+      if (response.created_by !== actorId && scope.responsible_user_id !== actorId) await assertProjectAdmin(input.projectId)
+    } else if (response.project_stage_id) {
+      const scope = await stageScope(input.projectId, response.project_stage_id)
+      assertActiveStageScope(scope)
+      if (response.created_by !== actorId) await assertProjectAdmin(input.projectId)
+    }
     if (["submitted", "under_review", "approved", "completed"].includes(response.status)) {
       return { ok: false, error: "Attachments cannot be changed while this report is awaiting review or finalized." }
     }
@@ -560,13 +567,18 @@ export async function deleteResponseAttachmentAction(input: {
     if (!attachment) return { ok: false, error: "Attachment not found." }
     const { data: response, error: responseError } = await admin
       .from("term_responses")
-      .select("status, project_stage_term_id")
+      .select("status, project_stage_term_id, project_stage_id, created_by")
       .eq("id", attachment.response_id)
       .eq("project_id", input.projectId)
       .maybeSingle()
     if (responseError) throw responseError
     if (!response) return { ok: false, error: "Report response not found." }
-    assertActiveTermScope(await termScope(input.projectId, response.project_stage_term_id))
+
+    if (response.project_stage_term_id) {
+      assertActiveTermScope(await termScope(input.projectId, response.project_stage_term_id))
+    } else if (response.project_stage_id) {
+      assertActiveStageScope(await stageScope(input.projectId, response.project_stage_id))
+    }
     if (["submitted", "under_review", "approved", "completed"].includes(response.status)) {
       return { ok: false, error: "Attachments cannot be changed while this report is awaiting review or finalized." }
     }
