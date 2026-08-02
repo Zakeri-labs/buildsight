@@ -351,18 +351,6 @@ export function InspectionReportForm({
     }
   }, [response])
 
-  useEffect(() => {
-    try {
-      const key = `buildsight:report-email-warning:${initialResponseId}`
-      const storedWarning = window.sessionStorage.getItem(key)
-      if (!storedWarning) return
-      window.sessionStorage.removeItem(key)
-      setError(storedWarning)
-    } catch {
-      // Storage may be unavailable in restricted browser contexts.
-    }
-  }, [initialResponseId])
-
   const evidenceImages = existingAttachments.filter((item) => item.attachmentKind === "evidence_image")
   const documentAttachments = existingAttachments.filter((item) => item.attachmentKind === "document")
   const statusLocked = status === "approved" || status === "completed"
@@ -492,9 +480,6 @@ export function InspectionReportForm({
         externalRecipients: ccSelection.externalRecipients,
       })
       if (!ccResult.ok) throw new Error(ccResult.error)
-      const emailWarning = ccResult.emailErrors.length
-        ? `CC recipients were saved, but email delivery had an issue: ${ccResult.emailErrors.slice(0, 3).join(" | ")}${ccResult.emailErrors.length > 3 ? ` | ${ccResult.emailErrors.length - 3} more error(s).` : ""}`
-        : null
       await uploadFiles(id, pendingImages, "evidence_image")
       await uploadFiles(id, pendingDocuments, "document")
       if (mode === "submit") {
@@ -515,17 +500,6 @@ export function InspectionReportForm({
       } else {
         setStatus(mode === "progress" ? "in_progress" : "draft")
         setSuccess(copy.saved)
-      }
-      if (emailWarning) {
-        if (!response) {
-          try {
-            window.sessionStorage.setItem(`buildsight:report-email-warning:${id}`, emailWarning)
-          } catch {
-            setError(emailWarning)
-          }
-        } else {
-          setError(emailWarning)
-        }
       }
       if (!response) {
         router.replace(`/projects/${project.id}/stages/${stage.id}/terms/${term.id}/reports/${id}`)

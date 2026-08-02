@@ -155,14 +155,16 @@ export async function loadStageManagement(organizationId: string): Promise<Stage
       .from("stages")
       .select("id, organization_id, name, description, is_active, sort_order, created_at, updated_at")
       .eq("organization_id", organizationId)
+      .eq("is_active", true)
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true }),
     admin
       .from("stage_terms")
       .select(
-        "id, stage_id, parent_term_id, report_name, is_required, approval_required, response_type, instructions, status, sort_order, created_at, updated_at, stages!inner(organization_id)",
+        "id, stage_id, parent_term_id, report_name, is_required, approval_required, response_type, instructions, status, sort_order, created_at, updated_at, stages!inner(organization_id, is_active)",
       )
       .eq("stages.organization_id", organizationId)
+      .eq("stages.is_active", true)
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true }),
   ])

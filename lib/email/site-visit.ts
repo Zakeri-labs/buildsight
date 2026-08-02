@@ -17,15 +17,10 @@ export type SiteVisitEmailInput = {
 export async function sendSiteVisitRequestEmails(input: SiteVisitEmailInput) {
   const apiKey = process.env.RESEND_API_KEY?.trim()
   const from = process.env.SITE_VISIT_FROM_EMAIL?.trim()
-  if (!apiKey || !from) {
-    const missing = [!apiKey ? "RESEND_API_KEY" : null, !from ? "SITE_VISIT_FROM_EMAIL" : null].filter(Boolean).join(" and ")
-    const error = `Site visit email delivery is not configured. Missing ${missing}.`
-    console.error("[email:site-visit] Delivery skipped", { projectId: input.projectId, error })
-    return { status: "skipped_unconfigured" as const, sent: 0, error }
-  }
+  if (!apiKey || !from) return { status: "skipped_unconfigured" as const, sent: 0 }
 
   const { projectName, recipients } = await getSiteVisitEmailRecipients(input.projectId, input.requestedById)
-  if (!recipients.length) return { status: "skipped_no_recipients" as const, sent: 0, error: null }
+  if (!recipients.length) return { status: "skipped_no_recipients" as const, sent: 0 }
 
   const preferredVisit = input.isAsap ? "ASAP" : input.preferredDate || "Not specified"
   const text = [
@@ -64,5 +59,5 @@ export async function sendSiteVisitRequestEmails(input: SiteVisitEmailInput) {
     throw new Error(`Site visit email failed (${response.status})${body ? `: ${body.slice(0, 250)}` : ""}`)
   }
 
-  return { status: "sent" as const, sent: recipients.length, error: null }
+  return { status: "sent" as const, sent: recipients.length }
 }

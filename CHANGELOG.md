@@ -1,3 +1,7 @@
+## 2026-08-02
+
+- Replaced the active global Stage library with the required 27-stage construction sequence while preserving legacy project Stage, Term, Sub-term, Report, response, and workflow records.
+
 # Changelog
 
 ## Modified files

@@ -107,7 +107,6 @@ export async function createSiteVisitRequestAction(input: {
     const { data: profile } = await admin.from("profiles").select("full_name, email").eq("id", actorId).maybeSingle()
     const requestedByName = profile?.full_name?.trim() || profile?.email?.trim() || "Requester"
     let emailStatus = "skipped"
-    let emailError: string | null = null
     try {
       const result = await sendSiteVisitRequestEmails({
         projectId: input.projectId,
@@ -119,15 +118,8 @@ export async function createSiteVisitRequestAction(input: {
         purpose,
       })
       emailStatus = result.status
-      emailError = result.error
-    } catch (error) {
+    } catch {
       emailStatus = "failed"
-      emailError = error instanceof Error ? error.message : "Unknown site visit email error."
-      console.error("[email:site-visit] Delivery failed", {
-        projectId: input.projectId,
-        requestId: created.id,
-        error: emailError,
-      })
     }
 
     await audit({
@@ -136,7 +128,7 @@ export async function createSiteVisitRequestAction(input: {
       entityType: "site_visit_request",
       entityId: created.id,
       projectId: input.projectId,
-      metadata: { isAsap, preferredDate, preferredTime: input.preferredTime, emailStatus, emailError },
+      metadata: { isAsap, preferredDate, preferredTime: input.preferredTime, emailStatus },
     })
 
     revalidateSiteVisitPaths(input.projectId, created.id)
