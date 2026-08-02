@@ -192,16 +192,21 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
                       <span className="text-xs text-muted-foreground whitespace-nowrap">({stageReports.length} {copy.reports})</span>
                     </button>
 
-                    {primaryTermId ? (
-                      <Link
-                        href={`/projects/${data.project.id}/stages/${stage.id}/terms/${primaryTermId}/reports/new`}
-                        className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5 px-3 text-xs font-medium shrink-0")}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Plus className="size-3.5" />
-                        {copy.addReport}
-                      </Link>
-                    ) : null}
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-xs font-medium tabular-nums text-muted-foreground">
+                        {percentage}% {copy.complete}
+                      </span>
+                      {primaryTermId ? (
+                        <Link
+                          href={`/projects/${data.project.id}/stages/${stage.id}/terms/${primaryTermId}/reports/new`}
+                          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5 px-3 text-xs font-medium shrink-0")}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Plus className="size-3.5" />
+                          {copy.addReport}
+                        </Link>
+                      ) : null}
+                    </div>
                   </div>
                 </CardHeader>
 

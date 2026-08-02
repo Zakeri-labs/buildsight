@@ -36,8 +36,9 @@ export function DonutChart({
         {segments.map((seg, i) => {
           const fraction = sum > 0 ? seg.value / sum : 0
           const length = fraction * circumference
-          const offset = -(cumulative / sum) * circumference
+          const offset = sum > 0 ? -(cumulative / sum) * circumference : 0
           cumulative += seg.value
+          if (length <= 0) return null
           return (
             <circle
               key={i}
