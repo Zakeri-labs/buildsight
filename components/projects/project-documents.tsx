@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { getDocumentTypeDefinition, type DocumentTypeIconKey, type DocumentTypeValue } from "@/lib/documents/document-types"
 import { cn } from "@/lib/utils"
-import { ProjectOverviewTableColumns } from "@/components/projects/project-overview-table-columns"
+import { ProjectOverviewTableColumns, projectOverviewTableCellClass } from "@/components/projects/project-overview-table-columns"
 import { profileAvatarDisplayUrl } from "@/lib/profile-avatar"
 
 export type ProjectDocument = {
@@ -103,37 +103,38 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
       </CardHeader>
       <CardContent className="p-0">
         <div className="overflow-x-auto">
-          <table className="min-w-[980px] w-full table-fixed text-sm">
-            <ProjectOverviewTableColumns />
+          <table className="w-full min-w-[900px] table-fixed text-sm">
+            <ProjectOverviewTableColumns layout="letters" />
             <thead>
               <tr className="border-b bg-muted/45 text-xs font-semibold text-muted-foreground">
-                <th className="px-5 py-3 text-start sm:px-6">Reference</th>
-                <th className="px-4 py-3 text-start">Title</th>
-                <th className="px-4 py-3 text-start">Type</th>
-                <th className="px-4 py-3 text-start">Uploaded By</th>
-                <th className="px-4 py-3 text-start">Last Updated</th>
-                <th className="px-4 py-3 text-start">Status</th>
-                <th className="px-5 py-3 text-end sm:px-6">Actions</th>
+                <th className={projectOverviewTableCellClass.headerFirst}>Reference</th>
+                <th className={projectOverviewTableCellClass.headerMiddle}>Title</th>
+                <th className={projectOverviewTableCellClass.headerMiddle}>Type</th>
+                <th className={projectOverviewTableCellClass.headerMiddle}>Uploaded By</th>
+                <th className={projectOverviewTableCellClass.headerMiddle}>Last Updated</th>
+                <th className={projectOverviewTableCellClass.headerMiddle}>Status</th>
+                <th className={projectOverviewTableCellClass.headerLast}>Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {documents.map((document) => (
                 <tr key={document.id} className="transition-colors hover:bg-muted/30">
-                  <td className="px-5 py-3.5 sm:px-6">
+                  <td className={projectOverviewTableCellClass.bodyFirst}>
                     <Link
                       href={`/documents/${document.id}`}
-                      className="font-medium text-primary hover:underline"
+                      className="block truncate font-medium text-primary hover:underline"
+                      title={document.reference}
                     >
                       {document.reference}
                     </Link>
                   </td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-3">
+                  <td className={projectOverviewTableCellClass.bodyMiddle}>
+                    <div className="flex min-w-0 items-center gap-3">
                       <DocumentIcon type={document.type} />
-                      <span className="font-medium text-foreground">{document.title}</span>
+                      <span className="min-w-0 flex-1 truncate font-medium text-foreground" title={document.title}>{document.title}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3.5">
+                  <td className={projectOverviewTableCellClass.bodyMiddle}>
                     <span
                       title={getDocumentTypeDefinition(document.type).label}
                       className={cn("inline-flex rounded-md px-2.5 py-1 text-xs font-medium", getDocumentTypeDefinition(document.type).badgeClassName)}
@@ -141,8 +142,8 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
                       {getDocumentTypeDefinition(document.type).shortLabel}
                     </span>
                   </td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-2.5">
+                  <td className={projectOverviewTableCellClass.bodyMiddle}>
+                    <div className="flex min-w-0 items-center gap-2.5">
                       <Avatar size="sm">
                         {document.uploadedBy.avatar ? (
                           <AvatarImage src={profileAvatarDisplayUrl(document.uploadedBy.avatar)} alt={document.uploadedBy.name} />
@@ -151,16 +152,16 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
                           {document.uploadedBy.initials}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="font-medium">{document.uploadedBy.name}</span>
+                      <span className="min-w-0 flex-1 truncate font-medium" title={document.uploadedBy.name}>{document.uploadedBy.name}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3.5 text-muted-foreground">{document.lastUpdated}</td>
-                  <td className="px-4 py-3.5">
+                  <td className={cn(projectOverviewTableCellClass.bodyMiddle, "whitespace-nowrap text-muted-foreground")}>{document.lastUpdated}</td>
+                  <td className={projectOverviewTableCellClass.bodyMiddle}>
                     <span className={cn("inline-flex rounded-md px-2.5 py-1 text-xs font-medium", statusStyles[document.status])}>
                       {document.status}
                     </span>
                   </td>
-                  <td className="px-5 py-3.5 text-end sm:px-6">
+                  <td className={projectOverviewTableCellClass.bodyLast}>
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         render={

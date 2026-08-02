@@ -67,7 +67,7 @@ import {
   type ProjectParticipantView as ProjectParticipant,
 } from "@/lib/projects/project-participant-types"
 import { cn } from "@/lib/utils"
-import { ProjectOverviewTableColumns } from "@/components/projects/project-overview-table-columns"
+import { ProjectOverviewTableColumns, projectOverviewTableCellClass } from "@/components/projects/project-overview-table-columns"
 
 export type { ProjectParticipantView as ProjectParticipant } from "@/lib/projects/project-participant-types"
 
@@ -726,17 +726,17 @@ export function ProjectParticipants({
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="min-w-[980px] w-full table-fixed text-sm">
-              <ProjectOverviewTableColumns />
+            <table className="w-full min-w-[920px] table-fixed text-sm">
+              <ProjectOverviewTableColumns layout="participants" />
               <thead>
                 <tr className="border-b bg-muted/45 text-xs font-semibold text-muted-foreground">
-                  <th className="px-5 py-3 text-start sm:px-6">Organization</th>
-                  <th className="px-4 py-3 text-start">Type</th>
-                  <th className="px-4 py-3 text-start">Participant Role</th>
-                  <th className="px-4 py-3 text-start">Key Contact</th>
-                  <th className="px-4 py-3 text-start">Users with Access</th>
-                  <th className="px-4 py-3 text-start">Status</th>
-                  <th className="px-5 py-3 text-end sm:px-6">Actions</th>
+                  <th className={projectOverviewTableCellClass.headerFirst}>Organization</th>
+                  <th className={projectOverviewTableCellClass.headerMiddle}>Type</th>
+                  <th className={projectOverviewTableCellClass.headerMiddle}>Participant Role</th>
+                  <th className={projectOverviewTableCellClass.headerMiddle}>Key Contact</th>
+                  <th className={projectOverviewTableCellClass.headerMiddle}>Users with Access</th>
+                  <th className={projectOverviewTableCellClass.headerMiddle}>Status</th>
+                  <th className={projectOverviewTableCellClass.headerLast}>Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -759,34 +759,34 @@ export function ProjectParticipants({
                       const hasActions = Boolean(participant.keyContact.userId || participant.organizationId || canManageParticipants || canManageAvatars)
                       return (
                         <tr key={participant.id} className="transition-colors hover:bg-muted/30">
-                          <td className="px-5 py-3.5 sm:px-6">
-                            <div className="flex items-center gap-3">
+                          <td className={projectOverviewTableCellClass.bodyFirst}>
+                            <div className="flex min-w-0 items-center gap-3">
                               <OrganizationMark participant={participant} />
-                              <span className="min-w-0">
-                                <span className="block truncate font-medium text-foreground">{participant.organization}</span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate font-medium text-foreground" title={participant.organization}>{participant.organization}</span>
                                 {participant.isExternalContact ? <span className="block text-xs text-muted-foreground">External contact</span> : null}
                               </span>
                             </div>
                           </td>
-                          <td className="px-4 py-3.5 text-muted-foreground">{participant.organizationType}</td>
-                          <td className="px-4 py-3.5">
-                            <span className={cn(
-                              "inline-flex rounded-md px-2.5 py-1 text-xs font-medium",
+                          <td className={cn(projectOverviewTableCellClass.bodyMiddle, "truncate text-muted-foreground")} title={participant.organizationType}>{participant.organizationType}</td>
+                          <td className={projectOverviewTableCellClass.bodyMiddle}>
+                            <span title={participant.projectRole} className={cn(
+                              "inline-block max-w-full truncate rounded-md px-2.5 py-1 text-xs font-medium",
                               roleStyles[participant.projectRole] ?? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
                             )}>{participant.projectRole}</span>
-                            {participant.contractorRoleLabel ? <span className="mt-1 block text-xs text-muted-foreground">{participant.contractorRoleLabel}</span> : null}
+                            {participant.contractorRoleLabel ? <span className="mt-1 block truncate text-xs text-muted-foreground" title={participant.contractorRoleLabel}>{participant.contractorRoleLabel}</span> : null}
                           </td>
-                          <td className="px-4 py-3.5">
-                            <div className="flex items-center gap-2.5">
+                          <td className={projectOverviewTableCellClass.bodyMiddle}>
+                            <div className="flex min-w-0 items-center gap-2.5">
                               <ProfileAvatar name={participant.keyContact.name} email={participant.keyContact.email ?? ""} avatarUrl={avatar} size="sm" />
                               <span className="min-w-0">
-                                <span className="block truncate font-medium">{participant.keyContact.name}</span>
-                                {participant.keyContact.detail ? <span className="block truncate text-xs text-muted-foreground">{participant.keyContact.detail}</span> : null}
+                                <span className="block truncate font-medium" title={participant.keyContact.name}>{participant.keyContact.name}</span>
+                                {participant.keyContact.detail ? <span className="block truncate text-xs text-muted-foreground" title={participant.keyContact.detail}>{participant.keyContact.detail}</span> : null}
                               </span>
                             </div>
                           </td>
-                          <td className="px-4 py-3.5 text-muted-foreground">{participant.usersWithAccess} {participant.usersWithAccess === 1 ? "user" : "users"}</td>
-                          <td className="px-4 py-3.5">
+                          <td className={cn(projectOverviewTableCellClass.bodyMiddle, "whitespace-nowrap text-muted-foreground")}>{participant.usersWithAccess} {participant.usersWithAccess === 1 ? "user" : "users"}</td>
+                          <td className={projectOverviewTableCellClass.bodyMiddle}>
                             <span className={cn(
                               "inline-flex rounded-md px-2.5 py-1 text-xs font-medium",
                               participant.status === "Active"
@@ -796,7 +796,7 @@ export function ProjectParticipants({
                                   : "bg-orange-50 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300",
                             )}>{participant.status}</span>
                           </td>
-                          <td className="px-5 py-3.5 text-end sm:px-6">
+                          <td className={projectOverviewTableCellClass.bodyLast}>
                             {hasActions ? (
                               <DropdownMenu>
                                 <DropdownMenuTrigger render={<button type="button" aria-label={`Actions for ${participant.organization}`} className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><MoreVertical className="size-4" /></button>} />

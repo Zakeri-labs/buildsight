@@ -353,8 +353,8 @@ export function ProjectDetail({
         {t.projects.title}
       </Link>
 
-      <div className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-[minmax(0,1fr)_380px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
-        <Card className="gap-0 overflow-hidden py-0">
+      <div className="grid grid-cols-1 items-stretch gap-6 min-[1180px]:grid-cols-[minmax(0,3.75fr)_minmax(220px,1fr)]">
+        <Card className="h-full gap-0 overflow-hidden py-0">
           <CardHeader className="flex flex-row items-center justify-between gap-3 border-b px-5 py-3.5 sm:px-6">
             <CardTitle className="min-w-0 text-base font-semibold tracking-tight">{labels.details}</CardTitle>
             {canEditProject ? (
@@ -503,23 +503,23 @@ export function ProjectDetail({
           </CardContent>
         </Card>
 
-        <Card className="h-full w-full max-w-[520px] justify-self-center gap-0 overflow-hidden py-0 xl:max-w-none xl:justify-self-stretch">
+        <Card className="h-full min-h-[420px] w-full self-stretch gap-0 overflow-hidden py-0">
           <CardHeader className="border-b px-5 py-3.5 sm:px-6">
             <CardTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">
               <MapPin className="size-4 text-primary" aria-hidden="true" />
               {isArabic ? "موقع المشروع" : "Project Location"}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex min-h-0 flex-1 p-0">
+          <CardContent className="flex min-h-[360px] flex-1 p-0 min-[1180px]:min-h-0">
             <div
               ref={mapShellRef}
               role="region"
               aria-label={isArabic ? "خريطة موقع المشروع" : "Project location map"}
               className={cn(
-                "relative isolate w-full overflow-hidden bg-muted/40",
+                "relative isolate min-h-[360px] w-full flex-1 overflow-hidden bg-muted/40",
                 isFullscreen
                   ? "fixed inset-0 z-[1200] h-screen max-h-none max-w-none rounded-none border-0 bg-background"
-                  : "min-h-[320px] flex-1 sm:min-h-[360px] xl:min-h-0",
+                  : "h-full",
               )}
             >
               <div
@@ -680,7 +680,7 @@ export function ProjectDetail({
             <span className="hidden sm:inline">{labels.viewAllDocuments}</span>
           </Link>
         </CardHeader>
-        <CardContent className="p-4 sm:p-5">
+        <CardContent className="p-0">
           <InitialDocumentsList
             embedded
             documents={initialDocuments}
