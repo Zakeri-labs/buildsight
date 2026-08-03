@@ -96,18 +96,25 @@ function projectDocuments(project: ProjectRecord): ProjectDocument[] {
 }
 
 function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
-  const isUnset =
+  const isNotSet =
     value === "Not set" ||
     value === "غير محدد" ||
-    value === "Not Set" ||
     value === "—" ||
     value == null ||
-    value === ""
+    value === "" ||
+    (typeof value === "string" && !value.trim())
+
   return (
-    <div className="flex flex-col justify-between gap-1 rounded-lg border border-border/40 bg-muted/15 p-2.5 transition-colors hover:bg-muted/30">
-      <dt className="text-[11px] font-medium text-muted-foreground/85">{label}</dt>
-      <dd className={cn("min-w-0 break-words text-xs font-semibold text-foreground", isUnset && "font-normal text-muted-foreground/35")}>
-        {isUnset ? <span className="select-none font-sans text-muted-foreground/30">—</span> : value}
+    <div className="flex min-w-0 items-center justify-between gap-3 border-b border-border/30 py-1.5 text-xs">
+      <dt className="shrink-0 font-medium text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 truncate text-end">
+        {isNotSet ? (
+          <span className="font-normal text-muted-foreground/40">—</span>
+        ) : typeof value === "string" || typeof value === "number" ? (
+          <span className="font-semibold text-foreground">{value}</span>
+        ) : (
+          value
+        )}
       </dd>
     </div>
   )
@@ -190,7 +197,7 @@ export function ProjectDetail({
         role: "دور الجهة",
         location: "الموقع / العنوان",
         areaDistrict: "المنطقة / الحي",
-        notSet: "غير محدد",
+        notSet: "—",
         type: "نوع المشروع",
         supervisionType: "نوع الإشراف",
         plotNo: "رقم قطعة الأرض",
@@ -225,7 +232,7 @@ export function ProjectDetail({
         role: "Organization Role",
         location: "Location / Address",
         areaDistrict: "Area / District",
-        notSet: "Not set",
+        notSet: "—",
         type: "Project Type",
         supervisionType: "Supervision Type",
         plotNo: "Plot No.",
@@ -263,7 +270,9 @@ export function ProjectDetail({
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${projectPoint.latitude},${projectPoint.longitude}`)}`
     : null
   const handleMapReady = useCallback(() => setMapState("ready"), [])
-  const handleTileError = useCallback(() => {}, [])
+  const handleTileError = useCallback(() => {
+    // Keep the mounted map visible; Leaflet can continue rendering the marker, controls, and remaining tiles.
+  }, [])
   const isFullscreen = nativeFullscreen || fallbackFullscreen
   const requestMapResize = useCallback(() => {
     setResizeRequest((request) => request + 1)
@@ -344,7 +353,9 @@ export function ProjectDetail({
       try {
         await shell.requestFullscreen()
         return
-      } catch {}
+      } catch {
+        // Fall through to the CSS fullscreen mode when the browser rejects the native API.
+      }
     }
 
     setFallbackFullscreen(true)
@@ -381,7 +392,7 @@ export function ProjectDetail({
             ) : null}
           </CardHeader>
           <CardContent className="p-4 sm:p-5">
-            <div className="grid gap-5 lg:grid-cols-[288px_minmax(0,1fr)]">
+            <div className="grid gap-4 lg:grid-cols-[288px_minmax(0,1fr)]">
               <div className="min-w-0">
                 <div className="relative">
                   <ProjectImageDisplay
@@ -416,87 +427,85 @@ export function ProjectDetail({
                 </Link>
               </div>
 
-              <div className="space-y-4 min-w-0">
-                <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
+              <div className="min-w-0 py-0.5">
+                <dl className="grid min-w-0 gap-x-5 md:grid-cols-2">
                   <DetailField label={labels.name} value={currentProject.name} />
-                  <DetailField label={labels.code} value={currentProject.code} />
                   <DetailField label={labels.type} value={currentProject.projectType} />
                   <DetailField label={labels.supervisionType} value={currentProject.supervisionType} />
-                  <DetailField label={labels.plotNo} value={currentEditProject.plotNo?.trim()} />
+                  <DetailField label={labels.code} value={currentProject.code} />
+                  <DetailField label={labels.plotNo} value={currentEditProject.plotNo?.trim() || labels.notSet} />
                   <DetailField
                     label={labels.status}
                     value={<ProjectStatusDisplay status={currentEditProject.status} isArabic={isArabic} />}
                   />
                   <DetailField label={labels.priority} value={projectPriorityLabel(currentEditProject.priority, isArabic)} />
                   <DetailField label={labels.owner} value={currentProject.client} />
-                  <DetailField label={labels.role} value={currentProject.organizationRole} />
                   <DetailField label={labels.start} value={currentProject.startDate} />
                   <DetailField
                     label={labels.supervisionStart}
-                    value={displayProjectDate(currentEditProject.supervisionStartDate, locale, "")}
+                    value={displayProjectDate(currentEditProject.supervisionStartDate, locale, labels.notSet)}
                   />
+                  <DetailField label={labels.role} value={currentProject.organizationRole} />
                   <DetailField label={labels.completion} value={currentProject.targetHandover} />
                   <DetailField label={labels.location} value={currentProject.location} />
-                  <DetailField label={labels.areaDistrict} value={currentEditProject.areaDistrict?.trim()} />
+                  <DetailField label={labels.areaDistrict} value={currentEditProject.areaDistrict?.trim() || labels.notSet} />
                   <DetailField
                     label={labels.includedStructureVisits}
-                    value={displayVisitCount(currentEditProject.includedStructureVisits, "")}
+                    value={displayVisitCount(currentEditProject.includedStructureVisits, labels.notSet)}
                   />
                   <DetailField
                     label={labels.includedFinishingVisits}
-                    value={displayVisitCount(currentEditProject.includedFinishingVisits, "")}
+                    value={displayVisitCount(currentEditProject.includedFinishingVisits, labels.notSet)}
                   />
                   <DetailField label={labels.progress} value={`${progress}%`} />
                 </dl>
 
-                {currentProject.description?.trim() ? (
-                  <div className="rounded-lg border border-border/40 bg-muted/10 p-3">
-                    <p className="text-[11px] font-medium text-muted-foreground">{labels.description}</p>
-                    <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-foreground/90">
-                      {currentProject.description}
-                    </p>
-                  </div>
-                ) : null}
+                <div className="mt-3 rounded-lg border border-border/40 bg-muted/20 p-3">
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{labels.description}</p>
+                  <p className="min-w-0 whitespace-pre-wrap break-words text-xs font-medium text-foreground/90">
+                    {currentProject.description?.trim() || "—"}
+                  </p>
+                </div>
 
-                <div className="rounded-lg border border-border/40 bg-muted/10 p-3">
-                  <p className="mb-2 text-xs font-semibold text-foreground">{labels.financialSummary}</p>
-                  <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
+                <div className="mt-3 rounded-lg border border-border/40 bg-muted/20 p-3">
+                  <p className="mb-1 text-xs font-semibold text-foreground">{labels.financialSummary}</p>
+                  <dl className="grid min-w-0 gap-x-6 md:grid-cols-2">
                     <DetailField
                       label={labels.structureFee}
-                      value={formatProjectAmountOmr(currentEditProject.structureSupervisionFee, "")}
+                      value={formatProjectAmountOmr(currentEditProject.structureSupervisionFee, "—")}
                     />
                     <DetailField
                       label={labels.finishingFee}
-                      value={formatProjectAmountOmr(currentEditProject.finishingSupervisionFee, "")}
+                      value={formatProjectAmountOmr(currentEditProject.finishingSupervisionFee, "—")}
                     />
                     <DetailField
                       label={labels.receivedAmount}
-                      value={formatProjectAmountOmr(currentEditProject.receivedAmount, "")}
+                      value={formatProjectAmountOmr(currentEditProject.receivedAmount, "—")}
                     />
                     <DetailField
                       label={labels.outstandingAmount}
-                      value={formatProjectAmountOmr(currentEditProject.outstandingAmount, "")}
+                      value={formatProjectAmountOmr(currentEditProject.outstandingAmount, "—")}
                     />
                     <DetailField
                       label={labels.nextPaymentAmount}
-                      value={formatProjectAmountOmr(currentEditProject.nextPaymentAmount, "")}
+                      value={formatProjectAmountOmr(currentEditProject.nextPaymentAmount, "—")}
                     />
                     <DetailField
                       label={labels.nextPaymentDueDate}
-                      value={displayProjectDate(currentEditProject.nextPaymentDueDate, locale, "")}
+                      value={displayProjectDate(currentEditProject.nextPaymentDueDate, locale, "—")}
                     />
                     <DetailField
                       label={labels.paymentNote}
-                      value={currentEditProject.invoiceReferencePaymentNote?.trim()}
+                      value={currentEditProject.invoiceReferencePaymentNote?.trim() || "—"}
                     />
                     <DetailField
                       label={labels.initialRemarks}
-                      value={currentEditProject.initialRemarks?.trim()}
+                      value={currentEditProject.initialRemarks?.trim() || "—"}
                     />
                   </dl>
                 </div>
 
-                <div className="pt-1 flex items-center gap-3" aria-label={`${labels.progress}: ${progress}%`}>
+                <div className="mt-3 flex items-center gap-3" aria-label={`${labels.progress}: ${progress}%`}>
                   <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
                     <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${progress}%` }} />
                   </div>
