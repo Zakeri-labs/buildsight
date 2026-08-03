@@ -123,16 +123,58 @@ function optionalWholeNumber(value: string): number | null {
   return value === "" ? null : Number(value)
 }
 
+export function generateAutoProjectCode(
+  orgName: string,
+  startDateStr: string,
+  existingCodes: string[] = [],
+): string {
+  let prefix = "Bonyan"
+  if (orgName?.trim()) {
+    const firstWord = orgName.trim().split(/\s+/)[0].replace(/[^a-zA-Z0-9]/g, "")
+    if (firstWord.length >= 2) prefix = firstWord
+  }
+
+  let year = 2026
+  if (startDateStr) {
+    const parsedDate = new Date(startDateStr)
+    if (!isNaN(parsedDate.getTime())) {
+      year = parsedDate.getFullYear()
+    }
+  } else {
+    year = new Date().getFullYear()
+  }
+
+  const yearRegex = new RegExp(`[/\\-_]${year}[/\\-_](\\d+)`, "i")
+  let maxSeq = year === 2026 ? 109 : 0
+
+  for (const c of existingCodes) {
+    if (!c) continue
+    const match = c.match(yearRegex)
+    if (match && match[1]) {
+      const num = parseInt(match[1], 10)
+      if (!isNaN(num) && num > maxSeq) {
+        maxSeq = num
+      }
+    }
+  }
+
+  const nextSeq = maxSeq + 1
+  const paddedSeq = nextSeq < 100 ? String(nextSeq).padStart(3, "0") : String(nextSeq)
+  return `${prefix}/sup/${year}/${paddedSeq}`
+}
+
 export function ProjectCreateForm({
   supervisingOrg,
   contractorOrganizations,
   users,
   supervisors,
+  existingProjectCodes = [],
 }: {
   supervisingOrg: { id: string; name: string }
   contractorOrganizations: ContractorOrganization[]
   users: UserOption[]
   supervisors: UserOption[]
+  existingProjectCodes?: string[]
 }) {
   const router = useRouter()
   const { locale } = useI18n()
@@ -140,6 +182,7 @@ export function ProjectCreateForm({
   const [step, setStep] = useState(1)
   const [name, setName] = useState("")
   const [code, setCode] = useState("")
+  const [codeTouched, setCodeTouched] = useState(false)
   const [projectType, setProjectType] = useState<ProjectTypeValue | "">("")
   const [supervisionType, setSupervisionType] = useState<SupervisionTypeValue | "">("")
   const [supervisionTypeOther, setSupervisionTypeOther] = useState("")
@@ -186,6 +229,13 @@ export function ProjectCreateForm({
   const projectStartDateInputRef = useRef<HTMLInputElement>(null)
   const supervisionStartDateInputRef = useRef<HTMLInputElement>(null)
   const submissionLockRef = useRef(false)
+
+  useEffect(() => {
+    if (!codeTouched) {
+      const autoCode = generateAutoProjectCode(supervisingOrg.name, projectStartDate, existingProjectCodes)
+      setCode(autoCode)
+    }
+  }, [projectStartDate, supervisingOrg.name, existingProjectCodes, codeTouched])
 
   const selectedDocumentCount = initialDocuments.length
   const selectedOwnerIdCardCount = useMemo(
@@ -894,7 +944,10 @@ export function ProjectCreateForm({
                         <Input
                           id="new-project-code"
                           value={code}
-                          onChange={(event) => setCode(event.target.value)}
+                          onChange={(event) => {
+                            setCode(event.target.value)
+                            setCodeTouched(Boolean(event.target.value.trim()))
+                          }}
                           placeholder={copy.codePlaceholder}
                           disabled={pending}
                           className="h-10"
@@ -1261,6 +1314,16 @@ export function ProjectCreateForm({
                   values={financialValues}
                   onChange={(field, value) => {
                     setFinancialValues((current) => ({ ...current, [field]: value }))
+                    setError(null)
+                  }}
+                  includedStructureVisits={includedStructureVisits}
+                  onChangeIncludedStructureVisits={(value) => {
+                    setIncludedStructureVisits(value)
+                    setError(null)
+                  }}
+                  includedFinishingVisits={includedFinishingVisits}
+                  onChangeIncludedFinishingVisits={(value) => {
+                    setIncludedFinishingVisits(value)
                     setError(null)
                   }}
                   disabled={pending}

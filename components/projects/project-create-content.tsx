@@ -24,7 +24,7 @@ export async function ProjectCreateContent() {
 
   const admin = createAdminClient()
   const [{ data: projectRows }, { data: memberRows }] = await Promise.all([
-    admin.from("projects").select("id").eq("supervising_organization_id", supervisingOrg.id),
+    admin.from("projects").select("id, code").eq("supervising_organization_id", supervisingOrg.id),
     admin
       .from("organization_memberships")
       .select("user_id, role")
@@ -32,6 +32,7 @@ export async function ProjectCreateContent() {
       .eq("status", "active"),
   ])
 
+  const existingProjectCodes = (projectRows ?? []).map((project) => project.code).filter(Boolean) as string[]
   const projectIds = (projectRows ?? []).map((project) => project.id)
   const memberIds = Array.from(new Set([session.userId, ...(memberRows ?? []).map((membership) => membership.user_id)]))
   const [{ data: profileRows }, participantMemberships] = await Promise.all([
@@ -105,6 +106,7 @@ export async function ProjectCreateContent() {
       contractorOrganizations={contractorOrganizations}
       users={userOptions}
       supervisors={supervisorOptions}
+      existingProjectCodes={existingProjectCodes}
     />
   )
 }

@@ -463,46 +463,6 @@ export function ProjectEditDialog({
                   </Button>
                 </div>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor={`project-edit-included-structure-visits-${project.id}`}>
-                    {isArabic ? "زيارات الهيكل الإنشائي المشمولة" : "Included Structure Visits"}
-                  </Label>
-                  <Input
-                    id={`project-edit-included-structure-visits-${project.id}`}
-                    type="number"
-                    min={0}
-                    step={1}
-                    inputMode="numeric"
-                    value={includedStructureVisits}
-                    onChange={(event) => {
-                      setIncludedStructureVisits(event.target.value)
-                      setError(null)
-                    }}
-                    disabled={pending}
-                    className="h-10"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor={`project-edit-included-finishing-visits-${project.id}`}>
-                    {isArabic ? "زيارات التشطيبات المشمولة" : "Included Finishing Visits"}
-                  </Label>
-                  <Input
-                    id={`project-edit-included-finishing-visits-${project.id}`}
-                    type="number"
-                    min={0}
-                    step={1}
-                    inputMode="numeric"
-                    value={includedFinishingVisits}
-                    onChange={(event) => {
-                      setIncludedFinishingVisits(event.target.value)
-                      setError(null)
-                    }}
-                    disabled={pending}
-                    className="h-10"
-                  />
-                </div>
-              </div>
               <div className="flex min-h-32 flex-1 flex-col gap-2">
                 <Label htmlFor={`project-edit-description-${project.id}`}>{isArabic ? "وصف المشروع" : "Project Description"}</Label>
                 <textarea
@@ -521,6 +481,16 @@ export function ProjectEditDialog({
             values={financialValues}
             onChange={(field, value) => {
               setFinancialValues((current) => ({ ...current, [field]: value }))
+              setError(null)
+            }}
+            includedStructureVisits={includedStructureVisits}
+            onChangeIncludedStructureVisits={(value) => {
+              setIncludedStructureVisits(value)
+              setError(null)
+            }}
+            includedFinishingVisits={includedFinishingVisits}
+            onChangeIncludedFinishingVisits={(value) => {
+              setIncludedFinishingVisits(value)
               setError(null)
             }}
             disabled={pending}

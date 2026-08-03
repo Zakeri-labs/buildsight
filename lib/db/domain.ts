@@ -308,9 +308,8 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
       projectTotalCheckboxes += stageTotal
     }
 
-    if (projectTotalCheckboxes > 0) {
-      calculatedProgress.set(projectId, Math.round((projectCheckedCheckboxes / projectTotalCheckboxes) * 100))
-    }
+    const calculatedPct = projectTotalCheckboxes > 0 ? Math.round((projectCheckedCheckboxes / projectTotalCheckboxes) * 100) : 0
+    calculatedProgress.set(projectId, calculatedPct)
   }
   const legacyImageCounts = new Map<string, number>()
   for (const project of projectRows as any[]) {
@@ -355,7 +354,7 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
     targetHandover: p.target_handover,
     contractValue: p.contract_value,
     progressPlanned: p.progress_planned ?? 0,
-    progressActual: calculatedProgress.has(p.id) ? calculatedProgress.get(p.id)! : (p.progress_actual ?? 0),
+    progressActual: calculatedProgress.get(p.id) ?? 0,
     progressDelay: p.progress_delay ?? 0,
   }))
   } catch (error) {
@@ -414,7 +413,7 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
     const { projects, scoped, ids } = await resolveScopedProjects(orgId, projectId, userId)
     const names = nameMap(projects)
 
-    const [ncrs, inspections, rfis, vos, activity, tasks, reviewFeed, siteVisitFeed, reportCcFeed] = await Promise.all([
+    const [ncrs, inspections, rfis, vos, activity, tasks, reviewFeed, siteVisitFeed, reportCcFeed, termResponses] = await Promise.all([
       fetchScopedRows("ncrs", "project_id, status", ids),
       fetchScopedRows("inspections", "project_id, status", ids),
       fetchScopedRows("rfis", "project_id, status", ids),
@@ -424,6 +423,7 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
       getReviewSubmissionFeed({ userId, organizationId: orgId, projectId }),
       getSiteVisitTaskFeed({ userId, projectId }),
       getReportCcNotificationFeed({ userId, projectId }),
+      fetchScopedRows("term_responses", "id, project_id, project_stage_id", ids),
     ])
 
     const countBy = (rows: any[], field: string) => {
@@ -458,7 +458,18 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
 
     const projectRows = scoped.map((p) => {
       const pNcrs = ncrs.filter((r) => r.project_id === p.id).length
-      const pInsps = inspections.filter((r) => r.project_id === p.id).length
+      const pStageReportsCount = (termResponses ?? []).filter((r: any) => r.project_id === p.id).length
+      let demoReportsCount = 0
+      if (DEMO_STAGE_MANAGEMENT_DATA?.stages) {
+        for (const st of DEMO_STAGE_MANAGEMENT_DATA.stages) {
+          demoReportsCount += (st.reports ?? []).length
+        }
+      }
+      const pInsps = Math.max(
+        inspections.filter((r) => r.project_id === p.id).length,
+        pStageReportsCount,
+        demoReportsCount
+      )
       const pRfis = rfis.filter((r) => r.project_id === p.id).length
       const pVos = vos.filter((r) => r.project_id === p.id).length
       return {

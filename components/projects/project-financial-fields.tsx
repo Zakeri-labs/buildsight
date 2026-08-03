@@ -22,6 +22,10 @@ export function ProjectFinancialFields({
   idPrefix,
   values,
   onChange,
+  includedStructureVisits,
+  onChangeIncludedStructureVisits,
+  includedFinishingVisits,
+  onChangeIncludedFinishingVisits,
   disabled = false,
   isArabic = false,
   className,
@@ -29,6 +33,10 @@ export function ProjectFinancialFields({
   idPrefix: string
   values: ProjectFinancialFormValues
   onChange: (field: FinancialField, value: string) => void
+  includedStructureVisits?: string
+  onChangeIncludedStructureVisits?: (value: string) => void
+  includedFinishingVisits?: string
+  onChangeIncludedFinishingVisits?: (value: string) => void
   disabled?: boolean
   isArabic?: boolean
   className?: string
@@ -45,7 +53,9 @@ export function ProjectFinancialFields({
 
   const copy = isArabic
     ? {
-        title: "معلومات العقد والبيانات المالية",
+        title: "الخلاصة المالية",
+        includedStructureVisits: "زيارات الهيكل الإنشائي المشمولة",
+        includedFinishingVisits: "زيارات التشطيبات المشمولة",
         structureFee: "رسوم الإشراف الإنشائي",
         finishingFee: "رسوم الإشراف على التشطيبات",
         received: "المبلغ المستلم",
@@ -58,7 +68,9 @@ export function ProjectFinancialFields({
         optional: "اختياري",
       }
     : {
-        title: "Contract & Financial Information",
+        title: "Financial Summary",
+        includedStructureVisits: "Included Structure Visits",
+        includedFinishingVisits: "Included Finishing Visits",
         structureFee: "Structure Supervision Fee",
         finishingFee: "Finishing Supervision Fee",
         received: "Received Amount",
@@ -120,7 +132,41 @@ export function ProjectFinancialFields({
   return (
     <section className={cn("rounded-2xl border bg-muted/10 p-4 sm:p-5", className)} aria-labelledby={`${idPrefix}-title`}>
       <h3 id={`${idPrefix}-title`} className="mb-4 text-sm font-semibold">{copy.title}</h3>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {onChangeIncludedStructureVisits ? (
+          <div className="space-y-2">
+            <Label htmlFor={`${idPrefix}-included-structure-visits`}>{copy.includedStructureVisits} ({copy.optional})</Label>
+            <Input
+              id={`${idPrefix}-included-structure-visits`}
+              type="number"
+              min={0}
+              step={1}
+              inputMode="numeric"
+              value={includedStructureVisits ?? ""}
+              onChange={(e) => onChangeIncludedStructureVisits(e.target.value)}
+              disabled={disabled}
+              placeholder="—"
+              className="h-10"
+            />
+          </div>
+        ) : null}
+        {onChangeIncludedFinishingVisits ? (
+          <div className="space-y-2">
+            <Label htmlFor={`${idPrefix}-included-finishing-visits`}>{copy.includedFinishingVisits} ({copy.optional})</Label>
+            <Input
+              id={`${idPrefix}-included-finishing-visits`}
+              type="number"
+              min={0}
+              step={1}
+              inputMode="numeric"
+              value={includedFinishingVisits ?? ""}
+              onChange={(e) => onChangeIncludedFinishingVisits(e.target.value)}
+              disabled={disabled}
+              placeholder="—"
+              className="h-10"
+            />
+          </div>
+        ) : null}
         {amountInput("structureSupervisionFee", copy.structureFee)}
         {amountInput("finishingSupervisionFee", copy.finishingFee)}
         {amountInput("receivedAmount", copy.received)}
@@ -185,7 +231,7 @@ export function ProjectFinancialFields({
             className="h-10"
           />
         </div>
-        <div className="space-y-2 sm:col-span-2 xl:col-span-4">
+        <div className="space-y-2 sm:col-span-2 lg:col-span-3 xl:col-span-4">
           <Label htmlFor={`${idPrefix}-initial-remarks`}>{copy.remarks} ({copy.optional})</Label>
           <textarea
             id={`${idPrefix}-initial-remarks`}
