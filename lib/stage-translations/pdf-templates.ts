@@ -153,9 +153,9 @@ export type BilingualSourceImage = {
 
 const SECTION_LABELS: Array<{ key: TranslationSectionKey; en: string; ar: string }> = [
   { key: "feedback", en: "Feedback", ar: "الملاحظات العامة" },
-  { key: "observation", en: "Observations", ar: "الملاحظات والمعاينة" },
+  { key: "observation", en: "Observation / Work Progress", ar: "الملاحظات / تقدم الأعمال" },
   { key: "findings", en: "Findings", ar: "النتائج" },
-  { key: "recommendations", en: "Recommendations", ar: "التوصيات" },
+  { key: "recommendations", en: "Instructions / Recommendations", ar: "التعليمات / التوصيات" },
   { key: "correctiveActions", en: "Corrective Actions", ar: "الإجراءات التصحيحية" },
 ]
 
