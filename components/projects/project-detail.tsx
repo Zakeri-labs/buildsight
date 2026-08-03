@@ -425,6 +425,31 @@ export function ProjectDetail({
                   <Images className="size-4" />
                   {labels.viewGallery}
                 </Link>
+              </div>
+
+              <div className="min-w-0 py-0.5">
+                <dl className="grid min-w-0 gap-x-5 md:grid-cols-2">
+                  <DetailField label={labels.name} value={currentProject.name} />
+                  <DetailField label={labels.owner} value={currentProject.client} />
+                  <DetailField label={labels.code} value={currentProject.code} />
+                  <DetailField label={labels.role} value={currentProject.organizationRole} />
+                  <DetailField label={labels.type} value={currentProject.projectType} />
+                  <DetailField label={labels.supervisionType} value={currentProject.supervisionType} />
+                  <DetailField label={labels.plotNo} value={currentEditProject.plotNo?.trim() || labels.notSet} />
+                  <DetailField label={labels.areaDistrict} value={currentEditProject.areaDistrict?.trim() || labels.notSet} />
+                  <DetailField
+                    label={labels.status}
+                    value={<ProjectStatusDisplay status={currentEditProject.status} isArabic={isArabic} />}
+                  />
+                  <DetailField label={labels.priority} value={projectPriorityLabel(currentEditProject.priority, isArabic)} />
+                  <DetailField label={labels.start} value={currentProject.startDate} />
+                  <DetailField
+                    label={labels.supervisionStart}
+                    value={displayProjectDate(currentEditProject.supervisionStartDate, locale, labels.notSet)}
+                  />
+                  <DetailField label={labels.location} value={currentProject.location} />
+                  <DetailField label={labels.completion} value={currentProject.targetHandover} />
+                </dl>
 
                 <div className="mt-3 rounded-lg border border-border/40 bg-muted/20 p-3">
                   <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{labels.description}</p>
@@ -432,31 +457,6 @@ export function ProjectDetail({
                     {currentProject.description?.trim() || "—"}
                   </p>
                 </div>
-              </div>
-
-              <div className="min-w-0 py-0.5">
-                <dl className="grid min-w-0 gap-x-5 md:grid-cols-2">
-                  <DetailField label={labels.name} value={currentProject.name} />
-                  <DetailField label={labels.type} value={currentProject.projectType} />
-                  <DetailField label={labels.supervisionType} value={currentProject.supervisionType} />
-                  <DetailField label={labels.code} value={currentProject.code} />
-                  <DetailField label={labels.plotNo} value={currentEditProject.plotNo?.trim() || labels.notSet} />
-                  <DetailField
-                    label={labels.status}
-                    value={<ProjectStatusDisplay status={currentEditProject.status} isArabic={isArabic} />}
-                  />
-                  <DetailField label={labels.priority} value={projectPriorityLabel(currentEditProject.priority, isArabic)} />
-                  <DetailField label={labels.owner} value={currentProject.client} />
-                  <DetailField label={labels.start} value={currentProject.startDate} />
-                  <DetailField
-                    label={labels.supervisionStart}
-                    value={displayProjectDate(currentEditProject.supervisionStartDate, locale, labels.notSet)}
-                  />
-                  <DetailField label={labels.role} value={currentProject.organizationRole} />
-                  <DetailField label={labels.completion} value={currentProject.targetHandover} />
-                  <DetailField label={labels.location} value={currentProject.location} />
-                  <DetailField label={labels.areaDistrict} value={currentEditProject.areaDistrict?.trim() || labels.notSet} />
-                </dl>
 
                 <div className="mt-3 rounded-lg border border-border/40 bg-muted/20 p-3">
                   <p className="mb-1 text-xs font-semibold text-foreground">{labels.financialSummary}</p>
