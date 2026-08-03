@@ -779,7 +779,7 @@ export function InspectionReportForm({
           <HeaderCell label={copy.reportNo} value={displayReportNo} />
           <HeaderCell label={copy.date} value={formatDate(reportDate, locale)} />
           <HeaderCell
-            label={locale === "ar" ? "مقدم التقرير" : "Created By"}
+            label={isDirectStageReport ? (locale === "ar" ? "المشرف" : "Supervisor") : (locale === "ar" ? "مقدم التقرير" : "Created By")}
             value={creatorPerson.name}
             person={creatorPerson}
           />
