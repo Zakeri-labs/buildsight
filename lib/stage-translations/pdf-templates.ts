@@ -153,7 +153,7 @@ export type BilingualSourceImage = {
 
 const SECTION_LABELS: Array<{ key: TranslationSectionKey; en: string; ar: string }> = [
   { key: "feedback", en: "Feedback", ar: "الملاحظات العامة" },
-  { key: "observation", en: "Observation", ar: "المعاينة" },
+  { key: "observation", en: "Observations", ar: "الملاحظات والمعاينة" },
   { key: "findings", en: "Findings", ar: "النتائج" },
   { key: "recommendations", en: "Recommendations", ar: "التوصيات" },
   { key: "correctiveActions", en: "Corrective Actions", ar: "الإجراءات التصحيحية" },
@@ -681,7 +681,9 @@ export function buildLanguagePdfTemplate(input: {
     reportNumber: data.response.reportNumber,
     visitNumber: String(data.response.visitNumber),
     createdAt: data.response.createdAt,
-    creatorName: data.response.createdBy?.name || "—",
+    creatorName: typeof (data.response as any).createdBy === "string"
+      ? (data.response as any).createdBy
+      : data.response.createdBy?.name || "—",
     status: data.response.status,
     reportType: content.reportType || data.response.reportType,
     subject: content.subject || data.response.subject || "—",

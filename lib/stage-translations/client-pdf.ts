@@ -3291,10 +3291,10 @@ function renderBilingualTextRow(
   let arOffset = 0
 
   do {
-    if (flow.y + 10 > flow.bottom) addBilingualContinuationPage(flow)
+    if (flow.y + 8 > flow.bottom) addBilingualContinuationPage(flow)
 
     const availH = flow.bottom - flow.y
-    const lineH = 4.2
+    const lineH = 3.6
     const maxAvailLines = Math.max(1, Math.floor(availH / lineH))
 
     const engRem = Math.max(0, engLines.length - engOffset)
@@ -3309,13 +3309,13 @@ function renderBilingualTextRow(
     if (engSeg.length) {
       setLanguage(doc, false, 8.5, false)
       doc.setTextColor(51, 65, 85)
-      writePdfText(doc, engSeg, flow.x, flow.y + 3.2, { align: "left", lineHeightFactor: 1.15 }, false)
+      writePdfText(doc, engSeg, flow.x, flow.y + 2.8, { align: "left", lineHeightFactor: 1.05 }, false)
     }
 
     if (arSeg.length) {
       setLanguage(doc, true, 8.5, false)
       doc.setTextColor(51, 65, 85)
-      writePdfText(doc, arSeg, flow.x + flow.width, flow.y + 3.2, { align: "right", lineHeightFactor: 1.15 }, true)
+      writePdfText(doc, arSeg, flow.x + flow.width, flow.y + 2.8, { align: "right", lineHeightFactor: 1.05 }, true)
     }
 
     flow.y += segH
@@ -3327,8 +3327,73 @@ function renderBilingualTextRow(
     }
   } while (engOffset < engLines.length || arOffset < arLines.length)
 
-  // Extra paragraph gap below body text
-  flow.y += 4
+  // Compact paragraph gap below body text
+  flow.y += 2.5
+}
+
+async function renderBilingualImageGrid(
+  flow: Flow,
+  images: PdfImageTemplate[],
+  arabicImages: PdfImageTemplate[] = [],
+) {
+  if (!images.length) return
+
+  const gap = 4
+  const colWidth = (flow.width - gap) / 2
+  const maxImgH = 68
+
+  for (let i = 0; i < images.length; i += 2) {
+    const pair = images.slice(i, i + 2)
+    const arPair = arabicImages.slice(i, i + 2)
+    const loadedPair = await Promise.all(pair.map((img) => loadImage(img.src)))
+
+    let rowH = 0
+    const dimensions = loadedPair.map((img, idx) => {
+      if (!img) return { w: colWidth, h: 40 }
+      const ratio = Math.min(colWidth / img.width, maxImgH / img.height)
+      const w = img.width * ratio
+      const h = img.height * ratio
+      rowH = Math.max(rowH, h + (pair[idx].caption || arPair[idx]?.caption ? 8 : 0) + 3)
+      return { w, h }
+    })
+
+    ensureSpace(flow, rowH + 4)
+
+    for (let idx = 0; idx < pair.length; idx += 1) {
+      const img = loadedPair[idx]
+      const engBlock = pair[idx]
+      const arBlock = arPair[idx]
+      const dim = dimensions[idx]
+      const x = flow.x + idx * (colWidth + gap)
+
+      if (!img) {
+        renderBilingualTextRow(flow, engBlock.caption || "Image unavailable.", arBlock?.caption || "", { style: "body" })
+        continue
+      }
+
+      flow.doc.setDrawColor(226, 232, 240)
+      flow.doc.rect(x - 0.5, flow.y - 0.5, dim.w + 1, dim.h + 1)
+      flow.doc.addImage(img.dataUrl, "JPEG", x, flow.y, dim.w, dim.h, undefined, "FAST")
+
+      if (engBlock.caption || arBlock?.caption) {
+        const engCap = engBlock.caption || ""
+        const arCap = arBlock?.caption || ""
+        const capLinesEng = textLines(flow.doc, engCap, dim.w)
+
+        setLanguage(flow.doc, false, 7.2, false)
+        flow.doc.setTextColor(100, 116, 139)
+        writePdfText(flow.doc, capLinesEng, x, flow.y + dim.h + 2.5, { align: "left", lineHeightFactor: 1.1 }, false)
+
+        if (arCap) {
+          const capLinesAr = textLines(flow.doc, arCap, dim.w)
+          setLanguage(flow.doc, true, 7.2, false)
+          flow.doc.setTextColor(100, 116, 139)
+          writePdfText(flow.doc, capLinesAr, x + dim.w, flow.y + dim.h + 2.5, { align: "right", lineHeightFactor: 1.1 }, true)
+        }
+      }
+    }
+    flow.y += rowH + 4
+  }
 }
 
 function pairedBlocksByEnglishStructure(englishBlocks: PdfBlock[], arabicBlocks: PdfBlock[]) {
@@ -3586,15 +3651,7 @@ async function buildNativeBilingualPdfBlob(input: {
 
     if (galleryImages.length) {
       renderBilingualTextRow(flow, engSection.imageTitle || "Images", arSection?.imageTitle || "", { style: "heading" })
-      for (let index = 0; index < galleryImages.length; index += 1) {
-        await renderBilingualImagePair(
-          flow,
-          imageTemplateBlock(galleryImages[index]) as Extract<PdfBlock, { type: "image" }>,
-          arabicGalleryImages[index]
-            ? imageTemplateBlock(arabicGalleryImages[index]) as Extract<PdfBlock, { type: "image" }>
-            : undefined,
-        )
-      }
+      await renderBilingualImageGrid(flow, galleryImages, arabicGalleryImages)
     }
 
     flow.y += 4

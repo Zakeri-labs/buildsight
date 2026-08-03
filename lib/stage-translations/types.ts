@@ -72,6 +72,7 @@ export type StageTranslationPageData = {
     createdAt: string
     updatedAt: string
     content: TranslationReportContent
+    createdBy?: { id?: string; name: string; email?: string | null } | null
     attachments: ProjectStageAttachment[]
   }
   translation: StageTranslationRecord | null
