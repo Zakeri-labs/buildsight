@@ -464,7 +464,6 @@ export function ProjectDetail({
                     label={labels.includedFinishingVisits}
                     value={displayVisitCount(currentEditProject.includedFinishingVisits, labels.notSet)}
                   />
-                  <DetailField label={labels.progress} value={`${progress}%`} />
                 </dl>
 
                 <div className="mt-3 rounded-lg border border-border/40 bg-muted/20 p-3">
