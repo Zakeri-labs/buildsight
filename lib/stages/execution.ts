@@ -150,8 +150,9 @@ export function isReportType(value: string): value is ReportTypeValue {
   return REPORT_TYPES.some((item) => item.value === value)
 }
 
-export function statusLabel(status: ProjectStageTermStatus | ResponseStatus, locale: "en" | "ar" = "en") {
-  const labels = {
+export function statusLabel(status: ProjectStageTermStatus | ResponseStatus | string | null | undefined, locale: "en" | "ar" = "en") {
+  if (!status) return "—"
+  const labels: Record<string, readonly [string, string]> = {
     not_started: ["Not Started", "لم يبدأ"],
     draft: ["Draft", "مسودة"],
     in_progress: ["In Progress", "قيد التنفيذ"],
@@ -160,8 +161,10 @@ export function statusLabel(status: ProjectStageTermStatus | ResponseStatus, loc
     approved: ["Approved", "معتمد"],
     rejected: ["Rejected", "مرفوض"],
     completed: ["Completed", "مكتمل"],
-  } satisfies Record<ProjectStageTermStatus, readonly [string, string]>
-  return labels[status][locale === "ar" ? 1 : 0]
+  }
+  const found = labels[status]
+  if (found) return found[locale === "ar" ? 1 : 0]
+  return String(status).replace(/[_-]+/g, " ")
 }
 
 export function statusTone(status: ProjectStageTermStatus | ResponseStatus) {
