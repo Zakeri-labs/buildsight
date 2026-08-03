@@ -6,6 +6,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Download,
+  Eye,
   File as FileIcon,
   Image as ImageIcon,
   ImagePlus,
@@ -27,6 +28,13 @@ import { uploadDocumentAsset } from "@/lib/documents/storage-upload"
 import { formatFileSize } from "@/lib/documents/simple-upload"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 export type DocumentAttachmentView = {
   id: string
@@ -63,6 +71,8 @@ export function ConstructionDocumentWorkspace({
   const [savingDetails, setSavingDetails] = useState(false)
   const [uploading, setUploading] = useState<UploadProgress | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
+  const [imageAction, setImageAction] = useState<{ id: string; type: "view" | "download" } | null>(null)
+  const [previewImage, setPreviewImage] = useState<{ attachment: DocumentAttachmentView; url: string } | null>(null)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
   const files = attachments.filter((attachment) => attachment.attachmentType === "file")
@@ -173,6 +183,51 @@ export function ConstructionDocumentWorkspace({
     }
   }
 
+  const getImageSignedUrl = async (image: DocumentAttachmentView, download = false) => {
+    const params = new URLSearchParams({ path: image.storagePath, signed: "1" })
+    if (download) {
+      params.set("download", "1")
+      params.set("filename", image.originalFilename)
+    }
+
+    const response = await fetch(`/api/document-images?${params.toString()}`, { cache: "no-store" })
+    if (!response.ok) throw new Error(download ? "Unable to download this image." : "Unable to open this image.")
+
+    const payload = await response.json() as { signedUrl?: string }
+    if (!payload.signedUrl) throw new Error(download ? "Unable to download this image." : "Unable to open this image.")
+    return payload.signedUrl
+  }
+
+  const viewImage = async (image: DocumentAttachmentView) => {
+    setImageAction({ id: image.id, type: "view" })
+    setMessage(null)
+    try {
+      setPreviewImage({ attachment: image, url: await getImageSignedUrl(image) })
+    } catch (error) {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Unable to open this image." })
+    } finally {
+      setImageAction(null)
+    }
+  }
+
+  const downloadImage = async (image: DocumentAttachmentView) => {
+    setImageAction({ id: image.id, type: "download" })
+    setMessage(null)
+    try {
+      const link = document.createElement("a")
+      link.href = await getImageSignedUrl(image, true)
+      link.download = image.originalFilename
+      link.rel = "noreferrer"
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+    } catch (error) {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Unable to download this image." })
+    } finally {
+      setImageAction(null)
+    }
+  }
+
   return (
     <div className="grid gap-5">
       <Card className="gap-0 py-0">
@@ -276,28 +331,74 @@ export function ConstructionDocumentWorkspace({
           {images.length ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {images.map((image) => (
-                <div key={image.id} className="group relative overflow-hidden rounded-xl border bg-muted/30">
+                <div key={image.id} className="overflow-hidden rounded-xl border bg-muted/30">
                   <div className="aspect-square overflow-hidden bg-slate-100 dark:bg-slate-900">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={`/api/document-images?path=${encodeURIComponent(image.storagePath)}`} alt={image.originalFilename} className="size-full object-cover transition-transform group-hover:scale-[1.02]" />
+                    <img src={`/api/document-images?path=${encodeURIComponent(image.storagePath)}`} alt={image.originalFilename} className="size-full object-cover" />
                   </div>
-                  <div className="p-2.5">
+                  <div className="border-t p-2.5">
                     <p className="truncate text-xs font-medium" title={image.originalFilename}>{image.originalFilename}</p>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">{formatFileSize(image.sizeBytes)}</p>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <p className="text-[11px] text-muted-foreground">{formatFileSize(image.sizeBytes)}</p>
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          disabled={Boolean(imageAction) || removingId === image.id}
+                          onClick={() => void viewImage(image)}
+                          className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                          title="View full image"
+                          aria-label={`View ${image.originalFilename}`}
+                        >{imageAction?.id === image.id && imageAction.type === "view" ? <Loader2 className="size-4 animate-spin" /> : <Eye className="size-4" />}</button>
+                        <button
+                          type="button"
+                          disabled={Boolean(imageAction) || removingId === image.id}
+                          onClick={() => void downloadImage(image)}
+                          className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                          title="Download image"
+                          aria-label={`Download ${image.originalFilename}`}
+                        >{imageAction?.id === image.id && imageAction.type === "download" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}</button>
+                        <button
+                          type="button"
+                          disabled={Boolean(imageAction) || removingId === image.id}
+                          onClick={() => void removeAttachment(image)}
+                          className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950/40"
+                          title="Remove image"
+                          aria-label={`Remove ${image.originalFilename}`}
+                        >{removingId === image.id ? <Loader2 className="size-4 animate-spin" /> : <XCircle className="size-4" />}</button>
+                      </div>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    disabled={removingId === image.id}
-                    onClick={() => void removeAttachment(image)}
-                    className="absolute right-2 top-2 inline-flex size-8 items-center justify-center rounded-lg bg-black/65 text-white opacity-0 backdrop-blur transition-opacity hover:bg-red-600 group-hover:opacity-100 focus:opacity-100 disabled:opacity-70"
-                    title="Remove image"
-                  >{removingId === image.id ? <Loader2 className="size-4 animate-spin" /> : <XCircle className="size-4" />}</button>
                 </div>
               ))}
             </div>
           ) : <EmptyAttachmentState icon={<ImageIcon className="size-6" />} text="No images added yet." />}
         </AttachmentCard>
       </div>
+
+      <Dialog open={Boolean(previewImage)} onOpenChange={(open: boolean) => { if (!open) setPreviewImage(null) }}>
+        <DialogContent className="h-[min(92dvh,960px)] max-w-[calc(100vw-2rem)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-4 sm:max-w-5xl">
+          <DialogHeader className="pe-10">
+            <DialogTitle className="truncate">{previewImage?.attachment.originalFilename}</DialogTitle>
+            <DialogDescription>
+              {previewImage ? `${formatFileSize(previewImage.attachment.sizeBytes)} · Full image preview` : "Full image preview"}
+            </DialogDescription>
+          </DialogHeader>
+          {previewImage ? (
+            <div className="flex min-h-0 items-center justify-center overflow-auto rounded-xl border bg-black/90 p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewImage.url}
+                alt={previewImage.attachment.originalFilename}
+                className="max-h-full max-w-full object-contain"
+                onError={() => {
+                  setPreviewImage(null)
+                  setMessage({ type: "error", text: "Unable to display this image. Check your access and try again." })
+                }}
+              />
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
