@@ -55,6 +55,7 @@ export function buildOriginalTranslationContent(input: {
       id: item.id,
       label: item.label,
       checked: item.checked,
+      result: item.result,
       notes: item.notes ?? "",
     })),
     approvals: input.approvals.map((item) => ({
@@ -76,6 +77,7 @@ function parseChecklist(value: unknown): TranslationChecklistItem[] {
       id: stringValue(row.id, 100) || `checklist-${index + 1}`,
       label: stringValue(row.label, 2_000),
       checked: row.checked === true,
+      result: stringValue(row.result, 50) || undefined,
       notes: stringValue(row.notes, 4_000),
     }
   })

@@ -1,3 +1,5 @@
+"use client"
+
 import { AppSidebar } from "@/components/app-sidebar"
 import { Suspense } from "react"
 import { AppTopbar } from "@/components/app-topbar"

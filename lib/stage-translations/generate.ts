@@ -364,43 +364,47 @@ async function createSignedUrl(path: string) {
 export async function generateStageTranslation(input: {
   projectId: string
   stageId: string
-  termId: string
+  termId?: string | null
   responseId: string
 }) {
   const userId = await assertProjectMember(input.projectId)
-  const pageData = await loadStageTranslationPageData(input.projectId, input.stageId, input.termId, userId, input.responseId)
+  const pageData = await loadStageTranslationPageData(input.projectId, input.stageId, userId, input.responseId, input.termId)
   if (!pageData) throw new Error("Save the inspection report before generating a translation.")
 
   const admin = createAdminClient()
-  const [{ data: activeTerm, error: termError }, { data: activeStage, error: stageError }] = await Promise.all([
-    admin
+  const { data: activeStage, error: stageError } = await admin
+    .from("project_stages")
+    .select("id")
+    .eq("id", input.stageId)
+    .eq("project_id", input.projectId)
+    .neq("status", "disabled")
+    .maybeSingle()
+
+  if (stageError) throw stageError
+  if (!activeStage) throw new Error("This stage is inactive and cannot accept new translations.")
+
+  let realTermId: string | null = null
+  if (input.termId && input.termId !== input.stageId) {
+    const { data: activeTerm } = await admin
       .from("project_stage_terms")
       .select("id, parent_term_id")
       .eq("id", input.termId)
       .eq("project_stage_id", input.stageId)
       .eq("is_active", true)
-      .maybeSingle(),
-    admin
-      .from("project_stages")
-      .select("id")
-      .eq("id", input.stageId)
-      .eq("project_id", input.projectId)
-      .neq("status", "disabled")
-      .maybeSingle(),
-  ])
-  if (termError) throw termError
-  if (stageError) throw stageError
-  if (!activeTerm || !activeStage) throw new Error("This stage or term is inactive and cannot accept new translations.")
-  if (activeTerm.parent_term_id) {
-    const { data: activeParent, error: parentError } = await admin
-      .from("project_stage_terms")
-      .select("id")
-      .eq("id", activeTerm.parent_term_id)
-      .eq("project_stage_id", input.stageId)
-      .eq("is_active", true)
       .maybeSingle()
-    if (parentError) throw parentError
-    if (!activeParent) throw new Error("This parent Term is inactive and cannot accept new translations.")
+    if (activeTerm) {
+      realTermId = activeTerm.id
+      if (activeTerm.parent_term_id) {
+        const { data: activeParent } = await admin
+          .from("project_stage_terms")
+          .select("id")
+          .eq("id", activeTerm.parent_term_id)
+          .eq("project_stage_id", input.stageId)
+          .eq("is_active", true)
+          .maybeSingle()
+        if (!activeParent) throw new Error("This parent Term is inactive and cannot accept new translations.")
+      }
+    }
   }
 
   const apiKey = process.env.OPENAI_API_KEY?.trim()
@@ -485,7 +489,7 @@ export async function generateStageTranslation(input: {
       .insert({
         project_id: pageData.project.id,
         project_stage_id: pageData.stage.id,
-        project_stage_term_id: pageData.term.id,
+        project_stage_term_id: realTermId,
         response_id: pageData.response.id,
         original_content: original,
         translated_content: null,

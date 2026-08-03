@@ -9,6 +9,7 @@ import {
   type SubtermResponseType,
   type TermResponseContent,
   isSubtermResponseType,
+  getFallbackStageChecklist,
 } from "@/lib/stages/execution"
 import { roleLabel } from "@/lib/db/types"
 
@@ -165,7 +166,7 @@ function parseContent(value: unknown): TermResponseContent {
             id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
             label: typeof item.label === "string" ? item.label : "Checklist item",
             checked: item.checked === true,
-            result: item.result === "pass" || item.result === "fail" || item.result === "na" ? item.result : item.checked === true ? "pass" : "",
+            result: item.result === "pass" || item.result === "fail" || item.result === "na" || item.result === "in_progress" ? item.result : item.checked === true ? "pass" : "",
             notes: typeof item.notes === "string" ? item.notes : undefined,
           }))
       : [],
@@ -504,7 +505,42 @@ export async function loadProjectStageExecution(
   } else {
     const includeInactive = includeInactiveForReview && access.canReview
     const visibleStages = includeInactive ? stageRows : stageRows.filter((stage: any) => stage.status !== "disabled")
-    stages = visibleStages.map((stage: any) => {
+    const existingTemplateIds = new Set(stageRows.map((stage: any) => stage.template_stage_id || stage.id))
+    const existingIds = new Set(stageRows.map((stage: any) => stage.id))
+
+    const libTermsByStage = new Map<string, ProjectStageTermExecution[]>()
+    for (const termDef of libraryTerms ?? []) {
+      if (termDef.parent_term_id) continue
+      const items = libTermsByStage.get(termDef.stage_id) ?? []
+      items.push({
+        id: termDef.id,
+        projectStageId: termDef.stage_id,
+        templateTermId: termDef.id,
+        parentTermId: null,
+        reportName: termDef.report_name,
+        required: termDef.is_required,
+        responsibleOrganization: null,
+        responsibleUser: null,
+        dueDateRule: "stage_start",
+        dueDate: null,
+        approvalRequired: true,
+        templateReference: null,
+        responseType: isSubtermResponseType(termDef.response_type) ? termDef.response_type : "combined",
+        instructions: null,
+        status: "not_started",
+        sortOrder: termDef.sort_order,
+        isActive: true,
+        hasLinkedData: false,
+        response: null,
+        responses: [],
+        reportSummary: { total: 0, draft: 0, inProgress: 0, pendingReview: 0, approved: 0, rejected: 0 },
+        translation: null,
+        subterms: [],
+      })
+      libTermsByStage.set(termDef.stage_id, items)
+    }
+
+    const mappedStages: ProjectStageExecution[] = visibleStages.map((stage: any) => {
       const stageReports = responsesByStage.get(stage.id) ?? []
       return {
         id: stage.id,
@@ -522,12 +558,64 @@ export async function loadProjectStageExecution(
           approved: stageReports.filter((item) => item.status === "approved" || item.status === "completed").length,
           rejected: stageReports.filter((item) => item.status === "rejected").length,
         },
-        terms: Array.from(termMap.values())
-          .filter((term) => term.projectStageId === stage.id && !term.parentTermId && (includeInactive || term.isActive))
-          .map((term) => includeInactive ? term : { ...term, subterms: term.subterms.filter((subterm) => subterm.isActive) })
-          .sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName)),
+        terms: (() => {
+          const directTerms = Array.from(termMap.values())
+            .filter((term) => term.projectStageId === stage.id && !term.parentTermId && (includeInactive || term.isActive))
+            .map((term) => (includeInactive ? term : { ...term, subterms: term.subterms.filter((subterm) => subterm.isActive) }))
+            .sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName))
+          if (directTerms.length > 0) return directTerms
+
+          const libTerms = (libTermsByStage.get(stage.template_stage_id || stage.id) ?? []).sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName))
+          if (libTerms.length > 0) return libTerms
+
+          return getFallbackStageChecklist(stage.name).map((item, idx) => ({
+            id: item.id,
+            projectStageId: stage.id,
+            templateTermId: item.id,
+            parentTermId: null,
+            reportName: item.reportName,
+            required: true,
+            responsibleOrganization: null,
+            responsibleUser: null,
+            dueDateRule: "stage_start",
+            dueDate: null,
+            approvalRequired: true,
+            templateReference: null,
+            responseType: "combined" as const,
+            instructions: null,
+            status: "not_started" as const,
+            sortOrder: idx + 1,
+            isActive: true,
+            hasLinkedData: false,
+            response: null,
+            responses: [],
+            reportSummary: { total: 0, draft: 0, inProgress: 0, pendingReview: 0, approved: 0, rejected: 0 },
+            translation: null,
+            subterms: [],
+          }))
+        })(),
       }
     })
+
+    for (const stageDef of libraryStages ?? []) {
+      if (stageDef.is_active === false) continue
+      if (existingTemplateIds.has(stageDef.id) || existingIds.has(stageDef.id)) continue
+
+      mappedStages.push({
+        id: stageDef.id,
+        templateStageId: stageDef.id,
+        name: stageDef.name,
+        description: stageDef.description,
+        status: "not_started",
+        sortOrder: stageDef.sort_order,
+        reports: [],
+        reportSummary: { total: 0, draft: 0, inProgress: 0, pendingReview: 0, approved: 0, rejected: 0 },
+        terms: (libTermsByStage.get(stageDef.id) ?? []).sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName)),
+      })
+    }
+
+    mappedStages.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+    stages = mappedStages
   }
 
   const projectStageByTemplate = new Map<string, any>(

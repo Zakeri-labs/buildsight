@@ -5,16 +5,19 @@ import { forwardRef, useEffect, useState, type ReactNode } from "react"
 import {
   AlertCircle,
   ArrowLeft,
+  Check,
   CheckCircle2,
   ClipboardCheck,
   Download,
   FileText,
+  Hourglass,
   ImageIcon,
   Languages,
   Loader2,
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  X,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -37,11 +40,8 @@ import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 const SECTION_LABELS: Array<{ key: TranslationSectionKey; en: string; ar: string }> = [
-  { key: "feedback", en: "Feedback", ar: "الملاحظات العامة" },
-  { key: "observation", en: "Observation", ar: "المعاينة" },
-  { key: "findings", en: "Findings", ar: "النتائج" },
-  { key: "recommendations", en: "Recommendations", ar: "التوصيات" },
-  { key: "correctiveActions", en: "Corrective Actions", ar: "الإجراءات التصحيحية" },
+  { key: "observation", en: "Observation / Work Progress", ar: "المعاينة وسير العمل" },
+  { key: "recommendations", en: "Instructions / Recommendations", ar: "التوصيات والتعليمات" },
 ]
 
 const COPY = {
@@ -209,7 +209,7 @@ export function StageTranslationViewer({
   const labelsEn = COPY.en
   const labelsAr = COPY.ar
   const translated = translation?.translatedContent ?? null
-  const original = translation?.originalContent ?? data.response.content
+  const original = data.response.content
   const sourcePdf = getSourcePdfAttachment(data)
   const translationIsStale = Boolean(
     translation?.generatedAt && new Date(data.response.updatedAt).getTime() > new Date(translation.generatedAt).getTime(),
@@ -229,7 +229,7 @@ export function StageTranslationViewer({
       if (!response.ok) throw new Error(payload?.error || "Unable to generate the document translation.")
       const now = new Date().toISOString()
       const next = payload.translation as Partial<StageTranslationRecord>
-      setTranslation({
+      const newRec: StageTranslationRecord = {
         id: String(next.id),
         status: "completed",
         originalContent: next.originalContent ?? data.response.content,
@@ -240,17 +240,20 @@ export function StageTranslationViewer({
         originalPdfPath: null,
         arabicPdfPath: null,
         bilingualPdfPath: null,
-      })
+      }
+      setTranslation(newRec)
       setSuccess(copy.generated)
+      return newRec
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : "Unable to generate the document translation.")
+      return null
     } finally {
       setBusy(null)
     }
   }
 
   async function storePdf(blob: Blob, filename: string, kind: "original" | "arabic" | "bilingual") {
-    if (!translation) throw new Error("Generate the translation before exporting PDFs.")
+    if (!translation) return null
     const path = await storeTranslationPdf({
       projectId: data.project.id,
       translationId: translation.id,
@@ -268,25 +271,16 @@ export function StageTranslationViewer({
   }
 
   async function downloadPdf(kind: "original" | "arabic" | "bilingual") {
-    if (kind !== "original" && (!translation?.translatedContent || translationIsStale)) return
-    const storedPath = translation
-      ? kind === "original"
-        ? translation.originalPdfPath
-        : kind === "arabic"
-          ? translation.arabicPdfPath
-          : translation.bilingualPdfPath
-      : null
-    if (storedPath && translation && !(kind === "original" && sourcePdf) && false) {
-      const params = new URLSearchParams({ projectId: data.project.id, translationId: translation?.id ?? "", kind })
-      window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
-      return
-    }
     setBusy(kind)
     setError(null)
     setSuccess(null)
     try {
-      const exported = await exportTranslationPdf({ data, translation, kind, ccRecipients })
-      if (translation) {
+      let activeTranslation = translation
+      if (kind !== "original" && (!activeTranslation?.translatedContent || translationIsStale)) {
+        activeTranslation = await generateTranslation()
+      }
+      const exported = await exportTranslationPdf({ data, translation: activeTranslation, kind, ccRecipients })
+      if (activeTranslation) {
         await storePdf(exported.blob, exported.filename, kind)
         downloadPdfBlob(exported.blob, exported.filename)
         setSuccess(copy.stored)
@@ -301,9 +295,14 @@ export function StageTranslationViewer({
     }
   }
 
+  const isDirectStage = !data.term?.id || data.term.id === data.stage.id
+  const backHref = isDirectStage
+    ? `/projects/${data.project.id}/stages/${data.stage.id}/reports/${data.response.id}`
+    : `/projects/${data.project.id}/stages/${data.stage.id}/terms/${data.term.id}/reports/${data.response.id}`
+
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
-      <Link href={`/projects/${data.project.id}/stages/${data.stage.id}/terms/${data.term.id}/reports/${data.response.id}`} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+      <Link href={backHref} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4 flip-rtl" />{copy.back}
       </Link>
 
@@ -317,7 +316,7 @@ export function StageTranslationViewer({
               <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
                 <Badge variant="outline">{data.project.name}</Badge>
                 <Badge variant="outline">{data.stage.name}</Badge>
-                <Badge variant="outline">{data.term.name}</Badge>
+                {!isDirectStage ? <Badge variant="outline">{data.term.name}</Badge> : null}
                 <Badge variant="outline" className={statusTone(data.response.status as any)}>{statusLabel(data.response.status as any, locale)}</Badge>
               </div>
             </div>
@@ -329,19 +328,19 @@ export function StageTranslationViewer({
               <Button variant="outline" onClick={() => void downloadPdf("original")} disabled={busy !== null}>
                 {busy === "original" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.downloadOriginal}
               </Button>
-              <Button variant="outline" onClick={() => void downloadPdf("arabic")} disabled={!translated || translationIsStale || busy !== null}>
+              <Button variant="outline" onClick={() => void downloadPdf("arabic")} disabled={busy !== null}>
                 {busy === "arabic" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.downloadArabic}
               </Button>
-              <Button variant="outline" onClick={() => void downloadPdf("bilingual")} disabled={!translated || translationIsStale || busy !== null}>
+              <Button variant="outline" onClick={() => void downloadPdf("bilingual")} disabled={busy !== null}>
                 {busy === "bilingual" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.downloadBilingual}
               </Button>
             </div>
           </div>
         </div>
-        <CardContent className="grid gap-px bg-border p-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <CardContent className={cn("grid gap-px bg-border p-0 sm:grid-cols-2", isDirectStage ? "lg:grid-cols-5" : "lg:grid-cols-3 xl:grid-cols-6")}>
           <HeaderMeta label={copy.project} value={data.project.name} />
           <HeaderMeta label={copy.stage} value={data.stage.name} />
-          <HeaderMeta label={copy.term} value={data.term.name} />
+          {!isDirectStage ? <HeaderMeta label={copy.term} value={data.term.name} /> : null}
           <HeaderMeta label={copy.documentNumber} value={data.response.reportNumber} />
           <HeaderMeta label={copy.document} value={data.response.reportTitle} />
           <HeaderMeta label={copy.date} value={formatDate(data.response.createdAt, locale)} />
@@ -477,7 +476,12 @@ function MirroredBilingualReport({
           }
         />
 
-        {SECTION_LABELS.map((section) => (
+        {SECTION_LABELS.filter((section) => {
+          const hasEn = Boolean(englishDocument.sections[section.key]?.trim())
+          const hasAr = Boolean(arabic.sections[section.key]?.trim())
+          const hasImg = sourceImages.some((image) => image.sectionHint === section.key)
+          return hasEn || hasAr || hasImg
+        }).map((section) => (
           <MirroredRow
             key={section.key}
             english={
@@ -503,51 +507,55 @@ function MirroredBilingualReport({
           />
         ))}
 
-        <MirroredRow
-          english={
-            <MirroredSectionCard title={labelsEn.checklist} icon={<CheckCircle2 className="size-4" />}>
-              <ChecklistBody content={englishDocument} labels={labelsEn} language="en" />
-              <SourcePdfImageGrid
-                images={sourceImages.filter((image) => image.sectionHint === "checklist")}
-                content={englishDocument}
-                language="en"
-              />
-            </MirroredSectionCard>
-          }
-          arabic={
-            <MirroredSectionCard title={labelsAr.checklist} icon={<CheckCircle2 className="size-4" />}>
-              <ChecklistBody content={arabic} labels={labelsAr} language="ar" />
-              <SourcePdfImageGrid
-                images={sourceImages.filter((image) => image.sectionHint === "checklist")}
-                content={arabic}
-                language="ar"
-              />
-            </MirroredSectionCard>
-          }
-        />
+        {englishDocument.checklist.length > 0 || arabic.checklist.length > 0 || sourceImages.some((i) => i.sectionHint === "checklist") ? (
+          <MirroredRow
+            english={
+              <MirroredSectionCard title={labelsEn.checklist} icon={<CheckCircle2 className="size-4" />}>
+                <ChecklistBody content={englishDocument} labels={labelsEn} language="en" />
+                <SourcePdfImageGrid
+                  images={sourceImages.filter((image) => image.sectionHint === "checklist")}
+                  content={englishDocument}
+                  language="en"
+                />
+              </MirroredSectionCard>
+            }
+            arabic={
+              <MirroredSectionCard title={labelsAr.checklist} icon={<CheckCircle2 className="size-4" />}>
+                <ChecklistBody content={arabic} referenceContent={englishDocument} labels={labelsAr} language="ar" />
+                <SourcePdfImageGrid
+                  images={sourceImages.filter((image) => image.sectionHint === "checklist")}
+                  content={arabic}
+                  language="ar"
+                />
+              </MirroredSectionCard>
+            }
+          />
+        ) : null}
 
-        <MirroredRow
-          english={
-            <MirroredSectionCard title={labelsEn.approvals} icon={<ShieldCheck className="size-4" />}>
-              <ApprovalBody content={englishDocument} labels={{ ...labelsEn, noApprovals: labelsEn.noContent }} language="en" />
-              <SourcePdfImageGrid
-                images={sourceImages.filter((image) => image.sectionHint === "approvals")}
-                content={englishDocument}
-                language="en"
-              />
-            </MirroredSectionCard>
-          }
-          arabic={
-            <MirroredSectionCard title={labelsAr.approvals} icon={<ShieldCheck className="size-4" />}>
-              <ApprovalBody content={arabic} labels={{ ...labelsAr, noApprovals: labelsAr.noContent }} language="ar" />
-              <SourcePdfImageGrid
-                images={sourceImages.filter((image) => image.sectionHint === "approvals")}
-                content={arabic}
-                language="ar"
-              />
-            </MirroredSectionCard>
-          }
-        />
+        {englishDocument.approvals.length > 0 || arabic.approvals.length > 0 || sourceImages.some((i) => i.sectionHint === "approvals") ? (
+          <MirroredRow
+            english={
+              <MirroredSectionCard title={labelsEn.approvals} icon={<ShieldCheck className="size-4" />}>
+                <ApprovalBody content={englishDocument} labels={{ ...labelsEn, noApprovals: labelsEn.noContent }} language="en" />
+                <SourcePdfImageGrid
+                  images={sourceImages.filter((image) => image.sectionHint === "approvals")}
+                  content={englishDocument}
+                  language="en"
+                />
+              </MirroredSectionCard>
+            }
+            arabic={
+              <MirroredSectionCard title={labelsAr.approvals} icon={<ShieldCheck className="size-4" />}>
+                <ApprovalBody content={arabic} labels={{ ...labelsAr, noApprovals: labelsAr.noContent }} language="ar" />
+                <SourcePdfImageGrid
+                  images={sourceImages.filter((image) => image.sectionHint === "approvals")}
+                  content={arabic}
+                  language="ar"
+                />
+              </MirroredSectionCard>
+            }
+          />
+        ) : null}
 
         <MirroredRow
           english={
@@ -788,13 +796,14 @@ function ReportHeaderCell({
   generatedAt: string | null
 }) {
   const isArabic = language === "ar"
+  const isDirectStage = !data.term?.id || data.term.id === data.stage.id
   return (
     <header className="stage-translation-no-break h-full rounded-2xl border border-slate-200 bg-white px-5 py-5 sm:px-7">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-blue-700"><Languages className="size-4" />{title}</div>
           <h2 className="break-words text-2xl font-bold tracking-tight text-slate-950">{content.reportTitle || data.response.reportTitle}</h2>
-          <p className="mt-1 text-sm text-slate-600">{content.termName || data.term.name}</p>
+          <p className="mt-1 text-sm text-slate-600">{!isDirectStage ? (content.termName || data.term.name) : (content.stageName || data.stage.name)}</p>
         </div>
         <div className="shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">{isArabic ? "AR" : "EN"}</div>
       </div>
@@ -823,16 +832,15 @@ function ProjectInformationBody({
   labels: ReportLabels
   language: "en" | "ar"
 }) {
+  const authorName = data.response.createdBy?.name || "—"
   return (
-    <dl className="grid gap-3 text-sm sm:grid-cols-2">
+    <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
       <ReportMeta label={labels.project} value={data.project.name} empty={labels.noContent} />
-      <ReportMeta label={labels.projectReference} value={data.project.code} empty={labels.noContent} />
       <ReportMeta label={labels.stage} value={content.stageName || data.stage.name} empty={labels.noContent} />
-      <ReportMeta label={labels.term} value={content.termName || data.term.name} empty={labels.noContent} />
-      <ReportMeta label={labels.documentNumber} value={data.response.reportNumber} empty={labels.noContent} />
       <ReportMeta label={labels.visitNumber} value={String(data.response.visitNumber || "")} empty={labels.noContent} />
+      <ReportMeta label={labels.documentNumber} value={data.response.reportNumber} empty={labels.noContent} />
       <ReportMeta label={labels.date} value={formatDate(data.response.createdAt, language)} empty={labels.noContent} />
-      <ReportMeta label={labels.status} value={statusLabel(data.response.status as any, language)} empty={labels.noContent} />
+      <ReportMeta label={language === "ar" ? "مقدم التقرير" : "Created By"} value={authorName} empty={labels.noContent} />
     </dl>
   )
 }
@@ -840,6 +848,7 @@ function ProjectInformationBody({
 function ReportDetailsBody({ content, labels }: { content: TranslationReportContent; labels: ReportLabels }) {
   return (
     <dl className="grid gap-3 text-sm sm:grid-cols-2">
+      <ReportMeta label={labels.document} value={content.reportTitle} empty={labels.noContent} />
       <ReportMeta label={labels.subject} value={content.subject} empty={labels.noContent} />
       <ReportMeta label={labels.type} value={content.reportType} empty={labels.noContent} />
     </dl>
@@ -885,6 +894,7 @@ const LanguageReport = forwardRef<HTMLElement, {
   sourcePdf?: StageTranslationPageData["response"]["attachments"][number] | null
 }>(function LanguageReport({ language, title, data, content, labels, generatedAt, sourcePdf }, ref) {
   const isArabic = language === "ar"
+  const isDirectStage = !data.term?.id || data.term.id === data.stage.id
   const evidence = data.response.attachments.filter((item) => item.attachmentKind === "evidence_image" || item.attachmentKind === "inline_image")
   const documents = data.response.attachments.filter((item) => item.attachmentKind === "document")
 
@@ -896,7 +906,7 @@ const LanguageReport = forwardRef<HTMLElement, {
           <div>
             <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-blue-700"><Languages className="size-4" />{title}</div>
             <h2 className="text-2xl font-bold tracking-tight text-slate-950">{content.reportTitle || data.response.reportTitle}</h2>
-            <p className="mt-1 text-sm text-slate-600">{content.termName || data.term.name}</p>
+            <p className="mt-1 text-sm text-slate-600">{!isDirectStage ? (content.termName || data.term.name) : (content.stageName || data.stage.name)}</p>
           </div>
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">{isArabic ? "AR" : "EN"}</div>
         </div>
@@ -909,7 +919,7 @@ const LanguageReport = forwardRef<HTMLElement, {
             <ReportMeta label={labels.project} value={data.project.name} />
             <ReportMeta label={labels.projectReference} value={data.project.code || "—"} />
             <ReportMeta label={labels.stage} value={content.stageName || data.stage.name} />
-            <ReportMeta label={labels.term} value={content.termName || data.term.name} />
+            {!isDirectStage ? <ReportMeta label={labels.term} value={content.termName || data.term.name} /> : null}
             <ReportMeta label={labels.documentNumber} value={data.response.reportNumber} />
             <ReportMeta label={labels.visitNumber} value={String(data.response.visitNumber)} />
             <ReportMeta label={labels.date} value={formatDate(data.response.createdAt, language)} />
@@ -924,16 +934,18 @@ const LanguageReport = forwardRef<HTMLElement, {
           </dl>
         </ReportGroup>
 
-        <ReportGroup title={labels.inspectionContent}>
-          <div className="space-y-7">
-            {SECTION_LABELS.map((section) => (
-              <ReportSection key={section.key} title={isArabic ? section.ar : section.en} html={content.sections[section.key]} empty={labels.noContent} />
-            ))}
-          </div>
-        </ReportGroup>
+        {SECTION_LABELS.some((section) => Boolean(content.sections[section.key]?.trim())) ? (
+          <ReportGroup title={labels.inspectionContent}>
+            <div className="space-y-7">
+              {SECTION_LABELS.filter((section) => Boolean(content.sections[section.key]?.trim())).map((section) => (
+                <ReportSection key={section.key} title={isArabic ? section.ar : section.en} html={content.sections[section.key]} empty={labels.noContent} />
+              ))}
+            </div>
+          </ReportGroup>
+        ) : null}
 
-        <ChecklistSection content={content} labels={labels} language={language} />
-        <ApprovalSection content={content} labels={labels} language={language} />
+        {content.checklist.length > 0 ? <ChecklistSection content={content} labels={labels} language={language} /> : null}
+        {content.approvals.length > 0 ? <ApprovalSection content={content} labels={labels} language={language} /> : null}
 
         <ReportGroup title={labels.attachmentsGroup}>
           <div className="space-y-7">
@@ -1023,18 +1035,62 @@ function ChecklistSection({ content, labels, language }: { content: TranslationR
   return <section><SectionHeading icon={<CheckCircle2 className="size-4" />} title={labels.checklist} /><ChecklistBody content={content} labels={labels} language={language} /></section>
 }
 
-function ChecklistBody({ content, labels, language }: { content: TranslationReportContent; labels: ReportLabels; language: "en" | "ar" }) {
+function ChecklistBody({
+  content,
+  referenceContent,
+  labels,
+  language,
+}: {
+  content: TranslationReportContent
+  referenceContent?: TranslationReportContent
+  labels: ReportLabels
+  language: "en" | "ar"
+}) {
   if (!content.checklist.length) return <p className="text-sm italic text-slate-500">{labels.noContent}</p>
+  const refList = referenceContent?.checklist ?? content.checklist
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200">
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
       <table className="w-full border-collapse text-sm">
-        <tbody>{content.checklist.map((item, index) => (
-          <tr key={item.id} className="border-b border-slate-100 last:border-0">
-            <td className="w-12 bg-slate-50 px-3 py-3 text-center font-semibold text-slate-500">{index + 1}</td>
-            <td className="px-3 py-3"><p className="font-semibold text-slate-900">{item.label}</p>{item.notes ? <p className="mt-1 text-xs text-slate-500">{item.notes}</p> : null}</td>
-            <td className="w-28 px-3 py-3 text-end"><span className={cn("inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold", item.checked ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>{item.checked ? labels.checked : labels.unchecked}</span></td>
-          </tr>
-        ))}</tbody>
+        <tbody>{content.checklist.map((item, index) => {
+          const refItem = refList[index] ?? item
+          const itemResult = item.result || refItem.result || (item.checked || refItem.checked ? "pass" : "pending")
+          const isPassed = itemResult === "pass" || item.checked || refItem.checked
+          const isFailed = itemResult === "fail"
+          const isInProgress = itemResult === "in_progress"
+
+          let badgeClasses = "border-slate-200 bg-slate-100 text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
+          let icon = <X className="size-3.5 stroke-[2] opacity-40" />
+          let titleTooltip = language === "ar" ? "غير مكتمل" : "Open"
+
+          if (isPassed) {
+            badgeClasses = "border-emerald-600 bg-emerald-600 text-white shadow-2xs dark:border-emerald-600 dark:bg-emerald-600"
+            icon = <Check className="size-4 stroke-[3]" />
+            titleTooltip = language === "ar" ? "مكتمل / مطابق" : "Passed"
+          } else if (isFailed) {
+            badgeClasses = "border-rose-600 bg-rose-600 text-white shadow-2xs dark:border-rose-600 dark:bg-rose-600"
+            icon = <X className="size-4 stroke-[3]" />
+            titleTooltip = language === "ar" ? "غير مطابق" : "Failed"
+          } else if (isInProgress) {
+            badgeClasses = "border-amber-500 bg-amber-500 text-white shadow-2xs dark:border-amber-500 dark:bg-amber-500"
+            icon = <Hourglass className="size-3.5 stroke-[2.5]" />
+            titleTooltip = language === "ar" ? "قيد التنفيذ" : "In Progress"
+          }
+
+          return (
+            <tr key={item.id || `check-${index}`} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
+              <td className="w-12 bg-slate-50 px-3.5 py-3 text-center font-bold text-slate-500">{index + 1}</td>
+              <td className="px-4 py-3">
+                <p className="font-semibold text-slate-900">{item.label}</p>
+                {item.notes ? <p className="mt-1 text-xs text-slate-500">{item.notes}</p> : null}
+              </td>
+              <td className="w-16 px-4 py-3 text-end">
+                <span title={titleTooltip} className={cn("inline-flex size-7 items-center justify-center rounded-lg border", badgeClasses)}>
+                  {icon}
+                </span>
+              </td>
+            </tr>
+          )
+        })}</tbody>
       </table>
     </div>
   )

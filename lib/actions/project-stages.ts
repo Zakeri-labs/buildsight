@@ -37,7 +37,7 @@ function normalizeContent(value: Partial<TermResponseContent>): TermResponseCont
           id: String(item.id || crypto.randomUUID()).slice(0, 100),
           label: String(item.label || "").trim().slice(0, 500),
           checked: Boolean(item.checked),
-          result: (item.result === "pass" || item.result === "fail" || item.result === "na" ? item.result : item.checked ? "pass" : "") as "" | "pass" | "fail" | "na",
+          result: (item.result === "pass" || item.result === "fail" || item.result === "na" || item.result === "in_progress" ? item.result : item.checked ? "pass" : "") as ChecklistResult,
           notes: item.notes ? String(item.notes).slice(0, 2_000) : undefined,
         })).filter((item) => item.label.length > 0)
       : EMPTY_TERM_RESPONSE_CONTENT.checklist,
@@ -51,13 +51,24 @@ function normalizeContent(value: Partial<TermResponseContent>): TermResponseCont
 
 async function termScope(projectId: string, termId: string) {
   const admin = createAdminClient()
-  const { data, error } = await admin
+  const { data: byId, error: errorId } = await admin
     .from("project_stage_terms")
     .select("id, report_name, approval_required, response_type, template_reference, instructions, responsible_user_id, project_stage_id, parent_term_id, is_active, project_stages!inner(project_id, name, status)")
     .eq("id", termId)
     .eq("project_stages.project_id", projectId)
     .maybeSingle()
-  if (error) throw error
+  if (errorId) throw errorId
+  let data = byId
+  if (!data) {
+    const { data: byTemplateId, error: errorTemplate } = await admin
+      .from("project_stage_terms")
+      .select("id, report_name, approval_required, response_type, template_reference, instructions, responsible_user_id, project_stage_id, parent_term_id, is_active, project_stages!inner(project_id, name, status)")
+      .eq("template_term_id", termId)
+      .eq("project_stages.project_id", projectId)
+      .maybeSingle()
+    if (errorTemplate) throw errorTemplate
+    data = byTemplateId
+  }
   if (!data) throw new Error("Project report term not found.")
   let parentActive = true
   if (data.parent_term_id) {
@@ -74,15 +85,109 @@ async function termScope(projectId: string, termId: string) {
 
 async function stageScope(projectId: string, stageId: string) {
   const admin = createAdminClient()
-  const { data, error } = await admin
+
+  // 1. Direct match on project_stages.id
+  const { data: byId, error: errorId } = await admin
     .from("project_stages")
     .select("id, project_id, name, description, status")
     .eq("id", stageId)
     .eq("project_id", projectId)
     .maybeSingle()
-  if (error) throw error
-  if (!data) throw new Error("Project stage not found.")
-  return data
+  if (errorId) throw errorId
+  if (byId) return byId
+
+  // 2. Match on project_stages.template_stage_id
+  const { data: byTemplateId, error: errorTemplate } = await admin
+    .from("project_stages")
+    .select("id, project_id, name, description, status")
+    .eq("template_stage_id", stageId)
+    .eq("project_id", projectId)
+    .maybeSingle()
+  if (errorTemplate) throw errorTemplate
+  if (byTemplateId) return byTemplateId
+
+  // 3. Match on library stages template (stages table) -> auto-provision project_stages row
+  const { data: libraryStage } = await admin
+    .from("stages")
+    .select("id, name, description, sort_order")
+    .eq("id", stageId)
+    .maybeSingle()
+
+  if (libraryStage) {
+    const { data: existingPs } = await admin
+      .from("project_stages")
+      .select("id, project_id, name, description, status")
+      .eq("project_id", projectId)
+      .eq("template_stage_id", libraryStage.id)
+      .maybeSingle()
+
+    if (existingPs) return existingPs
+
+    const { data: insertedPs, error: insertErr } = await admin
+      .from("project_stages")
+      .insert({
+        project_id: projectId,
+        template_stage_id: libraryStage.id,
+        name: libraryStage.name,
+        description: libraryStage.description,
+        status: "in_progress",
+        sort_order: libraryStage.sort_order ?? 0,
+      })
+      .select("id, project_id, name, description, status")
+      .single()
+
+    if (!insertErr && insertedPs) return insertedPs
+  }
+
+  // 4. Fallback: check if stageId is actually a termId
+  const { data: termStage } = await admin
+    .from("project_stage_terms")
+    .select("project_stage_id, project_stages!inner(id, project_id, name, description, status)")
+    .eq("id", stageId)
+    .eq("project_stages.project_id", projectId)
+    .maybeSingle()
+  if (termStage?.project_stages) {
+    const s = Array.isArray(termStage.project_stages) ? termStage.project_stages[0] : termStage.project_stages
+    if (s) return s
+  }
+
+  // 5. Fallback: get first non-disabled stage of project
+  const { data: firstStage } = await admin
+    .from("project_stages")
+    .select("id, project_id, name, description, status")
+    .eq("project_id", projectId)
+    .neq("status", "disabled")
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (firstStage) return firstStage
+
+  // 6. Fallback: create first stage from library templates
+  const { data: anyStage } = await admin
+    .from("stages")
+    .select("id, name, description, sort_order")
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (anyStage) {
+    const { data: createdDefaultPs } = await admin
+      .from("project_stages")
+      .insert({
+        project_id: projectId,
+        template_stage_id: anyStage.id,
+        name: anyStage.name,
+        description: anyStage.description,
+        status: "in_progress",
+        sort_order: anyStage.sort_order ?? 0,
+      })
+      .select("id, project_id, name, description, status")
+      .single()
+
+    if (createdDefaultPs) return createdDefaultPs
+  }
+
+  throw new Error("Project stage not found.")
 }
 
 function assertActiveStageScope(stage: { status: string }) {
@@ -115,7 +220,7 @@ async function validateConfiguredSubmission(
     case "inspection_checklist": {
       const rows = content.checklist.filter((item) => item.label.trim())
       if (!rows.length) return "Add at least one checklist item before submission."
-      return rows.every((item) => item.result === "pass" || item.result === "fail" || item.result === "na")
+      return rows.every((item) => item.result === "pass" || item.result === "fail" || item.result === "na" || item.result === "in_progress")
         ? null
         : "Complete every checklist item before submission."
     }
@@ -288,59 +393,50 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         throw error
       }
     } else {
-      let created = false
-      for (const candidate of reportNumberCandidates(input.responseId)) {
-        reportNumber = candidate
-        const { error } = await userClient.from("term_responses").insert({
-          id: input.responseId,
-          project_id: input.projectId,
-          project_stage_id: projectStageId,
-          project_stage_term_id: legacyTermId,
-          report_number: reportNumber,
-          visit_number: 1,
-          report_type: input.reportType,
-          subject: input.subject?.trim() || null,
-          report_title: title,
-          response_content: content,
-          status: nextStatus,
-          responsible_user_id: responsibleUserId,
-          approval_required: approvalRequired,
-          response_type: configuredResponseType,
-          template_reference: directStage ? input.templateReference?.trim() || null : term!.template_reference ?? null,
-          instructions: directStage ? input.instructions?.trim() || null : term!.instructions ?? null,
-          created_by: actorId,
-          updated_by: actorId,
-          submitted_at: input.submit ? now : null,
-          completed_at: input.submit && !approvalRequired ? now : null,
-        })
-        if (!error) {
-          created = true
-          break
-        }
-        if (error.code !== "23505") throw error
-
-        const { data: retry, error: retryError } = await admin
-          .from("term_responses")
-          .select("id, project_id, project_stage_id, project_stage_term_id, report_number, visit_number, status")
-          .eq("id", input.responseId)
-          .maybeSingle()
-        if (retryError) throw retryError
-        if (retry) {
-          if (retry.project_id !== input.projectId || retry.project_stage_id !== projectStageId || retry.project_stage_term_id !== legacyTermId) {
-            return { ok: false, error: "The report identifier is already in use." }
-          }
-          return { ok: true, data: { responseId: retry.id, reportNumber: retry.report_number, visitNumber: retry.visit_number, status: retry.status } }
-        }
-      }
-      if (!created) return { ok: false, error: "Could not allocate a unique report number. Try again." }
-      const { data: inserted, error: insertedError } = await admin
+      const { data: maxVisit } = await admin
         .from("term_responses")
         .select("visit_number")
-        .eq("id", input.responseId)
         .eq("project_id", input.projectId)
-        .single()
-      if (insertedError) throw insertedError
-      assignedVisitNumber = inserted.visit_number
+        .order("visit_number", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      assignedVisitNumber = (maxVisit?.visit_number ?? 0) + 1
+      const formattedVisitNo = String(assignedVisitNumber).padStart(3, "0")
+
+      const { data: proj } = await admin
+        .from("projects")
+        .select("code")
+        .eq("id", input.projectId)
+        .maybeSingle()
+      const projCode = proj?.code?.trim() || "PROJ"
+      reportNumber = `${projCode}/${formattedVisitNo}`
+
+      const { error: insertError } = await userClient.from("term_responses").insert({
+        id: input.responseId,
+        project_id: input.projectId,
+        project_stage_id: projectStageId,
+        project_stage_term_id: legacyTermId,
+        report_number: reportNumber,
+        visit_number: assignedVisitNumber,
+        report_type: input.reportType,
+        subject: input.subject?.trim() || null,
+        report_title: title,
+        response_content: content,
+        status: nextStatus,
+        responsible_user_id: responsibleUserId,
+        approval_required: approvalRequired,
+        response_type: configuredResponseType,
+        template_reference: directStage ? input.templateReference?.trim() || null : term!.template_reference ?? null,
+        instructions: directStage ? input.instructions?.trim() || null : term!.instructions ?? null,
+        created_by: actorId,
+        updated_by: actorId,
+        submitted_at: input.submit ? now : null,
+        completed_at: input.submit && !approvalRequired ? now : null,
+      })
+      if (insertError) {
+        if (insertError.code === "23505") return { ok: false, error: "A report with this identifier already exists." }
+        throw insertError
+      }
     }
 
     await audit({
@@ -398,15 +494,22 @@ export async function registerResponseAttachmentsAction(input: {
     const userClient = await createServerClient()
     const { data: response, error: responseError } = await admin
       .from("term_responses")
-      .select("id, status, project_stage_term_id, created_by")
+      .select("id, status, project_stage_term_id, project_stage_id, created_by")
       .eq("id", input.responseId)
       .eq("project_id", input.projectId)
       .maybeSingle()
     if (responseError) throw responseError
     if (!response) return { ok: false, error: "Report response not found." }
-    const scope = await termScope(input.projectId, response.project_stage_term_id)
-    assertActiveTermScope(scope)
-    if (response.created_by !== actorId && scope.responsible_user_id !== actorId) await assertProjectAdmin(input.projectId)
+
+    if (response.project_stage_term_id) {
+      const scope = await termScope(input.projectId, response.project_stage_term_id)
+      assertActiveTermScope(scope)
+      if (response.created_by !== actorId && scope.responsible_user_id !== actorId) await assertProjectAdmin(input.projectId)
+    } else if (response.project_stage_id) {
+      const scope = await stageScope(input.projectId, response.project_stage_id)
+      assertActiveStageScope(scope)
+      if (response.created_by !== actorId) await assertProjectAdmin(input.projectId)
+    }
     if (["submitted", "under_review", "approved", "completed"].includes(response.status)) {
       return { ok: false, error: "Attachments cannot be changed while this report is awaiting review or finalized." }
     }
@@ -464,13 +567,18 @@ export async function deleteResponseAttachmentAction(input: {
     if (!attachment) return { ok: false, error: "Attachment not found." }
     const { data: response, error: responseError } = await admin
       .from("term_responses")
-      .select("status, project_stage_term_id")
+      .select("status, project_stage_term_id, project_stage_id, created_by")
       .eq("id", attachment.response_id)
       .eq("project_id", input.projectId)
       .maybeSingle()
     if (responseError) throw responseError
     if (!response) return { ok: false, error: "Report response not found." }
-    assertActiveTermScope(await termScope(input.projectId, response.project_stage_term_id))
+
+    if (response.project_stage_term_id) {
+      assertActiveTermScope(await termScope(input.projectId, response.project_stage_term_id))
+    } else if (response.project_stage_id) {
+      assertActiveStageScope(await stageScope(input.projectId, response.project_stage_id))
+    }
     if (["submitted", "under_review", "approved", "completed"].includes(response.status)) {
       return { ok: false, error: "Attachments cannot be changed while this report is awaiting review or finalized." }
     }

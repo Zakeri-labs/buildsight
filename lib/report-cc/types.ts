@@ -33,6 +33,8 @@ export type ExternalCcRecipientInput = {
 export type ReportCcSelection = {
   internalUserIds: string[]
   externalRecipients: ExternalCcRecipientInput[]
+  reportToUserIds?: string[]
+  ccToUserIds?: string[]
 }
 
 export type ReportCcNotificationItem = {

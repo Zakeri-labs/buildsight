@@ -2,14 +2,14 @@ import { notFound } from "next/navigation"
 import { InspectionReportForm } from "@/components/stages/inspection-report-form"
 import { requireOnboarded } from "@/lib/auth/session"
 import { loadProjectStageReport } from "@/lib/db/project-stages"
-import { loadProjectCcCandidates, loadReportCcRecipients } from "@/lib/report-cc/server"
+import { loadProjectParticipantsOnly, loadReportCcRecipients } from "@/lib/report-cc/server"
 
 export default async function TermReportPage({ params }: { params: Promise<{ projectId: string; stageId: string; termId: string; reportId: string }> }) {
   const [{ projectId, stageId, termId, reportId }, session] = await Promise.all([params, requireOnboarded()])
   const data = await loadProjectStageReport(projectId, termId, reportId, session.userId)
   if (!data || data.stage.id !== stageId) notFound()
   const [ccCandidates, ccRecipients] = await Promise.all([
-    loadProjectCcCandidates(projectId),
+    loadProjectParticipantsOnly(projectId),
     loadReportCcRecipients(projectId, reportId, "report"),
   ])
   const workflowActive = data.stage.status !== "disabled" && data.term.isActive && (!data.parentTerm || data.parentTerm.isActive)

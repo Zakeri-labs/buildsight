@@ -2,6 +2,7 @@ import "server-only"
 
 import { assertProjectMember } from "@/lib/auth/guards"
 import { roleLabel } from "@/lib/db/types"
+import { getProjectParticipants } from "@/lib/db/project-participants"
 import { createAdminClient } from "@/lib/supabase/admin"
 import type {
   ProjectCcCandidate,
@@ -86,6 +87,37 @@ export async function loadProjectCcCandidates(projectId: string): Promise<Projec
         avatarUrl: profile.avatar_url ?? null,
         role: normalizedRole(rawRole),
         organizationName: participant?.organization_name?.trim() || null,
+      } satisfies ProjectCcCandidate
+    })
+    .sort((left: ProjectCcCandidate, right: ProjectCcCandidate) => left.name.localeCompare(right.name))
+}
+
+/**
+ * Returns only project participants (contractor, owner, consultant, etc.)
+ * excluding internal team members and organization members.
+ * Used for the Report to / CC to dropdowns.
+ */
+export async function loadProjectParticipantsOnly(projectId: string): Promise<ProjectCcCandidate[]> {
+  await assertProjectMember(projectId)
+  const participants = await getProjectParticipants(projectId)
+
+  return participants
+    .map((p) => {
+      const id = p.keyContact.userId || p.id
+      const contactName = p.keyContact.name && p.keyContact.name !== "Contact not provided"
+        ? p.keyContact.name
+        : p.organization
+      const roleText = p.contractorRoleLabel
+        ? `${p.projectRole} (${p.contractorRoleLabel})`
+        : p.projectRole
+
+      return {
+        id,
+        name: contactName,
+        email: p.keyContact.email ?? null,
+        avatarUrl: p.keyContact.avatar ?? null,
+        role: roleText,
+        organizationName: p.organization,
       } satisfies ProjectCcCandidate
     })
     .sort((left: ProjectCcCandidate, right: ProjectCcCandidate) => left.name.localeCompare(right.name))

@@ -136,11 +136,21 @@ export function StageTranslationActions({
     ? "border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
     : ""
 
+  const isTranslated = Boolean(
+    translation?.status === "completed" && translation?.generatedAt && translation?.translatedContent
+  )
+
+  const untranslatedHint = locale === "ar" ? "ترجم التقرير أولاً لتفعيل التنزيل" : "Translate report first to enable PDF download"
+
   return (
     <div className={cn("flex min-w-0 flex-col gap-1.5", inHeader ? "items-start sm:items-end" : "items-end")} onClick={(event) => event.stopPropagation()}>
       <div className="flex flex-wrap items-center gap-1.5">
         <Link
-          href={`/projects/${projectId}/stages/${stageId}/terms/${termId}/reports/${responseId}/translate`}
+          href={
+            !termId || termId === stageId
+              ? `/projects/${projectId}/stages/${stageId}/reports/${responseId}/translate`
+              : `/projects/${projectId}/stages/${stageId}/terms/${termId}/reports/${responseId}/translate`
+          }
           className={cn(buttonVariants({ size: btnSize, variant: inHeader ? "secondary" : "secondary" }), translateBtnClass)}
         >
           <Languages className="size-4" />{copy.translate}
@@ -148,10 +158,24 @@ export function StageTranslationActions({
         <Button size={btnSize} variant="outline" className={downloadBtnClass} disabled={busy !== null} title={copy.english} onClick={() => void download("original")}>
           {busy === "original" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.english}
         </Button>
-        <Button size={btnSize} variant="outline" className={downloadBtnClass} disabled={busy !== null || stale} title={stale ? copy.stale : copy.arabic} onClick={() => void download("arabic")}>
+        <Button
+          size={btnSize}
+          variant="outline"
+          className={cn(downloadBtnClass, !isTranslated && "opacity-50 cursor-not-allowed")}
+          disabled={busy !== null || !isTranslated || stale}
+          title={!isTranslated ? untranslatedHint : stale ? copy.stale : copy.arabic}
+          onClick={() => void download("arabic")}
+        >
           {busy === "arabic" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.arabic}
         </Button>
-        <Button size={btnSize} variant="outline" className={downloadBtnClass} disabled={busy !== null || stale} title={stale ? copy.stale : copy.bilingual} onClick={() => void download("bilingual")}>
+        <Button
+          size={btnSize}
+          variant="outline"
+          className={cn(downloadBtnClass, !isTranslated && "opacity-50 cursor-not-allowed")}
+          disabled={busy !== null || !isTranslated || stale}
+          title={!isTranslated ? untranslatedHint : stale ? copy.stale : copy.bilingual}
+          onClick={() => void download("bilingual")}
+        >
           {busy === "bilingual" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.bilingual}
         </Button>
       </div>

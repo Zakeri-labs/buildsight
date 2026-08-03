@@ -96,10 +96,26 @@ function projectDocuments(project: ProjectRecord): ProjectDocument[] {
 }
 
 function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
+  const isNotSet =
+    value === "Not set" ||
+    value === "غير محدد" ||
+    value === "—" ||
+    value == null ||
+    value === "" ||
+    (typeof value === "string" && !value.trim())
+
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)] items-start gap-2.5 py-1">
-      <dt className="text-xs font-medium leading-[1.15rem] text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-words text-sm font-semibold leading-[1.15rem] text-foreground">{value}</dd>
+    <div className="flex min-w-0 items-center justify-between gap-3 border-b border-border/30 py-1.5 text-xs">
+      <dt className="shrink-0 font-medium text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 truncate text-end">
+        {isNotSet ? (
+          <span className="font-normal text-muted-foreground/40">—</span>
+        ) : typeof value === "string" || typeof value === "number" ? (
+          <span className="font-semibold text-foreground">{value}</span>
+        ) : (
+          value
+        )}
+      </dd>
     </div>
   )
 }
@@ -181,7 +197,7 @@ export function ProjectDetail({
         role: "دور الجهة",
         location: "الموقع / العنوان",
         areaDistrict: "المنطقة / الحي",
-        notSet: "غير محدد",
+        notSet: "—",
         type: "نوع المشروع",
         supervisionType: "نوع الإشراف",
         plotNo: "رقم قطعة الأرض",
@@ -216,7 +232,7 @@ export function ProjectDetail({
         role: "Organization Role",
         location: "Location / Address",
         areaDistrict: "Area / District",
-        notSet: "Not set",
+        notSet: "—",
         type: "Project Type",
         supervisionType: "Supervision Type",
         plotNo: "Plot No.",
@@ -414,79 +430,60 @@ export function ProjectDetail({
               <div className="min-w-0 py-0.5">
                 <dl className="grid min-w-0 gap-x-5 md:grid-cols-2">
                   <DetailField label={labels.name} value={currentProject.name} />
+                  <DetailField label={labels.owner} value={currentProject.client} />
+                  <DetailField label={labels.code} value={currentProject.code} />
+                  <DetailField label={labels.role} value={currentProject.organizationRole} />
                   <DetailField label={labels.type} value={currentProject.projectType} />
                   <DetailField label={labels.supervisionType} value={currentProject.supervisionType} />
-                  <DetailField label={labels.code} value={currentProject.code} />
                   <DetailField label={labels.plotNo} value={currentEditProject.plotNo?.trim() || labels.notSet} />
+                  <DetailField label={labels.areaDistrict} value={currentEditProject.areaDistrict?.trim() || labels.notSet} />
                   <DetailField
                     label={labels.status}
                     value={<ProjectStatusDisplay status={currentEditProject.status} isArabic={isArabic} />}
                   />
                   <DetailField label={labels.priority} value={projectPriorityLabel(currentEditProject.priority, isArabic)} />
-                  <DetailField label={labels.owner} value={currentProject.client} />
                   <DetailField label={labels.start} value={currentProject.startDate} />
                   <DetailField
                     label={labels.supervisionStart}
                     value={displayProjectDate(currentEditProject.supervisionStartDate, locale, labels.notSet)}
                   />
-                  <DetailField label={labels.role} value={currentProject.organizationRole} />
-                  <DetailField label={labels.completion} value={currentProject.targetHandover} />
                   <DetailField label={labels.location} value={currentProject.location} />
-                  <DetailField label={labels.areaDistrict} value={currentEditProject.areaDistrict?.trim() || labels.notSet} />
-                  <DetailField
-                    label={labels.includedStructureVisits}
-                    value={displayVisitCount(currentEditProject.includedStructureVisits, labels.notSet)}
-                  />
-                  <DetailField
-                    label={labels.includedFinishingVisits}
-                    value={displayVisitCount(currentEditProject.includedFinishingVisits, labels.notSet)}
-                  />
-                  <DetailField label={labels.progress} value={`${progress}%`} />
+                  <DetailField label={labels.completion} value={currentProject.targetHandover} />
                 </dl>
 
-                <div className="mt-2.5 border-t pt-2.5">
-                  <div className="grid min-w-0 gap-1.5 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,3.15fr)] sm:items-start sm:gap-2.5">
-                    <p className="text-xs font-medium leading-5 text-muted-foreground">{labels.description}</p>
-                    <p className="min-w-0 whitespace-pre-wrap break-words text-sm leading-5 text-foreground/90">
-                      {currentProject.description}
-                    </p>
-                  </div>
+                <div className="mt-3 rounded-lg border border-border/40 bg-muted/20 p-3">
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{labels.description}</p>
+                  <p className="min-w-0 whitespace-pre-wrap break-words text-xs font-medium text-foreground/90">
+                    {currentProject.description?.trim() || "—"}
+                  </p>
                 </div>
 
-                <div className="mt-2.5 border-t pt-2.5">
-                  <p className="text-xs font-semibold text-foreground">{labels.financialSummary}</p>
-                  <dl className="mt-0.5 grid min-w-0 gap-x-5 md:grid-cols-2">
+                <div className="mt-3 rounded-lg border border-border/40 bg-muted/20 p-3">
+                  <p className="mb-1 text-xs font-semibold text-foreground">{labels.financialSummary}</p>
+                  <dl className="grid min-w-0 gap-x-6 md:grid-cols-2">
+                    <DetailField
+                      label={labels.includedStructureVisits}
+                      value={displayVisitCount(currentEditProject.includedStructureVisits, "—")}
+                    />
+                    <DetailField
+                      label={labels.includedFinishingVisits}
+                      value={displayVisitCount(currentEditProject.includedFinishingVisits, "—")}
+                    />
                     <DetailField
                       label={labels.structureFee}
-                      value={formatProjectAmountOmr(currentEditProject.structureSupervisionFee, labels.notSet)}
+                      value={formatProjectAmountOmr(currentEditProject.structureSupervisionFee, "—")}
                     />
                     <DetailField
                       label={labels.finishingFee}
-                      value={formatProjectAmountOmr(currentEditProject.finishingSupervisionFee, labels.notSet)}
+                      value={formatProjectAmountOmr(currentEditProject.finishingSupervisionFee, "—")}
                     />
                     <DetailField
                       label={labels.receivedAmount}
-                      value={formatProjectAmountOmr(currentEditProject.receivedAmount, labels.notSet)}
+                      value={formatProjectAmountOmr(currentEditProject.receivedAmount, "—")}
                     />
                     <DetailField
                       label={labels.outstandingAmount}
-                      value={formatProjectAmountOmr(currentEditProject.outstandingAmount, labels.notSet)}
-                    />
-                    <DetailField
-                      label={labels.nextPaymentAmount}
-                      value={formatProjectAmountOmr(currentEditProject.nextPaymentAmount, labels.notSet)}
-                    />
-                    <DetailField
-                      label={labels.nextPaymentDueDate}
-                      value={displayProjectDate(currentEditProject.nextPaymentDueDate, locale, labels.notSet)}
-                    />
-                    <DetailField
-                      label={labels.paymentNote}
-                      value={currentEditProject.invoiceReferencePaymentNote?.trim() || labels.notSet}
-                    />
-                    <DetailField
-                      label={labels.initialRemarks}
-                      value={currentEditProject.initialRemarks?.trim() || labels.notSet}
+                      value={formatProjectAmountOmr(currentEditProject.outstandingAmount, "—")}
                     />
                   </dl>
                 </div>

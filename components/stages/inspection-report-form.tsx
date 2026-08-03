@@ -12,6 +12,7 @@ import {
   ClipboardCheck,
   FileDown,
   FileText,
+  Hourglass,
   ImagePlus,
   Italic,
   Link2,
@@ -52,6 +53,7 @@ import {
   STAGE_DOCUMENT_MAX_FILES,
   STAGE_EVIDENCE_ACCEPT,
   STAGE_EVIDENCE_MAX_IMAGES,
+  getFallbackStageChecklist,
   resolveStageDocumentMimeType,
   sanitizeEvidenceFileName,
   statusLabel,
@@ -272,6 +274,9 @@ export function InspectionReportForm({
   response,
   translation,
   canReview,
+  canManage,
+  currentUserId,
+  currentUserPerson,
   workflowActive,
   canEdit,
   suggestedVisitNumber,
@@ -310,6 +315,7 @@ export function InspectionReportForm({
   canReview: boolean
   canManage?: boolean
   currentUserId?: string
+  currentUserPerson?: ProjectStagePerson | null
   workflowActive: boolean
   canEdit: boolean
   suggestedVisitNumber: number
@@ -322,9 +328,7 @@ export function InspectionReportForm({
   const reportDefinition = stageReportConfig ?? legacyTerm
   if (!reportDefinition) throw new Error("Report configuration is missing.")
   const isDirectStageReport = Boolean(stageReportConfig)
-  const reportsHref = isDirectStageReport
-    ? `/projects/${project.id}/stages/${stage.id}`
-    : `/projects/${project.id}/stages/${stage.id}/terms/${reportDefinition.id}`
+  const reportsHref = `/projects/${project.id}/stages/${stage.id}`
   const { locale } = useI18n()
   const copy = COPY[locale]
   const cleanStageName = stage.name.replace(/^\d+[\.\s\-]+/, "")
@@ -332,8 +336,12 @@ export function InspectionReportForm({
   const reportDate = response?.createdAt ?? new Date().toISOString()
   const [reportType, setReportType] = useState<ReportTypeValue>((REPORT_TYPES.some((item) => item.value === response?.reportType) ? response?.reportType : "inspection_report") as ReportTypeValue)
   const [visitNumber, setVisitNumber] = useState(response?.visitNumber ?? suggestedVisitNumber)
+  const initialVisitFormatted = String(visitNumber).padStart(3, "0")
+  const defaultReportTitlePattern = locale === "ar"
+    ? `زيارة ${initialVisitFormatted} - ${cleanStageName} Report`
+    : `Visit ${initialVisitFormatted} - ${cleanStageName} Report`
   const [subject, setSubject] = useState(response?.subject ?? "")
-  const [reportTitle, setReportTitle] = useState(response?.reportTitle ? response.reportTitle.replace(/^\d+[\.\s\-]+/, "") : cleanTermReportName)
+  const [reportTitle, setReportTitle] = useState(response?.reportTitle ?? defaultReportTitlePattern)
   const [content, setContent] = useState<TermResponseContent>(() => {
     let initialChecklist: ChecklistItem[] = []
     if (response?.content.checklist?.length) {
@@ -346,7 +354,17 @@ export function InspectionReportForm({
         result: "" as const,
       }))
     } else {
-      initialChecklist = checklistFromTemplate(reportDefinition.templateReference)
+      const fallbackItems = getFallbackStageChecklist(stage.name)
+      if (fallbackItems.length) {
+        initialChecklist = fallbackItems.map((item) => ({
+          id: crypto.randomUUID(),
+          label: item.reportName.replace(/^\d+[\.\s\-]+/, ""),
+          checked: false,
+          result: "" as const,
+        }))
+      } else {
+        initialChecklist = checklistFromTemplate(reportDefinition.templateReference)
+      }
     }
     return {
       ...(response?.content ?? EMPTY_TERM_RESPONSE_CONTENT),
@@ -510,6 +528,19 @@ export function InspectionReportForm({
       return
     }
     if (mode === "submit") {
+      const totalRecipients = ccSelection.internalUserIds.length + ccSelection.externalRecipients.length
+      const reportToCount = (ccSelection.reportToUserIds?.length ?? 0) + ccSelection.externalRecipients.filter((r) => (r as any).group === "reportTo" || !(r as any).group).length
+      const ccToCount = (ccSelection.ccToUserIds?.length ?? 0) + ccSelection.externalRecipients.filter((r) => (r as any).group === "ccTo").length
+
+      if (totalRecipients === 0 || reportToCount === 0 || ccToCount === 0) {
+        setError(
+          locale === "ar"
+            ? "يرجى تحديد مستلم التقرير (Report to) ومستلم النسخة (CC to) قبل إرسال التقرير."
+            : "Please select both 'Report to' and 'CC to' recipients before submitting the report for review."
+        )
+        return
+      }
+
       const validationError = configuredResponseError(
         reportDefinition.responseType,
         content,
@@ -565,11 +596,7 @@ export function InspectionReportForm({
         setSuccess(copy.saved)
       }
       if (!response) {
-        router.replace(
-          isDirectStageReport
-            ? `/projects/${project.id}/stages/${stage.id}/reports/${id}`
-            : `/projects/${project.id}/stages/${stage.id}/terms/${reportDefinition.id}/reports/${id}`,
-        )
+        router.replace(`/projects/${project.id}/stages/${stage.id}/reports/${id}`)
       }
       router.refresh()
     } catch (saveError) {
@@ -681,6 +708,18 @@ export function InspectionReportForm({
     }
   }
 
+  const formattedVisitNo = String(visitNumber).padStart(3, "0")
+  const projectCode = project.code?.trim() || "PROJ"
+  const displayReportNo = response?.reportNumber && response.reportNumber.includes("/")
+    ? response.reportNumber
+    : `${projectCode}/${formattedVisitNo}`
+  const creatorPerson = response?.createdBy ?? currentUserPerson ?? {
+    id: currentUserId ?? "",
+    name: "Project member",
+    email: null,
+    avatarUrl: null,
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 pb-24">
       <Link href={reportsHref} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
@@ -689,11 +728,6 @@ export function InspectionReportForm({
 
       <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
         <span>{project.name}</span><span aria-hidden>/</span><span>{cleanStageName}</span>
-        {isDirectStageReport ? null : parentTerm ? (
-          <><span aria-hidden>/</span><span>{parentTerm.name.replace(/^\d+[\.\s\-]+/, "")}</span><span aria-hidden>/</span><span>{cleanTermReportName}</span></>
-        ) : (
-          <><span aria-hidden>/</span><span>{cleanTermReportName}</span></>
-        )}
         <span aria-hidden>/</span><span className="font-medium text-foreground">{response ? response.reportTitle.replace(/^\d+[\.\s\-]+/, "") : (locale === "ar" ? "تقرير جديد" : "New Report")}</span>
       </nav>
 
@@ -738,25 +772,33 @@ export function InspectionReportForm({
             </div>
           </div>
         </div>
-        <CardContent className="grid gap-px bg-border p-0 sm:grid-cols-2 lg:grid-cols-4">
+        <CardContent className="grid gap-px bg-border p-0 sm:grid-cols-2 lg:grid-cols-3">
           <HeaderCell label={copy.project} value={project.name} />
           <HeaderCell label={copy.stage} value={cleanStageName} />
-          <HeaderCell label={copy.reportNo} value={reportNumber} />
-          <HeaderCell label={copy.visitNo} value={String(visitNumber)} />
+          <HeaderCell label={copy.visitNo} value={formattedVisitNo} />
+          <HeaderCell label={copy.reportNo} value={displayReportNo} />
           <HeaderCell label={copy.date} value={formatDate(reportDate, locale)} />
-          <HeaderCell label={copy.responsible} value={reportDefinition.responsibleUser?.name ?? copy.noResponsible} person={reportDefinition.responsibleUser} />
-          <HeaderCell label={copy.status} value={statusLabel(status, locale)} />
-          <HeaderCell label={copy.report} value={cleanTermReportName} />
+          <HeaderCell
+            label={locale === "ar" ? "مقدم التقرير" : "Created By"}
+            value={creatorPerson.name}
+            person={creatorPerson}
+          />
         </CardContent>
       </Card>
 
       <Card className="gap-0 py-0">
-        <CardHeader className="border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6"><CardTitle className="text-base font-semibold text-blue-950 dark:text-blue-100">{copy.basic}</CardTitle></CardHeader>
-        <CardContent className="grid gap-5 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-4">
-          <div className="space-y-2 sm:col-span-2 lg:col-span-4"><Label htmlFor="report-title">{copy.title} <span className="text-destructive">*</span></Label><Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} /></div>
-          <div className="space-y-2"><Label>{copy.type}</Label><Select value={reportType} onValueChange={(value) => setReportType(value as ReportTypeValue)} disabled={isLocked}><SelectTrigger className="w-full"><SelectValue>{(value) => reportTypeLabel(String(value ?? reportType), locale)}</SelectValue></SelectTrigger><SelectContent>{REPORT_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{reportTypeLabel(item.value, locale)}</SelectItem>)}</SelectContent></Select></div>
-          <div className="space-y-2"><Label htmlFor="visit-no">{copy.visitNo}</Label><Input id="visit-no" type="number" min={1} value={visitNumber} readOnly aria-readonly="true" className="bg-muted/40" /></div>
-          <div className="space-y-2 sm:col-span-2 lg:col-span-2"><Label htmlFor="report-subject">{copy.subject}</Label><Input id="report-subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Inspection location, package, activity, or reference" disabled={isLocked} /></div>
+        <CardHeader className="border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6">
+          <CardTitle className="text-base font-semibold text-blue-950 dark:text-blue-100">{copy.basic}</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-5 p-5 sm:p-6">
+          <div className="space-y-2">
+            <Label htmlFor="report-title">{copy.title} <span className="text-destructive">*</span></Label>
+            <Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="report-subject">{copy.subject}</Label>
+            <Input id="report-subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Inspection location, package, activity, or reference" disabled={isLocked} />
+          </div>
         </CardContent>
       </Card>
 
@@ -768,7 +810,6 @@ export function InspectionReportForm({
       />
 
       {reportDefinition.templateReference ? <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"><FileText className="mt-0.5 size-4 shrink-0" /><div><p className="font-semibold">{copy.template}</p><p className="mt-0.5 text-xs opacity-80">{reportDefinition.templateReference}</p></div></div> : null}
-      {reportDefinition.instructions ? <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm"><p className="font-semibold">Description / Instructions</p><p className="mt-1 whitespace-pre-wrap text-muted-foreground">{reportDefinition.instructions}</p></div> : null}
 
       {reportDefinition.responseType !== "combined" && reportDefinition.responseType !== "inspection_checklist" ? (
         <Card className="gap-0 py-0">
@@ -857,7 +898,62 @@ export function InspectionReportForm({
                   </>
                 ) : (
                   <>
-                    <button type="button" disabled={isLocked} onClick={() => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, checked: !row.checked, result: !row.checked ? "pass" : "" } : row) }))} className={cn("flex size-7 items-center justify-center rounded-lg border", item.checked ? "border-emerald-600 bg-emerald-600 text-white" : "bg-background")} aria-label={`Mark checklist item ${index + 1}`}><Check className="size-4" /></button>
+                    {(() => {
+                      const itemResult = item.result || (item.checked ? "pass" : "")
+                      let btnClasses = "border-slate-300 bg-slate-100/90 text-slate-400 hover:bg-slate-200/90 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
+                      let icon = <Check className="size-3.5" />
+                      let statusTooltip = "Empty / Click to change state"
+
+                      if (itemResult === "pass") {
+                        btnClasses = "border-emerald-600 bg-emerald-600 text-white shadow-2xs hover:bg-emerald-700 dark:border-emerald-600 dark:bg-emerald-600"
+                        icon = <Check className="size-4 stroke-[2.5]" />
+                        statusTooltip = "Done / Passed"
+                      } else if (itemResult === "fail") {
+                        btnClasses = "border-rose-600 bg-rose-600 text-white shadow-2xs hover:bg-rose-700 dark:border-rose-600 dark:bg-rose-600"
+                        icon = <X className="size-4 stroke-[2.5]" />
+                        statusTooltip = "Not Done / Failed"
+                      } else if (itemResult === "in_progress") {
+                        btnClasses = "border-amber-500 bg-amber-500 text-white shadow-2xs hover:bg-amber-600 dark:border-amber-500 dark:bg-amber-500"
+                        icon = <Hourglass className="size-3.5" />
+                        statusTooltip = "In Progress"
+                      }
+
+                      return (
+                        <button
+                          type="button"
+                          disabled={isLocked}
+                          onClick={() => {
+                            let nextResult: ChecklistResult = ""
+                            let nextChecked = false
+                            if (!itemResult) {
+                              nextResult = "pass"
+                              nextChecked = true
+                            } else if (itemResult === "pass") {
+                              nextResult = "fail"
+                              nextChecked = false
+                            } else if (itemResult === "fail") {
+                              nextResult = "in_progress"
+                              nextChecked = false
+                            } else {
+                              nextResult = ""
+                              nextChecked = false
+                            }
+
+                            setContent((current) => ({
+                              ...current,
+                              checklist: current.checklist.map((row) =>
+                                row.id === item.id ? { ...row, result: nextResult, checked: nextChecked } : row
+                              ),
+                            }))
+                          }}
+                          className={cn("flex size-7 shrink-0 items-center justify-center rounded-lg border transition-all duration-150", btnClasses)}
+                          title={statusTooltip}
+                          aria-label={`Mark checklist item ${index + 1}: ${statusTooltip}`}
+                        >
+                          {icon}
+                        </button>
+                      )
+                    })()}
                     <Input value={item.label} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))} placeholder={`Checklist item ${index + 1}`} />
                   </>
                 )}
@@ -882,44 +978,58 @@ export function InspectionReportForm({
       ) : null}
 
       {!workflowActive ? <div role="status" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100"><AlertCircle className="mt-0.5 size-4 shrink-0" />This workflow item is disabled for the project. Existing review history remains available, but new employee work is blocked.</div> : null}
-      {error ? <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"><AlertCircle className="mt-0.5 size-4 shrink-0" />{error}</div> : null}
-      {success ? <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"><CheckCircle2 className="mt-0.5 size-4 shrink-0" />{success}</div> : null}
 
       {((canReview && pendingReview) || (workflowActive && isEditable)) ? (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur md:start-64 md:px-8">
-          <div className="mx-auto flex max-w-7xl flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
-            {canReview && pendingReview ? (
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="lg"
-                  disabled={busy !== null}
-                  className="border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
-                  onClick={() => void decide("rejected")}
-                >
-                  {busy === "reject" ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
-                  {locale === "ar" ? "رفض التقرير" : "Reject Report"}
-                </Button>
-                <Button
-                  type="button"
-                  size="lg"
-                  disabled={busy !== null}
-                  className="bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600"
-                  onClick={() => void decide("approved")}
-                >
-                  {busy === "approve" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-                  {locale === "ar" ? "اعتماد التقرير" : "Approve Report"}
-                </Button>
-              </div>
-            ) : null}
-            {workflowActive && isEditable ? (
-              <>
-                <Button variant="outline" size="lg" disabled={busy !== null} onClick={() => void save("draft")}>{busy === "draft" ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}{copy.saveDraft}</Button>
-                <Button variant="outline" size="lg" disabled={busy !== null} onClick={() => void save("progress")}>{busy === "progress" ? <Loader2 className="size-4 animate-spin" /> : <ClipboardCheck className="size-4" />}{copy.saveProgress}</Button>
-                <Button size="lg" disabled={busy !== null} onClick={() => void save("submit")}>{busy === "submit" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}{copy.submit}</Button>
-              </>
-            ) : null}
+          <div className="mx-auto flex max-w-7xl flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              {error ? (
+                <div role="alert" className="flex max-w-xl items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+                  <AlertCircle className="size-4 shrink-0 text-red-600 dark:text-red-400" />
+                  <span className="truncate">{error}</span>
+                </div>
+              ) : success ? (
+                <div role="status" className="flex max-w-xl items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">
+                  <CheckCircle2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <span className="truncate">{success}</span>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3 shrink-0">
+              {canReview && pendingReview ? (
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    disabled={busy !== null}
+                    className="border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+                    onClick={() => void decide("rejected")}
+                  >
+                    {busy === "reject" ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
+                    {locale === "ar" ? "رفض التقرير" : "Reject Report"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="lg"
+                    disabled={busy !== null}
+                    className="bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600"
+                    onClick={() => void decide("approved")}
+                  >
+                    {busy === "approve" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                    {locale === "ar" ? "اعتماد التقرير" : "Approve Report"}
+                  </Button>
+                </div>
+              ) : null}
+              {workflowActive && isEditable ? (
+                <>
+                  <Button variant="outline" size="lg" disabled={busy !== null} onClick={() => void save("draft")}>{busy === "draft" ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}{copy.saveDraft}</Button>
+                  <Button variant="outline" size="lg" disabled={busy !== null} onClick={() => void save("progress")}>{busy === "progress" ? <Loader2 className="size-4 animate-spin" /> : <ClipboardCheck className="size-4" />}{copy.saveProgress}</Button>
+                  <Button size="lg" disabled={busy !== null} onClick={() => void save("submit")}>{busy === "submit" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}{copy.submit}</Button>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}

@@ -805,10 +805,25 @@ function drawCcMetadata(flow: Flow, x: number, y: number, width: number, recipie
   return height
 }
 
+function formatDateShort(dateStr?: string | null, rtl: boolean = false) {
+  if (!dateStr) return "—"
+  try {
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return dateStr
+    return date.toLocaleDateString(rtl ? "ar-SA" : "en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    })
+  } catch {
+    return dateStr
+  }
+}
+
 function drawFirstPageHeader(flow: Flow) {
   const { doc, template, pageWidth, rtl } = flow
   const margin = PAGE.margin
-  const headerH = 17   // compact height for 3 rows
+  const headerH = 17
 
   drawHeaderColumns(doc, flow, headerH)
 
@@ -841,39 +856,202 @@ function drawFirstPageHeader(flow: Flow) {
   doc.line(margin, headerH + 13, pageWidth - margin, headerH + 13)
   doc.setLineWidth(0.2)
 
-  // ── METADATA GRID (2 rows × 4 cells) ─────────────────────────────────────
+  // ── UNIFIED EXECUTIVE METADATA CARD (Recipients + 8 Metadata Cells) ──────
+  const cardX = margin
+  const cardWidth = pageWidth - margin * 2
+  const gridTop = headerH + 15
+
+  const reportTo = template.reportToRecipients || []
+  const ccTo = template.ccRecipients || []
+
+  // Helper to calculate recipient column height
+  const getRecipientHeight = (rList: typeof reportTo) => {
+    if (!rList.length) return 7
+    let lines = 0
+    rList.forEach((r) => {
+      lines += 1 // Name
+      if (r.role) lines += 1
+      if (r.company) lines += 1
+      if (r.email) lines += 1
+      lines += 0.4 // gap between recipients
+    })
+    return Math.max(7, 4.5 + lines * 3.4)
+  }
+
+  const reportToH = getRecipientHeight(reportTo)
+  const ccToH = getRecipientHeight(ccTo)
+  const recipientsRowH = Math.max(reportToH, ccToH, 13)
+
+  const cols = 3
+  const cellW = cardWidth / cols
+  const metaRowH = 11
+  const gridHeight = recipientsRowH + 2 * metaRowH
+
+  // Single outer container
+  doc.setDrawColor(226, 232, 240)
+  doc.setFillColor(248, 250, 252)
+  doc.roundedRect(cardX, gridTop, cardWidth, gridHeight, 1.5, 1.5, "FD")
+
+  // Internal grid lines
+  doc.setDrawColor(226, 232, 240)
+  doc.setLineWidth(0.15)
+
+  // Horizontal divider between Recipients Row (Row 1) and Meta Row 1 (Row 2)
+  doc.line(cardX, gridTop + recipientsRowH, cardX + cardWidth, gridTop + recipientsRowH)
+
+  // Horizontal divider between Meta Row 1 (Row 2) and Meta Row 2 (Row 3)
+  doc.line(cardX, gridTop + recipientsRowH + metaRowH, cardX + cardWidth, gridTop + recipientsRowH + metaRowH)
+
+  // Vertical divider between Report to (Left) and CC to (Right) in Row 1
+  const recHalfW = cardWidth / 2
+  doc.line(cardX + recHalfW, gridTop, cardX + recHalfW, gridTop + recipientsRowH)
+
+  // Vertical lines between 3 columns in Row 2 & Row 3
+  for (let c = 1; c < cols; c += 1) {
+    doc.line(cardX + c * cellW, gridTop + recipientsRowH, cardX + c * cellW, gridTop + gridHeight)
+  }
+
+  // ── RENDER ROW 1: RECIPIENTS (Report to / Primary on Left, CC to on Right) ──
+  const drawRecipientColumn = (
+    recList: typeof reportTo,
+    colLabel: string,
+    x: number,
+    w: number,
+    isRtl: boolean,
+  ) => {
+    // Header Label
+    setLanguage(doc, isRtl, 6.2, true)
+    doc.setTextColor(100, 116, 139)
+    writePdfText(
+      doc,
+      colLabel,
+      isRtl ? x + w - 3 : x + 3,
+      gridTop + 3.5,
+      { align: isRtl ? "right" : "left" },
+      isRtl,
+    )
+
+    if (!recList.length) {
+      setLanguage(doc, isRtl, 7.5, false)
+      doc.setTextColor(148, 163, 184)
+      writePdfText(
+        doc,
+        "—",
+        isRtl ? x + w - 3 : x + 3,
+        gridTop + 8,
+        { align: isRtl ? "right" : "left" },
+        isRtl,
+      )
+      return
+    }
+
+    let currY = gridTop + 7.8
+    recList.forEach((r) => {
+      // Name (Bold Dark)
+      const nameRtl = containsArabic(r.name)
+      setLanguage(doc, nameRtl, 7.5, true)
+      doc.setTextColor(15, 23, 42)
+      writePdfText(doc, r.name, isRtl ? x + w - 3 : x + 3, currY, { align: isRtl ? "right" : "left" }, nameRtl)
+      currY += 3.4
+
+      // Role
+      if (r.role) {
+        const roleRtl = containsArabic(r.role)
+        setLanguage(doc, roleRtl, 6.5, false)
+        doc.setTextColor(71, 85, 105)
+        writePdfText(doc, r.role, isRtl ? x + w - 3 : x + 3, currY, { align: isRtl ? "right" : "left" }, roleRtl)
+        currY += 3.2
+      }
+
+      // Company
+      if (r.company) {
+        const compRtl = containsArabic(r.company)
+        setLanguage(doc, compRtl, 6.5, false)
+        doc.setTextColor(71, 85, 105)
+        writePdfText(doc, r.company, isRtl ? x + w - 3 : x + 3, currY, { align: isRtl ? "right" : "left" }, compRtl)
+        currY += 3.2
+      }
+
+      // Email
+      if (r.email) {
+        setLanguage(doc, false, 6.2, false)
+        doc.setTextColor(37, 99, 235)
+        writePdfText(doc, r.email, isRtl ? x + w - 3 : x + 3, currY, { align: isRtl ? "right" : "left" }, false)
+        currY += 3.2
+      }
+
+      currY += 1.2
+    })
+  }
+
+  const leftColX = rtl ? cardX + recHalfW : cardX
+  const rightColX = rtl ? cardX : cardX + recHalfW
+  const reportToLabel = rtl ? "ارسال به / الموجه إليه:" : "Report to:"
+  const ccToLabel = rtl ? "نسخة إلى:" : "CC to:"
+
+  if (rtl) {
+    drawRecipientColumn(reportTo, reportToLabel, leftColX, recHalfW, true)
+    drawRecipientColumn(ccTo, ccToLabel, rightColX, recHalfW, true)
+  } else {
+    drawRecipientColumn(reportTo, reportToLabel, leftColX, recHalfW, false)
+    drawRecipientColumn(ccTo, ccToLabel, rightColX, recHalfW, false)
+  }
+
+  // ── RENDER ROW 2 & 3: THE 6 METADATA CELLS (Matching details page 1:1) ──────
+  const formattedDate = formatDateShort(template.createdAt, rtl)
+  const creator = template.creatorName || "—"
+
   const labels = rtl
-    ? ["المشروع", "مرجع المشروع", "المرحلة", "البند", "رقم المستند", "رقم الزيارة", "النوع", "الموضوع"]
-    : ["Project", "Project Reference", "Stage", "Term", "Document Number", "Visit Number", "Type", "Subject"]
+    ? ["المشروع", "المرحلة", "رقم الزيارة", "رقم المستند", "التاريخ", "مقدم التقرير"]
+    : ["Project", "Stage", "Visit Number", "Report Number", "Date", "Created By"]
+
   const values = [
     template.projectName,
-    template.projectReference,
     template.stageName,
-    template.termName,
-    template.reportNumber,
     template.visitNumber,
-    template.reportType,
-    template.subject,
+    template.reportNumber,
+    formattedDate,
+    creator,
   ]
-  const gap = 2
-  const cellWidth = (pageWidth - margin * 2 - gap * 3) / 4
-  const gridTop = headerH + 15
+
+  const metaTop = gridTop + recipientsRowH
+
   for (let index = 0; index < values.length; index += 1) {
-    const row = Math.floor(index / 4)
-    const logicalColumn = index % 4
-    const physicalColumn = rtl ? 3 - logicalColumn : logicalColumn
-    drawMetaCell(
-      flow,
-      margin + physicalColumn * (cellWidth + gap),
-      gridTop + row * 15.5,
-      cellWidth,
+    const row = Math.floor(index / cols)
+    const logicalColumn = index % cols
+    const physicalColumn = rtl ? (cols - 1) - logicalColumn : logicalColumn
+    const cellX = cardX + physicalColumn * cellW
+    const cellY = metaTop + row * metaRowH
+
+    // Label
+    setLanguage(doc, rtl, 6, false)
+    doc.setTextColor(100, 116, 139)
+    writePdfText(
+      doc,
       labels[index],
-      values[index],
+      rtl ? cellX + cellW - 3 : cellX + 3,
+      cellY + 3.5,
+      { align: rtl ? "right" : "left" },
+      rtl,
+    )
+
+    // Value
+    const val = values[index] || "—"
+    const valHasArabic = containsArabic(val)
+    setLanguage(doc, valHasArabic, 7.5, true)
+    doc.setTextColor(15, 23, 42)
+    const valLines = textLines(doc, val, cellW - 6).slice(0, 1)
+    writePdfText(
+      doc,
+      valLines,
+      rtl && valHasArabic ? cellX + cellW - 3 : cellX + 3,
+      cellY + 7.5,
+      { align: rtl && valHasArabic ? "right" : "left" },
+      valHasArabic,
     )
   }
-  const metadataBottom = gridTop + 2 * 15.5
-  const ccHeight = drawCcMetadata(flow, margin, metadataBottom + 1, pageWidth - margin * 2, template.ccRecipients)
-  flow.y = metadataBottom + (ccHeight ? ccHeight + 5 : 8)
+
+  flow.y = gridTop + gridHeight + 6
 }
 
 function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>) {
@@ -1079,81 +1257,132 @@ function renderRtlTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>)
   flow.y += 5
 }
 
+function drawChecklistVectorBadge(
+  doc: jsPDF,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  isPassed: boolean,
+  isFailed: boolean,
+  isInProgress: boolean,
+) {
+  if (isPassed) {
+    doc.setFillColor(22, 163, 74)
+    doc.roundedRect(x, y, w, h, 0.8, 0.8, "F")
+    doc.setDrawColor(255, 255, 255)
+    doc.setLineWidth(0.5)
+    doc.line(x + 0.8, y + 1.8, x + 1.5, y + 2.7)
+    doc.line(x + 1.5, y + 2.7, x + 2.8, y + 0.9)
+  } else if (isFailed) {
+    doc.setFillColor(225, 29, 72)
+    doc.roundedRect(x, y, w, h, 0.8, 0.8, "F")
+    doc.setDrawColor(255, 255, 255)
+    doc.setLineWidth(0.5)
+    doc.line(x + 1.0, y + 1.0, x + 2.6, y + 2.6)
+    doc.line(x + 2.6, y + 1.0, x + 1.0, y + 2.6)
+  } else if (isInProgress) {
+    doc.setFillColor(217, 119, 6)
+    doc.roundedRect(x, y, w, h, 0.8, 0.8, "F")
+    doc.setDrawColor(255, 255, 255)
+    doc.setLineWidth(0.4)
+    doc.line(x + 0.9, y + 0.9, x + 2.7, y + 0.9)
+    doc.line(x + 0.9, y + 2.7, x + 2.7, y + 2.7)
+    doc.line(x + 0.9, y + 0.9, x + 2.7, y + 2.7)
+    doc.line(x + 2.7, y + 0.9, x + 0.9, y + 2.7)
+  } else {
+    doc.setFillColor(241, 245, 249)
+    doc.setDrawColor(203, 213, 225)
+    doc.roundedRect(x, y, w, h, 0.8, 0.8, "FD")
+    doc.setDrawColor(148, 163, 184)
+    doc.setLineWidth(0.4)
+    doc.line(x + 1.1, y + 1.1, x + 2.5, y + 2.5)
+    doc.line(x + 2.5, y + 1.1, x + 1.1, y + 2.5)
+  }
+}
+
 function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
   const rows = (block && Array.isArray(block.rows)) ? block.rows : []
   if (!rows.length) return
 
-  const boxSize = 3.8
+  const badgeW = 3.6
+  const badgeH = 3.6
   const gap = 2.5
+  const notesW = 35.0
+
+  // Col 2 Label fills maximum space so Col 3 Notes goes all the way to the far page margin
+  const labelW = flow.width - badgeW - gap - notesW - gap
 
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i]
     if (!row.length) continue
 
-    const labelText = row.length >= 3 ? row[1] : row[0]
-    const statusText = row.length >= 3 ? row[2] : (row[1] || "")
-    const isChecked = Boolean(
-      statusText && (
-        statusText.toLowerCase().includes("complete") ||
-        statusText.includes("مكتمل") ||
-        statusText.includes("مكتملة") ||
-        statusText.includes("تم")
-      )
-    )
+    const labelText = row.length >= 2 ? row[1] : row[0]
+    const resultText = row.length >= 3 ? row[2] : (row[1] || "")
+    const notesText = row.length >= 4 ? row[3] : ""
 
-    const textAvailable = flow.width - boxSize - gap - 2
-    setLanguage(flow.doc, flow.rtl, 8.5, false)
-    const lines = textLines(flow.doc, labelText, textAvailable)
-    const lineH = 4.2
-    const itemH = Math.max(6, lines.length * lineH + 2.5)
+    const isPassed = resultText === "pass" || resultText.toLowerCase().includes("complete") || resultText.includes("مكتمل") || resultText.includes("تم")
+    const isFailed = resultText === "fail" || resultText.includes("غير مطابق")
+    const isInProgress = resultText === "in_progress" || resultText.includes("قيد التنفيذ")
+
+    setLanguage(flow.doc, flow.rtl, 7.8, false)
+    const labelLines = textLines(flow.doc, labelText, labelW)
+
+    setLanguage(flow.doc, flow.rtl, 7.2, false)
+    const notesLines = notesText ? textLines(flow.doc, notesText, notesW) : []
+
+    const lineH = 3.6
+    const maxTextLines = Math.max(labelLines.length, notesLines.length, 1)
+    const itemH = Math.max(6, maxTextLines * lineH + 2.5)
 
     ensureSpace(flow, itemH)
 
-    const boxY = flow.y + 0.6
+    const badgeY = flow.y + 0.4
 
     if (flow.rtl) {
-      const boxX = flow.x + flow.width - boxSize
-      const textX = boxX - gap
+      const badgeX = flow.x + flow.width - badgeW
+      const labelX = badgeX - gap
+      const notesX = flow.x
 
-      if (isChecked) {
-        flow.doc.setFillColor(22, 163, 74)
-        flow.doc.roundedRect(boxX, boxY, boxSize, boxSize, 0.6, 0.6, "F")
-        setLanguage(flow.doc, false, 6.5, true)
-        flow.doc.setTextColor(255, 255, 255)
-        flow.doc.text("v", boxX + 1.1, boxY + 2.8, { align: "left" })
-      } else {
-        flow.doc.setDrawColor(203, 213, 225)
-        flow.doc.setFillColor(255, 255, 255)
-        flow.doc.roundedRect(boxX, boxY, boxSize, boxSize, 0.6, 0.6, "FD")
+      // Draw Badge Icon in vector (3.6mm)
+      drawChecklistVectorBadge(flow.doc, badgeX, badgeY, badgeW, badgeH, isPassed, isFailed, isInProgress)
+
+      // Draw Label (Col 2)
+      setLanguage(flow.doc, true, 7.8, false)
+      flow.doc.setTextColor(30, 41, 59)
+      writePdfText(flow.doc, labelLines, labelX, flow.y + 2.8, { align: "right", lineHeightFactor: 1.15 }, true)
+
+      // Draw Notes (Col 3 - Far left margin in RTL)
+      if (notesLines.length > 0) {
+        setLanguage(flow.doc, true, 7.2, false)
+        flow.doc.setTextColor(148, 163, 184)
+        writePdfText(flow.doc, notesLines, notesX, flow.y + 2.8, { align: "left", lineHeightFactor: 1.15 }, true)
       }
-
-      setLanguage(flow.doc, true, 8.5, false)
-      flow.doc.setTextColor(15, 23, 42)
-      writePdfText(flow.doc, lines, textX, flow.y + 3, { align: "right", lineHeightFactor: 1.15 }, true)
     } else {
-      const boxX = flow.x
-      const textX = boxX + boxSize + gap
+      const badgeX = flow.x
+      const labelX = badgeX + badgeW + gap
+      const notesX = flow.x + flow.width
 
-      if (isChecked) {
-        flow.doc.setFillColor(22, 163, 74)
-        flow.doc.roundedRect(boxX, boxY, boxSize, boxSize, 0.6, 0.6, "F")
-        setLanguage(flow.doc, false, 6.5, true)
-        flow.doc.setTextColor(255, 255, 255)
-        flow.doc.text("v", boxX + 1.1, boxY + 2.8, { align: "left" })
-      } else {
-        flow.doc.setDrawColor(203, 213, 225)
-        flow.doc.setFillColor(255, 255, 255)
-        flow.doc.roundedRect(boxX, boxY, boxSize, boxSize, 0.6, 0.6, "FD")
+      // Draw Badge Icon in vector (3.6mm)
+      drawChecklistVectorBadge(flow.doc, badgeX, badgeY, badgeW, badgeH, isPassed, isFailed, isInProgress)
+
+      // Draw Label (Col 2)
+      setLanguage(flow.doc, false, 7.8, false)
+      flow.doc.setTextColor(30, 41, 59)
+      writePdfText(flow.doc, labelLines, labelX, flow.y + 2.8, { align: "left", lineHeightFactor: 1.15 }, false)
+
+      // Draw Notes (Col 3 - Far right margin in LTR)
+      if (notesLines.length > 0) {
+        setLanguage(flow.doc, false, 7.2, false)
+        flow.doc.setTextColor(148, 163, 184)
+        writePdfText(flow.doc, notesLines, notesX, flow.y + 2.8, { align: "right", lineHeightFactor: 1.15 }, false)
       }
-
-      setLanguage(flow.doc, false, 8.5, false)
-      flow.doc.setTextColor(15, 23, 42)
-      writePdfText(flow.doc, lines, textX, flow.y + 3, { align: "left", lineHeightFactor: 1.15 }, false)
     }
 
     flow.y += itemH
     flow.doc.setDrawColor(241, 245, 249)
-    flow.doc.line(flow.x, flow.y - 0.5, flow.x + flow.width, flow.y - 0.5)
+    flow.doc.setLineWidth(0.1)
+    flow.doc.line(flow.x, flow.y - 0.4, flow.x + flow.width, flow.y - 0.4)
   }
   flow.y += 2
 }
@@ -2428,13 +2657,18 @@ async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
   }
   drawFirstPageHeader(flow)
   for (const section of template.sections) {
-    // Skip redundant Project Information table since the 8 metadata cards at top already present this data
-    const isProjectInfoSection = section.key === "projectInformation"
+    // Skip redundant Project Information & Report Details tables since the executive metadata card at top presents this data
+    const titleLower = section.title.toLowerCase()
+    const isRedundantSection = section.key === "projectInformation"
       || section.key === "project-info"
-      || section.title.toLowerCase().includes("project information")
+      || section.key === "reportDetails"
+      || section.key === "report-details"
+      || titleLower.includes("project information")
+      || titleLower.includes("report details")
       || section.title.includes("معلومات المشروع")
+      || section.title.includes("تفاصيل التقرير")
 
-    if (isProjectInfoSection) {
+    if (isRedundantSection) {
       continue
     }
 
@@ -2833,30 +3067,114 @@ function bilingualRowAppearance(style: BilingualRowStyle, alternate: boolean) {
 }
 
 function drawBilingualColumnHeader(flow: Flow) {
-  const appearance = bilingualRowAppearance("column-header", false)
-  const width = flow.width / 2
-  const height = appearance.minHeight
-  const { doc } = flow
-
-  doc.setFillColor(...appearance.fill)
-  doc.rect(flow.x, flow.y, flow.width, height, "F")
-  doc.setDrawColor(...appearance.border)
-  doc.rect(flow.x, flow.y, flow.width, height)
-  doc.line(flow.x + width, flow.y, flow.x + width, flow.y + height)
-
-  setLanguage(doc, false, appearance.fontSize, appearance.bold)
-  doc.setTextColor(...appearance.text)
-  doc.text("English", flow.x + appearance.padding, flow.y + 5.8, { align: "left" })
-
-  setLanguage(doc, true, appearance.fontSize, appearance.bold)
-  doc.setTextColor(...appearance.text)
-  writePdfText(doc, "العربية", flow.x + flow.width - appearance.padding, flow.y + 5.8, { align: "right" }, true)
-  flow.y += height
+  // User requested to remove blue column headers completely
+  return
 }
 
 function addBilingualContinuationPage(flow: Flow) {
   addFlowPage(flow)
-  drawBilingualColumnHeader(flow)
+}
+
+function renderBilingualChecklist(
+  flow: Flow,
+  engSection: PdfSectionTemplate,
+  arSection?: PdfSectionTemplate,
+) {
+  const engRows = engSection.table?.rows ?? []
+  const arRows = arSection?.table?.rows ?? []
+  if (!engRows.length) return
+
+  const gap = 8
+  const halfW = (flow.width - gap) / 2
+  const badgeW = 3.6
+  const badgeH = 3.6
+  const innerGap = 2.0
+  const notesW = 18.0
+  const labelW = halfW - badgeW - innerGap - notesW - innerGap
+
+  const engX = flow.x
+  const arX = flow.x + halfW + gap
+
+  for (let i = 0; i < engRows.length; i += 1) {
+    const engRow = engRows[i]
+    if (!engRow.length) continue
+
+    const arRow = arRows[i]
+
+    // English data
+    const engLabel = engRow.length >= 2 ? engRow[1] : engRow[0]
+    const resultText = engRow.length >= 3 ? engRow[2] : (engRow[1] || "")
+    const engNotes = engRow.length >= 4 ? engRow[3] : ""
+
+    // Arabic data
+    const arLabel = arRow ? (arRow.length >= 2 ? arRow[1] : arRow[0]) : engLabel
+    const arNotes = arRow ? (arRow.length >= 4 ? arRow[3] : "") : engNotes
+
+    const isPassed = resultText === "pass" || resultText.toLowerCase().includes("complete") || resultText.includes("مكتمل") || resultText.includes("تم")
+    const isFailed = resultText === "fail" || resultText.includes("غير مطابق")
+    const isInProgress = resultText === "in_progress" || resultText.includes("قيد التنفيذ")
+
+    setLanguage(flow.doc, false, 7.8, false)
+    const engLabelLines = textLines(flow.doc, engLabel, labelW)
+
+    setLanguage(flow.doc, true, 7.8, false)
+    const arLabelLines = textLines(flow.doc, arLabel, labelW)
+
+    setLanguage(flow.doc, false, 7.2, false)
+    const engNotesLines = engNotes ? textLines(flow.doc, engNotes, notesW) : []
+
+    setLanguage(flow.doc, true, 7.2, false)
+    const arNotesLines = arNotes ? textLines(flow.doc, arNotes, notesW) : []
+
+    const lineH = 3.6
+    const engMaxLines = Math.max(engLabelLines.length, engNotesLines.length, 1)
+    const arMaxLines = Math.max(arLabelLines.length, arNotesLines.length, 1)
+    const itemH = Math.max(6, Math.max(engMaxLines, arMaxLines) * lineH + 2.5)
+
+    ensureSpace(flow, itemH)
+
+    const badgeY = flow.y + 0.4
+
+    // ── LEFT COLUMN: ENGLISH ──
+    const engBadgeX = engX
+    const engLabelX = engBadgeX + badgeW + innerGap
+    const engNotesX = engX + halfW
+
+    drawChecklistVectorBadge(flow.doc, engBadgeX, badgeY, badgeW, badgeH, isPassed, isFailed, isInProgress)
+
+    setLanguage(flow.doc, false, 7.8, false)
+    flow.doc.setTextColor(30, 41, 59)
+    writePdfText(flow.doc, engLabelLines, engLabelX, flow.y + 2.8, { align: "left", lineHeightFactor: 1.15 }, false)
+
+    if (engNotesLines.length > 0) {
+      setLanguage(flow.doc, false, 7.2, false)
+      flow.doc.setTextColor(148, 163, 184)
+      writePdfText(flow.doc, engNotesLines, engNotesX, flow.y + 2.8, { align: "right", lineHeightFactor: 1.15 }, false)
+    }
+
+    // ── RIGHT COLUMN: ARABIC ──
+    const arBadgeX = arX + halfW - badgeW
+    const arLabelX = arBadgeX - innerGap
+    const arNotesX = arX
+
+    drawChecklistVectorBadge(flow.doc, arBadgeX, badgeY, badgeW, badgeH, isPassed, isFailed, isInProgress)
+
+    setLanguage(flow.doc, true, 7.8, false)
+    flow.doc.setTextColor(30, 41, 59)
+    writePdfText(flow.doc, arLabelLines, arLabelX, flow.y + 2.8, { align: "right", lineHeightFactor: 1.15 }, true)
+
+    if (arNotesLines.length > 0) {
+      setLanguage(flow.doc, true, 7.2, false)
+      flow.doc.setTextColor(148, 163, 184)
+      writePdfText(flow.doc, arNotesLines, arNotesX, flow.y + 2.8, { align: "left", lineHeightFactor: 1.15 }, true)
+    }
+
+    flow.y += itemH
+    flow.doc.setDrawColor(241, 245, 249)
+    flow.doc.setLineWidth(0.1)
+    flow.doc.line(flow.x, flow.y - 0.4, flow.x + flow.width, flow.y - 0.4)
+  }
+  flow.y += 2
 }
 
 function renderBilingualTextRow(
@@ -2866,88 +3184,215 @@ function renderBilingualTextRow(
   options: BilingualRowOptions = {},
 ) {
   const style = options.style ?? "body"
-  const appearance = bilingualRowAppearance(style, Boolean(options.alternate))
-  const columnWidth = flow.width / 2
-  const contentWidth = columnWidth - appearance.padding * 2
-  const englishLines = bilingualCellLines(flow.doc, englishText, contentWidth, false, appearance.fontSize, appearance.bold)
-  const arabicLines = bilingualCellLines(flow.doc, arabicText, contentWidth, true, appearance.fontSize, appearance.bold)
+  const { doc } = flow
 
-  let englishOffset = 0
-  let arabicOffset = 0
-  let firstSegment = true
+  // 1. SECTION HEADERS: Clean header with blue accent boxes on outer edges
+  if (style === "section") {
+    ensureSpace(flow, 16)
+    flow.y += 4
 
-  do {
-    if (flow.y + appearance.minHeight > flow.bottom) addBilingualContinuationPage(flow)
+    const iconSize = 3.5
+    const engStr = (englishText || "").trim()
+    const arStr = (arabicText || "").trim()
 
-    const availableHeight = Math.max(appearance.minHeight, flow.bottom - flow.y)
-    const availableLineCount = Math.max(
-      1,
-      Math.floor((availableHeight - appearance.padding * 2) / appearance.lineHeight),
-    )
-    const englishRemaining = Math.max(0, englishLines.length - englishOffset)
-    const arabicRemaining = Math.max(0, arabicLines.length - arabicOffset)
-    const remainingLineCount = Math.max(englishRemaining, arabicRemaining, 1)
-    const segmentLineCount = Math.min(remainingLineCount, availableLineCount)
-    const englishSegment = englishLines.slice(englishOffset, englishOffset + segmentLineCount)
-    const arabicSegment = arabicLines.slice(arabicOffset, arabicOffset + segmentLineCount)
-    const rowHeight = Math.max(
+    // English Header on Left
+    if (engStr) {
+      doc.setFillColor(37, 99, 235)
+      doc.rect(flow.x, flow.y - 2.8, iconSize, iconSize, "F")
+      setLanguage(doc, false, 11, true)
+      doc.setTextColor(15, 23, 42)
+      writePdfText(doc, engStr, flow.x + iconSize + 2.5, flow.y, { align: "left" }, false)
+    }
+
+    // Arabic Header on Right
+    if (arStr) {
+      const arRightX = flow.x + flow.width
+      doc.setFillColor(37, 99, 235)
+      doc.rect(arRightX - iconSize, flow.y - 2.8, iconSize, iconSize, "F")
+      setLanguage(doc, true, 11, true)
+      doc.setTextColor(15, 23, 42)
+      writePdfText(doc, arStr, arRightX - iconSize - 2.5, flow.y, { align: "right" }, true)
+    }
+
+    // Thin light horizontal divider line below section header
+    flow.y += 3.5
+    doc.setDrawColor(226, 232, 240)
+    doc.setLineWidth(0.2)
+    doc.line(flow.x, flow.y, flow.x + flow.width, flow.y)
+    flow.y += 5
+    return
+  }
+
+  // 2. HEADING (e.g. subheadings inside section)
+  if (style === "heading") {
+    ensureSpace(flow, 12)
+    const gap = 6
+    const colW = (flow.width - gap) / 2
+    const engLines = bilingualCellLines(doc, englishText, colW, false, 9.5, true)
+    const arLines = bilingualCellLines(doc, arabicText, colW, true, 9.5, true)
+    const rowH = Math.max(engLines.length, arLines.length, 1) * 4.2
+
+    if (engLines.length) {
+      setLanguage(doc, false, 9.5, true)
+      doc.setTextColor(30, 41, 59)
+      writePdfText(doc, engLines, flow.x, flow.y + 3, { align: "left", lineHeightFactor: 1.15 }, false)
+    }
+    if (arLines.length) {
+      setLanguage(doc, true, 9.5, true)
+      doc.setTextColor(30, 41, 59)
+      writePdfText(doc, arLines, flow.x + flow.width, flow.y + 3, { align: "right", lineHeightFactor: 1.15 }, true)
+    }
+    flow.y += rowH + 3
+    return
+  }
+
+  // 3. TABLE ROWS (Actual tables like approval or structured table cells)
+  if (style === "table-header" || style === "table-cell") {
+    const appearance = bilingualRowAppearance(style, Boolean(options.alternate))
+    const columnWidth = flow.width / 2
+    const contentWidth = columnWidth - appearance.padding * 2
+    const englishLines = bilingualCellLines(doc, englishText, contentWidth, false, appearance.fontSize, appearance.bold)
+    const arabicLines = bilingualCellLines(doc, arabicText, contentWidth, true, appearance.fontSize, appearance.bold)
+
+    const rowH = Math.max(
       appearance.minHeight,
-      segmentLineCount * appearance.lineHeight + appearance.padding * 2,
+      Math.max(englishLines.length, arabicLines.length, 1) * appearance.lineHeight + appearance.padding * 2,
     )
-    const rowY = flow.y
-    const { doc } = flow
+    if (flow.y + rowH > flow.bottom) addBilingualContinuationPage(flow)
 
     doc.setFillColor(...appearance.fill)
-    doc.rect(flow.x, rowY, flow.width, rowHeight, "F")
+    doc.rect(flow.x, flow.y, flow.width, rowH, "F")
     doc.setDrawColor(...appearance.border)
-    doc.setLineWidth(style === "section" ? 0.35 : 0.18)
-    doc.rect(flow.x, rowY, flow.width, rowHeight)
-    doc.line(flow.x + columnWidth, rowY, flow.x + columnWidth, rowY + rowHeight)
+    doc.setLineWidth(0.18)
+    doc.rect(flow.x, flow.y, flow.width, rowH)
+    doc.line(flow.x + columnWidth, flow.y, flow.x + columnWidth, flow.y + rowH)
 
-    if (englishSegment.length) {
+    if (englishLines.length) {
       setLanguage(doc, false, appearance.fontSize, appearance.bold)
       doc.setTextColor(...appearance.text)
-      writePdfText(
-        doc,
-        englishSegment,
-        flow.x + appearance.padding,
-        rowY + appearance.padding + appearance.lineHeight * 0.78,
-        { align: "left", lineHeightFactor: 1.15 },
-        false,
-      )
+      writePdfText(doc, englishLines, flow.x + appearance.padding, flow.y + appearance.padding + 3, { align: "left", lineHeightFactor: 1.15 }, false)
     }
-
-    if (arabicSegment.length) {
+    if (arabicLines.length) {
       setLanguage(doc, true, appearance.fontSize, appearance.bold)
       doc.setTextColor(...appearance.text)
-      writePdfText(
-        doc,
-        arabicSegment,
-        flow.x + flow.width - appearance.padding,
-        rowY + appearance.padding + appearance.lineHeight * 0.78,
-        { align: "right", lineHeightFactor: 1.15 },
-        true,
-      )
+      writePdfText(doc, arabicLines, flow.x + flow.width - appearance.padding, flow.y + appearance.padding + 3, { align: "right", lineHeightFactor: 1.15 }, true)
+    }
+    flow.y += rowH
+    return
+  }
+
+  // 4. BODY PARAGRAPHS (Borderless, clean side-by-side text block matching image 1:1)
+  const gap = 8
+  const colW = (flow.width - gap) / 2
+  const engLines = bilingualCellLines(doc, englishText, colW, false, 8.5, false)
+  const arLines = bilingualCellLines(doc, arabicText, colW, true, 8.5, false)
+
+  let engOffset = 0
+  let arOffset = 0
+
+  do {
+    if (flow.y + 8 > flow.bottom) addBilingualContinuationPage(flow)
+
+    const availH = flow.bottom - flow.y
+    const lineH = 3.6
+    const maxAvailLines = Math.max(1, Math.floor(availH / lineH))
+
+    const engRem = Math.max(0, engLines.length - engOffset)
+    const arRem = Math.max(0, arLines.length - arOffset)
+    const segLines = Math.min(Math.max(engRem, arRem, 1), maxAvailLines)
+
+    const engSeg = engLines.slice(engOffset, engOffset + segLines)
+    const arSeg = arLines.slice(arOffset, arOffset + segLines)
+
+    const segH = segLines * lineH
+
+    if (engSeg.length) {
+      setLanguage(doc, false, 8.5, false)
+      doc.setTextColor(51, 65, 85)
+      writePdfText(doc, engSeg, flow.x, flow.y + 2.8, { align: "left", lineHeightFactor: 1.05 }, false)
     }
 
-    flow.y += rowHeight
-    englishOffset += segmentLineCount
-    arabicOffset += segmentLineCount
-    firstSegment = false
+    if (arSeg.length) {
+      setLanguage(doc, true, 8.5, false)
+      doc.setTextColor(51, 65, 85)
+      writePdfText(doc, arSeg, flow.x + flow.width, flow.y + 2.8, { align: "right", lineHeightFactor: 1.05 }, true)
+    }
 
-    const hasMore = englishOffset < englishLines.length || arabicOffset < arabicLines.length
-    if (hasMore) addBilingualContinuationPage(flow)
-  } while (
-    firstSegment
-    || englishOffset < englishLines.length
-    || arabicOffset < arabicLines.length
-  )
+    flow.y += segH
+    engOffset += segLines
+    arOffset += segLines
 
-  if (options.groupEnd) {
-    flow.doc.setDrawColor(148, 163, 184)
-    flow.doc.setLineWidth(0.35)
-    flow.doc.line(flow.x, flow.y, flow.x + flow.width, flow.y)
-    flow.doc.setLineWidth(0.2)
+    if (engOffset < engLines.length || arOffset < arLines.length) {
+      addBilingualContinuationPage(flow)
+    }
+  } while (engOffset < engLines.length || arOffset < arLines.length)
+
+  // Compact paragraph gap below body text
+  flow.y += 2.5
+}
+
+async function renderBilingualImageGrid(
+  flow: Flow,
+  images: PdfImageTemplate[],
+  arabicImages: PdfImageTemplate[] = [],
+) {
+  if (!images.length) return
+
+  const gap = 4
+  const colWidth = (flow.width - gap) / 2
+  const maxImgH = 68
+
+  for (let i = 0; i < images.length; i += 2) {
+    const pair = images.slice(i, i + 2)
+    const arPair = arabicImages.slice(i, i + 2)
+    const loadedPair = await Promise.all(pair.map((img) => loadImage(img.src)))
+
+    let rowH = 0
+    const dimensions = loadedPair.map((img, idx) => {
+      if (!img) return { w: colWidth, h: 40 }
+      const ratio = Math.min(colWidth / img.width, maxImgH / img.height)
+      const w = img.width * ratio
+      const h = img.height * ratio
+      rowH = Math.max(rowH, h + (pair[idx].caption || arPair[idx]?.caption ? 8 : 0) + 3)
+      return { w, h }
+    })
+
+    ensureSpace(flow, rowH + 4)
+
+    for (let idx = 0; idx < pair.length; idx += 1) {
+      const img = loadedPair[idx]
+      const engBlock = pair[idx]
+      const arBlock = arPair[idx]
+      const dim = dimensions[idx]
+      const x = flow.x + idx * (colWidth + gap)
+
+      if (!img) {
+        renderBilingualTextRow(flow, engBlock.caption || "Image unavailable.", arBlock?.caption || "", { style: "body" })
+        continue
+      }
+
+      flow.doc.setDrawColor(226, 232, 240)
+      flow.doc.rect(x - 0.5, flow.y - 0.5, dim.w + 1, dim.h + 1)
+      flow.doc.addImage(img.dataUrl, "JPEG", x, flow.y, dim.w, dim.h, undefined, "FAST")
+
+      if (engBlock.caption || arBlock?.caption) {
+        const engCap = engBlock.caption || ""
+        const arCap = arBlock?.caption || ""
+        const capLinesEng = textLines(flow.doc, engCap, dim.w)
+
+        setLanguage(flow.doc, false, 7.2, false)
+        flow.doc.setTextColor(100, 116, 139)
+        writePdfText(flow.doc, capLinesEng, x, flow.y + dim.h + 2.5, { align: "left", lineHeightFactor: 1.1 }, false)
+
+        if (arCap) {
+          const capLinesAr = textLines(flow.doc, arCap, dim.w)
+          setLanguage(flow.doc, true, 7.2, false)
+          flow.doc.setTextColor(100, 116, 139)
+          writePdfText(flow.doc, capLinesAr, x + dim.w, flow.y + dim.h + 2.5, { align: "right", lineHeightFactor: 1.1 }, true)
+        }
+      }
+    }
+    flow.y += rowH + 4
   }
 }
 
@@ -3146,18 +3591,38 @@ async function buildNativeBilingualPdfBlob(input: {
   }
 
   drawFirstPageHeader(flow)
-  drawBilingualColumnHeader(flow)
 
   const engSections = englishTemplate.sections
   const arSections = arabicTemplate.sections
   const arSectionMap = new Map(arSections.map((s) => [s.key, s]))
 
   for (const engSection of engSections) {
-    if (engSection.key === "projectInformation" || engSection.key === "project-info") {
-      continue // Skip redundant top project info table
+    const engTitleLower = engSection.title.toLowerCase()
+    if (
+      engSection.key === "projectInformation" ||
+      engSection.key === "project-info" ||
+      engSection.key === "reportDetails" ||
+      engSection.key === "report-details" ||
+      engTitleLower.includes("project information") ||
+      engTitleLower.includes("report details")
+    ) {
+      continue // Skip redundant top project info & report details table
     }
 
     const arSection = arSectionMap.get(engSection.key)
+
+    if (
+      engSection.key === "checklist" ||
+      engTitleLower.includes("checklist") ||
+      engTitleLower.includes("فحص")
+    ) {
+      if (flow.y + 11 > flow.bottom) addBilingualContinuationPage(flow)
+      flow.y += 3
+      renderBilingualTextRow(flow, engSection.title, arSection?.title || "", { style: "section" })
+      renderBilingualChecklist(flow, engSection, arSection)
+      flow.y += 4
+      continue
+    }
 
     const engBlocks = sectionContentBlocks(engSection)
     const arBlocks = arSection ? sectionContentBlocks(arSection) : []
@@ -3186,15 +3651,7 @@ async function buildNativeBilingualPdfBlob(input: {
 
     if (galleryImages.length) {
       renderBilingualTextRow(flow, engSection.imageTitle || "Images", arSection?.imageTitle || "", { style: "heading" })
-      for (let index = 0; index < galleryImages.length; index += 1) {
-        await renderBilingualImagePair(
-          flow,
-          imageTemplateBlock(galleryImages[index]) as Extract<PdfBlock, { type: "image" }>,
-          arabicGalleryImages[index]
-            ? imageTemplateBlock(arabicGalleryImages[index]) as Extract<PdfBlock, { type: "image" }>
-            : undefined,
-        )
-      }
+      await renderBilingualImageGrid(flow, galleryImages, arabicGalleryImages)
     }
 
     flow.y += 4
@@ -3414,7 +3871,7 @@ export async function exportTranslationPdf({
     }
   }
 
-  const rawEnglishTemplate = buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument, ccRecipients: ccMetadata })
+  const rawEnglishTemplate = buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument, ccRecipientsList: ccRecipients, ccRecipients: ccMetadata })
   // Static company/footer lines are already drawn by the fixed PDF footer.
   // Remove them from attachment body content in both languages before the
   // English structure becomes the canonical mirrored document schema.
@@ -3429,7 +3886,7 @@ export async function exportTranslationPdf({
   }
 
   if (!translation?.translatedContent) throw new Error("Generate the Arabic translation before exporting PDFs.")
-  const rawArabicTemplate = buildLanguagePdfTemplate({ data, translation, language: "ar", sourceDocument, ccRecipients: ccMetadata })
+  const rawArabicTemplate = buildLanguagePdfTemplate({ data, translation, language: "ar", sourceDocument, ccRecipientsList: ccRecipients, ccRecipients: ccMetadata })
   const footerCleanArabicTemplate = stripStaticFooterFromDocumentTemplate(rawArabicTemplate, sourceDocument)
   const arabicTemplate = synchronizeMirroredDocumentStructures(englishTemplate, footerCleanArabicTemplate)
   validateTemplateAssets(arabicTemplate, sourceDocument)

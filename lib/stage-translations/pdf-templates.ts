@@ -105,6 +105,17 @@ export type PreservedSourceLayout = {
   pages: ExtractedPdfPage[]
 }
 
+import type { ReportCcRecipient } from "@/lib/report-cc/types"
+
+export type PdfRecipientInfo = {
+  id?: string
+  name: string
+  role?: string | null
+  company?: string | null
+  email?: string | null
+  type?: "internal" | "external"
+}
+
 export type LanguagePdfTemplate = {
   language: "en" | "ar"
   direction: "ltr" | "rtl"
@@ -117,10 +128,13 @@ export type LanguagePdfTemplate = {
   reportNumber: string
   visitNumber: string
   createdAt: string
+  creatorName: string
   status: string
   reportType: string
   subject: string
-  ccRecipients: string[]
+  reportToRecipients: PdfRecipientInfo[]
+  ccRecipients: PdfRecipientInfo[]
+  rawCcStrings?: string[]
   generatedAt: string | null
   sections: PdfSectionTemplate[]
   sourceLayout?: PreservedSourceLayout | null
@@ -139,7 +153,7 @@ export type BilingualSourceImage = {
 
 const SECTION_LABELS: Array<{ key: TranslationSectionKey; en: string; ar: string }> = [
   { key: "feedback", en: "Feedback", ar: "الملاحظات العامة" },
-  { key: "observation", en: "Observation", ar: "المعاينة" },
+  { key: "observation", en: "Observations", ar: "الملاحظات والمعاينة" },
   { key: "findings", en: "Findings", ar: "النتائج" },
   { key: "recommendations", en: "Recommendations", ar: "التوصيات" },
   { key: "correctiveActions", en: "Corrective Actions", ar: "الإجراءات التصحيحية" },
@@ -260,7 +274,11 @@ function reportDetailsSection(
   }
 }
 
-function checklistSection(content: TranslationReportContent, language: "en" | "ar"): PdfSectionTemplate {
+function checklistSection(
+  content: TranslationReportContent,
+  language: "en" | "ar",
+  englishContent?: TranslationReportContent | null,
+): PdfSectionTemplate {
   const labels = LABELS[language]
   if (!content?.checklist || !content.checklist.length) {
     return { key: "checklist", title: labels.checklist, html: "" }
@@ -269,12 +287,17 @@ function checklistSection(content: TranslationReportContent, language: "en" | "a
     key: "checklist",
     title: labels.checklist,
     table: {
-      headers: ["#", labels.item, labels.state],
-      rows: content.checklist.map((item, index) => [
-        String(index + 1),
-        item.notes ? `${item.label}\n${item.notes}` : item.label,
-        item.checked ? labels.checked : labels.unchecked,
-      ]),
+      headers: ["#", labels.item, labels.state, language === "ar" ? "الملاحظات" : "Notes"],
+      rows: content.checklist.map((item, index) => {
+        const enItem = englishContent?.checklist?.[index]
+        const result = enItem?.result || item.result || (enItem?.checked ?? item.checked ? "pass" : "pending")
+        return [
+          String(index + 1),
+          item.label,
+          result,
+          item.notes || "",
+        ]
+      }),
     },
   }
 }
@@ -591,21 +614,50 @@ export function buildLanguagePdfTemplate(input: {
   translation: StageTranslationRecord | null
   language: "en" | "ar"
   sourceDocument?: ExtractedSourceDocument | null
+  ccRecipientsList?: ReportCcRecipient[]
   ccRecipients?: string[]
 }): LanguagePdfTemplate {
-  const { data, translation, language, sourceDocument } = input
+  const { data, translation, language, sourceDocument, ccRecipientsList = [] } = input
   const content = language === "ar"
     ? translation?.translatedContent
     : translation?.originalContent ?? data.response.content
   if (!content) throw new Error("Generate the Arabic translation before exporting the Arabic PDF.")
 
-  // The UI and PDF both consume the complete structured TranslationReportContent
-  // object. Source-PDF extraction enriches that model with tables and images; it
-  // never replaces the report with a partial coordinate-only reconstruction.
+  const reportToRecipients: PdfRecipientInfo[] = ccRecipientsList.slice(0, 1).map((r) => ({
+    id: r.id,
+    name: r.name,
+    role: r.role,
+    company: r.company,
+    email: r.email,
+    type: r.type,
+  }))
+
+  const ccRecipients: PdfRecipientInfo[] = ccRecipientsList.slice(1).map((r) => ({
+    id: r.id,
+    name: r.name,
+    role: r.role,
+    company: r.company,
+    email: r.email,
+    type: r.type,
+  }))
+
+  // If raw ccRecipients strings were provided (fallback), parse them
+  if (!reportToRecipients.length && !ccRecipients.length && input.ccRecipients?.length) {
+    input.ccRecipients.forEach((str, i) => {
+      const parts = str.split("\n").map((s) => s.trim()).filter(Boolean)
+      const name = parts[0] || "—"
+      const details = parts.slice(1).join(" · ")
+      const info: PdfRecipientInfo = { name, company: details }
+      if (i === 0) reportToRecipients.push(info)
+      else ccRecipients.push(info)
+    })
+  }
+
+  const englishContent = translation?.originalContent ?? data.response.content
   const sections: PdfSectionTemplate[] = [
     projectInformationSection(data, content, language),
     reportDetailsSection(data, content, language),
-    checklistSection(content, language),
+    checklistSection(content, language, englishContent),
     ...SECTION_LABELS.map((section) => ({
       key: section.key,
       title: language === "ar" ? section.ar : section.en,
@@ -629,10 +681,15 @@ export function buildLanguagePdfTemplate(input: {
     reportNumber: data.response.reportNumber,
     visitNumber: String(data.response.visitNumber),
     createdAt: data.response.createdAt,
+    creatorName: typeof (data.response as any).createdBy === "string"
+      ? (data.response as any).createdBy
+      : data.response.createdBy?.name || "—",
     status: data.response.status,
     reportType: content.reportType || data.response.reportType,
     subject: content.subject || data.response.subject || "—",
-    ccRecipients: input.ccRecipients ?? [],
+    reportToRecipients,
+    ccRecipients,
+    rawCcStrings: input.ccRecipients ?? [],
     generatedAt: language === "ar" ? translation?.generatedAt ?? null : null,
     sections,
     sourceLayout: null,

@@ -14,6 +14,7 @@ export type TranslationChecklistItem = {
   id: string
   label: string
   checked: boolean
+  result?: "pass" | "fail" | "na" | "in_progress" | string
   notes: string
 }
 
@@ -71,6 +72,7 @@ export type StageTranslationPageData = {
     createdAt: string
     updatedAt: string
     content: TranslationReportContent
+    createdBy?: { id?: string; name: string; email?: string | null } | null
     attachments: ProjectStageAttachment[]
   }
   translation: StageTranslationRecord | null
