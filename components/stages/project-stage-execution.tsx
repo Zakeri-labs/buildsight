@@ -16,7 +16,7 @@ import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ManageProjectStagesButton } from "@/components/stages/project-stage-admin-controls"
 import type { ProjectStageExecutionData } from "@/lib/db/project-stages"
-import { statusLabel, statusTone } from "@/lib/stages/execution"
+import { getFallbackStageChecklist, statusLabel, statusTone } from "@/lib/stages/execution"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
 
@@ -54,35 +54,72 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
   const copy = COPY[language]
   const [openStages, setOpenStages] = useState<Set<string>>(() => new Set(data.stages.slice(0, 2).map((stage) => stage.id)))
 
+  const stageStats = useMemo(() => {
+    return data.stages.map((stage) => {
+      const stageReportsMap = new Map<string, any>()
+      for (const term of stage.terms ?? []) {
+        const responses = term.responses ?? (term.response ? [term.response] : [])
+        for (const resp of responses) {
+          if (!stageReportsMap.has(resp.id)) {
+            stageReportsMap.set(resp.id, resp)
+          }
+        }
+      }
+      for (const report of stage.reports ?? []) {
+        if (!stageReportsMap.has(report.id)) {
+          stageReportsMap.set(report.id, report)
+        }
+      }
+      const stageReports = Array.from(stageReportsMap.values())
+
+      let reportChecklistTotal = 0
+      let stageCheckedCheckboxes = 0
+
+      for (const report of stageReports) {
+        const checklist = report.content?.checklist ?? []
+        for (const item of checklist) {
+          reportChecklistTotal++
+          if (item.checked || item.result === "pass") {
+            stageCheckedCheckboxes++
+          }
+        }
+      }
+
+      let stageTermsCount = 0
+      for (const term of stage.terms ?? []) {
+        if (term.subterms && term.subterms.length > 0) {
+          stageTermsCount += term.subterms.filter((s) => s.active !== false).length
+        } else if (term.active !== false) {
+          stageTermsCount += 1
+        }
+      }
+
+      const fallbackChecklistCount = getFallbackStageChecklist(stage.name).length
+      const stageTotalCheckboxes = Math.max(reportChecklistTotal, stageTermsCount, fallbackChecklistCount)
+      const stageCheckboxPercentage = stageTotalCheckboxes > 0 ? Math.round((stageCheckedCheckboxes / stageTotalCheckboxes) * 100) : 0
+
+      return {
+        stage,
+        stageReports,
+        stageTotalCheckboxes,
+        stageCheckedCheckboxes,
+        stageCheckboxPercentage,
+      }
+    })
+  }, [data.stages])
+
   const totals = useMemo(() => {
     let totalItems = 0
     let checkedItems = 0
 
-    for (const stage of data.stages) {
-      const reportsMap = new Map<string, any>()
-      for (const term of stage.terms ?? []) {
-        const responses = term.responses ?? (term.response ? [term.response] : [])
-        for (const resp of responses) {
-          if (!reportsMap.has(resp.id)) reportsMap.set(resp.id, resp)
-        }
-      }
-      for (const report of stage.reports ?? []) {
-        if (!reportsMap.has(report.id)) reportsMap.set(report.id, report)
-      }
-      for (const report of reportsMap.values()) {
-        const checklist = report.content?.checklist ?? []
-        for (const item of checklist) {
-          totalItems++
-          if (item.checked || item.result === "pass") {
-            checkedItems++
-          }
-        }
-      }
+    for (const stat of stageStats) {
+      totalItems += stat.stageTotalCheckboxes
+      checkedItems += stat.stageCheckedCheckboxes
     }
 
     const percentage = totalItems > 0 ? Math.round((checkedItems / totalItems) * 100) : 0
     return { total: totalItems, completed: checkedItems, percentage }
-  }, [data.stages])
+  }, [stageStats])
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -116,40 +153,9 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
         </Card>
       ) : (
         <div className="flex flex-col gap-4">
-          {data.stages.map((stage) => {
+          {stageStats.map(({ stage, stageReports, stageTotalCheckboxes, stageCheckedCheckboxes, stageCheckboxPercentage }) => {
             const open = openStages.has(stage.id)
             const cleanStageName = stage.name.replace(/^\d+[\.\s\-]+/, "")
-
-            const stageReportsMap = new Map<string, any>()
-            for (const term of stage.terms ?? []) {
-              const responses = term.responses ?? (term.response ? [term.response] : [])
-              for (const resp of responses) {
-                if (!stageReportsMap.has(resp.id)) {
-                  stageReportsMap.set(resp.id, resp)
-                }
-              }
-            }
-            for (const report of stage.reports ?? []) {
-              if (!stageReportsMap.has(report.id)) {
-                stageReportsMap.set(report.id, report)
-              }
-            }
-            const stageReports = Array.from(stageReportsMap.values())
-
-            let stageTotalCheckboxes = 0
-            let stageCheckedCheckboxes = 0
-
-            for (const report of stageReports) {
-              const checklist = report.content?.checklist ?? []
-              for (const item of checklist) {
-                stageTotalCheckboxes++
-                if (item.checked || item.result === "pass") {
-                  stageCheckedCheckboxes++
-                }
-              }
-            }
-
-            const stageCheckboxPercentage = stageTotalCheckboxes > 0 ? Math.round((stageCheckedCheckboxes / stageTotalCheckboxes) * 100) : 0
 
             return (
               <Card key={stage.id} className="gap-0 overflow-hidden py-0">

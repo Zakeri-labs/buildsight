@@ -5,6 +5,8 @@ import { getReviewSubmissionFeed } from "@/lib/review-submissions/server"
 import { getSiteVisitTaskFeed } from "@/lib/site-visits/server"
 import { getReportCcNotificationFeed } from "@/lib/report-cc/server"
 
+import { getFallbackStageChecklist } from "@/lib/stages/execution"
+
 export type DomainProject = {
   id: string
   name: string
@@ -207,20 +209,26 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
   const [{ data: imageRows }, { data: activeStageRows }] = projectIds.length
     ? await Promise.all([
         admin.from("project_images").select("project_id, storage_path").in("project_id", projectIds).eq("order_index", 0),
-        admin.from("project_stages").select("id, project_id").in("project_id", projectIds).neq("status", "disabled"),
+        admin.from("project_stages").select("id, project_id, name").in("project_id", projectIds).neq("status", "disabled"),
       ])
     : [
         { data: [] as Array<{ project_id: string; storage_path: string }> },
-        { data: [] as Array<{ id: string; project_id: string }> },
+        { data: [] as Array<{ id: string; project_id: string; name: string }> },
       ]
   const activeStageIds = (activeStageRows ?? []).map((stage: any) => stage.id as string)
-  const { data: progressTermRows } = activeStageIds.length
-    ? await admin
-        .from("project_stage_terms")
-        .select("id, project_stage_id, parent_term_id, is_required, status")
-        .in("project_stage_id", activeStageIds)
-        .eq("is_active", true)
-    : { data: [] as Array<{ id: string; project_stage_id: string; parent_term_id: string | null; is_required: boolean; status: string }> }
+  const [{ data: progressTermRows }, { data: responseRows }] = activeStageIds.length
+    ? await Promise.all([
+        admin
+          .from("project_stage_terms")
+          .select("id, project_stage_id, parent_term_id, is_required, status, is_active")
+          .in("project_stage_id", activeStageIds)
+          .eq("is_active", true),
+        admin
+          .from("term_responses")
+          .select("id, project_id, project_stage_id, response_content")
+          .in("project_id", projectIds),
+      ])
+    : [{ data: [] }, { data: [] }]
   const imageByProject = new Map(
     (imageRows ?? []).map((image: any) => [image.project_id as string, image.storage_path as string]),
   )
@@ -230,12 +238,36 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
     rows.push(term)
     termsByStage.set((term as any).project_stage_id, rows)
   }
+  const responsesByStage = new Map<string, any[]>()
+  for (const resp of responseRows ?? []) {
+    if (!resp.project_stage_id) continue
+    const rows = responsesByStage.get(resp.project_stage_id) ?? []
+    rows.push(resp)
+    responsesByStage.set(resp.project_stage_id, rows)
+  }
+
   const calculatedProgress = new Map<string, number>()
   for (const projectId of projectIds) {
-    const stageIds = (activeStageRows ?? []).filter((stage: any) => stage.project_id === projectId).map((stage: any) => stage.id as string)
-    const countedProjectTerms: any[] = []
-    for (const stageId of stageIds) {
-      const stageTerms = termsByStage.get(stageId) ?? []
+    const pStages = (activeStageRows ?? []).filter((stage: any) => stage.project_id === projectId)
+    let projectTotalCheckboxes = 0
+    let projectCheckedCheckboxes = 0
+
+    for (const stage of pStages) {
+      const stageResponses = responsesByStage.get(stage.id) ?? []
+      let reportChecklistTotal = 0
+      for (const resp of stageResponses) {
+        const checklist = resp.response_content?.checklist ?? []
+        if (Array.isArray(checklist)) {
+          for (const item of checklist) {
+            reportChecklistTotal++
+            if (item?.checked === true || item?.result === "pass") {
+              projectCheckedCheckboxes++
+            }
+          }
+        }
+      }
+
+      const stageTerms = termsByStage.get(stage.id) ?? []
       const childrenByParent = new Map<string, any[]>()
       for (const term of stageTerms) {
         if (!term.parent_term_id) continue
@@ -243,17 +275,19 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
         children.push(term)
         childrenByParent.set(term.parent_term_id, children)
       }
-      const actionableStageTerms: any[] = []
+      let stageTermsCount = 0
       for (const term of stageTerms.filter((row) => !row.parent_term_id)) {
         const children = childrenByParent.get(term.id) ?? []
-        actionableStageTerms.push(...(children.length ? children : [term]))
+        stageTermsCount += children.length ? children.length : 1
       }
-      const requiredStageTerms = actionableStageTerms.filter((term) => term.is_required)
-      countedProjectTerms.push(...(requiredStageTerms.length ? requiredStageTerms : actionableStageTerms))
+
+      const fallbackCount = getFallbackStageChecklist(stage.name).length
+      const stageTotal = Math.max(reportChecklistTotal, stageTermsCount, fallbackCount)
+      projectTotalCheckboxes += stageTotal
     }
-    if (countedProjectTerms.length) {
-      const completed = countedProjectTerms.filter((term) => term.status === "approved" || term.status === "completed").length
-      calculatedProgress.set(projectId, Math.round((completed / countedProjectTerms.length) * 100))
+
+    if (projectTotalCheckboxes > 0) {
+      calculatedProgress.set(projectId, Math.round((projectCheckedCheckboxes / projectTotalCheckboxes) * 100))
     }
   }
   const legacyImageCounts = new Map<string, number>()
