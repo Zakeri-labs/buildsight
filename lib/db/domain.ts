@@ -385,13 +385,44 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
   }
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
+const ALL_PROJECT_SCOPE_VALUES = new Set(["all", "null", "undefined"])
+
+function asUuid(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const normalized = value.trim()
+  return UUID_PATTERN.test(normalized) ? normalized : null
+}
+
+function validUuidList(values: unknown[]): string[] {
+  return Array.from(new Set(values.map(asUuid).filter((value): value is string => Boolean(value))))
+}
+
+function normalizeProjectScope(value: string | null): string | null {
+  if (typeof value !== "string") return null
+  const normalized = value.trim()
+  if (!normalized || ALL_PROJECT_SCOPE_VALUES.has(normalized.toLowerCase())) return null
+  return normalized
+}
+
 // Resolve the set of project ids in scope. A selected project is never
 // allowed to fall back to organisation-wide data when it is missing or stale.
 async function resolveScopedProjects(orgId: string, projectId: string | null, userId?: string) {
   const projects = await getOrgProjects(orgId, userId)
-  const scoped = projectId ? projects.filter((p) => p.id === projectId || p.code === projectId) : projects
-  const ids = scoped.map((p) => p.id)
-  return { projects, scoped, ids }
+  const requestedScope = normalizeProjectScope(projectId)
+  const selectedProject = requestedScope
+    ? projects.find((project) => project.id === requestedScope || project.code === requestedScope) ?? null
+    : null
+  const scoped = requestedScope ? (selectedProject ? [selectedProject] : []) : projects
+  const ids = validUuidList(scoped.map((project) => project.id))
+
+  return {
+    projects,
+    scoped,
+    ids,
+    requestedSpecificProject: Boolean(requestedScope),
+    selectedProjectId: asUuid(selectedProject?.id),
+  }
 }
 
 function nameMap(projects: DomainProject[]) {
@@ -399,9 +430,11 @@ function nameMap(projects: DomainProject[]) {
 }
 
 async function fetchScopedRows(table: string, columns: string, ids: string[]) {
-  if (ids.length === 0) return [] as any[]
+  const projectIds = validUuidList(ids)
+  if (projectIds.length === 0) return [] as any[]
   const admin = createAdminClient()
-  const { data } = await admin.from(table).select(columns).in("project_id", ids)
+  const { data, error } = await admin.from(table).select(columns).in("project_id", projectIds)
+  if (error) throw error
   return data ?? []
 }
 
@@ -430,10 +463,42 @@ export type DashboardData = {
   scopeName: string | null
 }
 
+function createEmptyDashboard(): DashboardData {
+  return {
+    kpis: { totalProjects: 0, openNcrs: 0, openInspections: 0, openRfis: 0 },
+    ncrDonut: [],
+    inspectionDonut: [],
+    activity: [],
+    projects: [],
+    tasks: [],
+    scopeName: null,
+  }
+}
+
 export async function getDashboardData(orgId: string, projectId: string | null, userId: string): Promise<DashboardData> {
   try {
-    const { projects, scoped, ids } = await resolveScopedProjects(orgId, projectId, userId)
+    const validOrgId = asUuid(orgId)
+    const validUserId = asUuid(userId)
+    if (!validOrgId || !validUserId) {
+      console.error("getDashboardData skipped invalid dashboard identity scope", {
+        organizationIdType: typeof orgId,
+        userIdType: typeof userId,
+      })
+      return createEmptyDashboard()
+    }
+
+    const {
+      projects,
+      scoped,
+      ids,
+      requestedSpecificProject,
+      selectedProjectId,
+    } = await resolveScopedProjects(validOrgId, projectId, validUserId)
     const names = nameMap(projects)
+    const canLoadProjectFeeds = !requestedSpecificProject || Boolean(selectedProjectId)
+    const emptyReviewFeed = { canReview: false, items: [] }
+    const emptySiteVisitFeed = { canManage: false, items: [] }
+    const emptyReportCcFeed = { canNotify: false, items: [] }
 
     const [ncrs, inspections, rfis, vos, activity, tasks, reviewFeed, siteVisitFeed, reportCcFeed, termResponses] = await Promise.all([
       fetchScopedRows("ncrs", "project_id, status", ids),
@@ -442,9 +507,15 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
       fetchScopedRows("variation_orders", "project_id", ids),
       fetchScopedRows("activity_log", "id, project_id, type, verb, reference, created_at", ids),
       fetchScopedRows("tasks", "id, project_id, action, type, reference, due_label, due_tone, sort_order", ids),
-      getReviewSubmissionFeed({ userId, organizationId: orgId, projectId }),
-      getSiteVisitTaskFeed({ userId, projectId }),
-      getReportCcNotificationFeed({ userId, projectId }),
+      canLoadProjectFeeds
+        ? getReviewSubmissionFeed({ userId: validUserId, organizationId: validOrgId, projectId: selectedProjectId })
+        : Promise.resolve(emptyReviewFeed),
+      canLoadProjectFeeds
+        ? getSiteVisitTaskFeed({ userId: validUserId, projectId: selectedProjectId })
+        : Promise.resolve(emptySiteVisitFeed),
+      canLoadProjectFeeds
+        ? getReportCcNotificationFeed({ userId: validUserId, projectId: selectedProjectId })
+        : Promise.resolve(emptyReportCcFeed),
       fetchScopedRows("term_responses", "id, project_id, project_stage_id", ids),
     ])
 
@@ -588,11 +659,11 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
       activity: activityRows,
       projects: projectRows,
       tasks: taskRows,
-      scopeName: projectId && scoped.length === 1 ? scoped[0].name : null,
+      scopeName: selectedProjectId && scoped.length === 1 ? scoped[0].name : null,
     }
   } catch (error) {
     console.error("getDashboardData error:", error)
-    return emptyDashboard
+    return createEmptyDashboard()
   }
 }
 

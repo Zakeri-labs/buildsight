@@ -20,6 +20,18 @@ function normalizedRole(value: string | null | undefined) {
   return roleLabel(value.trim())
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
+
+function asUuid(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const normalized = value.trim()
+  return UUID_PATTERN.test(normalized) ? normalized : null
+}
+
+function validUuidList(values: unknown[]): string[] {
+  return Array.from(new Set(values.map(asUuid).filter((value): value is string => Boolean(value))))
+}
+
 export async function loadProjectCcCandidates(projectId: string): Promise<ProjectCcCandidate[]> {
   await assertProjectMember(projectId)
   const admin = createAdminClient()
@@ -172,35 +184,49 @@ export async function loadReportCcRecipients(
 }
 
 async function accessibleProjectIdsForUser(userId: string) {
+  const validUserId = asUuid(userId)
+  if (!validUserId) return []
+
   const admin = createAdminClient()
-  const [{ data: projectMemberships }, { data: orgMemberships }] = await Promise.all([
-    admin.from("project_user_memberships").select("project_id").eq("user_id", userId).eq("status", "active"),
-    admin.from("organization_memberships").select("organization_id").eq("user_id", userId).eq("status", "active"),
+  const [{ data: projectMemberships, error: projectMembershipError }, { data: orgMemberships, error: orgMembershipError }] = await Promise.all([
+    admin.from("project_user_memberships").select("project_id").eq("user_id", validUserId).eq("status", "active"),
+    admin.from("organization_memberships").select("organization_id").eq("user_id", validUserId).eq("status", "active"),
   ])
-  const organizationIds = Array.from(new Set((orgMemberships ?? []).map((row: any) => row.organization_id as string)))
-  const { data: orgProjects } = organizationIds.length
+  if (projectMembershipError) throw projectMembershipError
+  if (orgMembershipError) throw orgMembershipError
+
+  const organizationIds = validUuidList((orgMemberships ?? []).map((row: any) => row.organization_id))
+  const { data: orgProjects, error: orgProjectsError } = organizationIds.length
     ? await admin.from("projects").select("id").in("supervising_organization_id", organizationIds)
-    : { data: [] as any[] }
-  return Array.from(new Set([
-    ...(projectMemberships ?? []).map((row: any) => row.project_id as string),
-    ...(orgProjects ?? []).map((row: any) => row.id as string),
-  ]))
+    : { data: [] as any[], error: null }
+  if (orgProjectsError) throw orgProjectsError
+
+  return validUuidList([
+    ...(projectMemberships ?? []).map((row: any) => row.project_id),
+    ...(orgProjects ?? []).map((row: any) => row.id),
+  ])
 }
 
 export async function getReportCcNotificationFeed(input: {
   userId: string
   projectId: string | null
 }): Promise<{ canNotify: boolean; items: ReportCcNotificationItem[] }> {
+  const validUserId = asUuid(input.userId)
+  if (!validUserId) return { canNotify: false, items: [] }
+
+  const requestedProjectId = input.projectId === null ? null : asUuid(input.projectId)
+  if (input.projectId !== null && !requestedProjectId) return { canNotify: false, items: [] }
+
   const admin = createAdminClient()
-  let projectIds = await accessibleProjectIdsForUser(input.userId)
-  if (input.projectId) projectIds = projectIds.filter((id) => id === input.projectId)
+  let projectIds = await accessibleProjectIdsForUser(validUserId)
+  if (requestedProjectId) projectIds = projectIds.filter((id) => id === requestedProjectId)
   if (!projectIds.length) return { canNotify: false, items: [] }
 
   const { data: recipientRows, error: recipientError } = await admin
     .from("report_cc_recipients")
     .select("id, project_id, response_id, recipient_context, added_by, created_at")
     .eq("recipient_type", "internal")
-    .eq("user_id", input.userId)
+    .eq("user_id", validUserId)
     .in("project_id", projectIds)
     .order("created_at", { ascending: false })
     .limit(50)
@@ -210,19 +236,28 @@ export async function getReportCcNotificationFeed(input: {
   }
   if (!recipientRows?.length) return { canNotify: true, items: [] }
 
-  const responseIds = Array.from(new Set(recipientRows.map((row: any) => row.response_id as string)))
+  const responseIds = validUuidList(recipientRows.map((row: any) => row.response_id))
+  if (!responseIds.length) return { canNotify: true, items: [] }
+
   const { data: responses, error: responseError } = await admin
     .from("term_responses")
-    .select("id, project_id, project_stage_term_id, report_number, report_title")
+    .select("id, project_id, project_stage_id, project_stage_term_id, report_number, report_title")
     .in("id", responseIds)
   if (responseError) throw responseError
-  const termIds = Array.from(new Set((responses ?? []).map((row: any) => row.project_stage_term_id as string)))
+
+  // Stage-based responses intentionally have no project_stage_term_id. Filter
+  // nullable term ids before the UUID query and resolve their stage directly.
+  const termIds = validUuidList((responses ?? []).map((row: any) => row.project_stage_term_id))
   const { data: terms, error: termError } = termIds.length
     ? await admin.from("project_stage_terms").select("id, report_name, project_stage_id").in("id", termIds)
     : { data: [] as any[], error: null }
   if (termError) throw termError
-  const stageIds = Array.from(new Set((terms ?? []).map((row: any) => row.project_stage_id as string)))
-  const actorIds = Array.from(new Set(recipientRows.map((row: any) => row.added_by as string).filter(Boolean)))
+
+  const stageIds = validUuidList([
+    ...(terms ?? []).map((row: any) => row.project_stage_id),
+    ...(responses ?? []).map((row: any) => row.project_stage_id),
+  ])
+  const actorIds = validUuidList(recipientRows.map((row: any) => row.added_by))
   const [{ data: stages, error: stageError }, { data: projects, error: projectError }, { data: actors, error: actorError }] = await Promise.all([
     stageIds.length ? admin.from("project_stages").select("id, name").in("id", stageIds) : Promise.resolve({ data: [] as any[], error: null }),
     admin.from("projects").select("id, name").in("id", projectIds),
@@ -242,12 +277,20 @@ export async function getReportCcNotificationFeed(input: {
   for (const recipient of recipientRows as any[]) {
     const response = responseById.get(recipient.response_id)
     if (!response || response.project_id !== recipient.project_id) continue
-    const term = termById.get(response.project_stage_term_id)
-    const stage = term ? stageById.get(term.project_stage_id) : null
+
+    const termId = asUuid(response.project_stage_term_id)
+    const term = termId ? termById.get(termId) : null
+    const stageId = asUuid(term?.project_stage_id) ?? asUuid(response.project_stage_id)
+    const stage = stageId ? stageById.get(stageId) : null
     const project = projectById.get(response.project_id)
-    if (!term || !stage || !project) continue
+    if (!stage || !project) continue
+
     const actor = recipient.added_by ? actorById.get(recipient.added_by) : null
     const translateSuffix = recipient.recipient_context === "translation" ? "/translate" : ""
+    const reportPath = term
+      ? `/projects/${response.project_id}/stages/${stage.id}/terms/${term.id}/reports/${response.id}`
+      : `/projects/${response.project_id}/stages/${stage.id}/reports/${response.id}`
+
     items.push({
       id: recipient.id,
       notificationKey: `report-cc:${recipient.id}:${recipient.created_at}`,
@@ -255,14 +298,14 @@ export async function getReportCcNotificationFeed(input: {
       projectId: response.project_id,
       projectName: project.name,
       stageName: stage.name,
-      termName: term.report_name,
+      termName: term?.report_name ?? response.report_title ?? stage.name,
       reportId: response.id,
-      reportNumber: response.report_number,
-      reportTitle: response.report_title,
+      reportNumber: response.report_number ?? "",
+      reportTitle: response.report_title ?? stage.name,
       addedById: recipient.added_by ?? null,
       addedByName: personName(actor),
       createdAt: recipient.created_at,
-      href: `/projects/${response.project_id}/stages/${stage.id}/terms/${term.id}/reports/${response.id}${translateSuffix}`,
+      href: `${reportPath}${translateSuffix}`,
     })
   }
   return { canNotify: true, items }
