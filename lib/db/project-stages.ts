@@ -9,6 +9,7 @@ import {
   type SubtermResponseType,
   type TermResponseContent,
   isSubtermResponseType,
+  getFallbackStageChecklist,
 } from "@/lib/stages/execution"
 import { roleLabel } from "@/lib/db/types"
 
@@ -557,10 +558,42 @@ export async function loadProjectStageExecution(
           approved: stageReports.filter((item) => item.status === "approved" || item.status === "completed").length,
           rejected: stageReports.filter((item) => item.status === "rejected").length,
         },
-        terms: Array.from(termMap.values())
-          .filter((term) => term.projectStageId === stage.id && !term.parentTermId && (includeInactive || term.isActive))
-          .map((term) => includeInactive ? term : { ...term, subterms: term.subterms.filter((subterm) => subterm.isActive) })
-          .sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName)),
+        terms: (() => {
+          const directTerms = Array.from(termMap.values())
+            .filter((term) => term.projectStageId === stage.id && !term.parentTermId && (includeInactive || term.isActive))
+            .map((term) => (includeInactive ? term : { ...term, subterms: term.subterms.filter((subterm) => subterm.isActive) }))
+            .sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName))
+          if (directTerms.length > 0) return directTerms
+
+          const libTerms = (libTermsByStage.get(stage.template_stage_id || stage.id) ?? []).sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName))
+          if (libTerms.length > 0) return libTerms
+
+          return getFallbackStageChecklist(stage.name).map((item, idx) => ({
+            id: item.id,
+            projectStageId: stage.id,
+            templateTermId: item.id,
+            parentTermId: null,
+            reportName: item.reportName,
+            required: true,
+            responsibleOrganization: null,
+            responsibleUser: null,
+            dueDateRule: "stage_start",
+            dueDate: null,
+            approvalRequired: true,
+            templateReference: null,
+            responseType: "combined" as const,
+            instructions: null,
+            status: "not_started" as const,
+            sortOrder: idx + 1,
+            isActive: true,
+            hasLinkedData: false,
+            response: null,
+            responses: [],
+            reportSummary: { total: 0, draft: 0, inProgress: 0, pendingReview: 0, approved: 0, rejected: 0 },
+            translation: null,
+            subterms: [],
+          }))
+        })(),
       }
     })
 

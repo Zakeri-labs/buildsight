@@ -209,3 +209,67 @@ export function validateStageDocument(file: File): string | null {
   if (file.size > STAGE_DOCUMENT_MAX_FILE_BYTES) return `${file.name} exceeds the 50 MB limit.`
   return null
 }
+
+const DEFAULT_STAGE_CHECKLIST_LIBRARY: Record<string, string[]> = {
+  "earth work excavation": [
+    "Check for Setting out and Levels/Set backs as per Excavation Scheme plan.",
+    "Check for Layout of Excavation with reference to grids and keeping allowance from face of substructure.",
+    "Ensure protection of existing services /Neighbors Plot boundary",
+    "Ensure proper access for Trucks / Dumpers and other vehicles.",
+    "Depth of the Excavation",
+    "PCC Bottom level",
+    "Verify the foundation data with respect to geotechnical report.",
+    "Check for soil dressing, loose earth removed and area is leveled.",
+    "Check for the soil preserved at site for backfilling and dispose soil not suitable for filling.",
+    "All area well illuminated and ensure proper barricading the excavated area.",
+  ],
+  pcc: [
+    "Check for location / Bottom level of footing",
+    "The surface compaction completed",
+    "FDT report submitted for review",
+    "Check for formwork including form oil applied and laid to the correct dimensions including line",
+    "Check for concrete top level marked at required places",
+    "1000-guage Polythene sheet providedetc.",
+  ],
+  footing: [
+    "The setback of the building as per the drawing",
+    "Front side of the building",
+    "Left side of the building",
+    "Right side of the building",
+    "Rear side of the building",
+    "Nearest Road level/Plinth level/Interlock level marking at the site",
+    "Structural grid line and architectural grid lines are provided as per the drawing",
+    "Footing formwork including form oil applied and laid to the correct dimensions including line, level and plumb checked.",
+    "Supporting of the formwork",
+    "All columns sizes and orientation",
+    "Sizes (length and Diameter) of re-bar of the footings",
+    "Spacing of re-bar as per the drawing",
+    "Direction and Alignment of the re-bar",
+    "Right angle of the footing & Column",
+    "Cover of concrete around reinforcement steel maintained as per requirement",
+    "Separator (Chair Bar) is provided properly between top and bottom re-bar.",
+    "Development length of the re-bar of the footing as per requirement",
+    "Sizes (length and Diameter) of re-bar of the Columns",
+    "Reinforcement bars are free from rust,mill scales, cleaned concrete droppings and any other such impurities",
+    "Sizes/Spacings of the stirrups of re-bar of the Columns",
+  ],
+}
+
+export function getFallbackStageChecklist(stageName: string): Array<{ id: string; reportName: string }> {
+  if (!stageName) return []
+  const clean = stageName.trim().toLowerCase()
+
+  let key = ""
+  if (clean.includes("excavation") || clean.includes("earth work")) key = "earth work excavation"
+  else if (clean.includes("pcc")) key = "pcc"
+  else if (clean.includes("footing")) key = "footing"
+
+  const items = key ? DEFAULT_STAGE_CHECKLIST_LIBRARY[key] : null
+  if (!items) return []
+
+  return items.map((reportName, idx) => ({
+    id: `fallback-${key}-${idx + 1}`,
+    reportName,
+  }))
+}
+

@@ -53,6 +53,7 @@ import {
   STAGE_DOCUMENT_MAX_FILES,
   STAGE_EVIDENCE_ACCEPT,
   STAGE_EVIDENCE_MAX_IMAGES,
+  getFallbackStageChecklist,
   resolveStageDocumentMimeType,
   sanitizeEvidenceFileName,
   statusLabel,
@@ -353,7 +354,17 @@ export function InspectionReportForm({
         result: "" as const,
       }))
     } else {
-      initialChecklist = checklistFromTemplate(reportDefinition.templateReference)
+      const fallbackItems = getFallbackStageChecklist(stage.name)
+      if (fallbackItems.length) {
+        initialChecklist = fallbackItems.map((item) => ({
+          id: crypto.randomUUID(),
+          label: item.reportName.replace(/^\d+[\.\s\-]+/, ""),
+          checked: false,
+          result: "" as const,
+        }))
+      } else {
+        initialChecklist = checklistFromTemplate(reportDefinition.templateReference)
+      }
     }
     return {
       ...(response?.content ?? EMPTY_TERM_RESPONSE_CONTENT),

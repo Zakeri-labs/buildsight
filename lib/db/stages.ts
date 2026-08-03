@@ -5079,4 +5079,5 @@ export const DEMO_STAGE_MANAGEMENT_DATA: StageManagementData = {
       ]
     }
   ]
-};
+}
+
