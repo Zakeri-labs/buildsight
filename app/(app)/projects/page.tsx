@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 import { ProjectsList, type ProjectRow } from "@/components/projects/projects-list"
 import { requireOnboarded, isOrgAdmin } from "@/lib/auth/session"
 import { canAdministerProject } from "@/lib/auth/guards"
@@ -42,6 +45,7 @@ export default async function ProjectsPage({
     name: project.name,
     ownerClient: project.client?.trim() || "—",
     address: project.location?.trim() || "—",
+    areaDistrict: project.region?.trim() || null,
     projectType: projectTypeLabel(project.projectType),
     projectTypeValue: isProjectTypeValue(project.projectType) ? project.projectType : null,
     supervisionType: project.supervisionType,

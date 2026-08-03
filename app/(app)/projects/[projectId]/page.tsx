@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 import { notFound } from "next/navigation"
 import { ProjectDetail } from "@/components/projects/project-detail"
 import type { ProjectDocument } from "@/components/projects/project-documents"

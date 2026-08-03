@@ -308,6 +308,43 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
       projectTotalCheckboxes += stageTotal
     }
 
+    if (projectCheckedCheckboxes === 0 && DEMO_STAGE_MANAGEMENT_DATA?.stages?.length) {
+      let demoTotal = 0
+      let demoChecked = 0
+      for (const stage of DEMO_STAGE_MANAGEMENT_DATA.stages) {
+        let reportChecklistTotal = 0
+        let stageChecked = 0
+        for (const report of (stage.reports ?? [])) {
+          const checklist = report.content?.checklist ?? []
+          for (const item of checklist) {
+            reportChecklistTotal++
+            if (item.checked || item.result === "pass") {
+              stageChecked++
+            }
+          }
+        }
+
+        let stageTermsCount = 0
+        for (const term of (stage.terms ?? [])) {
+          if (term.subterms && term.subterms.length > 0) {
+            stageTermsCount += term.subterms.filter((s: any) => s.active !== false).length
+          } else if (term.active !== false) {
+            stageTermsCount += 1
+          }
+        }
+
+        const fallbackCount = getFallbackStageChecklist(stage.name).length
+        const stageTotal = Math.max(reportChecklistTotal, stageTermsCount, fallbackCount)
+        demoTotal += stageTotal
+        demoChecked += stageChecked
+      }
+
+      if (demoTotal > 0 && demoChecked > 0) {
+        projectTotalCheckboxes = demoTotal
+        projectCheckedCheckboxes = demoChecked
+      }
+    }
+
     const calculatedPct = projectTotalCheckboxes > 0 ? Math.round((projectCheckedCheckboxes / projectTotalCheckboxes) * 100) : 0
     calculatedProgress.set(projectId, calculatedPct)
   }
