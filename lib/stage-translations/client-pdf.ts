@@ -33,6 +33,7 @@ const AUTOTABLE_SCRIPT_URLS = [
 const ARABIC_FONT_FILENAME = "GretaArabic-Regular.ttf"
 const ARABIC_FONT_FAMILY = "GretaArabic"
 const ARABIC_FONT_URL = "/fonts/GretaArabic-Regular.ttf"
+const CLOSING_LOGO_URL = "/bonyan-closing-logo.png"
 
 const LATIN_FONT_FILENAME = "helvetica"
 const LATIN_FONT_FAMILY = "helvetica"
@@ -88,6 +89,7 @@ type Flow = {
   bottom: number
   pageNumber: number
   logoImage?: LoadedImage | null
+  closingLogoImage?: LoadedImage | null
 }
 
 let pdfToolsPromise: Promise<JsPdfConstructor> | null = null
@@ -1052,6 +1054,75 @@ function drawFirstPageHeader(flow: Flow) {
   }
 
   flow.y = gridTop + gridHeight + 6
+}
+
+function renderTranslationClosingBlock(flow: Flow) {
+  const closingLogo = flow.closingLogoImage
+  if (!closingLogo) throw new Error("Unable to load the closing signature logo for the translated PDF.")
+
+  const firstLine = flow.rtl ? "وتفضلوا بقبول فائق الاحترام،" : "Yours faithfully,"
+  const companyLine = flow.rtl
+    ? "عن شركة بنيان للإنشاءات والاستشارات الهندسية"
+    : "For BONYAN CONSTRUCTION FOR ENGINEERING CONSULTANCY"
+  const fontSize = 9
+  const lineHeight = 4.4
+  const logoWidth = 28
+  const logoHeight = logoWidth * closingLogo.height / Math.max(1, closingLogo.width)
+  const lineToLogoGap = 2.2
+  const logoToCompanyGap = 4.2
+  const bottomGap = 4
+
+  setLanguage(flow.doc, flow.rtl, fontSize, false)
+  const firstLines = textLines(flow.doc, firstLine, flow.width)
+  const companyLines = textLines(flow.doc, companyLine, flow.width)
+  const requiredHeight = firstLines.length * lineHeight
+    + lineToLogoGap
+    + logoHeight
+    + logoToCompanyGap
+    + companyLines.length * lineHeight
+    + bottomGap
+
+  // The closing is one indivisible unit. If it does not fit, start the whole
+  // block on the next page rather than splitting its text and logo.
+  ensureSpace(flow, requiredHeight)
+
+  const textX = flow.rtl ? flow.x + flow.width : flow.x
+  const alignment = flow.rtl ? "right" : "left"
+  flow.doc.setTextColor(51, 65, 85)
+  writePdfText(
+    flow.doc,
+    firstLines,
+    textX,
+    flow.y,
+    { align: alignment, lineHeightFactor: 1.2 },
+    flow.rtl,
+  )
+
+  const logoY = flow.y + firstLines.length * lineHeight + lineToLogoGap
+  const logoX = flow.rtl ? flow.x + flow.width - logoWidth : flow.x
+  flow.doc.addImage(
+    closingLogo.dataUrl,
+    "PNG",
+    logoX,
+    logoY,
+    logoWidth,
+    logoHeight,
+    undefined,
+    "FAST",
+  )
+
+  setLanguage(flow.doc, flow.rtl, fontSize, false)
+  flow.doc.setTextColor(51, 65, 85)
+  const companyY = logoY + logoHeight + logoToCompanyGap
+  writePdfText(
+    flow.doc,
+    companyLines,
+    textX,
+    companyY,
+    { align: alignment, lineHeightFactor: 1.2 },
+    flow.rtl,
+  )
+  flow.y = companyY + companyLines.length * lineHeight + bottomGap
 }
 
 function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>) {
@@ -2625,11 +2696,15 @@ function validateMirroredTemplates(english: LanguagePdfTemplate, arabic: Languag
   }
 }
 
-async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
+async function buildLanguagePdfBlob(
+  template: LanguagePdfTemplate,
+  options: { appendClosingBlock?: boolean } = {},
+) {
   validateLanguagePdfTemplate(template)
-  const [JsPdf, logoImage] = await Promise.all([
+  const [JsPdf, logoImage, closingLogoImage] = await Promise.all([
     loadPdfTools(),
     loadImage("/LogoB.png"),
+    options.appendClosingBlock ? loadImage(CLOSING_LOGO_URL) : Promise.resolve(null),
   ])
   const doc = new JsPdf({
     unit: "mm",
@@ -2654,6 +2729,7 @@ async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
     bottom: PAGE.portraitHeight - PAGE.footer - 5,
     pageNumber: 1,
     logoImage,
+    closingLogoImage,
   }
   drawFirstPageHeader(flow)
   for (const section of template.sections) {
@@ -2714,6 +2790,10 @@ async function buildLanguagePdfBlob(template: LanguagePdfTemplate) {
     }
 
     flow.y += 4
+  }
+
+  if (options.appendClosingBlock) {
+    renderTranslationClosingBlock(flow)
   }
 
   addPageNumbers(doc, flow.rtl)
@@ -3847,11 +3927,13 @@ export async function exportTranslationPdf({
   translation,
   kind,
   ccRecipients = [],
+  appendClosingBlock = false,
 }: {
   data: StageTranslationPageData
   translation: StageTranslationRecord | null
   kind: PdfKind
   ccRecipients?: ReportCcRecipient[]
+  appendClosingBlock?: boolean
 }) {
   const base = safePdfFilename(data.project.code || data.project.name)
   const report = safePdfFilename(data.response.reportNumber)
@@ -3880,7 +3962,7 @@ export async function exportTranslationPdf({
   if (kind === "original") {
     validateTemplateAssets(englishTemplate, sourceDocument)
     return {
-      blob: await buildLanguagePdfBlob(englishTemplate),
+      blob: await buildLanguagePdfBlob(englishTemplate, { appendClosingBlock }),
       filename: `${base}-${report}-english-structured.pdf`,
     }
   }
@@ -3892,7 +3974,7 @@ export async function exportTranslationPdf({
   validateTemplateAssets(arabicTemplate, sourceDocument)
   validateTemplateAssets(englishTemplate, sourceDocument)
   validateMirroredTemplates(englishTemplate, arabicTemplate)
-  const arabicBlob = await buildLanguagePdfBlob(arabicTemplate)
+  const arabicBlob = await buildLanguagePdfBlob(arabicTemplate, { appendClosingBlock })
   if (kind === "arabic") {
     return { blob: arabicBlob, filename: `${base}-${report}-arabic-translation.pdf` }
   }

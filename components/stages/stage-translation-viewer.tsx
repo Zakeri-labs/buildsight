@@ -196,9 +196,11 @@ function filenameWithoutExtension(value: string) {
 export function StageTranslationViewer({
   data,
   ccRecipients,
+  appendTranslatedPdfClosing = false,
 }: {
   data: StageTranslationPageData
   ccRecipients: ReportCcRecipient[]
+  appendTranslatedPdfClosing?: boolean
 }) {
   const { locale } = useI18n()
   const copy = COPY[locale]
@@ -279,7 +281,13 @@ export function StageTranslationViewer({
       if (kind !== "original" && (!activeTranslation?.translatedContent || translationIsStale)) {
         activeTranslation = await generateTranslation()
       }
-      const exported = await exportTranslationPdf({ data, translation: activeTranslation, kind, ccRecipients })
+      const exported = await exportTranslationPdf({
+        data,
+        translation: activeTranslation,
+        kind,
+        ccRecipients,
+        appendClosingBlock: appendTranslatedPdfClosing,
+      })
       if (activeTranslation) {
         await storePdf(exported.blob, exported.filename, kind)
         downloadPdfBlob(exported.blob, exported.filename)
