@@ -1,3 +1,8 @@
+## 2026-08-03
+
+- Fixed atomic Site Visit scheduling and rescheduling, participant validation, and safe server errors.
+- Database migration required: execute `scripts/sql/047_fix_site_visit_scheduling.sql`.
+
 ## 2026-08-02
 
 - Replaced the active global Stage library with the required 27-stage construction sequence while preserving legacy project Stage, Term, Sub-term, Report, response, and workflow records.

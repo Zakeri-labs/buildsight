@@ -20,6 +20,61 @@ function cleanText(value: unknown, max: number) {
   return typeof value === "string" ? value.trim().slice(0, max) : ""
 }
 
+
+type SupabaseErrorFields = {
+  message?: string
+  code?: string
+  details?: string | null
+  hint?: string | null
+}
+
+function getSupabaseErrorFields(error: unknown): SupabaseErrorFields {
+  if (!error || typeof error !== "object") {
+    return { message: error instanceof Error ? error.message : String(error ?? "Unknown error") }
+  }
+  const value = error as Record<string, unknown>
+  return {
+    message: typeof value.message === "string" ? value.message : undefined,
+    code: typeof value.code === "string" ? value.code : undefined,
+    details: typeof value.details === "string" ? value.details : null,
+    hint: typeof value.hint === "string" ? value.hint : null,
+  }
+}
+
+function logSiteVisitSupabaseError(operation: string, error: unknown) {
+  const fields = getSupabaseErrorFields(error)
+  console.error(`[site-visits] ${operation} failed`, {
+    message: fields.message ?? "Unknown Supabase error",
+    code: fields.code ?? null,
+    details: fields.details ?? null,
+    hint: fields.hint ?? null,
+  })
+}
+
+function safeScheduleError(error: unknown) {
+  const fields = getSupabaseErrorFields(error)
+  const message = (fields.message ?? "").toLowerCase()
+
+  if (fields.code === "PGRST202" || fields.code === "PGRST203" || fields.code === "42883" || message.includes("schedule_site_visit_request")) {
+    return "Site visit scheduling is unavailable until the latest database migration is applied."
+  }
+  if (message.includes("not authorized") || message.includes("permission")) {
+    return "You do not have permission to schedule this site visit."
+  }
+  if (message.includes("participant") || message.includes("assignee") || fields.code === "23503") {
+    return "One or more selected participants can no longer be assigned to this project. Refresh and try again."
+  }
+  if (message.includes("request not found")) return "Site visit request not found."
+  if (message.includes("can no longer be scheduled") || message.includes("status")) {
+    return "This site visit request can no longer be scheduled. Refresh and try again."
+  }
+  if (message.includes("date and time") || fields.code === "22007") {
+    return "Select a valid visit date and time."
+  }
+
+  return "The site visit could not be scheduled. Please refresh and try again."
+}
+
 function revalidateSiteVisitPaths(projectId: string, requestId?: string) {
   revalidatePath("/", "layout")
   revalidatePath("/")
@@ -165,13 +220,89 @@ export async function scheduleSiteVisitAction(input: {
       .select("id, project_id, status")
       .eq("id", input.requestId)
       .maybeSingle()
-    if (requestError) throw requestError
+    if (requestError) {
+      logSiteVisitSupabaseError("request lookup", requestError)
+      throw requestError
+    }
     if (!request) return { ok: false, error: "Site visit request not found." }
     if (request.status === "completed" || request.status === "cancelled") {
       return { ok: false, error: "This site visit request can no longer be scheduled." }
     }
 
-    const actorId = await assertSiteVisitManager(request.project_id)
+    let actorId: string
+    try {
+      actorId = await assertSiteVisitManager(request.project_id)
+    } catch (authorizationError) {
+      if (!(authorizationError instanceof AuthzError)) {
+        logSiteVisitSupabaseError("manager authorization", authorizationError)
+      }
+      throw authorizationError
+    }
+
+    if (assignedUserIds.length) {
+      const [membershipResult, participantResult, projectResult] = await Promise.all([
+        admin
+          .from("project_user_memberships")
+          .select("user_id")
+          .eq("project_id", request.project_id)
+          .eq("status", "active")
+          .in("user_id", assignedUserIds),
+        admin
+          .from("project_participants")
+          .select("key_contact_user_id")
+          .eq("project_id", request.project_id)
+          .eq("status", "active")
+          .in("key_contact_user_id", assignedUserIds),
+        admin
+          .from("projects")
+          .select("supervising_organization_id")
+          .eq("id", request.project_id)
+          .maybeSingle(),
+      ])
+      if (membershipResult.error) {
+        logSiteVisitSupabaseError("assigned-participant project membership validation", membershipResult.error)
+        throw membershipResult.error
+      }
+      if (participantResult.error) {
+        logSiteVisitSupabaseError("assigned-participant record validation", participantResult.error)
+        throw participantResult.error
+      }
+      if (projectResult.error) {
+        logSiteVisitSupabaseError("assigned-participant project validation", projectResult.error)
+        throw projectResult.error
+      }
+
+      const validAssignedUserIds = new Set<string>([
+        ...(membershipResult.data ?? []).map((row: any) => row.user_id as string),
+        ...(participantResult.data ?? [])
+          .map((row: any) => row.key_contact_user_id as string | null)
+          .filter((id): id is string => Boolean(id)),
+      ])
+
+      const remainingUserIds = assignedUserIds.filter((id) => !validAssignedUserIds.has(id))
+      if (remainingUserIds.length && projectResult.data?.supervising_organization_id) {
+        const { data: organizationMembers, error: organizationMemberError } = await admin
+          .from("organization_memberships")
+          .select("user_id")
+          .eq("organization_id", projectResult.data.supervising_organization_id)
+          .eq("status", "active")
+          .in("user_id", remainingUserIds)
+        if (organizationMemberError) {
+          logSiteVisitSupabaseError("assigned-participant organization membership validation", organizationMemberError)
+          throw organizationMemberError
+        }
+        for (const row of organizationMembers ?? []) validAssignedUserIds.add(row.user_id as string)
+      }
+
+      const invalidAssignedUserIds = assignedUserIds.filter((id) => !validAssignedUserIds.has(id))
+      if (invalidAssignedUserIds.length) {
+        return {
+          ok: false,
+          error: "One or more selected participants can no longer be assigned to this project. Refresh and try again.",
+        }
+      }
+    }
+
     const { error: scheduleError } = await admin.rpc("schedule_site_visit_request", {
       target_request_id: input.requestId,
       actor_id: actorId,
@@ -180,7 +311,10 @@ export async function scheduleSiteVisitAction(input: {
       visit_notes: cleanText(input.notes, 4000),
       assigned_user_ids: assignedUserIds,
     })
-    if (scheduleError) throw scheduleError
+    if (scheduleError) {
+      logSiteVisitSupabaseError("schedule_site_visit_request RPC", scheduleError)
+      throw scheduleError
+    }
 
     await audit({
       actorId,
@@ -199,7 +333,7 @@ export async function scheduleSiteVisitAction(input: {
     return { ok: true, requestId: input.requestId }
   } catch (error) {
     if (error instanceof AuthzError) return { ok: false, error: error.message }
-    return { ok: false, error: error instanceof Error ? error.message : "Unable to schedule the site visit." }
+    return { ok: false, error: safeScheduleError(error) }
   }
 }
 
