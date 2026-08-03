@@ -1428,7 +1428,7 @@ function renderRtlTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>)
 }
 
 function drawChecklistVectorBadge(
-  doc: jsPDF,
+  doc: JsPdfDocument,
   x: number,
   y: number,
   w: number,
@@ -1471,90 +1471,276 @@ function drawChecklistVectorBadge(
   }
 }
 
+type ChecklistStatusPresentation = {
+  label: string
+  passed: boolean
+  failed: boolean
+  inProgress: boolean
+}
+
+function checklistStatusPresentation(resultText: string, rtl: boolean): ChecklistStatusPresentation {
+  const raw = normalizeText(resultText)
+  const normalized = raw.toLowerCase().replace(/[\s-]+/g, "_")
+
+  if (
+    normalized === "fail"
+    || normalized === "failed"
+    || normalized === "rejected"
+    || raw.includes("غير مطابق")
+  ) {
+    return {
+      label: rtl ? "غير مطابق" : "Failed",
+      passed: false,
+      failed: true,
+      inProgress: false,
+    }
+  }
+
+  if (
+    normalized === "in_progress"
+    || normalized === "inprogress"
+    || raw.includes("قيد التنفيذ")
+  ) {
+    return {
+      label: rtl ? "قيد التنفيذ" : "In Progress",
+      passed: false,
+      failed: false,
+      inProgress: true,
+    }
+  }
+
+  if (
+    normalized === "na"
+    || normalized === "n/a"
+    || normalized === "not_applicable"
+    || raw.includes("لا ينطبق")
+  ) {
+    return {
+      label: rtl ? "لا ينطبق" : "N/A",
+      passed: false,
+      failed: false,
+      inProgress: false,
+    }
+  }
+
+  const isEmpty = !raw
+    || normalized === "pending"
+    || normalized === "open"
+    || raw.includes("غير مكتمل")
+
+  if (
+    !isEmpty
+    && (
+      normalized === "pass"
+      || normalized === "passed"
+      || normalized === "complete"
+      || normalized === "completed"
+      || raw.includes("مكتمل")
+      || raw.includes("مطابق")
+      || raw === "تم"
+    )
+  ) {
+    return {
+      label: rtl ? "مكتمل / مطابق" : "Passed",
+      passed: true,
+      failed: false,
+      inProgress: false,
+    }
+  }
+
+  return {
+    label: isEmpty ? (rtl ? "غير مكتمل" : "Open") : raw,
+    passed: false,
+    failed: false,
+    inProgress: false,
+  }
+}
+
 function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>) {
   const rows = (block && Array.isArray(block.rows)) ? block.rows : []
   if (!rows.length) return
 
+  const itemWidth = flow.width * 0.78
+  const statusWidth = flow.width - itemWidth
+  const itemX = flow.rtl ? flow.x + statusWidth : flow.x
+  const statusX = flow.rtl ? flow.x : flow.x + itemWidth
+  const dividerX = flow.rtl ? flow.x + statusWidth : flow.x + itemWidth
+  const cellPadding = 3
   const badgeW = 3.6
   const badgeH = 3.6
-  const gap = 2.5
-  const notesW = 35.0
+  const iconTextGap = 2
+  const itemLineHeight = 4.1
+  const notesLineHeight = 3.55
+  const statusLineHeight = 3.8
+  const headerHeight = 9.5
 
-  // Col 2 Label fills maximum space so Col 3 Notes goes all the way to the far page margin
-  const labelW = flow.width - badgeW - gap - notesW - gap
-
-  for (let i = 0; i < rows.length; i += 1) {
-    const row = rows[i]
-    if (!row.length) continue
-
-    const labelText = row.length >= 2 ? row[1] : row[0]
+  const prepareRow = (row: string[]) => {
+    const itemText = row.length >= 2 ? row[1] : row[0]
     const resultText = row.length >= 3 ? row[2] : (row[1] || "")
     const notesText = row.length >= 4 ? row[3] : ""
+    const status = checklistStatusPresentation(resultText, flow.rtl)
 
-    const isPassed = resultText === "pass" || resultText.toLowerCase().includes("complete") || resultText.includes("مكتمل") || resultText.includes("تم")
-    const isFailed = resultText === "fail" || resultText.includes("غير مطابق")
-    const isInProgress = resultText === "in_progress" || resultText.includes("قيد التنفيذ")
-
-    setLanguage(flow.doc, flow.rtl, 7.8, false)
-    const labelLines = textLines(flow.doc, labelText, labelW)
+    setLanguage(flow.doc, flow.rtl, 8.2, false)
+    const itemLines = textLines(flow.doc, itemText, itemWidth - cellPadding * 2)
 
     setLanguage(flow.doc, flow.rtl, 7.2, false)
-    const notesLines = notesText ? textLines(flow.doc, notesText, notesW) : []
+    const notesLines = notesText
+      ? textLines(flow.doc, notesText, itemWidth - cellPadding * 2)
+      : []
 
-    const lineH = 3.6
-    const maxTextLines = Math.max(labelLines.length, notesLines.length, 1)
-    const itemH = Math.max(6, maxTextLines * lineH + 2.5)
+    const statusHasArabic = containsArabic(status.label)
+    setLanguage(flow.doc, statusHasArabic, 7.6, false)
+    const statusTextWidth = statusWidth - cellPadding * 2 - badgeW - iconTextGap
+    const statusLines = textLines(flow.doc, status.label, statusTextWidth)
 
-    ensureSpace(flow, itemH)
+    const itemTextHeight = itemLines.length * itemLineHeight
+    const notesHeight = notesLines.length ? 1 + notesLines.length * notesLineHeight : 0
+    const itemContentHeight = itemTextHeight + notesHeight
+    const statusContentHeight = Math.max(badgeH, statusLines.length * statusLineHeight)
+    const height = Math.max(9.5, Math.max(itemContentHeight, statusContentHeight) + 4)
 
-    const badgeY = flow.y + 0.4
+    return {
+      itemLines,
+      notesLines,
+      status,
+      statusHasArabic,
+      statusLines,
+      height,
+    }
+  }
 
-    if (flow.rtl) {
-      const badgeX = flow.x + flow.width - badgeW
-      const labelX = badgeX - gap
-      const notesX = flow.x
+  const preparedRows = rows.filter((row) => row.length > 0).map(prepareRow)
+  if (!preparedRows.length) return
 
-      // Draw Badge Icon in vector (3.6mm)
-      drawChecklistVectorBadge(flow.doc, badgeX, badgeY, badgeW, badgeH, isPassed, isFailed, isInProgress)
+  const drawCellFrame = (y: number, height: number, fill: [number, number, number]) => {
+    flow.doc.setDrawColor(226, 232, 240)
+    flow.doc.setFillColor(...fill)
+    flow.doc.setLineWidth(0.15)
+    flow.doc.rect(flow.x, y, flow.width, height, "FD")
+    flow.doc.line(dividerX, y, dividerX, y + height)
+  }
 
-      // Draw Label (Col 2)
-      setLanguage(flow.doc, true, 7.8, false)
-      flow.doc.setTextColor(30, 41, 59)
-      writePdfText(flow.doc, labelLines, labelX, flow.y + 2.8, { align: "right", lineHeightFactor: 1.15 }, true)
+  const drawHeader = () => {
+    drawCellFrame(flow.y, headerHeight, [248, 250, 252])
 
-      // Draw Notes (Col 3 - Far left margin in RTL)
-      if (notesLines.length > 0) {
-        setLanguage(flow.doc, true, 7.2, false)
-        flow.doc.setTextColor(148, 163, 184)
-        writePdfText(flow.doc, notesLines, notesX, flow.y + 2.8, { align: "left", lineHeightFactor: 1.15 }, true)
-      }
-    } else {
-      const badgeX = flow.x
-      const labelX = badgeX + badgeW + gap
-      const notesX = flow.x + flow.width
+    setLanguage(flow.doc, flow.rtl, 8.2, false)
+    flow.doc.setTextColor(15, 23, 42)
+    writePdfText(
+      flow.doc,
+      flow.rtl ? "بند التفتيش" : "Inspection Item",
+      flow.rtl ? itemX + itemWidth - cellPadding : itemX + cellPadding,
+      flow.y + 6,
+      { align: flow.rtl ? "right" : "left" },
+      flow.rtl,
+    )
 
-      // Draw Badge Icon in vector (3.6mm)
-      drawChecklistVectorBadge(flow.doc, badgeX, badgeY, badgeW, badgeH, isPassed, isFailed, isInProgress)
+    setLanguage(flow.doc, flow.rtl, 8.2, false)
+    writePdfText(
+      flow.doc,
+      flow.rtl ? "الحالة" : "Status",
+      statusX + statusWidth / 2,
+      flow.y + 6,
+      { align: "center" },
+      flow.rtl,
+    )
 
-      // Draw Label (Col 2)
-      setLanguage(flow.doc, false, 7.8, false)
-      flow.doc.setTextColor(30, 41, 59)
-      writePdfText(flow.doc, labelLines, labelX, flow.y + 2.8, { align: "left", lineHeightFactor: 1.15 }, false)
+    flow.y += headerHeight
+  }
 
-      // Draw Notes (Col 3 - Far right margin in LTR)
-      if (notesLines.length > 0) {
-        setLanguage(flow.doc, false, 7.2, false)
-        flow.doc.setTextColor(148, 163, 184)
-        writePdfText(flow.doc, notesLines, notesX, flow.y + 2.8, { align: "right", lineHeightFactor: 1.15 }, false)
-      }
+  ensureSpace(flow, headerHeight + preparedRows[0].height)
+  drawHeader()
+
+  for (const row of preparedRows) {
+    if (flow.y + row.height > flow.bottom) {
+      addFlowPage(flow)
+      drawHeader()
     }
 
-    flow.y += itemH
-    flow.doc.setDrawColor(241, 245, 249)
-    flow.doc.setLineWidth(0.1)
-    flow.doc.line(flow.x, flow.y - 0.4, flow.x + flow.width, flow.y - 0.4)
+    const rowY = flow.y
+    drawCellFrame(rowY, row.height, [255, 255, 255])
+
+    const itemContentHeight = row.itemLines.length * itemLineHeight
+      + (row.notesLines.length ? 1 + row.notesLines.length * notesLineHeight : 0)
+    const itemStartY = rowY + (row.height - itemContentHeight) / 2 + 3.1
+
+    setLanguage(flow.doc, flow.rtl, 8.2, false)
+    flow.doc.setTextColor(51, 65, 85)
+    writePdfText(
+      flow.doc,
+      row.itemLines,
+      flow.rtl ? itemX + itemWidth - cellPadding : itemX + cellPadding,
+      itemStartY,
+      { align: flow.rtl ? "right" : "left", lineHeightFactor: 1.15 },
+      flow.rtl,
+    )
+
+    if (row.notesLines.length) {
+      setLanguage(flow.doc, flow.rtl, 7.2, false)
+      flow.doc.setTextColor(100, 116, 139)
+      writePdfText(
+        flow.doc,
+        row.notesLines,
+        flow.rtl ? itemX + itemWidth - cellPadding : itemX + cellPadding,
+        itemStartY + row.itemLines.length * itemLineHeight + 1,
+        { align: flow.rtl ? "right" : "left", lineHeightFactor: 1.15 },
+        flow.rtl,
+      )
+    }
+
+    const badgeY = rowY + (row.height - badgeH) / 2
+    const statusTextHeight = row.statusLines.length * statusLineHeight
+    const statusTextY = rowY + (row.height - statusTextHeight) / 2 + 3
+
+    if (flow.rtl) {
+      const badgeX = statusX + statusWidth - cellPadding - badgeW
+      drawChecklistVectorBadge(
+        flow.doc,
+        badgeX,
+        badgeY,
+        badgeW,
+        badgeH,
+        row.status.passed,
+        row.status.failed,
+        row.status.inProgress,
+      )
+      setLanguage(flow.doc, row.statusHasArabic, 7.6, false)
+      flow.doc.setTextColor(51, 65, 85)
+      writePdfText(
+        flow.doc,
+        row.statusLines,
+        badgeX - iconTextGap,
+        statusTextY,
+        { align: "right", lineHeightFactor: 1.15 },
+        row.statusHasArabic,
+      )
+    } else {
+      const badgeX = statusX + cellPadding
+      drawChecklistVectorBadge(
+        flow.doc,
+        badgeX,
+        badgeY,
+        badgeW,
+        badgeH,
+        row.status.passed,
+        row.status.failed,
+        row.status.inProgress,
+      )
+      setLanguage(flow.doc, row.statusHasArabic, 7.6, false)
+      flow.doc.setTextColor(51, 65, 85)
+      writePdfText(
+        flow.doc,
+        row.statusLines,
+        badgeX + badgeW + iconTextGap,
+        statusTextY,
+        { align: "left", lineHeightFactor: 1.15 },
+        row.statusHasArabic,
+      )
+    }
+
+    flow.y += row.height
   }
-  flow.y += 2
+
+  flow.y += 5
 }
 
 function renderNativeVectorTable(flow: Flow, headers: string[], rows: string[][]) {
