@@ -274,7 +274,11 @@ function reportDetailsSection(
   }
 }
 
-function checklistSection(content: TranslationReportContent, language: "en" | "ar"): PdfSectionTemplate {
+function checklistSection(
+  content: TranslationReportContent,
+  language: "en" | "ar",
+  englishContent?: TranslationReportContent | null,
+): PdfSectionTemplate {
   const labels = LABELS[language]
   if (!content?.checklist || !content.checklist.length) {
     return { key: "checklist", title: labels.checklist, html: "" }
@@ -284,12 +288,16 @@ function checklistSection(content: TranslationReportContent, language: "en" | "a
     title: labels.checklist,
     table: {
       headers: ["#", labels.item, labels.state, language === "ar" ? "الملاحظات" : "Notes"],
-      rows: content.checklist.map((item, index) => [
-        String(index + 1),
-        item.label,
-        item.result || (item.checked ? "pass" : "pending"),
-        item.notes || "",
-      ]),
+      rows: content.checklist.map((item, index) => {
+        const enItem = englishContent?.checklist?.[index]
+        const result = enItem?.result || item.result || (enItem?.checked ?? item.checked ? "pass" : "pending")
+        return [
+          String(index + 1),
+          item.label,
+          result,
+          item.notes || "",
+        ]
+      }),
     },
   }
 }
@@ -645,10 +653,11 @@ export function buildLanguagePdfTemplate(input: {
     })
   }
 
+  const englishContent = translation?.originalContent ?? data.response.content
   const sections: PdfSectionTemplate[] = [
     projectInformationSection(data, content, language),
     reportDetailsSection(data, content, language),
-    checklistSection(content, language),
+    checklistSection(content, language, englishContent),
     ...SECTION_LABELS.map((section) => ({
       key: section.key,
       title: language === "ar" ? section.ar : section.en,
