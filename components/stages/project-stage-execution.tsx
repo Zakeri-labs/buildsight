@@ -170,13 +170,22 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
                         {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4 flip-rtl" />}
                       </span>
                       <CardTitle className="truncate text-base font-semibold text-foreground">{cleanStageName}</CardTitle>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">({stageReports.length} {copy.reports})</span>
+                      <span className={cn("text-xs whitespace-nowrap", stageReports.length > 0 ? "font-semibold text-foreground" : "text-muted-foreground")}>
+                        (<strong className={cn(stageReports.length > 0 && "font-bold text-slate-900 dark:text-slate-100")}>{stageReports.length}</strong> {copy.reports})
+                      </span>
                     </button>
 
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-xs font-medium tabular-nums text-muted-foreground whitespace-nowrap">
-                        {stageCheckedCheckboxes} / {stageTotalCheckboxes} ({stageCheckboxPercentage}%)
-                      </span>
+                      {stageCheckboxPercentage > 0 ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:border-emerald-800/70 dark:bg-emerald-950/50 dark:text-emerald-300 tabular-nums whitespace-nowrap shadow-2xs">
+                          <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          {stageCheckedCheckboxes} / {stageTotalCheckboxes} ({stageCheckboxPercentage}%)
+                        </span>
+                      ) : (
+                        <span className="text-xs font-medium tabular-nums text-muted-foreground whitespace-nowrap">
+                          {stageCheckedCheckboxes} / {stageTotalCheckboxes} ({stageCheckboxPercentage}%)
+                        </span>
+                      )}
                       <Link
                         href={`/projects/${data.project.id}/stages/${stage.id}/reports/new`}
                         className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5 px-3 text-xs font-medium shrink-0")}
