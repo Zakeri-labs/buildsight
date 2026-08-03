@@ -456,19 +456,19 @@ export function ProjectDetail({
                   <DetailField label={labels.completion} value={currentProject.targetHandover} />
                   <DetailField label={labels.location} value={currentProject.location} />
                   <DetailField label={labels.areaDistrict} value={currentEditProject.areaDistrict?.trim() || labels.notSet} />
-                  <DetailField
-                    label={labels.includedStructureVisits}
-                    value={displayVisitCount(currentEditProject.includedStructureVisits, labels.notSet)}
-                  />
-                  <DetailField
-                    label={labels.includedFinishingVisits}
-                    value={displayVisitCount(currentEditProject.includedFinishingVisits, labels.notSet)}
-                  />
                 </dl>
 
                 <div className="mt-3 rounded-lg border border-border/40 bg-muted/20 p-3">
                   <p className="mb-1 text-xs font-semibold text-foreground">{labels.financialSummary}</p>
                   <dl className="grid min-w-0 gap-x-6 md:grid-cols-2">
+                    <DetailField
+                      label={labels.includedStructureVisits}
+                      value={displayVisitCount(currentEditProject.includedStructureVisits, "—")}
+                    />
+                    <DetailField
+                      label={labels.includedFinishingVisits}
+                      value={displayVisitCount(currentEditProject.includedFinishingVisits, "—")}
+                    />
                     <DetailField
                       label={labels.structureFee}
                       value={formatProjectAmountOmr(currentEditProject.structureSupervisionFee, "—")}
@@ -484,22 +484,6 @@ export function ProjectDetail({
                     <DetailField
                       label={labels.outstandingAmount}
                       value={formatProjectAmountOmr(currentEditProject.outstandingAmount, "—")}
-                    />
-                    <DetailField
-                      label={labels.nextPaymentAmount}
-                      value={formatProjectAmountOmr(currentEditProject.nextPaymentAmount, "—")}
-                    />
-                    <DetailField
-                      label={labels.nextPaymentDueDate}
-                      value={displayProjectDate(currentEditProject.nextPaymentDueDate, locale, "—")}
-                    />
-                    <DetailField
-                      label={labels.paymentNote}
-                      value={currentEditProject.invoiceReferencePaymentNote?.trim() || "—"}
-                    />
-                    <DetailField
-                      label={labels.initialRemarks}
-                      value={currentEditProject.initialRemarks?.trim() || "—"}
                     />
                   </dl>
                 </div>
