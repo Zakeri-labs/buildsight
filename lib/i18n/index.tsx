@@ -11,7 +11,17 @@ type I18nContextValue = {
   toggleLocale: () => void
 }
 
-const I18nContext = createContext<I18nContextValue | null>(null)
+// Provide a real default so useI18n is safe to call even outside I18nProvider
+// (e.g. during SSR before the client context tree is hydrated)
+const defaultContext: I18nContextValue = {
+  locale: "en",
+  dir: "ltr",
+  t: dictionaries["en"] as Dictionary,
+  setLocale: () => {},
+  toggleLocale: () => {},
+}
+
+const I18nContext = createContext<I18nContextValue>(defaultContext)
 
 const STORAGE_KEY = "buildsight-locale"
 
@@ -57,7 +67,5 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useI18n() {
-  const ctx = useContext(I18nContext)
-  if (!ctx) throw new Error("useI18n must be used within I18nProvider")
-  return ctx
+  return useContext(I18nContext)
 }
