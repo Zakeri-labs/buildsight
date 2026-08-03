@@ -229,7 +229,7 @@ export function StageTranslationViewer({
       if (!response.ok) throw new Error(payload?.error || "Unable to generate the document translation.")
       const now = new Date().toISOString()
       const next = payload.translation as Partial<StageTranslationRecord>
-      setTranslation({
+      const newRec: StageTranslationRecord = {
         id: String(next.id),
         status: "completed",
         originalContent: next.originalContent ?? data.response.content,
@@ -240,17 +240,20 @@ export function StageTranslationViewer({
         originalPdfPath: null,
         arabicPdfPath: null,
         bilingualPdfPath: null,
-      })
+      }
+      setTranslation(newRec)
       setSuccess(copy.generated)
+      return newRec
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : "Unable to generate the document translation.")
+      return null
     } finally {
       setBusy(null)
     }
   }
 
   async function storePdf(blob: Blob, filename: string, kind: "original" | "arabic" | "bilingual") {
-    if (!translation) throw new Error("Generate the translation before exporting PDFs.")
+    if (!translation) return null
     const path = await storeTranslationPdf({
       projectId: data.project.id,
       translationId: translation.id,
@@ -268,25 +271,16 @@ export function StageTranslationViewer({
   }
 
   async function downloadPdf(kind: "original" | "arabic" | "bilingual") {
-    if (kind !== "original" && (!translation?.translatedContent || translationIsStale)) return
-    const storedPath = translation
-      ? kind === "original"
-        ? translation.originalPdfPath
-        : kind === "arabic"
-          ? translation.arabicPdfPath
-          : translation.bilingualPdfPath
-      : null
-    if (storedPath && translation && !(kind === "original" && sourcePdf) && false) {
-      const params = new URLSearchParams({ projectId: data.project.id, translationId: translation?.id ?? "", kind })
-      window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
-      return
-    }
     setBusy(kind)
     setError(null)
     setSuccess(null)
     try {
-      const exported = await exportTranslationPdf({ data, translation, kind, ccRecipients })
-      if (translation) {
+      let activeTranslation = translation
+      if (kind !== "original" && (!activeTranslation?.translatedContent || translationIsStale)) {
+        activeTranslation = await generateTranslation()
+      }
+      const exported = await exportTranslationPdf({ data, translation: activeTranslation, kind, ccRecipients })
+      if (activeTranslation) {
         await storePdf(exported.blob, exported.filename, kind)
         downloadPdfBlob(exported.blob, exported.filename)
         setSuccess(copy.stored)
@@ -334,10 +328,10 @@ export function StageTranslationViewer({
               <Button variant="outline" onClick={() => void downloadPdf("original")} disabled={busy !== null}>
                 {busy === "original" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.downloadOriginal}
               </Button>
-              <Button variant="outline" onClick={() => void downloadPdf("arabic")} disabled={!translated || translationIsStale || busy !== null}>
+              <Button variant="outline" onClick={() => void downloadPdf("arabic")} disabled={busy !== null}>
                 {busy === "arabic" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.downloadArabic}
               </Button>
-              <Button variant="outline" onClick={() => void downloadPdf("bilingual")} disabled={!translated || translationIsStale || busy !== null}>
+              <Button variant="outline" onClick={() => void downloadPdf("bilingual")} disabled={busy !== null}>
                 {busy === "bilingual" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.downloadBilingual}
               </Button>
             </div>
