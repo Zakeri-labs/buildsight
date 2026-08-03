@@ -3100,89 +3100,151 @@ function renderBilingualTextRow(
   options: BilingualRowOptions = {},
 ) {
   const style = options.style ?? "body"
-  const appearance = bilingualRowAppearance(style, Boolean(options.alternate))
-  const columnWidth = flow.width / 2
-  const contentWidth = columnWidth - appearance.padding * 2
-  const englishLines = bilingualCellLines(flow.doc, englishText, contentWidth, false, appearance.fontSize, appearance.bold)
-  const arabicLines = bilingualCellLines(flow.doc, arabicText, contentWidth, true, appearance.fontSize, appearance.bold)
+  const { doc } = flow
 
-  let englishOffset = 0
-  let arabicOffset = 0
-  let firstSegment = true
+  // 1. SECTION HEADERS: Clean header with blue accent boxes on outer edges
+  if (style === "section") {
+    ensureSpace(flow, 16)
+    flow.y += 4
 
-  do {
-    if (flow.y + appearance.minHeight > flow.bottom) addBilingualContinuationPage(flow)
+    const iconSize = 3.5
+    const engStr = (englishText || "").trim()
+    const arStr = (arabicText || "").trim()
 
-    const availableHeight = Math.max(appearance.minHeight, flow.bottom - flow.y)
-    const availableLineCount = Math.max(
-      1,
-      Math.floor((availableHeight - appearance.padding * 2) / appearance.lineHeight),
-    )
-    const englishRemaining = Math.max(0, englishLines.length - englishOffset)
-    const arabicRemaining = Math.max(0, arabicLines.length - arabicOffset)
-    const remainingLineCount = Math.max(englishRemaining, arabicRemaining, 1)
-    const segmentLineCount = Math.min(remainingLineCount, availableLineCount)
-    const englishSegment = englishLines.slice(englishOffset, englishOffset + segmentLineCount)
-    const arabicSegment = arabicLines.slice(arabicOffset, arabicOffset + segmentLineCount)
-    const rowHeight = Math.max(
+    // English Header on Left
+    if (engStr) {
+      doc.setFillColor(37, 99, 235)
+      doc.rect(flow.x, flow.y - 2.8, iconSize, iconSize, "F")
+      setLanguage(doc, false, 11, true)
+      doc.setTextColor(15, 23, 42)
+      writePdfText(doc, engStr, flow.x + iconSize + 2.5, flow.y, { align: "left" }, false)
+    }
+
+    // Arabic Header on Right
+    if (arStr) {
+      const arRightX = flow.x + flow.width
+      doc.setFillColor(37, 99, 235)
+      doc.rect(arRightX - iconSize, flow.y - 2.8, iconSize, iconSize, "F")
+      setLanguage(doc, true, 11, true)
+      doc.setTextColor(15, 23, 42)
+      writePdfText(doc, arStr, arRightX - iconSize - 2.5, flow.y, { align: "right" }, true)
+    }
+
+    // Thin light horizontal divider line below section header
+    flow.y += 3.5
+    doc.setDrawColor(226, 232, 240)
+    doc.setLineWidth(0.2)
+    doc.line(flow.x, flow.y, flow.x + flow.width, flow.y)
+    flow.y += 5
+    return
+  }
+
+  // 2. HEADING (e.g. subheadings inside section)
+  if (style === "heading") {
+    ensureSpace(flow, 12)
+    const gap = 6
+    const colW = (flow.width - gap) / 2
+    const engLines = bilingualCellLines(doc, englishText, colW, false, 9.5, true)
+    const arLines = bilingualCellLines(doc, arabicText, colW, true, 9.5, true)
+    const rowH = Math.max(engLines.length, arLines.length, 1) * 4.2
+
+    if (engLines.length) {
+      setLanguage(doc, false, 9.5, true)
+      doc.setTextColor(30, 41, 59)
+      writePdfText(doc, engLines, flow.x, flow.y + 3, { align: "left", lineHeightFactor: 1.15 }, false)
+    }
+    if (arLines.length) {
+      setLanguage(doc, true, 9.5, true)
+      doc.setTextColor(30, 41, 59)
+      writePdfText(doc, arLines, flow.x + flow.width, flow.y + 3, { align: "right", lineHeightFactor: 1.15 }, true)
+    }
+    flow.y += rowH + 3
+    return
+  }
+
+  // 3. TABLE ROWS (Actual tables like approval or structured table cells)
+  if (style === "table-header" || style === "table-cell") {
+    const appearance = bilingualRowAppearance(style, Boolean(options.alternate))
+    const columnWidth = flow.width / 2
+    const contentWidth = columnWidth - appearance.padding * 2
+    const englishLines = bilingualCellLines(doc, englishText, contentWidth, false, appearance.fontSize, appearance.bold)
+    const arabicLines = bilingualCellLines(doc, arabicText, contentWidth, true, appearance.fontSize, appearance.bold)
+
+    const rowH = Math.max(
       appearance.minHeight,
-      segmentLineCount * appearance.lineHeight + appearance.padding * 2,
+      Math.max(englishLines.length, arabicLines.length, 1) * appearance.lineHeight + appearance.padding * 2,
     )
-    const rowY = flow.y
-    const { doc } = flow
+    if (flow.y + rowH > flow.bottom) addBilingualContinuationPage(flow)
 
     doc.setFillColor(...appearance.fill)
-    doc.rect(flow.x, rowY, flow.width, rowHeight, "F")
+    doc.rect(flow.x, flow.y, flow.width, rowH, "F")
     doc.setDrawColor(...appearance.border)
-    doc.setLineWidth(style === "section" ? 0.35 : 0.18)
-    doc.rect(flow.x, rowY, flow.width, rowHeight)
-    doc.line(flow.x + columnWidth, rowY, flow.x + columnWidth, rowY + rowHeight)
+    doc.setLineWidth(0.18)
+    doc.rect(flow.x, flow.y, flow.width, rowH)
+    doc.line(flow.x + columnWidth, flow.y, flow.x + columnWidth, flow.y + rowH)
 
-    if (englishSegment.length) {
+    if (englishLines.length) {
       setLanguage(doc, false, appearance.fontSize, appearance.bold)
       doc.setTextColor(...appearance.text)
-      writePdfText(
-        doc,
-        englishSegment,
-        flow.x + appearance.padding,
-        rowY + appearance.padding + appearance.lineHeight * 0.78,
-        { align: "left", lineHeightFactor: 1.15 },
-        false,
-      )
+      writePdfText(doc, englishLines, flow.x + appearance.padding, flow.y + appearance.padding + 3, { align: "left", lineHeightFactor: 1.15 }, false)
     }
-
-    if (arabicSegment.length) {
+    if (arabicLines.length) {
       setLanguage(doc, true, appearance.fontSize, appearance.bold)
       doc.setTextColor(...appearance.text)
-      writePdfText(
-        doc,
-        arabicSegment,
-        flow.x + flow.width - appearance.padding,
-        rowY + appearance.padding + appearance.lineHeight * 0.78,
-        { align: "right", lineHeightFactor: 1.15 },
-        true,
-      )
+      writePdfText(doc, arabicLines, flow.x + flow.width - appearance.padding, flow.y + appearance.padding + 3, { align: "right", lineHeightFactor: 1.15 }, true)
+    }
+    flow.y += rowH
+    return
+  }
+
+  // 4. BODY PARAGRAPHS (Borderless, clean side-by-side text block matching image 1:1)
+  const gap = 8
+  const colW = (flow.width - gap) / 2
+  const engLines = bilingualCellLines(doc, englishText, colW, false, 8.5, false)
+  const arLines = bilingualCellLines(doc, arabicText, colW, true, 8.5, false)
+
+  let engOffset = 0
+  let arOffset = 0
+
+  do {
+    if (flow.y + 10 > flow.bottom) addBilingualContinuationPage(flow)
+
+    const availH = flow.bottom - flow.y
+    const lineH = 4.2
+    const maxAvailLines = Math.max(1, Math.floor(availH / lineH))
+
+    const engRem = Math.max(0, engLines.length - engOffset)
+    const arRem = Math.max(0, arLines.length - arOffset)
+    const segLines = Math.min(Math.max(engRem, arRem, 1), maxAvailLines)
+
+    const engSeg = engLines.slice(engOffset, engOffset + segLines)
+    const arSeg = arLines.slice(arOffset, arOffset + segLines)
+
+    const segH = segLines * lineH
+
+    if (engSeg.length) {
+      setLanguage(doc, false, 8.5, false)
+      doc.setTextColor(51, 65, 85)
+      writePdfText(doc, engSeg, flow.x, flow.y + 3.2, { align: "left", lineHeightFactor: 1.15 }, false)
     }
 
-    flow.y += rowHeight
-    englishOffset += segmentLineCount
-    arabicOffset += segmentLineCount
-    firstSegment = false
+    if (arSeg.length) {
+      setLanguage(doc, true, 8.5, false)
+      doc.setTextColor(51, 65, 85)
+      writePdfText(doc, arSeg, flow.x + flow.width, flow.y + 3.2, { align: "right", lineHeightFactor: 1.15 }, true)
+    }
 
-    const hasMore = englishOffset < englishLines.length || arabicOffset < arabicLines.length
-    if (hasMore) addBilingualContinuationPage(flow)
-  } while (
-    firstSegment
-    || englishOffset < englishLines.length
-    || arabicOffset < arabicLines.length
-  )
+    flow.y += segH
+    engOffset += segLines
+    arOffset += segLines
 
-  if (options.groupEnd) {
-    flow.doc.setDrawColor(148, 163, 184)
-    flow.doc.setLineWidth(0.35)
-    flow.doc.line(flow.x, flow.y, flow.x + flow.width, flow.y)
-    flow.doc.setLineWidth(0.2)
-  }
+    if (engOffset < engLines.length || arOffset < arLines.length) {
+      addBilingualContinuationPage(flow)
+    }
+  } while (engOffset < engLines.length || arOffset < arLines.length)
+
+  // Extra paragraph gap below body text
+  flow.y += 4
 }
 
 function pairedBlocksByEnglishStructure(englishBlocks: PdfBlock[], arabicBlocks: PdfBlock[]) {
