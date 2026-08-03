@@ -11,14 +11,11 @@ export const PROJECT_TYPES = [
 ] as const
 
 export const SUPERVISION_TYPES = [
-  { value: "full_time", label: "Full-Time Supervision", labelAr: "إشراف بدوام كامل" },
-  { value: "part_time", label: "Part-Time Supervision", labelAr: "إشراف بدوام جزئي" },
-  { value: "periodic", label: "Periodic Supervision", labelAr: "إشراف دوري" },
-  { value: "milestone_based", label: "Milestone-Based Supervision", labelAr: "إشراف حسب المراحل" },
-  { value: "resident", label: "Resident Supervision", labelAr: "إشراف مقيم" },
-  { value: "on_call", label: "On-Call Supervision", labelAr: "إشراف عند الطلب" },
-  { value: "remote", label: "Remote Supervision", labelAr: "إشراف عن بُعد" },
-  { value: "consultancy_only", label: "Consultancy Only", labelAr: "استشارات فقط" },
+  { value: "monthly_2", label: "Monthly 2", labelAr: "شهري 2" },
+  { value: "monthly_3", label: "Monthly 3", labelAr: "شهري 3" },
+  { value: "monthly_4", label: "Monthly 4", labelAr: "شهري 4" },
+  { value: "lump_sum", label: "Lump Sum", labelAr: "مبلغ مقطوع" },
+  { value: "visit_basic", label: "Visit Basic", labelAr: "أساسي بالزيارة" },
   { value: "other", label: "Other", labelAr: "أخرى" },
 ] as const
 
@@ -40,13 +37,25 @@ const projectPriorityValues = new Set<string>(PROJECT_PRIORITIES.map((item) => i
 const LEGACY_SUPERVISION_LABELS: Record<string, string> = {
   monthly_6_times: "Monthly 6 Times",
   monthly_4_times: "Monthly 4 Times",
+  monthly_4: "Monthly 4",
+  monthly_3: "Monthly 3",
+  monthly_2: "Monthly 2",
   lump_sum: "Lump Sum",
   visit_basis: "Visit Basis",
+  visit_basic: "Visit Basic",
   full_supervision: "Full Supervision",
   periodic_supervision: "Periodic Supervision",
   design_and_supervision: "Design and Supervision",
   construction_management: "Construction Management",
   quality_inspection: "Quality Inspection",
+  full_time: "Full-Time Supervision",
+  part_time: "Part-Time Supervision",
+  periodic: "Periodic Supervision",
+  milestone_based: "Milestone-Based Supervision",
+  resident: "Resident Supervision",
+  on_call: "On-Call Supervision",
+  remote: "Remote Supervision",
+  consultancy_only: "Consultancy Only",
 }
 
 export function isProjectTypeValue(value: unknown): value is ProjectTypeValue {
