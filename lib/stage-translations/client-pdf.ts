@@ -1269,35 +1269,35 @@ function drawChecklistVectorBadge(
 ) {
   if (isPassed) {
     doc.setFillColor(22, 163, 74)
-    doc.roundedRect(x, y, w, h, 1, 1, "F")
-    doc.setDrawColor(255, 255, 255)
-    doc.setLineWidth(0.65)
-    doc.line(x + 1.1, y + 2.5, x + 2.1, y + 3.7)
-    doc.line(x + 2.1, y + 3.7, x + 3.9, y + 1.3)
-  } else if (isFailed) {
-    doc.setFillColor(225, 29, 72)
-    doc.roundedRect(x, y, w, h, 1, 1, "F")
-    doc.setDrawColor(255, 255, 255)
-    doc.setLineWidth(0.65)
-    doc.line(x + 1.3, y + 1.3, x + 3.7, y + 3.7)
-    doc.line(x + 3.7, y + 1.3, x + 1.3, y + 3.7)
-  } else if (isInProgress) {
-    doc.setFillColor(217, 119, 6)
-    doc.roundedRect(x, y, w, h, 1, 1, "F")
+    doc.roundedRect(x, y, w, h, 0.8, 0.8, "F")
     doc.setDrawColor(255, 255, 255)
     doc.setLineWidth(0.5)
-    doc.line(x + 1.2, y + 1.2, x + 3.8, y + 1.2)
-    doc.line(x + 1.2, y + 3.8, x + 3.8, y + 3.8)
-    doc.line(x + 1.2, y + 1.2, x + 3.8, y + 3.8)
-    doc.line(x + 3.8, y + 1.2, x + 1.2, y + 3.8)
+    doc.line(x + 0.8, y + 1.8, x + 1.5, y + 2.7)
+    doc.line(x + 1.5, y + 2.7, x + 2.8, y + 0.9)
+  } else if (isFailed) {
+    doc.setFillColor(225, 29, 72)
+    doc.roundedRect(x, y, w, h, 0.8, 0.8, "F")
+    doc.setDrawColor(255, 255, 255)
+    doc.setLineWidth(0.5)
+    doc.line(x + 1.0, y + 1.0, x + 2.6, y + 2.6)
+    doc.line(x + 2.6, y + 1.0, x + 1.0, y + 2.6)
+  } else if (isInProgress) {
+    doc.setFillColor(217, 119, 6)
+    doc.roundedRect(x, y, w, h, 0.8, 0.8, "F")
+    doc.setDrawColor(255, 255, 255)
+    doc.setLineWidth(0.4)
+    doc.line(x + 0.9, y + 0.9, x + 2.7, y + 0.9)
+    doc.line(x + 0.9, y + 2.7, x + 2.7, y + 2.7)
+    doc.line(x + 0.9, y + 0.9, x + 2.7, y + 2.7)
+    doc.line(x + 2.7, y + 0.9, x + 0.9, y + 2.7)
   } else {
     doc.setFillColor(241, 245, 249)
     doc.setDrawColor(203, 213, 225)
-    doc.roundedRect(x, y, w, h, 1, 1, "FD")
+    doc.roundedRect(x, y, w, h, 0.8, 0.8, "FD")
     doc.setDrawColor(148, 163, 184)
-    doc.setLineWidth(0.5)
-    doc.line(x + 1.5, y + 1.5, x + 3.5, y + 3.5)
-    doc.line(x + 3.5, y + 1.5, x + 1.5, y + 3.5)
+    doc.setLineWidth(0.4)
+    doc.line(x + 1.1, y + 1.1, x + 2.5, y + 2.5)
+    doc.line(x + 2.5, y + 1.1, x + 1.1, y + 2.5)
   }
 }
 
@@ -1305,14 +1305,13 @@ function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "tabl
   const rows = (block && Array.isArray(block.rows)) ? block.rows : []
   if (!rows.length) return
 
-  const badgeW = 5.0
-  const badgeH = 5.0
-  const gap = 3.0
+  const badgeW = 3.6
+  const badgeH = 3.6
+  const gap = 2.5
+  const notesW = 35.0
 
-  // 3 Columns: Col 1 = Icon (5mm), Col 2 = Label (62% width), Col 3 = Notes (Remaining width)
-  const availableW = flow.width - badgeW - gap
-  const labelW = Math.floor(availableW * 0.62)
-  const notesW = availableW - labelW - gap
+  // Col 2 Label fills maximum space so Col 3 Notes goes all the way to the far page margin
+  const labelW = flow.width - badgeW - gap - notesW - gap
 
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i]
@@ -1326,64 +1325,64 @@ function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "tabl
     const isFailed = resultText === "fail" || resultText.includes("غير مطابق")
     const isInProgress = resultText === "in_progress" || resultText.includes("قيد التنفيذ")
 
-    setLanguage(flow.doc, flow.rtl, 8.5, false)
+    setLanguage(flow.doc, flow.rtl, 7.8, false)
     const labelLines = textLines(flow.doc, labelText, labelW)
 
-    setLanguage(flow.doc, flow.rtl, 7.5, false)
+    setLanguage(flow.doc, flow.rtl, 7.2, false)
     const notesLines = notesText ? textLines(flow.doc, notesText, notesW) : []
 
-    const lineH = 4.0
+    const lineH = 3.6
     const maxTextLines = Math.max(labelLines.length, notesLines.length, 1)
-    const itemH = Math.max(7, maxTextLines * lineH + 3.0)
+    const itemH = Math.max(6, maxTextLines * lineH + 2.5)
 
     ensureSpace(flow, itemH)
 
-    const badgeY = flow.y + 0.5
+    const badgeY = flow.y + 0.4
 
     if (flow.rtl) {
       const badgeX = flow.x + flow.width - badgeW
       const labelX = badgeX - gap
       const notesX = flow.x
 
-      // Draw Badge Icon in vector
+      // Draw Badge Icon in vector (3.6mm)
       drawChecklistVectorBadge(flow.doc, badgeX, badgeY, badgeW, badgeH, isPassed, isFailed, isInProgress)
 
       // Draw Label (Col 2)
-      setLanguage(flow.doc, true, 8.5, true)
-      flow.doc.setTextColor(15, 23, 42)
-      writePdfText(flow.doc, labelLines, labelX, flow.y + 3.2, { align: "right", lineHeightFactor: 1.15 }, true)
+      setLanguage(flow.doc, true, 7.8, false)
+      flow.doc.setTextColor(30, 41, 59)
+      writePdfText(flow.doc, labelLines, labelX, flow.y + 2.8, { align: "right", lineHeightFactor: 1.15 }, true)
 
-      // Draw Notes (Col 3)
+      // Draw Notes (Col 3 - Far left margin in RTL)
       if (notesLines.length > 0) {
-        setLanguage(flow.doc, true, 7.5, false)
-        flow.doc.setTextColor(100, 116, 139)
-        writePdfText(flow.doc, notesLines, notesX + notesW, flow.y + 3.2, { align: "right", lineHeightFactor: 1.15 }, true)
+        setLanguage(flow.doc, true, 7.2, false)
+        flow.doc.setTextColor(148, 163, 184)
+        writePdfText(flow.doc, notesLines, notesX, flow.y + 2.8, { align: "left", lineHeightFactor: 1.15 }, true)
       }
     } else {
       const badgeX = flow.x
       const labelX = badgeX + badgeW + gap
-      const notesX = labelX + labelW + gap
+      const notesX = flow.x + flow.width
 
-      // Draw Badge Icon in vector
+      // Draw Badge Icon in vector (3.6mm)
       drawChecklistVectorBadge(flow.doc, badgeX, badgeY, badgeW, badgeH, isPassed, isFailed, isInProgress)
 
       // Draw Label (Col 2)
-      setLanguage(flow.doc, false, 8.5, true)
-      flow.doc.setTextColor(15, 23, 42)
-      writePdfText(flow.doc, labelLines, labelX, flow.y + 3.2, { align: "left", lineHeightFactor: 1.15 }, false)
+      setLanguage(flow.doc, false, 7.8, false)
+      flow.doc.setTextColor(30, 41, 59)
+      writePdfText(flow.doc, labelLines, labelX, flow.y + 2.8, { align: "left", lineHeightFactor: 1.15 }, false)
 
-      // Draw Notes (Col 3)
+      // Draw Notes (Col 3 - Far right margin in LTR)
       if (notesLines.length > 0) {
-        setLanguage(flow.doc, false, 7.5, false)
-        flow.doc.setTextColor(100, 116, 139)
-        writePdfText(flow.doc, notesLines, notesX, flow.y + 3.2, { align: "left", lineHeightFactor: 1.15 }, false)
+        setLanguage(flow.doc, false, 7.2, false)
+        flow.doc.setTextColor(148, 163, 184)
+        writePdfText(flow.doc, notesLines, notesX, flow.y + 2.8, { align: "right", lineHeightFactor: 1.15 }, false)
       }
     }
 
     flow.y += itemH
     flow.doc.setDrawColor(241, 245, 249)
     flow.doc.setLineWidth(0.1)
-    flow.doc.line(flow.x, flow.y - 0.5, flow.x + flow.width, flow.y - 0.5)
+    flow.doc.line(flow.x, flow.y - 0.4, flow.x + flow.width, flow.y - 0.4)
   }
   flow.y += 2
 }
