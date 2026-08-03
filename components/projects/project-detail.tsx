@@ -96,10 +96,19 @@ function projectDocuments(project: ProjectRecord): ProjectDocument[] {
 }
 
 function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
+  const isUnset =
+    value === "Not set" ||
+    value === "غير محدد" ||
+    value === "Not Set" ||
+    value === "—" ||
+    value == null ||
+    value === ""
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)] items-start gap-2.5 py-1">
-      <dt className="text-xs font-medium leading-[1.15rem] text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-words text-sm font-semibold leading-[1.15rem] text-foreground">{value}</dd>
+    <div className="flex flex-col justify-between gap-1 rounded-lg border border-border/40 bg-muted/15 p-2.5 transition-colors hover:bg-muted/30">
+      <dt className="text-[11px] font-medium text-muted-foreground/85">{label}</dt>
+      <dd className={cn("min-w-0 break-words text-xs font-semibold text-foreground", isUnset && "font-normal text-muted-foreground/35")}>
+        {isUnset ? <span className="select-none font-sans text-muted-foreground/30">—</span> : value}
+      </dd>
     </div>
   )
 }
@@ -254,9 +263,7 @@ export function ProjectDetail({
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${projectPoint.latitude},${projectPoint.longitude}`)}`
     : null
   const handleMapReady = useCallback(() => setMapState("ready"), [])
-  const handleTileError = useCallback(() => {
-    // Keep the mounted map visible; Leaflet can continue rendering the marker, controls, and remaining tiles.
-  }, [])
+  const handleTileError = useCallback(() => {}, [])
   const isFullscreen = nativeFullscreen || fallbackFullscreen
   const requestMapResize = useCallback(() => {
     setResizeRequest((request) => request + 1)
@@ -337,9 +344,7 @@ export function ProjectDetail({
       try {
         await shell.requestFullscreen()
         return
-      } catch {
-        // Fall through to the CSS fullscreen mode when the browser rejects the native API.
-      }
+      } catch {}
     }
 
     setFallbackFullscreen(true)
@@ -376,7 +381,7 @@ export function ProjectDetail({
             ) : null}
           </CardHeader>
           <CardContent className="p-4 sm:p-5">
-            <div className="grid gap-4 lg:grid-cols-[288px_minmax(0,1fr)]">
+            <div className="grid gap-5 lg:grid-cols-[288px_minmax(0,1fr)]">
               <div className="min-w-0">
                 <div className="relative">
                   <ProjectImageDisplay
@@ -411,87 +416,87 @@ export function ProjectDetail({
                 </Link>
               </div>
 
-              <div className="min-w-0 py-0.5">
-                <dl className="grid min-w-0 gap-x-5 md:grid-cols-2">
+              <div className="space-y-4 min-w-0">
+                <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
                   <DetailField label={labels.name} value={currentProject.name} />
+                  <DetailField label={labels.code} value={currentProject.code} />
                   <DetailField label={labels.type} value={currentProject.projectType} />
                   <DetailField label={labels.supervisionType} value={currentProject.supervisionType} />
-                  <DetailField label={labels.code} value={currentProject.code} />
-                  <DetailField label={labels.plotNo} value={currentEditProject.plotNo?.trim() || labels.notSet} />
+                  <DetailField label={labels.plotNo} value={currentEditProject.plotNo?.trim()} />
                   <DetailField
                     label={labels.status}
                     value={<ProjectStatusDisplay status={currentEditProject.status} isArabic={isArabic} />}
                   />
                   <DetailField label={labels.priority} value={projectPriorityLabel(currentEditProject.priority, isArabic)} />
                   <DetailField label={labels.owner} value={currentProject.client} />
+                  <DetailField label={labels.role} value={currentProject.organizationRole} />
                   <DetailField label={labels.start} value={currentProject.startDate} />
                   <DetailField
                     label={labels.supervisionStart}
-                    value={displayProjectDate(currentEditProject.supervisionStartDate, locale, labels.notSet)}
+                    value={displayProjectDate(currentEditProject.supervisionStartDate, locale, "")}
                   />
-                  <DetailField label={labels.role} value={currentProject.organizationRole} />
                   <DetailField label={labels.completion} value={currentProject.targetHandover} />
                   <DetailField label={labels.location} value={currentProject.location} />
-                  <DetailField label={labels.areaDistrict} value={currentEditProject.areaDistrict?.trim() || labels.notSet} />
+                  <DetailField label={labels.areaDistrict} value={currentEditProject.areaDistrict?.trim()} />
                   <DetailField
                     label={labels.includedStructureVisits}
-                    value={displayVisitCount(currentEditProject.includedStructureVisits, labels.notSet)}
+                    value={displayVisitCount(currentEditProject.includedStructureVisits, "")}
                   />
                   <DetailField
                     label={labels.includedFinishingVisits}
-                    value={displayVisitCount(currentEditProject.includedFinishingVisits, labels.notSet)}
+                    value={displayVisitCount(currentEditProject.includedFinishingVisits, "")}
                   />
                   <DetailField label={labels.progress} value={`${progress}%`} />
                 </dl>
 
-                <div className="mt-2.5 border-t pt-2.5">
-                  <div className="grid min-w-0 gap-1.5 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,3.15fr)] sm:items-start sm:gap-2.5">
-                    <p className="text-xs font-medium leading-5 text-muted-foreground">{labels.description}</p>
-                    <p className="min-w-0 whitespace-pre-wrap break-words text-sm leading-5 text-foreground/90">
+                {currentProject.description?.trim() ? (
+                  <div className="rounded-lg border border-border/40 bg-muted/10 p-3">
+                    <p className="text-[11px] font-medium text-muted-foreground">{labels.description}</p>
+                    <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-foreground/90">
                       {currentProject.description}
                     </p>
                   </div>
-                </div>
+                ) : null}
 
-                <div className="mt-2.5 border-t pt-2.5">
-                  <p className="text-xs font-semibold text-foreground">{labels.financialSummary}</p>
-                  <dl className="mt-0.5 grid min-w-0 gap-x-5 md:grid-cols-2">
+                <div className="rounded-lg border border-border/40 bg-muted/10 p-3">
+                  <p className="mb-2 text-xs font-semibold text-foreground">{labels.financialSummary}</p>
+                  <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
                     <DetailField
                       label={labels.structureFee}
-                      value={formatProjectAmountOmr(currentEditProject.structureSupervisionFee, labels.notSet)}
+                      value={formatProjectAmountOmr(currentEditProject.structureSupervisionFee, "")}
                     />
                     <DetailField
                       label={labels.finishingFee}
-                      value={formatProjectAmountOmr(currentEditProject.finishingSupervisionFee, labels.notSet)}
+                      value={formatProjectAmountOmr(currentEditProject.finishingSupervisionFee, "")}
                     />
                     <DetailField
                       label={labels.receivedAmount}
-                      value={formatProjectAmountOmr(currentEditProject.receivedAmount, labels.notSet)}
+                      value={formatProjectAmountOmr(currentEditProject.receivedAmount, "")}
                     />
                     <DetailField
                       label={labels.outstandingAmount}
-                      value={formatProjectAmountOmr(currentEditProject.outstandingAmount, labels.notSet)}
+                      value={formatProjectAmountOmr(currentEditProject.outstandingAmount, "")}
                     />
                     <DetailField
                       label={labels.nextPaymentAmount}
-                      value={formatProjectAmountOmr(currentEditProject.nextPaymentAmount, labels.notSet)}
+                      value={formatProjectAmountOmr(currentEditProject.nextPaymentAmount, "")}
                     />
                     <DetailField
                       label={labels.nextPaymentDueDate}
-                      value={displayProjectDate(currentEditProject.nextPaymentDueDate, locale, labels.notSet)}
+                      value={displayProjectDate(currentEditProject.nextPaymentDueDate, locale, "")}
                     />
                     <DetailField
                       label={labels.paymentNote}
-                      value={currentEditProject.invoiceReferencePaymentNote?.trim() || labels.notSet}
+                      value={currentEditProject.invoiceReferencePaymentNote?.trim()}
                     />
                     <DetailField
                       label={labels.initialRemarks}
-                      value={currentEditProject.initialRemarks?.trim() || labels.notSet}
+                      value={currentEditProject.initialRemarks?.trim()}
                     />
                   </dl>
                 </div>
 
-                <div className="mt-3 flex items-center gap-3" aria-label={`${labels.progress}: ${progress}%`}>
+                <div className="pt-1 flex items-center gap-3" aria-label={`${labels.progress}: ${progress}%`}>
                   <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
                     <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${progress}%` }} />
                   </div>
