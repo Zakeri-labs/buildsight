@@ -1125,6 +1125,105 @@ function renderTranslationClosingBlock(flow: Flow) {
   flow.y = companyY + companyLines.length * lineHeight + bottomGap
 }
 
+function renderBilingualTranslationClosingBlock(flow: Flow) {
+  const closingLogo = flow.closingLogoImage
+  if (!closingLogo) throw new Error("Unable to load the closing signature logo for the bilingual PDF.")
+
+  const englishFirstLine = "Yours faithfully,"
+  const arabicFirstLine = "وتفضلوا بقبول فائق الاحترام،"
+  const englishCompanyLine = "For BONYAN CONSTRUCTION FOR ENGINEERING CONSULTANCY"
+  const arabicCompanyLine = "عن شركة بنيان للإنشاءات والاستشارات الهندسية"
+
+  const columnGap = 12
+  const columnWidth = (flow.width - columnGap) / 2
+  const fontSize = 8.5
+  const lineHeight = 4.4
+  const logoWidth = 28
+  const logoHeight = logoWidth * closingLogo.height / Math.max(1, closingLogo.width)
+  const firstRowToLogoGap = 2.2
+  const logoToCompanyRowGap = 4.2
+  const bottomGap = 4
+
+  setLanguage(flow.doc, false, fontSize, false)
+  const englishFirstLines = textLines(flow.doc, englishFirstLine, columnWidth)
+  setLanguage(flow.doc, true, fontSize, false)
+  const arabicFirstLines = textLines(flow.doc, arabicFirstLine, columnWidth)
+  setLanguage(flow.doc, false, fontSize, false)
+  const englishCompanyLines = textLines(flow.doc, englishCompanyLine, columnWidth)
+  setLanguage(flow.doc, true, fontSize, false)
+  const arabicCompanyLines = textLines(flow.doc, arabicCompanyLine, columnWidth)
+
+  const firstRowHeight = Math.max(englishFirstLines.length, arabicFirstLines.length, 1) * lineHeight
+  const companyRowHeight = Math.max(englishCompanyLines.length, arabicCompanyLines.length, 1) * lineHeight
+  const requiredHeight = firstRowHeight
+    + firstRowToLogoGap
+    + logoHeight
+    + logoToCompanyRowGap
+    + companyRowHeight
+    + bottomGap
+
+  // Keep both language rows and the single shared logo together as one unit.
+  ensureSpace(flow, requiredHeight)
+
+  flow.doc.setTextColor(51, 65, 85)
+  setLanguage(flow.doc, false, fontSize, false)
+  writePdfText(
+    flow.doc,
+    englishFirstLines,
+    flow.x,
+    flow.y,
+    { align: "left", lineHeightFactor: 1.2 },
+    false,
+  )
+
+  setLanguage(flow.doc, true, fontSize, false)
+  writePdfText(
+    flow.doc,
+    arabicFirstLines,
+    flow.x + flow.width,
+    flow.y,
+    { align: "right", lineHeightFactor: 1.2 },
+    true,
+  )
+
+  const logoY = flow.y + firstRowHeight + firstRowToLogoGap
+  const logoX = flow.x + (flow.width - logoWidth) / 2
+  flow.doc.addImage(
+    closingLogo.dataUrl,
+    "PNG",
+    logoX,
+    logoY,
+    logoWidth,
+    logoHeight,
+    undefined,
+    "FAST",
+  )
+
+  const companyRowY = logoY + logoHeight + logoToCompanyRowGap
+  flow.doc.setTextColor(51, 65, 85)
+  setLanguage(flow.doc, false, fontSize, false)
+  writePdfText(
+    flow.doc,
+    englishCompanyLines,
+    flow.x,
+    companyRowY,
+    { align: "left", lineHeightFactor: 1.2 },
+    false,
+  )
+
+  setLanguage(flow.doc, true, fontSize, false)
+  writePdfText(
+    flow.doc,
+    arabicCompanyLines,
+    flow.x + flow.width,
+    companyRowY,
+    { align: "right", lineHeightFactor: 1.2 },
+    true,
+  )
+
+  flow.y = companyRowY + companyRowHeight + bottomGap
+}
+
 function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>) {
   const size = block.level <= 2 ? 14 : block.level === 3 ? 12 : 10.5
   setLanguage(flow.doc, flow.rtl, size, true)
@@ -3641,11 +3740,13 @@ async function buildNativeBilingualPdfBlob(input: {
   englishTemplate: LanguagePdfTemplate
   arabicTemplate: LanguagePdfTemplate
   sourceDocument?: ExtractedSourceDocument | null
+  appendClosingBlock?: boolean
 }) {
-  const { data, englishTemplate, arabicTemplate } = input
-  const [JsPdf, logoImage] = await Promise.all([
+  const { data, englishTemplate, arabicTemplate, appendClosingBlock = false } = input
+  const [JsPdf, logoImage, closingLogoImage] = await Promise.all([
     loadPdfTools(),
     loadImage("/LogoB.png"),
+    appendClosingBlock ? loadImage(CLOSING_LOGO_URL) : Promise.resolve(null),
   ])
   const doc = new JsPdf({
     unit: "mm",
@@ -3668,6 +3769,7 @@ async function buildNativeBilingualPdfBlob(input: {
     bottom: PAGE.portraitHeight - PAGE.footer - 5,
     pageNumber: 1,
     logoImage,
+    closingLogoImage,
   }
 
   drawFirstPageHeader(flow)
@@ -3735,6 +3837,10 @@ async function buildNativeBilingualPdfBlob(input: {
     }
 
     flow.y += 4
+  }
+
+  if (appendClosingBlock) {
+    renderBilingualTranslationClosingBlock(flow)
   }
 
   addPageNumbers(doc, false)
@@ -3985,6 +4091,7 @@ export async function exportTranslationPdf({
     englishTemplate,
     arabicTemplate,
     sourceDocument,
+    appendClosingBlock,
   })
   return { blob: bilingualBlob, filename: `${base}-${report}-bilingual.pdf` }
 }
