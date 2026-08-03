@@ -128,6 +128,7 @@ export type LanguagePdfTemplate = {
   reportNumber: string
   visitNumber: string
   createdAt: string
+  creatorName: string
   status: string
   reportType: string
   subject: string
@@ -671,6 +672,7 @@ export function buildLanguagePdfTemplate(input: {
     reportNumber: data.response.reportNumber,
     visitNumber: String(data.response.visitNumber),
     createdAt: data.response.createdAt,
+    creatorName: data.response.createdBy?.name || "—",
     status: data.response.status,
     reportType: content.reportType || data.response.reportType,
     subject: content.subject || data.response.subject || "—",

@@ -882,7 +882,7 @@ function drawFirstPageHeader(flow: Flow) {
   const ccToH = getRecipientHeight(ccTo)
   const recipientsRowH = Math.max(reportToH, ccToH, 13)
 
-  const cols = 4
+  const cols = 3
   const cellW = cardWidth / cols
   const metaRowH = 11
   const gridHeight = recipientsRowH + 2 * metaRowH
@@ -906,7 +906,7 @@ function drawFirstPageHeader(flow: Flow) {
   const recHalfW = cardWidth / 2
   doc.line(cardX + recHalfW, gridTop, cardX + recHalfW, gridTop + recipientsRowH)
 
-  // Vertical lines between 4 columns in Row 2 & Row 3
+  // Vertical lines between 3 columns in Row 2 & Row 3
   for (let c = 1; c < cols; c += 1) {
     doc.line(cardX + c * cellW, gridTop + recipientsRowH, cardX + c * cellW, gridTop + gridHeight)
   }
@@ -997,23 +997,21 @@ function drawFirstPageHeader(flow: Flow) {
     drawRecipientColumn(ccTo, ccToLabel, rightColX, recHalfW, false)
   }
 
-  // ── RENDER ROW 2 & 3: THE 8 METADATA CELLS (Matching details page 1:1) ──────
+  // ── RENDER ROW 2 & 3: THE 6 METADATA CELLS (Matching details page 1:1) ──────
   const formattedDate = formatDateShort(template.createdAt, rtl)
-  const formattedStatus = template.status ? statusLabel(template.status as any, rtl ? "ar" : "en") : "—"
+  const creator = template.creatorName || "—"
 
   const labels = rtl
-    ? ["المشروع", "مرجع المشروع", "المرحلة", "البند", "رقم المستند", "رقم الزيارة", "التاريخ", "الحالة"]
-    : ["Project", "Project Reference", "Stage", "Term", "Document Number", "Visit Number", "Date", "Status"]
+    ? ["المشروع", "المرحلة", "رقم الزيارة", "رقم المستند", "التاريخ", "مقدم التقرير"]
+    : ["Project", "Stage", "Visit Number", "Report Number", "Date", "Created By"]
 
   const values = [
     template.projectName,
-    template.projectReference,
     template.stageName,
-    template.termName,
-    template.reportNumber,
     template.visitNumber,
+    template.reportNumber,
     formattedDate,
-    formattedStatus,
+    creator,
   ]
 
   const metaTop = gridTop + recipientsRowH
