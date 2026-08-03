@@ -822,7 +822,10 @@ function formatDateShort(dateStr?: string | null, rtl: boolean = false) {
   }
 }
 
-function drawFirstPageHeader(flow: Flow) {
+function drawFirstPageHeader(
+  flow: Flow,
+  options: { bilingualSupervisorLabel?: boolean } = {},
+) {
   const { doc, template, pageWidth, rtl } = flow
   const margin = PAGE.margin
   const headerH = 17
@@ -1004,8 +1007,8 @@ function drawFirstPageHeader(flow: Flow) {
   const creator = template.creatorName || "—"
 
   const labels = rtl
-    ? ["المشروع", "المرحلة", "رقم الزيارة", "رقم المستند", "التاريخ", "مقدم التقرير"]
-    : ["Project", "Stage", "Visit Number", "Report Number", "Date", "Created By"]
+    ? ["المشروع", "المرحلة", "رقم الزيارة", "رقم المستند", "التاريخ", "المشرف"]
+    : ["Project", "Stage", "Visit Number", "Report Number", "Date", "Supervisor"]
 
   const values = [
     template.projectName,
@@ -1026,16 +1029,37 @@ function drawFirstPageHeader(flow: Flow) {
     const cellY = metaTop + row * metaRowH
 
     // Label
-    setLanguage(doc, rtl, 6, false)
     doc.setTextColor(100, 116, 139)
-    writePdfText(
-      doc,
-      labels[index],
-      rtl ? cellX + cellW - 3 : cellX + 3,
-      cellY + 3.5,
-      { align: rtl ? "right" : "left" },
-      rtl,
-    )
+    if (options.bilingualSupervisorLabel && index === values.length - 1) {
+      setLanguage(doc, false, 6, false)
+      writePdfText(
+        doc,
+        "Supervisor",
+        cellX + 3,
+        cellY + 3.5,
+        { align: "left" },
+        false,
+      )
+      setLanguage(doc, true, 6, false)
+      writePdfText(
+        doc,
+        "المشرف",
+        cellX + cellW - 3,
+        cellY + 3.5,
+        { align: "right" },
+        true,
+      )
+    } else {
+      setLanguage(doc, rtl, 6, false)
+      writePdfText(
+        doc,
+        labels[index],
+        rtl ? cellX + cellW - 3 : cellX + 3,
+        cellY + 3.5,
+        { align: rtl ? "right" : "left" },
+        rtl,
+      )
+    }
 
     // Value
     const val = values[index] || "—"
@@ -3958,7 +3982,7 @@ async function buildNativeBilingualPdfBlob(input: {
     closingLogoImage,
   }
 
-  drawFirstPageHeader(flow)
+  drawFirstPageHeader(flow, { bilingualSupervisorLabel: true })
 
   const engSections = englishTemplate.sections
   const arSections = arabicTemplate.sections
