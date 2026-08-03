@@ -425,6 +425,13 @@ export function ProjectDetail({
                   <Images className="size-4" />
                   {labels.viewGallery}
                 </Link>
+
+                <div className="mt-3 rounded-lg border border-border/40 bg-muted/20 p-3">
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{labels.description}</p>
+                  <p className="min-w-0 whitespace-pre-wrap break-words text-xs font-medium text-foreground/90">
+                    {currentProject.description?.trim() || "—"}
+                  </p>
+                </div>
               </div>
 
               <div className="min-w-0 py-0.5">
@@ -459,13 +466,6 @@ export function ProjectDetail({
                   />
                   <DetailField label={labels.progress} value={`${progress}%`} />
                 </dl>
-
-                <div className="mt-3 rounded-lg border border-border/40 bg-muted/20 p-3">
-                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{labels.description}</p>
-                  <p className="min-w-0 whitespace-pre-wrap break-words text-xs font-medium text-foreground/90">
-                    {currentProject.description?.trim() || "—"}
-                  </p>
-                </div>
 
                 <div className="mt-3 rounded-lg border border-border/40 bg-muted/20 p-3">
                   <p className="mb-1 text-xs font-semibold text-foreground">{labels.financialSummary}</p>
