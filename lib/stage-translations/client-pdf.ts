@@ -1584,19 +1584,19 @@ function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "tabl
   const rows = (block && Array.isArray(block.rows)) ? block.rows : []
   if (!rows.length) return
 
-  const itemWidth = flow.width * 0.78
-  const statusWidth = flow.width - itemWidth
-  const itemX = flow.rtl ? flow.x + statusWidth : flow.x
-  const statusX = flow.rtl ? flow.x : flow.x + itemWidth
-  const dividerX = flow.rtl ? flow.x + statusWidth : flow.x + itemWidth
-  const cellPadding = 3
+  // The standalone PDFs use a compact icon-only status column. Its visual
+  // position is mirrored: left in English and right in Arabic.
+  const statusWidth = flow.width * 0.1
+  const itemWidth = flow.width - statusWidth
+  const statusX = flow.rtl ? flow.x + itemWidth : flow.x
+  const itemX = flow.rtl ? flow.x : flow.x + statusWidth
+  const dividerX = flow.rtl ? flow.x + itemWidth : flow.x + statusWidth
+  const cellPadding = 2.2
   const badgeW = 3.6
   const badgeH = 3.6
-  const iconTextGap = 2
   const itemLineHeight = 4.1
   const notesLineHeight = 3.55
-  const statusLineHeight = 3.8
-  const headerHeight = 9.5
+  const headerHeight = 8.5
 
   const prepareRow = (row: string[]) => {
     const itemText = row.length >= 2 ? row[1] : row[0]
@@ -1612,23 +1612,15 @@ function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "tabl
       ? textLines(flow.doc, notesText, itemWidth - cellPadding * 2)
       : []
 
-    const statusHasArabic = containsArabic(status.label)
-    setLanguage(flow.doc, statusHasArabic, 7.6, false)
-    const statusTextWidth = statusWidth - cellPadding * 2 - badgeW - iconTextGap
-    const statusLines = textLines(flow.doc, status.label, statusTextWidth)
-
     const itemTextHeight = itemLines.length * itemLineHeight
     const notesHeight = notesLines.length ? 1 + notesLines.length * notesLineHeight : 0
     const itemContentHeight = itemTextHeight + notesHeight
-    const statusContentHeight = Math.max(badgeH, statusLines.length * statusLineHeight)
-    const height = Math.max(9.5, Math.max(itemContentHeight, statusContentHeight) + 4)
+    const height = Math.max(7.2, Math.max(itemContentHeight, badgeH) + 2.8)
 
     return {
       itemLines,
       notesLines,
       status,
-      statusHasArabic,
-      statusLines,
       height,
     }
   }
@@ -1653,7 +1645,7 @@ function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "tabl
       flow.doc,
       flow.rtl ? "بند التفتيش" : "Inspection Item",
       flow.rtl ? itemX + itemWidth - cellPadding : itemX + cellPadding,
-      flow.y + 6,
+      flow.y + 5.5,
       { align: flow.rtl ? "right" : "left" },
       flow.rtl,
     )
@@ -1663,7 +1655,7 @@ function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "tabl
       flow.doc,
       flow.rtl ? "الحالة" : "Status",
       statusX + statusWidth / 2,
-      flow.y + 6,
+      flow.y + 5.5,
       { align: "center" },
       flow.rtl,
     )
@@ -1685,7 +1677,7 @@ function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "tabl
 
     const itemContentHeight = row.itemLines.length * itemLineHeight
       + (row.notesLines.length ? 1 + row.notesLines.length * notesLineHeight : 0)
-    const itemStartY = rowY + (row.height - itemContentHeight) / 2 + 3.1
+    const itemStartY = rowY + (row.height - itemContentHeight) / 2 + 3
 
     setLanguage(flow.doc, flow.rtl, 8.2, false)
     flow.doc.setTextColor(51, 65, 85)
@@ -1711,55 +1703,18 @@ function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "tabl
       )
     }
 
+    const badgeX = statusX + (statusWidth - badgeW) / 2
     const badgeY = rowY + (row.height - badgeH) / 2
-    const statusTextHeight = row.statusLines.length * statusLineHeight
-    const statusTextY = rowY + (row.height - statusTextHeight) / 2 + 3
-
-    if (flow.rtl) {
-      const badgeX = statusX + statusWidth - cellPadding - badgeW
-      drawChecklistVectorBadge(
-        flow.doc,
-        badgeX,
-        badgeY,
-        badgeW,
-        badgeH,
-        row.status.passed,
-        row.status.failed,
-        row.status.inProgress,
-      )
-      setLanguage(flow.doc, row.statusHasArabic, 7.6, false)
-      flow.doc.setTextColor(51, 65, 85)
-      writePdfText(
-        flow.doc,
-        row.statusLines,
-        badgeX - iconTextGap,
-        statusTextY,
-        { align: "right", lineHeightFactor: 1.15 },
-        row.statusHasArabic,
-      )
-    } else {
-      const badgeX = statusX + cellPadding
-      drawChecklistVectorBadge(
-        flow.doc,
-        badgeX,
-        badgeY,
-        badgeW,
-        badgeH,
-        row.status.passed,
-        row.status.failed,
-        row.status.inProgress,
-      )
-      setLanguage(flow.doc, row.statusHasArabic, 7.6, false)
-      flow.doc.setTextColor(51, 65, 85)
-      writePdfText(
-        flow.doc,
-        row.statusLines,
-        badgeX + badgeW + iconTextGap,
-        statusTextY,
-        { align: "left", lineHeightFactor: 1.15 },
-        row.statusHasArabic,
-      )
-    }
+    drawChecklistVectorBadge(
+      flow.doc,
+      badgeX,
+      badgeY,
+      badgeW,
+      badgeH,
+      row.status.passed,
+      row.status.failed,
+      row.status.inProgress,
+    )
 
     flow.y += row.height
   }
