@@ -1155,8 +1155,9 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
   const lineHeight = 4.4
   const logoWidth = 28
   const logoHeight = logoWidth * closingLogo.height / Math.max(1, closingLogo.width)
-  const firstRowToLogoGap = 2.2
-  const logoToCompanyRowGap = 4.2
+  // Use one compact, controlled gap on both sides of the centered logo so
+  // the bilingual closing remains balanced without blank-line spacing.
+  const rowGap = 1.8
   const bottomGap = 4
 
   setLanguage(flow.doc, false, fontSize, false)
@@ -1171,9 +1172,9 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
   const firstRowHeight = Math.max(englishFirstLines.length, arabicFirstLines.length, 1) * lineHeight
   const companyRowHeight = Math.max(englishCompanyLines.length, arabicCompanyLines.length, 1) * lineHeight
   const requiredHeight = firstRowHeight
-    + firstRowToLogoGap
+    + rowGap
     + logoHeight
-    + logoToCompanyRowGap
+    + rowGap
     + companyRowHeight
     + bottomGap
 
@@ -1201,7 +1202,7 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
     true,
   )
 
-  const logoY = flow.y + firstRowHeight + firstRowToLogoGap
+  const logoY = flow.y + firstRowHeight + rowGap
   const logoX = flow.x + (flow.width - logoWidth) / 2
   flow.doc.addImage(
     closingLogo.dataUrl,
@@ -1214,7 +1215,7 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
     "FAST",
   )
 
-  const companyRowY = logoY + logoHeight + logoToCompanyRowGap
+  const companyRowY = logoY + logoHeight + rowGap
   flow.doc.setTextColor(51, 65, 85)
   setLanguage(flow.doc, false, fontSize, false)
   writePdfText(
