@@ -1298,7 +1298,6 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
   const textLineHeightFactor = 1.2
   const lineHeight = fontSize * 0.352778 * textLineHeightFactor
   const textLineGap = 1.2
-  const textToLogoGap = 2.2
   const logoWidth = 28
   const logoHeight = logoWidth * closingLogo.height / Math.max(1, closingLogo.width)
   const bottomGap = 4
@@ -1315,12 +1314,18 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
   const firstLineRowHeight = Math.max(englishFirstLines.length, arabicFirstLines.length, 1) * lineHeight
   const companyRowHeight = Math.max(englishCompanyLines.length, arabicCompanyLines.length, 1) * lineHeight
   const textBlockHeight = firstLineRowHeight + textLineGap + companyRowHeight
-  const requiredHeight = textBlockHeight + textToLogoGap + logoHeight + bottomGap
+
+  // Vertically center the single shared logo against the complete paired text
+  // area instead of placing it in a detached row beneath the two columns.
+  const contentHeight = Math.max(textBlockHeight, logoHeight)
+  const requiredHeight = contentHeight + bottomGap
 
   // Keep the paired two-line text blocks and their single shared logo together.
   ensureSpace(flow, requiredHeight)
 
-  const companyRowY = flow.y + firstLineRowHeight + textLineGap
+  const textTopY = flow.y + (contentHeight - textBlockHeight) / 2
+  const logoY = flow.y + (contentHeight - logoHeight) / 2
+  const companyRowY = textTopY + firstLineRowHeight + textLineGap
 
   flow.doc.setTextColor(51, 65, 85)
   setLanguage(flow.doc, false, fontSize, false)
@@ -1328,7 +1333,7 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
     flow.doc,
     englishFirstLines,
     flow.x,
-    flow.y,
+    textTopY,
     { align: "left", baseline: "top", lineHeightFactor: textLineHeightFactor },
     false,
   )
@@ -1346,7 +1351,7 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
     flow.doc,
     arabicFirstLines,
     flow.x + flow.width,
-    flow.y,
+    textTopY,
     { align: "right", baseline: "top", lineHeightFactor: textLineHeightFactor },
     true,
   )
@@ -1359,7 +1364,6 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
     true,
   )
 
-  const logoY = flow.y + textBlockHeight + textToLogoGap
   const logoX = flow.x + (flow.width - logoWidth) / 2
   flow.doc.addImage(
     closingLogo.dataUrl,
@@ -1372,7 +1376,7 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
     "FAST",
   )
 
-  flow.y = logoY + logoHeight + bottomGap
+  flow.y = flow.y + contentHeight + bottomGap
 }
 
 function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>) {
