@@ -1128,8 +1128,8 @@ function drawFirstPageHeader(
 
   if (useBilingualLocationCell) {
     drawWrappedBilingualRecipientColumn(reportTo, "Report to:", cardX, cellW)
-    drawProjectLocationColumn(cardX + cellW, cellW)
-    drawWrappedBilingualRecipientColumn(ccTo, "CC to:", cardX + cellW * 2, cellW)
+    drawWrappedBilingualRecipientColumn(ccTo, "CC to:", cardX + cellW, cellW)
+    drawProjectLocationColumn(cardX + cellW * 2, cellW)
   } else {
     const recHalfW = cardWidth / 2
     const leftColX = rtl ? cardX + recHalfW : cardX
