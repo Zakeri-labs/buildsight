@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useId, useMemo, useState } from "react"
 import { Building2, Check, ChevronDown, Mail, Plus, Search, UserCheck, UserPlus, X } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -51,6 +51,8 @@ export function CcRecipientsField({
 }) {
   const { locale } = useI18n()
   const isAr = locale === "ar"
+  const [isRecipientsExpanded, setIsRecipientsExpanded] = useState(false)
+  const recipientsContentId = useId()
 
   // We maintain target groups: "reportTo" and "ccTo"
   const [reportToUserIds, setReportToUserIds] = useState<string[]>(() => value.reportToUserIds ?? value.internalUserIds.slice(0, 1))
@@ -224,23 +226,51 @@ export function CcRecipientsField({
   return (
     <>
       <Card className={cn("gap-0 py-0 overflow-hidden", compact && "shadow-none")}>
-        <CardHeader className="border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base font-semibold text-blue-950 dark:text-blue-100">
-                <Mail className="size-4 text-primary" />
-                {isAr ? "مستلمو التقرير والنسخ" : "Report Recipients & Copies"}
-              </CardTitle>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {isAr
-                  ? "حدد الأشخاص المعنيين بالمستند من المشاركين في المشروع أو أضف جهات خارجية."
-                  : "Specify primary report recipients and notification copies from project participants."}
-              </p>
-            </div>
+        <CardHeader className="relative border-b border-blue-200/80 bg-blue-100/70 py-3.5 pl-14 pr-5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:pl-16 sm:pr-6">
+          <button
+            type="button"
+            onClick={() => setIsRecipientsExpanded((expanded) => !expanded)}
+            className="absolute left-4 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-blue-950/70 transition-colors hover:bg-blue-200/70 hover:text-blue-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 dark:text-blue-100/75 dark:hover:bg-blue-800/70 dark:hover:text-blue-100 sm:left-5"
+            aria-label={
+              isRecipientsExpanded
+                ? isAr
+                  ? "طي مستلمي التقرير والنسخ"
+                  : "Collapse Report Recipients & Copies"
+                : isAr
+                  ? "توسيع مستلمي التقرير والنسخ"
+                  : "Expand Report Recipients & Copies"
+            }
+            aria-expanded={isRecipientsExpanded}
+            aria-controls={recipientsContentId}
+          >
+            <ChevronDown
+              className={cn(
+                "size-4 transition-transform duration-200",
+                !isRecipientsExpanded && (isAr ? "rotate-90" : "-rotate-90")
+              )}
+              aria-hidden="true"
+            />
+          </button>
+
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base font-semibold text-blue-950 dark:text-blue-100">
+              <Mail className="size-4 text-primary" />
+              {isAr ? "مستلمو التقرير والنسخ" : "Report Recipients & Copies"}
+            </CardTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {isAr
+                ? "حدد الأشخاص المعنيين بالمستند من المشاركين في المشروع أو أضف جهات خارجية."
+                : "Specify primary report recipients and notification copies from project participants."}
+            </p>
           </div>
         </CardHeader>
 
-        <CardContent className="p-5 sm:p-6">
+        <CardContent
+          id={recipientsContentId}
+          hidden={!isRecipientsExpanded}
+          aria-hidden={!isRecipientsExpanded}
+          className="p-5 sm:p-6"
+        >
           <div className="grid gap-6 md:grid-cols-2">
             {/* Column 1: Report To */}
             <div className="flex flex-col gap-3 rounded-xl border bg-muted/10 p-4">
