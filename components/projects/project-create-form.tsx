@@ -188,6 +188,7 @@ export function ProjectCreateForm({
   const [supervisionTypeOther, setSupervisionTypeOther] = useState("")
   const [location, setLocation] = useState<ProjectLocationValue>(EMPTY_PROJECT_LOCATION)
   const [areaDistrict, setAreaDistrict] = useState("")
+  const [phase, setPhase] = useState("")
   const [plotNo, setPlotNo] = useState("")
   const [projectStartDate, setProjectStartDate] = useState("")
   const [supervisionStartDate, setSupervisionStartDate] = useState("")
@@ -295,6 +296,8 @@ export function ProjectCreateForm({
         moveImageLater: "تحريك الصورة إلى اليمين",
         areaDistrict: "المنطقة / الحي",
         areaDistrictPlaceholder: "مثال: وسط المدينة أو منطقة الأعمال",
+        phase: "المرحلة",
+        phasePlaceholder: "مثال: المرحلة 1",
         plotNo: "رقم قطعة الأرض",
         plotNoPlaceholder: "مثال: 42-B",
         projectStartDate: "تاريخ بدء المشروع",
@@ -389,6 +392,8 @@ export function ProjectCreateForm({
         moveImageLater: "Move image later",
         areaDistrict: "Area / District",
         areaDistrictPlaceholder: "e.g. Downtown or Business District",
+        phase: "Phase",
+        phasePlaceholder: "e.g. Phase 1",
         plotNo: "Plot No.",
         plotNoPlaceholder: "e.g. 42-B",
         projectStartDate: "Project Start Date",
@@ -755,6 +760,7 @@ export function ProjectCreateForm({
           includedFinishingVisits: optionalWholeNumber(includedFinishingVisits),
           location: location.address,
           region: areaDistrict,
+          phase,
           latitude: location.latitude,
           longitude: location.longitude,
           description,
@@ -925,6 +931,18 @@ export function ProjectCreateForm({
                       label: copy.areaDistrict,
                       placeholder: copy.areaDistrictPlaceholder,
                     }}
+                    contentAfterAreaField={
+                      <Field label={`${copy.phase} (${copy.optional})`} htmlFor="new-project-phase">
+                        <Input
+                          id="new-project-phase"
+                          value={phase}
+                          onChange={(event) => setPhase(event.target.value)}
+                          placeholder={copy.phasePlaceholder}
+                          disabled={pending}
+                          className="h-10"
+                        />
+                      </Field>
+                    }
                     disabled={pending}
                   >
                     <div className="flex h-full min-h-0 flex-col gap-4">

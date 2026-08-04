@@ -736,6 +736,7 @@ export async function createProject(input: {
   supervisionType?: SupervisionTypeValue
   supervisionTypeOther?: string
   plotNo?: string
+  phase?: string
   supervisionStartDate?: string
   priority?: ProjectPriorityValue
   includedStructureVisits?: number | null
@@ -912,6 +913,7 @@ export async function createProject(input: {
         supervision_type: input.supervisionType || null,
         supervision_type_other: supervisionTypeOther,
         plot_no: input.plotNo?.trim() || null,
+        phase: input.phase?.trim() || null,
         supervision_start_date: supervisionStartDate.date,
         priority,
         included_structure_visits: includedStructureVisits.value,

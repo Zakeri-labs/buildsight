@@ -91,6 +91,7 @@ export function ProjectLocationField({
   disabled,
   children,
   areaField,
+  contentAfterAreaField,
 }: {
   value: ProjectLocationValue
   onChange: (value: ProjectLocationValue) => void
@@ -103,6 +104,7 @@ export function ProjectLocationField({
     label: string
     placeholder?: string
   }
+  contentAfterAreaField?: React.ReactNode
 }) {
   const generatedId = useId()
   const inputId = id ?? `project-location-${generatedId}`
@@ -459,6 +461,8 @@ export function ProjectLocationField({
               />
             </div>
           ) : null}
+
+          {contentAfterAreaField}
 
           <div id={helpId} className="space-y-1.5">
             {value.verified && hasCoordinates(value) ? (
