@@ -1040,15 +1040,6 @@ function drawFirstPageHeader(
         { align: "left" },
         false,
       )
-      setLanguage(doc, true, 6, false)
-      writePdfText(
-        doc,
-        "المشرف",
-        cellX + cellW - 3,
-        cellY + 3.5,
-        { align: "right" },
-        true,
-      )
     } else {
       setLanguage(doc, rtl, 6, false)
       writePdfText(
