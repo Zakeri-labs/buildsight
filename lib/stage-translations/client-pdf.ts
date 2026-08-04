@@ -915,10 +915,34 @@ function drawFirstPageHeader(
     return Math.max(13, cursorY + 1)
   }
 
-  const optionalLines = (value: string, width: number, fontSize: number, valueRtl: boolean) => {
-    if (!value.trim()) return [] as string[]
-    setLanguage(doc, valueRtl, fontSize, false)
-    return textLines(doc, value, width)
+  const locationLabelFontSize = 6.2
+  const locationValueFontSize = 6.5
+  const locationLineHeight = 3.2
+  const locationRowGap = 0.35
+  const locationInlineGap = 0.9
+  const locationTopInset = 4
+  const locationBottomInset = 1.2
+  const projectLocationFields = [
+    { label: "Address", value: template.projectAddress },
+    { label: "Phase", value: template.projectPhase },
+    { label: "Plot No.", value: template.projectPlotNo },
+  ].filter((field) => field.value.trim().length > 0)
+
+  const getInlineLocationLayout = (label: string, value: string, width: number) => {
+    const labelText = `${label}:`
+    setLanguage(doc, false, locationLabelFontSize, true)
+    const labelWidth = doc.getTextWidth(labelText)
+
+    const valueRtl = containsArabic(value)
+    setLanguage(doc, valueRtl, locationValueFontSize, false)
+    const fullValueWidth = Math.max(8, width - 6)
+    const firstLineWidth = Math.max(8, fullValueWidth - labelWidth - locationInlineGap)
+    const firstPass = textLines(doc, value, firstLineWidth)
+    const lines = firstPass.length <= 1
+      ? firstPass
+      : [firstPass[0], ...textLines(doc, firstPass.slice(1).join(" "), fullValueWidth)]
+
+    return { labelText, labelWidth, valueRtl, lines }
   }
 
   const cols = 3
@@ -927,23 +951,13 @@ function drawFirstPageHeader(
   let recipientsRowH: number
 
   if (useBilingualLocationCell) {
-    const locationValueFontSize = 6.5
-    const locationLineHeight = 2.75
-    const locationLabelToValueGap = 2.8
-    const locationGroupGap = 0.6
-    const locationTopInset = 3.4
-    const locationBottomInset = 0.8
-    const locationValueLines = [
-      optionalLines(template.projectAddress, cellW - 6, locationValueFontSize, containsArabic(template.projectAddress)),
-      optionalLines(template.projectPhase, cellW - 6, locationValueFontSize, containsArabic(template.projectPhase)),
-      optionalLines(template.projectPlotNo, cellW - 6, locationValueFontSize, containsArabic(template.projectPlotNo)),
-    ]
-    const locationCellHeight = locationValueLines.reduce(
-      (height, lines, index) =>
-        height
-        + locationLabelToValueGap
-        + lines.length * locationLineHeight
-        + (index < locationValueLines.length - 1 ? locationGroupGap : 0),
+    const locationCellHeight = projectLocationFields.reduce(
+      (height, field, index) => {
+        const layout = getInlineLocationLayout(field.label, field.value, cellW)
+        return height
+          + layout.lines.length * locationLineHeight
+          + (index < projectLocationFields.length - 1 ? locationRowGap : 0)
+      },
       locationTopInset + locationBottomInset,
     )
     recipientsRowH = Math.max(
@@ -1112,43 +1126,35 @@ function drawFirstPageHeader(
   }
 
   const drawProjectLocationColumn = (x: number, w: number) => {
-    const valueFontSize = 6.5
-    const valueLineHeight = 2.75
-    const labelToValueGap = 2.8
-    const groupGap = 0.6
+    let cursorY = gridTop + locationTopInset
 
-    const drawLabel = (label: string, y: number) => {
-      setLanguage(doc, false, 6.2, true)
+    projectLocationFields.forEach((field, fieldIndex) => {
+      const layout = getInlineLocationLayout(field.label, field.value, w)
+
+      setLanguage(doc, false, locationLabelFontSize, true)
       doc.setTextColor(100, 116, 139)
-      writePdfText(doc, label, x + 3, y, { align: "left" }, false)
-    }
+      writePdfText(doc, layout.labelText, x + 3, cursorY, { align: "left" }, false)
 
-    const drawOptionalValue = (value: string, y: number) => {
-      if (!value.trim()) return 0
-      const valueRtl = containsArabic(value)
-      setLanguage(doc, valueRtl, valueFontSize, false)
-      doc.setTextColor(15, 23, 42)
-      const lines = textLines(doc, value, w - 6)
-      const textX = valueRtl ? x + w - 3 : x + 3
-      const align = valueRtl ? "right" : "left"
-      lines.forEach((line, index) => {
-        writePdfText(doc, line, textX, y + index * valueLineHeight, { align }, valueRtl)
+      setLanguage(doc, layout.valueRtl, locationValueFontSize, false)
+      doc.setTextColor(71, 85, 105)
+      layout.lines.forEach((line, lineIndex) => {
+        const firstLine = lineIndex === 0
+        const textX = layout.valueRtl
+          ? x + w - 3
+          : x + 3 + (firstLine ? layout.labelWidth + locationInlineGap : 0)
+        const align = layout.valueRtl ? "right" : "left"
+        writePdfText(
+          doc,
+          line,
+          textX,
+          cursorY + lineIndex * locationLineHeight,
+          { align },
+          layout.valueRtl,
+        )
       })
-      return lines.length * valueLineHeight
-    }
 
-    const fields = [
-      { label: "Address", value: template.projectAddress },
-      { label: "Phase", value: template.projectPhase },
-      { label: "Plot No.", value: template.projectPlotNo },
-    ]
-    let cursorY = gridTop + 3.4
-
-    fields.forEach((field, index) => {
-      drawLabel(field.label, cursorY)
-      cursorY += labelToValueGap
-      cursorY += drawOptionalValue(field.value, cursorY)
-      if (index < fields.length - 1) cursorY += groupGap
+      cursorY += layout.lines.length * locationLineHeight
+      if (fieldIndex < projectLocationFields.length - 1) cursorY += locationRowGap
     })
   }
 
