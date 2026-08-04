@@ -6,6 +6,8 @@ export type ProjectCcCandidate = {
   email: string | null
   avatarUrl: string | null
   role: string
+  roleKey?: string | null
+  defaultPriority?: number | null
   organizationName: string | null
 }
 
@@ -28,6 +30,7 @@ export type ExternalCcRecipientInput = {
   email: string
   company: string
   role: string
+  group?: "reportTo" | "ccTo"
 }
 
 export type ReportCcSelection = {

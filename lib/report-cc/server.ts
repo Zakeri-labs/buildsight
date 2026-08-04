@@ -114,7 +114,7 @@ export async function loadProjectParticipantsOnly(projectId: string): Promise<Pr
   const participants = await getProjectParticipants(projectId)
 
   return participants
-    .map((p) => {
+    .map((p, index) => {
       const id = p.keyContact.userId || p.id
       const contactName = p.keyContact.name && p.keyContact.name !== "Contact not provided"
         ? p.keyContact.name
@@ -129,6 +129,8 @@ export async function loadProjectParticipantsOnly(projectId: string): Promise<Pr
         email: p.keyContact.email ?? null,
         avatarUrl: p.keyContact.avatar ?? null,
         role: roleText,
+        roleKey: p.projectRole,
+        defaultPriority: index,
         organizationName: p.organization,
       } satisfies ProjectCcCandidate
     })

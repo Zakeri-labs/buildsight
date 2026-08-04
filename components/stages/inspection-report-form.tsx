@@ -265,6 +265,76 @@ function formatDate(value: string | Date, locale: "en" | "ar") {
   return new Intl.DateTimeFormat(locale === "ar" ? "ar" : "en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date)
 }
 
+function normalizedRecipientRole(candidate: ProjectCcCandidate) {
+  return (candidate.roleKey?.trim() || candidate.role.trim())
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s*\/\s*/g, " / ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function preferredRecipientCandidate(
+  candidates: ProjectCcCandidate[],
+  matches: (candidate: ProjectCcCandidate) => boolean,
+  excludedIds = new Set<string>(),
+) {
+  return candidates
+    .filter((candidate) => !excludedIds.has(candidate.id) && matches(candidate))
+    .sort((left, right) => (left.defaultPriority ?? Number.MAX_SAFE_INTEGER) - (right.defaultPriority ?? Number.MAX_SAFE_INTEGER))[0] ?? null
+}
+
+function initialRecipientSelection(
+  candidates: ProjectCcCandidate[],
+  recipients: ReportCcRecipient[],
+  applyNewStageDefaults: boolean,
+): ReportCcSelection {
+  if (applyNewStageDefaults && recipients.length === 0) {
+    const contractor = preferredRecipientCandidate(candidates, (candidate) => {
+      const role = normalizedRecipientRole(candidate)
+      return role === "contractor" || role.startsWith("contractor (")
+    })
+    const owner = preferredRecipientCandidate(candidates, (candidate) => {
+      const role = normalizedRecipientRole(candidate)
+      return role === "client / owner" || role === "owner / client" || role === "client" || role === "owner"
+    }, new Set(contractor ? [contractor.id] : []))
+
+    const reportToUserIds = contractor ? [contractor.id] : []
+    const ccToUserIds = owner ? [owner.id] : []
+    return {
+      internalUserIds: Array.from(new Set([...reportToUserIds, ...ccToUserIds])),
+      externalRecipients: [],
+      reportToUserIds,
+      ccToUserIds,
+    }
+  }
+
+  const reportToRecipient = recipients[0] ?? null
+  const reportToUserIds = reportToRecipient?.type === "internal" && reportToRecipient.userId ? [reportToRecipient.userId] : []
+  const ccToUserIds = recipients
+    .slice(1)
+    .filter((recipient) => recipient.type === "internal" && recipient.userId)
+    .map((recipient) => recipient.userId as string)
+
+  return {
+    internalUserIds: recipients
+      .filter((recipient) => recipient.type === "internal" && recipient.userId)
+      .map((recipient) => recipient.userId as string),
+    externalRecipients: recipients
+      .filter((recipient) => recipient.type === "external")
+      .map((recipient) => ({
+        clientId: recipient.id,
+        name: recipient.name,
+        email: recipient.email ?? "",
+        company: recipient.company ?? "",
+        role: recipient.role ?? "",
+        group: recipients[0]?.id === recipient.id ? "reportTo" as const : "ccTo" as const,
+      })),
+    reportToUserIds,
+    ccToUserIds,
+  }
+}
+
 export function InspectionReportForm({
   project,
   stage,
@@ -382,16 +452,11 @@ export function InspectionReportForm({
   const [success, setSuccess] = useState<string | null>(null)
   const [reviewComments, setReviewComments] = useState("")
   const [approvalHistory, setApprovalHistory] = useState(response?.approvals ?? [])
-  const [ccSelection, setCcSelection] = useState<ReportCcSelection>(() => ({
-    internalUserIds: initialCcRecipients.filter((recipient) => recipient.type === "internal" && recipient.userId).map((recipient) => recipient.userId as string),
-    externalRecipients: initialCcRecipients.filter((recipient) => recipient.type === "external").map((recipient) => ({
-      clientId: recipient.id,
-      name: recipient.name,
-      email: recipient.email ?? "",
-      company: recipient.company ?? "",
-      role: recipient.role ?? "",
-    })),
-  }))
+  const [ccSelection, setCcSelection] = useState<ReportCcSelection>(() => initialRecipientSelection(
+    ccCandidates,
+    initialCcRecipients,
+    isDirectStageReport && response === null,
+  ))
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const documentInputRef = useRef<HTMLInputElement | null>(null)
   const pendingImagesRef = useRef<PendingFile[]>([])
@@ -564,6 +629,8 @@ export function InspectionReportForm({
           context: "report",
           internalUserIds: ccSelection.internalUserIds,
           externalRecipients: ccSelection.externalRecipients,
+          reportToUserIds: isDirectStageReport ? ccSelection.reportToUserIds : undefined,
+          ccToUserIds: isDirectStageReport ? ccSelection.ccToUserIds : undefined,
         })
         if (!ccResult.ok) throw new Error(ccResult.error)
       }

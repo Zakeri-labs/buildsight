@@ -16,7 +16,14 @@ export type ReportCcActionResult =
   | { ok: false; error: string }
 
 function normalizeExternal(rows: ExternalCcRecipientInput[]) {
-  const byEmail = new Map<string, { name: string; email: string; company: string | null; role: string | null }>()
+  const byEmail = new Map<string, {
+    clientId: string
+    name: string
+    email: string
+    company: string | null
+    role: string | null
+    group?: "reportTo" | "ccTo"
+  }>()
   for (const row of rows.slice(0, 50)) {
     const name = row.name.trim().slice(0, 250)
     const email = row.email.trim().toLowerCase().slice(0, 320)
@@ -25,7 +32,7 @@ function normalizeExternal(rows: ExternalCcRecipientInput[]) {
     if (!name && !email && !company && !role) continue
     if (!name) throw new Error("External recipient name is required.")
     if (!EMAIL_PATTERN.test(email)) throw new Error(`Enter a valid email address for ${name}.`)
-    byEmail.set(email, { name, email, company, role })
+    byEmail.set(email, { clientId: row.clientId, name, email, company, role, group: row.group })
   }
   return Array.from(byEmail.values())
 }
@@ -97,6 +104,8 @@ export async function saveReportCcRecipientsAction(input: {
   context: ReportCcContext
   internalUserIds: string[]
   externalRecipients: ExternalCcRecipientInput[]
+  reportToUserIds?: string[]
+  ccToUserIds?: string[]
 }): Promise<ReportCcActionResult> {
   try {
     if (!UUID_PATTERN.test(input.projectId) || !UUID_PATTERN.test(input.responseId)) {
@@ -108,6 +117,11 @@ export async function saveReportCcRecipientsAction(input: {
 
     const { actorId, response, term } = await assertCanManage(input.projectId, input.responseId, input.context)
     const rawInternalIds = Array.from(new Set(input.internalUserIds.filter((id) => UUID_PATTERN.test(id)))).slice(0, 100)
+    const hasGroupedSelection = input.reportToUserIds !== undefined || input.ccToUserIds !== undefined
+    const reportToUserIds = Array.from(new Set((input.reportToUserIds ?? []).filter((id) => UUID_PATTERN.test(id))))
+    const ccToUserIds = Array.from(new Set((input.ccToUserIds ?? []).filter((id) => UUID_PATTERN.test(id))))
+    const reportToIdSet = new Set(reportToUserIds)
+    const ccToIdSet = new Set(ccToUserIds)
 
     const [internalCandidates, participantCandidates] = await Promise.all([
       loadProjectCcCandidates(input.projectId),
@@ -140,6 +154,7 @@ export async function saveReportCcRecipientsAction(input: {
             email: safeEmail,
             company: participant.organizationName ?? "",
             role: participant.role ?? "",
+            group: reportToIdSet.has(id) ? "reportTo" : ccToIdSet.has(id) ? "ccTo" : undefined,
           })
         } else {
           return { ok: false, error: "One or more selected recipients no longer have access to this project." }
@@ -179,41 +194,85 @@ export async function saveReportCcRecipientsAction(input: {
       if (error) throw error
     }
 
-    const inserted: any[] = []
-    for (const userId of validInternalUserIds.filter((id) => !existingInternal.has(id))) {
-      const { data, error } = await admin
-        .from("report_cc_recipients")
-        .insert({
-          project_id: input.projectId,
-          response_id: input.responseId,
-          recipient_context: input.context,
-          recipient_type: "internal",
-          user_id: userId,
-          added_by: actorId,
-        })
-        .select("id, user_id, recipient_type")
-        .single()
-      if (error && error.code !== "23505") throw error
-      if (data) inserted.push(data)
+    type PendingRecipientInsert =
+      | { type: "internal"; userId: string }
+      | { type: "external"; external: (typeof externalRows)[number] }
+
+    const validInternalSet = new Set(validInternalUserIds)
+    const externalByClientId = new Map(externalRows.map((row) => [row.clientId, row] as const))
+    const pendingInserts: PendingRecipientInsert[] = []
+    const queuedInternal = new Set<string>()
+    const queuedExternal = new Set<string>()
+
+    const queueInternal = (userId: string) => {
+      if (!validInternalSet.has(userId) || existingInternal.has(userId) || queuedInternal.has(userId)) return
+      queuedInternal.add(userId)
+      pendingInserts.push({ type: "internal", userId })
     }
-    for (const external of externalRows.filter((row) => !existingExternal.has(row.email))) {
-      const { data, error } = await admin
-        .from("report_cc_recipients")
-        .insert({
-          project_id: input.projectId,
-          response_id: input.responseId,
-          recipient_context: input.context,
-          recipient_type: "external",
-          external_name: external.name,
-          external_email: external.email,
-          external_company: external.company,
-          external_role: external.role,
-          added_by: actorId,
-        })
-        .select("id, external_name, external_email, recipient_type")
-        .single()
-      if (error && error.code !== "23505") throw error
-      if (data) inserted.push(data)
+    const queueConvertedParticipant = (candidateId: string) => {
+      const external = externalByClientId.get(candidateId)
+      if (!external || existingExternal.has(external.email) || queuedExternal.has(external.email)) return
+      queuedExternal.add(external.email)
+      pendingInserts.push({ type: "external", external })
+    }
+    const queueExternal = (external: (typeof externalRows)[number]) => {
+      if (existingExternal.has(external.email) || queuedExternal.has(external.email)) return
+      queuedExternal.add(external.email)
+      pendingInserts.push({ type: "external", external })
+    }
+
+    if (hasGroupedSelection) {
+      for (const id of reportToUserIds) {
+        queueInternal(id)
+        queueConvertedParticipant(id)
+      }
+      for (const external of externalRows.filter((row) => row.group === "reportTo")) queueExternal(external)
+      for (const id of ccToUserIds) {
+        queueInternal(id)
+        queueConvertedParticipant(id)
+      }
+      for (const external of externalRows.filter((row) => row.group === "ccTo")) queueExternal(external)
+    }
+    for (const id of validInternalUserIds) queueInternal(id)
+    for (const external of externalRows) queueExternal(external)
+
+    const inserted: any[] = []
+    for (const pending of pendingInserts) {
+      if (pending.type === "internal") {
+        const { data, error } = await admin
+          .from("report_cc_recipients")
+          .insert({
+            project_id: input.projectId,
+            response_id: input.responseId,
+            recipient_context: input.context,
+            recipient_type: "internal",
+            user_id: pending.userId,
+            added_by: actorId,
+          })
+          .select("id, user_id, recipient_type")
+          .single()
+        if (error && error.code !== "23505") throw error
+        if (data) inserted.push(data)
+      } else {
+        const external = pending.external
+        const { data, error } = await admin
+          .from("report_cc_recipients")
+          .insert({
+            project_id: input.projectId,
+            response_id: input.responseId,
+            recipient_context: input.context,
+            recipient_type: "external",
+            external_name: external.name,
+            external_email: external.email,
+            external_company: external.company,
+            external_role: external.role,
+            added_by: actorId,
+          })
+          .select("id, external_name, external_email, recipient_type")
+          .single()
+        if (error && error.code !== "23505") throw error
+        if (data) inserted.push(data)
+      }
     }
 
     const stage = Array.isArray(term?.project_stages) ? term.project_stages[0] : term?.project_stages || response.project_stages
