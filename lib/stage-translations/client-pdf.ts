@@ -1152,12 +1152,14 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
   const columnGap = 12
   const columnWidth = (flow.width - columnGap) / 2
   const fontSize = 8.5
-  const lineHeight = 4.4
+  const textLineHeightFactor = 1.2
+  // jsPDF text coordinates are baselines by default. This block renders its
+  // text from the top edge instead, so the logo gaps are measured from the
+  // actual content-sized text rows rather than from an extra baseline offset.
+  const lineHeight = fontSize * 0.352778 * textLineHeightFactor
   const logoWidth = 28
   const logoHeight = logoWidth * closingLogo.height / Math.max(1, closingLogo.width)
-  // Use one compact, controlled gap on both sides of the centered logo so
-  // the bilingual closing remains balanced without blank-line spacing.
-  const rowGap = 1.8
+  const rowGap = 1.6
   const bottomGap = 4
 
   setLanguage(flow.doc, false, fontSize, false)
@@ -1188,7 +1190,7 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
     englishFirstLines,
     flow.x,
     flow.y,
-    { align: "left", lineHeightFactor: 1.2 },
+    { align: "left", baseline: "top", lineHeightFactor: textLineHeightFactor },
     false,
   )
 
@@ -1198,7 +1200,7 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
     arabicFirstLines,
     flow.x + flow.width,
     flow.y,
-    { align: "right", lineHeightFactor: 1.2 },
+    { align: "right", baseline: "top", lineHeightFactor: textLineHeightFactor },
     true,
   )
 
@@ -1223,7 +1225,7 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
     englishCompanyLines,
     flow.x,
     companyRowY,
-    { align: "left", lineHeightFactor: 1.2 },
+    { align: "left", baseline: "top", lineHeightFactor: textLineHeightFactor },
     false,
   )
 
@@ -1233,7 +1235,7 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
     arabicCompanyLines,
     flow.x + flow.width,
     companyRowY,
-    { align: "right", lineHeightFactor: 1.2 },
+    { align: "right", baseline: "top", lineHeightFactor: textLineHeightFactor },
     true,
   )
 
