@@ -58,7 +58,7 @@ export type StageTranslationRecord = {
 }
 
 export type StageTranslationPageData = {
-  project: { id: string; name: string; code: string | null; location: string | null; plotNo: string | null }
+  project: { id: string; name: string; code: string | null; location: string | null; phase: string | null; plotNo: string | null }
   stage: { id: string; name: string }
   term: { id: string; name: string; required: boolean }
   response: {

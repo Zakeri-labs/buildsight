@@ -928,10 +928,18 @@ function drawFirstPageHeader(
 
   if (useBilingualLocationCell) {
     const addressLines = optionalLines(template.projectAddress, cellW - 6, 7, containsArabic(template.projectAddress))
+    const phaseLines = optionalLines(template.projectPhase, cellW - 6, 7, containsArabic(template.projectPhase))
     const plotLines = optionalLines(template.projectPlotNo, cellW - 6, 7, containsArabic(template.projectPlotNo))
     const addressValueHeight = Math.max(1, addressLines.length) * 3.2
+    const phaseValueHeight = Math.max(1, phaseLines.length) * 3.2
     const plotValueHeight = Math.max(1, plotLines.length) * 3.2
-    const locationCellHeight = 7.8 + addressValueHeight + 1.2 + 4 + plotValueHeight + 1
+    const locationCellHeight = 7.8
+      + addressValueHeight
+      + 1.2 + 4
+      + phaseValueHeight
+      + 1.2 + 4
+      + plotValueHeight
+      + 1
     recipientsRowH = Math.max(
       wrappedRecipientHeight(reportTo, cellW),
       locationCellHeight,
@@ -1121,7 +1129,11 @@ function drawFirstPageHeader(
     drawLabel("Address", gridTop + 3.5)
     const addressY = gridTop + 7.8
     const addressHeight = drawOptionalValue(template.projectAddress, addressY) || 3.2
-    const plotLabelY = addressY + addressHeight + 1.2
+    const phaseLabelY = addressY + addressHeight + 1.2
+    drawLabel("Phase", phaseLabelY)
+    const phaseValueY = phaseLabelY + 4
+    const phaseHeight = drawOptionalValue(template.projectPhase, phaseValueY) || 3.2
+    const plotLabelY = phaseValueY + phaseHeight + 1.2
     drawLabel("Plot No.", plotLabelY)
     drawOptionalValue(template.projectPlotNo, plotLabelY + 4)
   }

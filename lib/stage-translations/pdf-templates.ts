@@ -124,6 +124,7 @@ export type LanguagePdfTemplate = {
   projectName: string
   projectReference: string
   projectAddress: string
+  projectPhase: string
   projectPlotNo: string
   stageName: string
   termName: string
@@ -687,6 +688,7 @@ export function buildLanguagePdfTemplate(input: {
     projectName: data.project.name,
     projectReference: data.project.code || "—",
     projectAddress: optionalProjectPdfValue(data.project.location),
+    projectPhase: optionalProjectPdfValue(data.project.phase),
     projectPlotNo: optionalProjectPdfValue(data.project.plotNo),
     stageName: content.stageName || data.stage.name,
     termName: content.termName || data.term.name,

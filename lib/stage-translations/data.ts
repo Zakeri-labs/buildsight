@@ -30,7 +30,7 @@ async function loadTranslationContext(responseId: string, projectId: string) {
       .maybeSingle(),
     admin
       .from("projects")
-      .select("location, plot_no")
+      .select("location, phase, plot_no")
       .eq("id", projectId)
       .maybeSingle(),
   ])
@@ -64,6 +64,7 @@ async function buildPageData(
     project: {
       ...execution.project,
       location: projectDetails?.location ?? null,
+      phase: projectDetails?.phase ?? null,
       plotNo: projectDetails?.plot_no ?? null,
     },
     stage: { id: execution.stage.id, name: execution.stage.name },
@@ -111,6 +112,7 @@ async function buildDirectStagePageData(
     project: {
       ...execution.project,
       location: projectDetails?.location ?? null,
+      phase: projectDetails?.phase ?? null,
       plotNo: projectDetails?.plot_no ?? null,
     },
     stage: { id: execution.stage.id, name: execution.stage.name },
