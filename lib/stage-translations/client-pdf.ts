@@ -1575,81 +1575,103 @@ function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "tabl
   const rows = (block && Array.isArray(block.rows)) ? block.rows : []
   if (!rows.length) return
 
-  // The standalone PDFs use a compact icon-only status column. Its visual
-  // position is mirrored: left in English and right in Arabic.
-  const statusWidth = flow.width * 0.1
-  const itemWidth = flow.width - statusWidth
-  const statusX = flow.rtl ? flow.x + itemWidth : flow.x
-  const itemX = flow.rtl ? flow.x : flow.x + statusWidth
-  const dividerX = flow.rtl ? flow.x + itemWidth : flow.x + statusWidth
+  // Keep the compact icon-only status column and render the saved per-item
+  // comment/reference as its own column. The Arabic table mirrors the same
+  // three-column structure for RTL presentation.
+  const statusWidth = flow.width * 0.09
+  const itemWidth = flow.width * 0.57
+  const commentWidth = flow.width - statusWidth - itemWidth
+  const statusX = flow.rtl ? flow.x + commentWidth + itemWidth : flow.x
+  const itemX = flow.rtl ? flow.x + commentWidth : flow.x + statusWidth
+  const commentX = flow.rtl ? flow.x : flow.x + statusWidth + itemWidth
+  const dividerXs = flow.rtl
+    ? [flow.x + commentWidth, flow.x + commentWidth + itemWidth]
+    : [flow.x + statusWidth, flow.x + statusWidth + itemWidth]
   const cellPadding = 2.2
   const badgeW = 3.6
   const badgeH = 3.6
-  const itemLineHeight = 4.1
-  const notesLineHeight = 3.55
-  const headerHeight = 8.5
+  const textLineHeight = 4.1
+  const headerLineHeight = 4.1
+
+  const prepareTextLines = (text: string, width: number, rtl: boolean, fontSize: number) => {
+    if (!normalizeText(text)) return [] as string[]
+    setLanguage(flow.doc, rtl, fontSize, false)
+    return textLines(flow.doc, text, width - cellPadding * 2)
+  }
 
   const prepareRow = (row: string[]) => {
+    // Checklist templates intentionally retain their source row shape:
+    // [index, item, result, notes]. Only the visible PDF table changes.
     const itemText = row.length >= 2 ? row[1] : row[0]
     const resultText = row.length >= 3 ? row[2] : (row[1] || "")
-    const notesText = row.length >= 4 ? row[3] : ""
+    const commentText = row.length >= 4 ? row[3] : ""
+    const itemLines = prepareTextLines(itemText, itemWidth, flow.rtl, 8.2)
+    const commentLines = prepareTextLines(commentText, commentWidth, flow.rtl, 8)
     const status = checklistStatusPresentation(resultText, flow.rtl)
+    const itemHeight = Math.max(1, itemLines.length) * textLineHeight
+    const commentHeight = commentLines.length * textLineHeight
+    const height = Math.max(7.2, Math.max(itemHeight, commentHeight, badgeH) + 2.8)
 
-    setLanguage(flow.doc, flow.rtl, 8.2, false)
-    const itemLines = textLines(flow.doc, itemText, itemWidth - cellPadding * 2)
-
-    setLanguage(flow.doc, flow.rtl, 7.2, false)
-    const notesLines = notesText
-      ? textLines(flow.doc, notesText, itemWidth - cellPadding * 2)
-      : []
-
-    const itemTextHeight = itemLines.length * itemLineHeight
-    const notesHeight = notesLines.length ? 1 + notesLines.length * notesLineHeight : 0
-    const itemContentHeight = itemTextHeight + notesHeight
-    const height = Math.max(7.2, Math.max(itemContentHeight, badgeH) + 2.8)
-
-    return {
-      itemLines,
-      notesLines,
-      status,
-      height,
-    }
+    return { itemLines, commentLines, status, height }
   }
 
   const preparedRows = rows.filter((row) => row.length > 0).map(prepareRow)
   if (!preparedRows.length) return
+
+  const headerSpecs = flow.rtl
+    ? [
+        { text: "التعليق / المرجع", x: commentX, width: commentWidth, align: "right" as const, rtl: true },
+        { text: "بند التفتيش", x: itemX, width: itemWidth, align: "right" as const, rtl: true },
+        { text: "الحالة", x: statusX, width: statusWidth, align: "center" as const, rtl: true },
+      ]
+    : [
+        { text: "Status", x: statusX, width: statusWidth, align: "center" as const, rtl: false },
+        { text: "Inspection Item", x: itemX, width: itemWidth, align: "left" as const, rtl: false },
+        { text: "Comment / Reference", x: commentX, width: commentWidth, align: "left" as const, rtl: false },
+      ]
+
+  const preparedHeaders = headerSpecs.map((header) => {
+    setLanguage(flow.doc, header.rtl, 8.2, false)
+    return {
+      ...header,
+      lines: textLines(flow.doc, header.text, header.width - cellPadding * 2),
+    }
+  })
+  const headerHeight = Math.max(
+    8.5,
+    Math.max(...preparedHeaders.map((header) => header.lines.length), 1) * headerLineHeight + 3,
+  )
 
   const drawCellFrame = (y: number, height: number, fill: [number, number, number]) => {
     flow.doc.setDrawColor(226, 232, 240)
     flow.doc.setFillColor(...fill)
     flow.doc.setLineWidth(0.15)
     flow.doc.rect(flow.x, y, flow.width, height, "FD")
-    flow.doc.line(dividerX, y, dividerX, y + height)
+    for (const dividerX of dividerXs) flow.doc.line(dividerX, y, dividerX, y + height)
   }
 
   const drawHeader = () => {
     drawCellFrame(flow.y, headerHeight, [248, 250, 252])
-
-    setLanguage(flow.doc, flow.rtl, 8.2, false)
     flow.doc.setTextColor(15, 23, 42)
-    writePdfText(
-      flow.doc,
-      flow.rtl ? "بند التفتيش" : "Inspection Item",
-      flow.rtl ? itemX + itemWidth - cellPadding : itemX + cellPadding,
-      flow.y + 5.5,
-      { align: flow.rtl ? "right" : "left" },
-      flow.rtl,
-    )
 
-    setLanguage(flow.doc, flow.rtl, 8.2, false)
-    writePdfText(
-      flow.doc,
-      flow.rtl ? "الحالة" : "Status",
-      statusX + statusWidth / 2,
-      flow.y + 5.5,
-      { align: "center" },
-      flow.rtl,
-    )
+    for (const header of preparedHeaders) {
+      setLanguage(flow.doc, header.rtl, 8.2, false)
+      const textHeight = header.lines.length * headerLineHeight
+      const startY = flow.y + (headerHeight - textHeight) / 2 + 3.2
+      const textX = header.align === "center"
+        ? header.x + header.width / 2
+        : header.align === "right"
+          ? header.x + header.width - cellPadding
+          : header.x + cellPadding
+      writePdfText(
+        flow.doc,
+        header.lines,
+        textX,
+        startY,
+        { align: header.align, lineHeightFactor: 1.15 },
+        header.rtl,
+      )
+    }
 
     flow.y += headerHeight
   }
@@ -1666,29 +1688,31 @@ function renderChecklistTable(flow: Flow, block: Extract<PdfBlock, { type: "tabl
     const rowY = flow.y
     drawCellFrame(rowY, row.height, [255, 255, 255])
 
-    const itemContentHeight = row.itemLines.length * itemLineHeight
-      + (row.notesLines.length ? 1 + row.notesLines.length * notesLineHeight : 0)
-    const itemStartY = rowY + (row.height - itemContentHeight) / 2 + 3
-
-    setLanguage(flow.doc, flow.rtl, 8.2, false)
-    flow.doc.setTextColor(51, 65, 85)
-    writePdfText(
-      flow.doc,
-      row.itemLines,
-      flow.rtl ? itemX + itemWidth - cellPadding : itemX + cellPadding,
-      itemStartY,
-      { align: flow.rtl ? "right" : "left", lineHeightFactor: 1.15 },
-      flow.rtl,
-    )
-
-    if (row.notesLines.length) {
-      setLanguage(flow.doc, flow.rtl, 7.2, false)
-      flow.doc.setTextColor(100, 116, 139)
+    if (row.itemLines.length) {
+      const itemTextHeight = row.itemLines.length * textLineHeight
+      const itemStartY = rowY + (row.height - itemTextHeight) / 2 + 3
+      setLanguage(flow.doc, flow.rtl, 8.2, false)
+      flow.doc.setTextColor(51, 65, 85)
       writePdfText(
         flow.doc,
-        row.notesLines,
+        row.itemLines,
         flow.rtl ? itemX + itemWidth - cellPadding : itemX + cellPadding,
-        itemStartY + row.itemLines.length * itemLineHeight + 1,
+        itemStartY,
+        { align: flow.rtl ? "right" : "left", lineHeightFactor: 1.15 },
+        flow.rtl,
+      )
+    }
+
+    if (row.commentLines.length) {
+      const commentTextHeight = row.commentLines.length * textLineHeight
+      const commentStartY = rowY + (row.height - commentTextHeight) / 2 + 3
+      setLanguage(flow.doc, flow.rtl, 8, false)
+      flow.doc.setTextColor(51, 65, 85)
+      writePdfText(
+        flow.doc,
+        row.commentLines,
+        flow.rtl ? commentX + commentWidth - cellPadding : commentX + cellPadding,
+        commentStartY,
         { align: flow.rtl ? "right" : "left", lineHeightFactor: 1.15 },
         flow.rtl,
       )
@@ -3421,58 +3445,93 @@ function renderBilingualChecklist(
 
   const gap = 6
   const tableWidth = (flow.width - gap) / 2
-  const statusWidth = tableWidth * 0.11
-  const itemWidth = tableWidth - statusWidth
+  const statusWidth = tableWidth * 0.1
+  const itemWidth = tableWidth * 0.57
+  const commentWidth = tableWidth - statusWidth - itemWidth
   const englishTableX = flow.x
   const arabicTableX = flow.x + tableWidth + gap
+
+  // English physical order: Status | Inspection Item | Comment / Reference
   const englishStatusX = englishTableX
-  const englishItemX = englishTableX + statusWidth
-  const arabicItemX = arabicTableX
-  const arabicStatusX = arabicTableX + itemWidth
-  const cellPadding = 2.2
+  const englishItemX = englishStatusX + statusWidth
+  const englishCommentX = englishItemX + itemWidth
+  const englishDividers = [englishItemX, englishCommentX]
+
+  // Arabic physical order: التعليق / المرجع | بند التفتيش | الحالة
+  const arabicCommentX = arabicTableX
+  const arabicItemX = arabicCommentX + commentWidth
+  const arabicStatusX = arabicItemX + itemWidth
+  const arabicDividers = [arabicItemX, arabicStatusX]
+
+  const cellPadding = 1.8
   const badgeW = 3.6
   const badgeH = 3.6
-  const itemLineHeight = 4.1
-  const notesLineHeight = 3.55
-  const headerHeight = 8.5
+  const textLineHeight = 3.8
+  const headerLineHeight = 3.7
 
-  const prepareLanguageCell = (itemText: string, notesText: string, rtl: boolean) => {
-    setLanguage(flow.doc, rtl, 8.2, false)
-    const itemLines = textLines(flow.doc, itemText || "—", itemWidth - cellPadding * 2)
-
-    setLanguage(flow.doc, rtl, 7.2, false)
-    const notesLines = notesText
-      ? textLines(flow.doc, notesText, itemWidth - cellPadding * 2)
-      : []
-
-    const itemTextHeight = itemLines.length * itemLineHeight
-    const notesHeight = notesLines.length ? 1 + notesLines.length * notesLineHeight : 0
-
-    return {
-      itemLines,
-      notesLines,
-      contentHeight: itemTextHeight + notesHeight,
-    }
+  const prepareCell = (text: string, width: number, rtl: boolean, fontSize: number) => {
+    if (!normalizeText(text)) return { lines: [] as string[], height: 0 }
+    setLanguage(flow.doc, rtl, fontSize, false)
+    const lines = textLines(flow.doc, text, width - cellPadding * 2)
+    return { lines, height: lines.length * textLineHeight }
   }
 
   const preparedRows = Array.from({ length: rowCount }, (_, index) => {
+    // Both language templates retain [index, item, result, notes]. Pair by
+    // checklist index so the saved comment/reference remains with its item.
     const engRow = engRows[index] ?? []
     const arRow = arRows[index] ?? []
-    const englishItem = engRow.length >= 2 ? engRow[1] : (engRow[0] || arRow[1] || arRow[0] || "—")
-    const arabicItem = arRow.length >= 2 ? arRow[1] : (arRow[0] || englishItem)
+    const englishItemText = engRow.length >= 2 ? engRow[1] : (engRow[0] || arRow[1] || arRow[0] || "—")
+    const arabicItemText = arRow.length >= 2 ? arRow[1] : (arRow[0] || englishItemText)
     const resultText = engRow.length >= 3 ? engRow[2] : (arRow.length >= 3 ? arRow[2] : "")
-    const englishNotes = engRow.length >= 4 ? engRow[3] : ""
-    const arabicNotes = arRow.length >= 4 ? arRow[3] : ""
-    const english = prepareLanguageCell(englishItem, englishNotes, false)
-    const arabic = prepareLanguageCell(arabicItem, arabicNotes, true)
+    const englishCommentText = engRow.length >= 4 ? engRow[3] : ""
+    const arabicCommentText = arRow.length >= 4 ? arRow[3] : ""
+
+    const englishItem = prepareCell(englishItemText, itemWidth, false, 7.8)
+    const englishComment = prepareCell(englishCommentText, commentWidth, false, 7.2)
+    const arabicItem = prepareCell(arabicItemText, itemWidth, true, 7.8)
+    const arabicComment = prepareCell(arabicCommentText, commentWidth, true, 7.2)
     const status = checklistStatusPresentation(resultText, false)
     const height = Math.max(
       7.2,
-      Math.max(english.contentHeight, arabic.contentHeight, badgeH) + 2.8,
+      Math.max(
+        englishItem.height,
+        englishComment.height,
+        arabicItem.height,
+        arabicComment.height,
+        badgeH,
+      ) + 2.8,
     )
 
-    return { english, arabic, status, height }
+    return {
+      englishItem,
+      englishComment,
+      arabicItem,
+      arabicComment,
+      status,
+      height,
+    }
   })
+
+  const headerSpecs = [
+    { text: "Status", x: englishStatusX, width: statusWidth, align: "center" as const, rtl: false, fontSize: 6.5, padding: 0.7 },
+    { text: "Inspection Item", x: englishItemX, width: itemWidth, align: "left" as const, rtl: false, fontSize: 7.2, padding: cellPadding },
+    { text: "Comment / Reference", x: englishCommentX, width: commentWidth, align: "left" as const, rtl: false, fontSize: 7.2, padding: cellPadding },
+    { text: "التعليق / المرجع", x: arabicCommentX, width: commentWidth, align: "right" as const, rtl: true, fontSize: 7.2, padding: cellPadding },
+    { text: "بند التفتيش", x: arabicItemX, width: itemWidth, align: "right" as const, rtl: true, fontSize: 7.2, padding: cellPadding },
+    { text: "الحالة", x: arabicStatusX, width: statusWidth, align: "center" as const, rtl: true, fontSize: 6.3, padding: 0.7 },
+  ]
+  const preparedHeaders = headerSpecs.map((header) => {
+    setLanguage(flow.doc, header.rtl, header.fontSize, false)
+    return {
+      ...header,
+      lines: textLines(flow.doc, header.text, header.width - header.padding * 2),
+    }
+  })
+  const headerHeight = Math.max(
+    8.5,
+    Math.max(...preparedHeaders.map((header) => header.lines.length), 1) * headerLineHeight + 3,
+  )
 
   // Keep the existing bilingual section titles outside the tables and avoid
   // orphaning them at the bottom of a page when the first paired row follows.
@@ -3487,7 +3546,7 @@ function renderBilingualChecklist(
 
   const drawTableFrame = (
     tableX: number,
-    dividerX: number,
+    dividerXs: number[],
     y: number,
     height: number,
     fill: [number, number, number],
@@ -3496,49 +3555,32 @@ function renderBilingualChecklist(
     flow.doc.setFillColor(...fill)
     flow.doc.setLineWidth(0.15)
     flow.doc.rect(tableX, y, tableWidth, height, "FD")
-    flow.doc.line(dividerX, y, dividerX, y + height)
+    for (const dividerX of dividerXs) flow.doc.line(dividerX, y, dividerX, y + height)
   }
 
   const drawHeaders = () => {
-    drawTableFrame(englishTableX, englishItemX, flow.y, headerHeight, [248, 250, 252])
-    drawTableFrame(arabicTableX, arabicStatusX, flow.y, headerHeight, [248, 250, 252])
-
-    setLanguage(flow.doc, false, 8.2, false)
+    drawTableFrame(englishTableX, englishDividers, flow.y, headerHeight, [248, 250, 252])
+    drawTableFrame(arabicTableX, arabicDividers, flow.y, headerHeight, [248, 250, 252])
     flow.doc.setTextColor(15, 23, 42)
-    writePdfText(
-      flow.doc,
-      "Status",
-      englishStatusX + statusWidth / 2,
-      flow.y + 5.5,
-      { align: "center" },
-      false,
-    )
-    writePdfText(
-      flow.doc,
-      "Inspection Item",
-      englishItemX + cellPadding,
-      flow.y + 5.5,
-      { align: "left" },
-      false,
-    )
 
-    setLanguage(flow.doc, true, 8.2, false)
-    writePdfText(
-      flow.doc,
-      "بند التفتيش",
-      arabicItemX + itemWidth - cellPadding,
-      flow.y + 5.5,
-      { align: "right" },
-      true,
-    )
-    writePdfText(
-      flow.doc,
-      "الحالة",
-      arabicStatusX + statusWidth / 2,
-      flow.y + 5.5,
-      { align: "center" },
-      true,
-    )
+    for (const header of preparedHeaders) {
+      setLanguage(flow.doc, header.rtl, header.fontSize, false)
+      const textHeight = header.lines.length * headerLineHeight
+      const startY = flow.y + (headerHeight - textHeight) / 2 + 3
+      const textX = header.align === "center"
+        ? header.x + header.width / 2
+        : header.align === "right"
+          ? header.x + header.width - header.padding
+          : header.x + header.padding
+      writePdfText(
+        flow.doc,
+        header.lines,
+        textX,
+        startY,
+        { align: header.align, lineHeightFactor: 1.15 },
+        header.rtl,
+      )
+    }
 
     flow.y += headerHeight
   }
@@ -3552,56 +3594,35 @@ function renderBilingualChecklist(
     }
 
     const rowY = flow.y
-    drawTableFrame(englishTableX, englishItemX, rowY, row.height, [255, 255, 255])
-    drawTableFrame(arabicTableX, arabicStatusX, rowY, row.height, [255, 255, 255])
+    drawTableFrame(englishTableX, englishDividers, rowY, row.height, [255, 255, 255])
+    drawTableFrame(arabicTableX, arabicDividers, rowY, row.height, [255, 255, 255])
 
-    const englishStartY = rowY + (row.height - row.english.contentHeight) / 2 + 3
-    setLanguage(flow.doc, false, 8.2, false)
-    flow.doc.setTextColor(51, 65, 85)
-    writePdfText(
-      flow.doc,
-      row.english.itemLines,
-      englishItemX + cellPadding,
-      englishStartY,
-      { align: "left", lineHeightFactor: 1.15 },
-      false,
-    )
-    if (row.english.notesLines.length) {
-      setLanguage(flow.doc, false, 7.2, false)
-      flow.doc.setTextColor(100, 116, 139)
+    const drawCellText = (input: {
+      lines: string[]
+      height: number
+      x: number
+      width: number
+      rtl: boolean
+      fontSize: number
+    }) => {
+      if (!input.lines.length) return
+      const startY = rowY + (row.height - input.height) / 2 + 2.8
+      setLanguage(flow.doc, input.rtl, input.fontSize, false)
+      flow.doc.setTextColor(51, 65, 85)
       writePdfText(
         flow.doc,
-        row.english.notesLines,
-        englishItemX + cellPadding,
-        englishStartY + row.english.itemLines.length * itemLineHeight + 1,
-        { align: "left", lineHeightFactor: 1.15 },
-        false,
+        input.lines,
+        input.rtl ? input.x + input.width - cellPadding : input.x + cellPadding,
+        startY,
+        { align: input.rtl ? "right" : "left", lineHeightFactor: 1.15 },
+        input.rtl,
       )
     }
 
-    const arabicStartY = rowY + (row.height - row.arabic.contentHeight) / 2 + 3
-    setLanguage(flow.doc, true, 8.2, false)
-    flow.doc.setTextColor(51, 65, 85)
-    writePdfText(
-      flow.doc,
-      row.arabic.itemLines,
-      arabicItemX + itemWidth - cellPadding,
-      arabicStartY,
-      { align: "right", lineHeightFactor: 1.15 },
-      true,
-    )
-    if (row.arabic.notesLines.length) {
-      setLanguage(flow.doc, true, 7.2, false)
-      flow.doc.setTextColor(100, 116, 139)
-      writePdfText(
-        flow.doc,
-        row.arabic.notesLines,
-        arabicItemX + itemWidth - cellPadding,
-        arabicStartY + row.arabic.itemLines.length * itemLineHeight + 1,
-        { align: "right", lineHeightFactor: 1.15 },
-        true,
-      )
-    }
+    drawCellText({ ...row.englishItem, x: englishItemX, width: itemWidth, rtl: false, fontSize: 7.8 })
+    drawCellText({ ...row.englishComment, x: englishCommentX, width: commentWidth, rtl: false, fontSize: 7.2 })
+    drawCellText({ ...row.arabicItem, x: arabicItemX, width: itemWidth, rtl: true, fontSize: 7.8 })
+    drawCellText({ ...row.arabicComment, x: arabicCommentX, width: commentWidth, rtl: true, fontSize: 7.2 })
 
     const badgeY = rowY + (row.height - badgeH) / 2
     drawChecklistVectorBadge(
