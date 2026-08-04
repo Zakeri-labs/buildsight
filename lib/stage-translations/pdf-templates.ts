@@ -123,6 +123,8 @@ export type LanguagePdfTemplate = {
   badge: string
   projectName: string
   projectReference: string
+  projectAddress: string
+  projectPlotNo: string
   stageName: string
   termName: string
   reportNumber: string
@@ -609,6 +611,14 @@ export function validateLanguagePdfTemplate(template: LanguagePdfTemplate) {
   if (!hasStructuredContent) throw new Error("The structured report contains no exportable content.")
 }
 
+function optionalProjectPdfValue(value: string | null | undefined) {
+  const normalized = value?.trim() ?? ""
+  if (!normalized) return ""
+  const lowered = normalized.toLowerCase()
+  if (["null", "undefined", "n/a", "not set", "location not set", "-", "—"].includes(lowered)) return ""
+  return normalized
+}
+
 export function buildLanguagePdfTemplate(input: {
   data: StageTranslationPageData
   translation: StageTranslationRecord | null
@@ -676,6 +686,8 @@ export function buildLanguagePdfTemplate(input: {
     badge: language === "ar" ? "AR" : "EN",
     projectName: data.project.name,
     projectReference: data.project.code || "—",
+    projectAddress: optionalProjectPdfValue(data.project.location),
+    projectPlotNo: optionalProjectPdfValue(data.project.plotNo),
     stageName: content.stageName || data.stage.name,
     termName: content.termName || data.term.name,
     reportNumber: data.response.reportNumber,

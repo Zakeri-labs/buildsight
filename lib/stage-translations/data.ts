@@ -20,6 +20,25 @@ function mapTranslation(row: any, fallbackOriginal: StageTranslationRecord["orig
   }
 }
 
+async function loadTranslationContext(responseId: string, projectId: string) {
+  const admin = createAdminClient()
+  const [translationResult, projectResult] = await Promise.all([
+    admin
+      .from("translation_documents")
+      .select("id, translation_status, original_content, translated_content, original_pdf_url, arabic_pdf_url, bilingual_pdf_url, generated_at, created_at, updated_at")
+      .eq("response_id", responseId)
+      .maybeSingle(),
+    admin
+      .from("projects")
+      .select("location, plot_no")
+      .eq("id", projectId)
+      .maybeSingle(),
+  ])
+  if (translationResult.error) throw translationResult.error
+  if (projectResult.error) throw projectResult.error
+  return { translation: translationResult.data, projectDetails: projectResult.data }
+}
+
 async function buildPageData(
   execution: Awaited<ReturnType<typeof loadProjectStageTerm>>,
   response: ProjectTermResponse,
@@ -40,15 +59,13 @@ async function buildPageData(
       decidedAt: approval.decidedAt,
     })),
   })
-  const admin = createAdminClient()
-  const { data: translation, error } = await admin
-    .from("translation_documents")
-    .select("id, translation_status, original_content, translated_content, original_pdf_url, arabic_pdf_url, bilingual_pdf_url, generated_at, created_at, updated_at")
-    .eq("response_id", response.id)
-    .maybeSingle()
-  if (error) throw error
+  const { translation, projectDetails } = await loadTranslationContext(response.id, execution.project.id)
   return {
-    project: execution.project,
+    project: {
+      ...execution.project,
+      location: projectDetails?.location ?? null,
+      plotNo: projectDetails?.plot_no ?? null,
+    },
     stage: { id: execution.stage.id, name: execution.stage.name },
     term: { id: execution.term.id, name: execution.term.reportName, required: execution.term.required },
     response: {
@@ -89,15 +106,13 @@ async function buildDirectStagePageData(
       decidedAt: approval.decidedAt,
     })),
   })
-  const admin = createAdminClient()
-  const { data: translation, error } = await admin
-    .from("translation_documents")
-    .select("id, translation_status, original_content, translated_content, original_pdf_url, arabic_pdf_url, bilingual_pdf_url, generated_at, created_at, updated_at")
-    .eq("response_id", response.id)
-    .maybeSingle()
-  if (error) throw error
+  const { translation, projectDetails } = await loadTranslationContext(response.id, execution.project.id)
   return {
-    project: execution.project,
+    project: {
+      ...execution.project,
+      location: projectDetails?.location ?? null,
+      plotNo: projectDetails?.plot_no ?? null,
+    },
     stage: { id: execution.stage.id, name: execution.stage.name },
     term: { id: execution.stage.id, name: `${execution.stage.name} Report`, required: false },
     response: {
