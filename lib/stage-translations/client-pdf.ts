@@ -3449,18 +3449,18 @@ function renderBilingualChecklist(
   const gap = 6
   const tableWidth = (flow.width - gap) / 2
   const statusWidth = tableWidth * 0.1
-  const itemWidth = tableWidth * 0.57
+  const itemWidth = tableWidth * 0.68
   const commentWidth = tableWidth - statusWidth - itemWidth
   const englishTableX = flow.x
   const arabicTableX = flow.x + tableWidth + gap
 
-  // English physical order: Status | Inspection Item | Comment / Reference
+  // English physical order: Status | Inspection Item | Comment
   const englishStatusX = englishTableX
   const englishItemX = englishStatusX + statusWidth
   const englishCommentX = englishItemX + itemWidth
   const englishDividers = [englishItemX, englishCommentX]
 
-  // Arabic physical order: التعليق / المرجع | بند التفتيش | الحالة
+  // Arabic physical order: تعليق | بند التفتيش | الحالة
   const arabicCommentX = arabicTableX
   const arabicItemX = arabicCommentX + commentWidth
   const arabicStatusX = arabicItemX + itemWidth
@@ -3519,8 +3519,8 @@ function renderBilingualChecklist(
   const headerSpecs = [
     { text: "Status", x: englishStatusX, width: statusWidth, align: "center" as const, rtl: false, fontSize: 6.5, padding: 0.7 },
     { text: "Inspection Item", x: englishItemX, width: itemWidth, align: "left" as const, rtl: false, fontSize: 7.2, padding: cellPadding },
-    { text: "Comment / Reference", x: englishCommentX, width: commentWidth, align: "left" as const, rtl: false, fontSize: 7.2, padding: cellPadding },
-    { text: "التعليق / المرجع", x: arabicCommentX, width: commentWidth, align: "right" as const, rtl: true, fontSize: 7.2, padding: cellPadding },
+    { text: "Comment", x: englishCommentX, width: commentWidth, align: "left" as const, rtl: false, fontSize: 7.2, padding: cellPadding },
+    { text: "تعليق", x: arabicCommentX, width: commentWidth, align: "right" as const, rtl: true, fontSize: 7.2, padding: cellPadding },
     { text: "بند التفتيش", x: arabicItemX, width: itemWidth, align: "right" as const, rtl: true, fontSize: 7.2, padding: cellPadding },
     { text: "الحالة", x: arabicStatusX, width: statusWidth, align: "center" as const, rtl: true, fontSize: 6.3, padding: 0.7 },
   ]
