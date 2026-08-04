@@ -3426,98 +3426,217 @@ function renderBilingualChecklist(
 ) {
   const engRows = engSection.table?.rows ?? []
   const arRows = arSection?.table?.rows ?? []
-  if (!engRows.length) return
+  const rowCount = Math.max(engRows.length, arRows.length)
 
-  const gap = 8
-  const halfW = (flow.width - gap) / 2
+  const gap = 6
+  const tableWidth = (flow.width - gap) / 2
+  const statusWidth = tableWidth * 0.11
+  const itemWidth = tableWidth - statusWidth
+  const englishTableX = flow.x
+  const arabicTableX = flow.x + tableWidth + gap
+  const englishStatusX = englishTableX
+  const englishItemX = englishTableX + statusWidth
+  const arabicItemX = arabicTableX
+  const arabicStatusX = arabicTableX + itemWidth
+  const cellPadding = 2.2
   const badgeW = 3.6
   const badgeH = 3.6
-  const innerGap = 2.0
-  const notesW = 18.0
-  const labelW = halfW - badgeW - innerGap - notesW - innerGap
+  const itemLineHeight = 4.1
+  const notesLineHeight = 3.55
+  const headerHeight = 8.5
 
-  const engX = flow.x
-  const arX = flow.x + halfW + gap
+  const prepareLanguageCell = (itemText: string, notesText: string, rtl: boolean) => {
+    setLanguage(flow.doc, rtl, 8.2, false)
+    const itemLines = textLines(flow.doc, itemText || "—", itemWidth - cellPadding * 2)
 
-  for (let i = 0; i < engRows.length; i += 1) {
-    const engRow = engRows[i]
-    if (!engRow.length) continue
+    setLanguage(flow.doc, rtl, 7.2, false)
+    const notesLines = notesText
+      ? textLines(flow.doc, notesText, itemWidth - cellPadding * 2)
+      : []
 
-    const arRow = arRows[i]
+    const itemTextHeight = itemLines.length * itemLineHeight
+    const notesHeight = notesLines.length ? 1 + notesLines.length * notesLineHeight : 0
 
-    // English data
-    const engLabel = engRow.length >= 2 ? engRow[1] : engRow[0]
-    const resultText = engRow.length >= 3 ? engRow[2] : (engRow[1] || "")
-    const engNotes = engRow.length >= 4 ? engRow[3] : ""
-
-    // Arabic data
-    const arLabel = arRow ? (arRow.length >= 2 ? arRow[1] : arRow[0]) : engLabel
-    const arNotes = arRow ? (arRow.length >= 4 ? arRow[3] : "") : engNotes
-
-    const isPassed = resultText === "pass" || resultText.toLowerCase().includes("complete") || resultText.includes("مكتمل") || resultText.includes("تم")
-    const isFailed = resultText === "fail" || resultText.includes("غير مطابق")
-    const isInProgress = resultText === "in_progress" || resultText.includes("قيد التنفيذ")
-
-    setLanguage(flow.doc, false, 7.8, false)
-    const engLabelLines = textLines(flow.doc, engLabel, labelW)
-
-    setLanguage(flow.doc, true, 7.8, false)
-    const arLabelLines = textLines(flow.doc, arLabel, labelW)
-
-    setLanguage(flow.doc, false, 7.2, false)
-    const engNotesLines = engNotes ? textLines(flow.doc, engNotes, notesW) : []
-
-    setLanguage(flow.doc, true, 7.2, false)
-    const arNotesLines = arNotes ? textLines(flow.doc, arNotes, notesW) : []
-
-    const lineH = 3.6
-    const engMaxLines = Math.max(engLabelLines.length, engNotesLines.length, 1)
-    const arMaxLines = Math.max(arLabelLines.length, arNotesLines.length, 1)
-    const itemH = Math.max(6, Math.max(engMaxLines, arMaxLines) * lineH + 2.5)
-
-    ensureSpace(flow, itemH)
-
-    const badgeY = flow.y + 0.4
-
-    // ── LEFT COLUMN: ENGLISH ──
-    const engBadgeX = engX
-    const engLabelX = engBadgeX + badgeW + innerGap
-    const engNotesX = engX + halfW
-
-    drawChecklistVectorBadge(flow.doc, engBadgeX, badgeY, badgeW, badgeH, isPassed, isFailed, isInProgress)
-
-    setLanguage(flow.doc, false, 7.8, false)
-    flow.doc.setTextColor(30, 41, 59)
-    writePdfText(flow.doc, engLabelLines, engLabelX, flow.y + 2.8, { align: "left", lineHeightFactor: 1.15 }, false)
-
-    if (engNotesLines.length > 0) {
-      setLanguage(flow.doc, false, 7.2, false)
-      flow.doc.setTextColor(148, 163, 184)
-      writePdfText(flow.doc, engNotesLines, engNotesX, flow.y + 2.8, { align: "right", lineHeightFactor: 1.15 }, false)
+    return {
+      itemLines,
+      notesLines,
+      contentHeight: itemTextHeight + notesHeight,
     }
-
-    // ── RIGHT COLUMN: ARABIC ──
-    const arBadgeX = arX + halfW - badgeW
-    const arLabelX = arBadgeX - innerGap
-    const arNotesX = arX
-
-    drawChecklistVectorBadge(flow.doc, arBadgeX, badgeY, badgeW, badgeH, isPassed, isFailed, isInProgress)
-
-    setLanguage(flow.doc, true, 7.8, false)
-    flow.doc.setTextColor(30, 41, 59)
-    writePdfText(flow.doc, arLabelLines, arLabelX, flow.y + 2.8, { align: "right", lineHeightFactor: 1.15 }, true)
-
-    if (arNotesLines.length > 0) {
-      setLanguage(flow.doc, true, 7.2, false)
-      flow.doc.setTextColor(148, 163, 184)
-      writePdfText(flow.doc, arNotesLines, arNotesX, flow.y + 2.8, { align: "left", lineHeightFactor: 1.15 }, true)
-    }
-
-    flow.y += itemH
-    flow.doc.setDrawColor(241, 245, 249)
-    flow.doc.setLineWidth(0.1)
-    flow.doc.line(flow.x, flow.y - 0.4, flow.x + flow.width, flow.y - 0.4)
   }
+
+  const preparedRows = Array.from({ length: rowCount }, (_, index) => {
+    const engRow = engRows[index] ?? []
+    const arRow = arRows[index] ?? []
+    const englishItem = engRow.length >= 2 ? engRow[1] : (engRow[0] || arRow[1] || arRow[0] || "—")
+    const arabicItem = arRow.length >= 2 ? arRow[1] : (arRow[0] || englishItem)
+    const resultText = engRow.length >= 3 ? engRow[2] : (arRow.length >= 3 ? arRow[2] : "")
+    const englishNotes = engRow.length >= 4 ? engRow[3] : ""
+    const arabicNotes = arRow.length >= 4 ? arRow[3] : ""
+    const english = prepareLanguageCell(englishItem, englishNotes, false)
+    const arabic = prepareLanguageCell(arabicItem, arabicNotes, true)
+    const status = checklistStatusPresentation(resultText, false)
+    const height = Math.max(
+      7.2,
+      Math.max(english.contentHeight, arabic.contentHeight, badgeH) + 2.8,
+    )
+
+    return { english, arabic, status, height }
+  })
+
+  // Keep the existing bilingual section titles outside the tables and avoid
+  // orphaning them at the bottom of a page when the first paired row follows.
+  const firstTableHeight = preparedRows.length ? headerHeight + preparedRows[0].height : 0
+  if (preparedRows.length && flow.y + 18 + firstTableHeight > flow.bottom) {
+    addBilingualContinuationPage(flow)
+  }
+  flow.y += 3
+  renderBilingualTextRow(flow, engSection.title, arSection?.title || "", { style: "section" })
+
+  if (!preparedRows.length) return
+
+  const drawTableFrame = (
+    tableX: number,
+    dividerX: number,
+    y: number,
+    height: number,
+    fill: [number, number, number],
+  ) => {
+    flow.doc.setDrawColor(226, 232, 240)
+    flow.doc.setFillColor(...fill)
+    flow.doc.setLineWidth(0.15)
+    flow.doc.rect(tableX, y, tableWidth, height, "FD")
+    flow.doc.line(dividerX, y, dividerX, y + height)
+  }
+
+  const drawHeaders = () => {
+    drawTableFrame(englishTableX, englishItemX, flow.y, headerHeight, [248, 250, 252])
+    drawTableFrame(arabicTableX, arabicStatusX, flow.y, headerHeight, [248, 250, 252])
+
+    setLanguage(flow.doc, false, 8.2, false)
+    flow.doc.setTextColor(15, 23, 42)
+    writePdfText(
+      flow.doc,
+      "Status",
+      englishStatusX + statusWidth / 2,
+      flow.y + 5.5,
+      { align: "center" },
+      false,
+    )
+    writePdfText(
+      flow.doc,
+      "Inspection Item",
+      englishItemX + cellPadding,
+      flow.y + 5.5,
+      { align: "left" },
+      false,
+    )
+
+    setLanguage(flow.doc, true, 8.2, false)
+    writePdfText(
+      flow.doc,
+      "بند التفتيش",
+      arabicItemX + itemWidth - cellPadding,
+      flow.y + 5.5,
+      { align: "right" },
+      true,
+    )
+    writePdfText(
+      flow.doc,
+      "الحالة",
+      arabicStatusX + statusWidth / 2,
+      flow.y + 5.5,
+      { align: "center" },
+      true,
+    )
+
+    flow.y += headerHeight
+  }
+
+  drawHeaders()
+
+  for (const row of preparedRows) {
+    if (flow.y + row.height > flow.bottom) {
+      addBilingualContinuationPage(flow)
+      drawHeaders()
+    }
+
+    const rowY = flow.y
+    drawTableFrame(englishTableX, englishItemX, rowY, row.height, [255, 255, 255])
+    drawTableFrame(arabicTableX, arabicStatusX, rowY, row.height, [255, 255, 255])
+
+    const englishStartY = rowY + (row.height - row.english.contentHeight) / 2 + 3
+    setLanguage(flow.doc, false, 8.2, false)
+    flow.doc.setTextColor(51, 65, 85)
+    writePdfText(
+      flow.doc,
+      row.english.itemLines,
+      englishItemX + cellPadding,
+      englishStartY,
+      { align: "left", lineHeightFactor: 1.15 },
+      false,
+    )
+    if (row.english.notesLines.length) {
+      setLanguage(flow.doc, false, 7.2, false)
+      flow.doc.setTextColor(100, 116, 139)
+      writePdfText(
+        flow.doc,
+        row.english.notesLines,
+        englishItemX + cellPadding,
+        englishStartY + row.english.itemLines.length * itemLineHeight + 1,
+        { align: "left", lineHeightFactor: 1.15 },
+        false,
+      )
+    }
+
+    const arabicStartY = rowY + (row.height - row.arabic.contentHeight) / 2 + 3
+    setLanguage(flow.doc, true, 8.2, false)
+    flow.doc.setTextColor(51, 65, 85)
+    writePdfText(
+      flow.doc,
+      row.arabic.itemLines,
+      arabicItemX + itemWidth - cellPadding,
+      arabicStartY,
+      { align: "right", lineHeightFactor: 1.15 },
+      true,
+    )
+    if (row.arabic.notesLines.length) {
+      setLanguage(flow.doc, true, 7.2, false)
+      flow.doc.setTextColor(100, 116, 139)
+      writePdfText(
+        flow.doc,
+        row.arabic.notesLines,
+        arabicItemX + itemWidth - cellPadding,
+        arabicStartY + row.arabic.itemLines.length * itemLineHeight + 1,
+        { align: "right", lineHeightFactor: 1.15 },
+        true,
+      )
+    }
+
+    const badgeY = rowY + (row.height - badgeH) / 2
+    drawChecklistVectorBadge(
+      flow.doc,
+      englishStatusX + (statusWidth - badgeW) / 2,
+      badgeY,
+      badgeW,
+      badgeH,
+      row.status.passed,
+      row.status.failed,
+      row.status.inProgress,
+    )
+    drawChecklistVectorBadge(
+      flow.doc,
+      arabicStatusX + (statusWidth - badgeW) / 2,
+      badgeY,
+      badgeW,
+      badgeH,
+      row.status.passed,
+      row.status.failed,
+      row.status.inProgress,
+    )
+
+    flow.y += row.height
+  }
+
   flow.y += 2
 }
 
@@ -3963,9 +4082,6 @@ async function buildNativeBilingualPdfBlob(input: {
       engTitleLower.includes("checklist") ||
       engTitleLower.includes("فحص")
     ) {
-      if (flow.y + 11 > flow.bottom) addBilingualContinuationPage(flow)
-      flow.y += 3
-      renderBilingualTextRow(flow, engSection.title, arSection?.title || "", { style: "section" })
       renderBilingualChecklist(flow, engSection, arSection)
       flow.y += 4
       continue
