@@ -1153,13 +1153,11 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
   const columnWidth = (flow.width - columnGap) / 2
   const fontSize = 8.5
   const textLineHeightFactor = 1.2
-  // jsPDF text coordinates are baselines by default. This block renders its
-  // text from the top edge instead, so the logo gaps are measured from the
-  // actual content-sized text rows rather than from an extra baseline offset.
   const lineHeight = fontSize * 0.352778 * textLineHeightFactor
+  const textLineGap = 1.2
+  const textToLogoGap = 2.2
   const logoWidth = 28
   const logoHeight = logoWidth * closingLogo.height / Math.max(1, closingLogo.width)
-  const rowGap = 1.6
   const bottomGap = 4
 
   setLanguage(flow.doc, false, fontSize, false)
@@ -1171,17 +1169,15 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
   setLanguage(flow.doc, true, fontSize, false)
   const arabicCompanyLines = textLines(flow.doc, arabicCompanyLine, columnWidth)
 
-  const firstRowHeight = Math.max(englishFirstLines.length, arabicFirstLines.length, 1) * lineHeight
+  const firstLineRowHeight = Math.max(englishFirstLines.length, arabicFirstLines.length, 1) * lineHeight
   const companyRowHeight = Math.max(englishCompanyLines.length, arabicCompanyLines.length, 1) * lineHeight
-  const requiredHeight = firstRowHeight
-    + rowGap
-    + logoHeight
-    + rowGap
-    + companyRowHeight
-    + bottomGap
+  const textBlockHeight = firstLineRowHeight + textLineGap + companyRowHeight
+  const requiredHeight = textBlockHeight + textToLogoGap + logoHeight + bottomGap
 
-  // Keep both language rows and the single shared logo together as one unit.
+  // Keep the paired two-line text blocks and their single shared logo together.
   ensureSpace(flow, requiredHeight)
+
+  const companyRowY = flow.y + firstLineRowHeight + textLineGap
 
   flow.doc.setTextColor(51, 65, 85)
   setLanguage(flow.doc, false, fontSize, false)
@@ -1190,6 +1186,14 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
     englishFirstLines,
     flow.x,
     flow.y,
+    { align: "left", baseline: "top", lineHeightFactor: textLineHeightFactor },
+    false,
+  )
+  writePdfText(
+    flow.doc,
+    englishCompanyLines,
+    flow.x,
+    companyRowY,
     { align: "left", baseline: "top", lineHeightFactor: textLineHeightFactor },
     false,
   )
@@ -1203,8 +1207,16 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
     { align: "right", baseline: "top", lineHeightFactor: textLineHeightFactor },
     true,
   )
+  writePdfText(
+    flow.doc,
+    arabicCompanyLines,
+    flow.x + flow.width,
+    companyRowY,
+    { align: "right", baseline: "top", lineHeightFactor: textLineHeightFactor },
+    true,
+  )
 
-  const logoY = flow.y + firstRowHeight + rowGap
+  const logoY = flow.y + textBlockHeight + textToLogoGap
   const logoX = flow.x + (flow.width - logoWidth) / 2
   flow.doc.addImage(
     closingLogo.dataUrl,
@@ -1217,29 +1229,7 @@ function renderBilingualTranslationClosingBlock(flow: Flow) {
     "FAST",
   )
 
-  const companyRowY = logoY + logoHeight + rowGap
-  flow.doc.setTextColor(51, 65, 85)
-  setLanguage(flow.doc, false, fontSize, false)
-  writePdfText(
-    flow.doc,
-    englishCompanyLines,
-    flow.x,
-    companyRowY,
-    { align: "left", baseline: "top", lineHeightFactor: textLineHeightFactor },
-    false,
-  )
-
-  setLanguage(flow.doc, true, fontSize, false)
-  writePdfText(
-    flow.doc,
-    arabicCompanyLines,
-    flow.x + flow.width,
-    companyRowY,
-    { align: "right", baseline: "top", lineHeightFactor: textLineHeightFactor },
-    true,
-  )
-
-  flow.y = companyRowY + companyRowHeight + bottomGap
+  flow.y = logoY + logoHeight + bottomGap
 }
 
 function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>) {
