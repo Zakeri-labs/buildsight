@@ -36,6 +36,58 @@ function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U"
 }
 
+function comparableText(value: string | null | undefined) {
+  return value?.trim().toLocaleLowerCase() ?? ""
+}
+
+function distinctRecipientDetails(
+  values: Array<string | null | undefined>,
+  excludedValues: Array<string | null | undefined> = [],
+) {
+  const seen = new Set(excludedValues.map(comparableText).filter(Boolean))
+  return values
+    .map((value) => value?.trim() || "")
+    .filter((value) => {
+      const normalized = comparableText(value)
+      if (!normalized || seen.has(normalized)) return false
+      seen.add(normalized)
+      return true
+    })
+    .join(" · ")
+}
+
+function CandidateIdentity({
+  candidate,
+  selectedCard = false,
+}: {
+  candidate: ProjectCcCandidate
+  selectedCard?: boolean
+}) {
+  const name = candidate.name.trim() || candidate.organizationName?.trim() || candidate.email?.trim() || candidate.phone?.trim() || "Project contact"
+  const phone = candidate.phone?.trim() && comparableText(candidate.phone) !== comparableText(name)
+    ? candidate.phone.trim()
+    : ""
+  const details = distinctRecipientDetails(
+    [candidate.role, candidate.organizationName, candidate.email],
+    [name, phone],
+  )
+
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <p className={cn("truncate text-foreground", selectedCard ? "font-semibold" : "font-medium")}>{name}</p>
+        {candidate.isExternalContact ? (
+          <span className="shrink-0 rounded bg-primary/10 px-1 py-0.2 text-[9px] font-medium text-primary">
+            External
+          </span>
+        ) : null}
+      </div>
+      {phone ? <p className={cn("truncate text-muted-foreground", selectedCard ? "text-[11px]" : "text-[10px]")}>{phone}</p> : null}
+      {details ? <p className={cn("truncate text-muted-foreground", selectedCard ? "text-[11px]" : "text-[10px]")}>{details}</p> : null}
+    </div>
+  )
+}
+
 export function CcRecipientsField({
   candidates,
   value,
@@ -79,6 +131,25 @@ export function CcRecipientsField({
   const [dialogError, setDialogError] = useState<string | null>(null)
 
   const candidateMap = useMemo(() => new Map(candidates.map((c) => [c.id, c])), [candidates])
+
+  function matchingProjectCandidate(ext: ExternalCcRecipientInput) {
+    const directMatch = candidateMap.get(ext.clientId)
+    if (directMatch) return directMatch
+
+    const externalName = comparableText(ext.name)
+    const externalEmail = comparableText(ext.email)
+    const externalCompany = comparableText(ext.company)
+    return candidates.find((candidate) => {
+      const samePhone = Boolean(candidate.phone && comparableText(candidate.phone) === externalName)
+      const sameEmail = Boolean(candidate.email && externalEmail && comparableText(candidate.email) === externalEmail)
+      const sameNamedCompany = Boolean(
+        externalCompany &&
+        comparableText(candidate.organizationName) === externalCompany &&
+        comparableText(candidate.name) === externalName,
+      )
+      return samePhone || sameEmail || sameNamedCompany
+    }) ?? null
+  }
 
   function emitChanges(
     nextReportToIds: string[],
@@ -201,7 +272,7 @@ export function CcRecipientsField({
     const q = reportSearch.trim().toLowerCase()
     if (!q) return candidates
     return candidates.filter((c) =>
-      [c.name, c.email ?? "", c.role, c.organizationName ?? ""].some((f) => f.toLowerCase().includes(q))
+      [c.name, c.phone ?? "", c.email ?? "", c.role, c.organizationName ?? ""].some((f) => f.toLowerCase().includes(q))
     )
   }, [candidates, reportSearch])
 
@@ -209,7 +280,7 @@ export function CcRecipientsField({
     const q = ccSearch.trim().toLowerCase()
     if (!q) return candidates
     return candidates.filter((c) =>
-      [c.name, c.email ?? "", c.role, c.organizationName ?? ""].some((f) => f.toLowerCase().includes(q))
+      [c.name, c.phone ?? "", c.email ?? "", c.role, c.organizationName ?? ""].some((f) => f.toLowerCase().includes(q))
     )
   }, [candidates, ccSearch])
 
@@ -337,12 +408,7 @@ export function CcRecipientsField({
                               ) : null}
                               <AvatarFallback className="text-[10px]">{initials(candidate.name)}</AvatarFallback>
                             </Avatar>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate font-medium">{candidate.name}</p>
-                              <p className="truncate text-[10px] text-muted-foreground">
-                                {candidate.role} {candidate.organizationName ? `· ${candidate.organizationName}` : ""}
-                              </p>
-                            </div>
+                            <CandidateIdentity candidate={candidate} />
                           </DropdownMenuItem>
                         )
                       })
@@ -380,12 +446,7 @@ export function CcRecipientsField({
                           {candidate.avatarUrl ? <AvatarImage src={profileAvatarDisplayUrl(candidate.avatarUrl)} /> : null}
                           <AvatarFallback className="text-xs">{initials(candidate.name)}</AvatarFallback>
                         </Avatar>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-semibold text-foreground">{candidate.name}</p>
-                          <p className="truncate text-[11px] text-muted-foreground">
-                            {candidate.role} {candidate.organizationName ? `· ${candidate.organizationName}` : ""}
-                          </p>
-                        </div>
+                        <CandidateIdentity candidate={candidate} selectedCard />
                       </div>
                       {!disabled ? (
                         <button
@@ -401,39 +462,50 @@ export function CcRecipientsField({
                   )
                 })}
 
-                {externalReportTo.map((ext) => (
-                  <div
-                    key={ext.clientId}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs shadow-2xs"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 font-semibold text-primary">
-                        {initials(ext.name)}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <p className="truncate font-semibold text-foreground">{ext.name}</p>
-                          <span className="rounded bg-primary/10 px-1 py-0.2 text-[9px] font-medium text-primary">
-                            External
-                          </span>
+                {externalReportTo.map((ext) => {
+                  const projectCandidate = matchingProjectCandidate(ext)
+                  const displayName = projectCandidate?.name?.trim() || ext.name.trim() || ext.company.trim() || ext.email.trim() || "External contact"
+                  const phone = projectCandidate?.phone?.trim() && comparableText(projectCandidate.phone) !== comparableText(displayName)
+                    ? projectCandidate.phone.trim()
+                    : ""
+                  const details = distinctRecipientDetails(
+                    [ext.role || projectCandidate?.role || "External Contact", ext.company || projectCandidate?.organizationName, ext.email || projectCandidate?.email],
+                    [displayName, phone],
+                  )
+
+                  return (
+                    <div
+                      key={ext.clientId}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs shadow-2xs"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 font-semibold text-primary">
+                          {initials(displayName)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <p className="truncate font-semibold text-foreground">{displayName}</p>
+                            <span className="shrink-0 rounded bg-primary/10 px-1 py-0.2 text-[9px] font-medium text-primary">
+                              External
+                            </span>
+                          </div>
+                          {phone ? <p className="truncate text-[11px] text-muted-foreground">{phone}</p> : null}
+                          {details ? <p className="truncate text-[11px] text-muted-foreground">{details}</p> : null}
                         </div>
-                        <p className="truncate text-[11px] text-muted-foreground">
-                          {ext.role || "External Contact"} {ext.company ? `· ${ext.company}` : ""} · {ext.email}
-                        </p>
                       </div>
+                      {!disabled ? (
+                        <button
+                          type="button"
+                          onClick={() => removeExternal(ext.clientId)}
+                          className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                          aria-label="Remove external contact"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      ) : null}
                     </div>
-                    {!disabled ? (
-                      <button
-                        type="button"
-                        onClick={() => removeExternal(ext.clientId)}
-                        className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                        aria-label="Remove external contact"
-                      >
-                        <X className="size-3.5" />
-                      </button>
-                    ) : null}
-                  </div>
-                ))}
+                  )
+                })}
 
                 {!reportToUserIds.length && !externalReportTo.length ? (
                   <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
@@ -508,12 +580,7 @@ export function CcRecipientsField({
                               ) : null}
                               <AvatarFallback className="text-[10px]">{initials(candidate.name)}</AvatarFallback>
                             </Avatar>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate font-medium">{candidate.name}</p>
-                              <p className="truncate text-[10px] text-muted-foreground">
-                                {candidate.role} {candidate.organizationName ? `· ${candidate.organizationName}` : ""}
-                              </p>
-                            </div>
+                            <CandidateIdentity candidate={candidate} />
                           </DropdownMenuItem>
                         )
                       })

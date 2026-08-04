@@ -97,6 +97,8 @@ export async function loadProjectCcCandidates(projectId: string): Promise<Projec
         name: personName(profile),
         email: profile.email ?? null,
         avatarUrl: profile.avatar_url ?? null,
+        phone: null,
+        isExternalContact: false,
         role: normalizedRole(rawRole),
         organizationName: participant?.organization_name?.trim() || null,
       } satisfies ProjectCcCandidate
@@ -116,9 +118,14 @@ export async function loadProjectParticipantsOnly(projectId: string): Promise<Pr
   return participants
     .map((p, index) => {
       const id = p.keyContact.userId || p.id
-      const contactName = p.keyContact.name && p.keyContact.name !== "Contact not provided"
-        ? p.keyContact.name
-        : p.organization
+      const savedContactName = p.keyContact.name?.trim() || ""
+      const phone = p.keyContact.phone?.trim() || null
+      const hasUsableContactName = Boolean(
+        savedContactName &&
+        savedContactName !== "Contact not provided" &&
+        savedContactName !== phone,
+      )
+      const contactName = hasUsableContactName ? savedContactName : p.organization
       const roleText = p.contractorRoleLabel
         ? `${p.projectRole} (${p.contractorRoleLabel})`
         : p.projectRole
@@ -128,6 +135,8 @@ export async function loadProjectParticipantsOnly(projectId: string): Promise<Pr
         name: contactName,
         email: p.keyContact.email ?? null,
         avatarUrl: p.keyContact.avatar ?? null,
+        phone,
+        isExternalContact: p.isExternalContact,
         role: roleText,
         roleKey: p.projectRole,
         defaultPriority: index,

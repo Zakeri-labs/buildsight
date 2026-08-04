@@ -5,6 +5,8 @@ export type ProjectCcCandidate = {
   name: string
   email: string | null
   avatarUrl: string | null
+  phone?: string | null
+  isExternalContact?: boolean
   role: string
   roleKey?: string | null
   defaultPriority?: number | null
