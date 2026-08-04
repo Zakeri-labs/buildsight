@@ -398,7 +398,8 @@ export function InspectionReportForm({
   const reportDefinition = stageReportConfig ?? legacyTerm
   if (!reportDefinition) throw new Error("Report configuration is missing.")
   const isDirectStageReport = Boolean(stageReportConfig)
-  const reportsHref = `/projects/${project.id}/stages/${stage.id}`
+  const [resolvedStageId, setResolvedStageId] = useState(stage.id)
+  const reportsHref = `/projects/${project.id}/stages/${resolvedStageId}`
   const { locale } = useI18n()
   const copy = COPY[locale]
   const cleanStageName = stage.name.replace(/^\d+[\.\s\-]+/, "")
@@ -509,14 +510,15 @@ export function InspectionReportForm({
       saveStatus,
     }
     const result = isDirectStageReport
-      ? await saveStageReportAction({ ...reportInput, stageId: stage.id })
+      ? await saveStageReportAction({ ...reportInput, stageId: resolvedStageId })
       : await saveTermResponseAction({ ...reportInput, termId: reportDefinition.id })
     if (!result.ok) throw new Error(result.error)
     setResponseId(result.data.responseId)
+    setResolvedStageId(result.data.projectStageId)
     setReportNumber(result.data.reportNumber)
     setVisitNumber(result.data.visitNumber)
     setStatus(result.data.status as ResponseStatus)
-    return result.data.responseId
+    return result.data
   }
 
   const uploadFiles = async (id: string, files: PendingFile[], kind: "evidence_image" | "document") => {
@@ -621,7 +623,9 @@ export function InspectionReportForm({
     setSuccess(null)
     setBusy(mode)
     try {
-      const id = await ensureResponse(mode === "progress" ? "in_progress" : "draft")
+      const savedResponse = await ensureResponse(mode === "progress" ? "in_progress" : "draft")
+      const id = savedResponse.responseId
+      let routeStageId = savedResponse.projectStageId
       if (ccSelection.internalUserIds.length || ccSelection.externalRecipients.length || initialCcRecipients.length) {
         const ccResult = await saveReportCcRecipientsAction({
           projectId: project.id,
@@ -652,9 +656,11 @@ export function InspectionReportForm({
           submit: true as const,
         }
         const result = isDirectStageReport
-          ? await saveStageReportAction({ ...reportInput, stageId: stage.id })
+          ? await saveStageReportAction({ ...reportInput, stageId: routeStageId })
           : await saveTermResponseAction({ ...reportInput, termId: reportDefinition.id })
         if (!result.ok) throw new Error(result.error)
+        routeStageId = result.data.projectStageId
+        setResolvedStageId(result.data.projectStageId)
         setVisitNumber(result.data.visitNumber)
         setStatus(result.data.status as ResponseStatus)
         setSuccess(result.data.status === "completed" ? copy.saved : copy.submitted)
@@ -663,7 +669,7 @@ export function InspectionReportForm({
         setSuccess(copy.saved)
       }
       if (!response) {
-        router.replace(`/projects/${project.id}/stages/${stage.id}/reports/${id}`)
+        router.replace(`/projects/${project.id}/stages/${routeStageId}/reports/${id}`)
       }
       router.refresh()
     } catch (saveError) {
@@ -733,7 +739,7 @@ export function InspectionReportForm({
     if (validationError) throw new Error(validationError)
     setBusy("inline")
     try {
-      const id = responseId ?? await ensureResponse("draft")
+      const id = responseId ?? (await ensureResponse("draft")).responseId
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error("Your session has expired. Sign in again.")
@@ -759,7 +765,7 @@ export function InspectionReportForm({
     setSuccess(null)
     setBusy(decision === "approved" ? "approve" : "reject")
     try {
-      const id = responseId ?? await ensureResponse("draft")
+      const id = responseId ?? (await ensureResponse("draft")).responseId
       await uploadFiles(id, pendingImages, "evidence_image")
       await uploadFiles(id, pendingDocuments, "document")
       const result = await decideTermResponseAction({ projectId: project.id, responseId: id, decision, comments: reviewComments })
@@ -823,8 +829,8 @@ export function InspectionReportForm({
               {responseId ? (
                 <StageTranslationActions
                   projectId={project.id}
-                  stageId={stage.id}
-                  termId={reportDefinition.id}
+                  stageId={resolvedStageId}
+                  termId={isDirectStageReport ? resolvedStageId : reportDefinition.id}
                   responseId={responseId}
                   responseUpdatedAt={response?.updatedAt ?? new Date().toISOString()}
                   translation={translation}

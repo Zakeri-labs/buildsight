@@ -286,7 +286,7 @@ type SaveReportResponseInput = {
   saveStatus?: "draft" | "in_progress"
 }
 
-type SavedReportResponse = { responseId: string; reportNumber: string; visitNumber: number; status: string }
+type SavedReportResponse = { responseId: string; projectStageId: string; reportNumber: string; visitNumber: number; status: string }
 
 async function saveReportResponse(input: SaveReportResponseInput): Promise<StageActionResult<SavedReportResponse>> {
   try {
@@ -454,7 +454,7 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         ? `/projects/${input.projectId}/stages/${projectStageId}/reports/${input.responseId}`
         : `/projects/${input.projectId}/stages/${projectStageId}/terms/${legacyTermId}/reports/${input.responseId}`,
     )
-    return { ok: true, data: { responseId: input.responseId, reportNumber, visitNumber: assignedVisitNumber, status: nextStatus } }
+    return { ok: true, data: { responseId: input.responseId, projectStageId, reportNumber, visitNumber: assignedVisitNumber, status: nextStatus } }
   } catch (error) {
     return actionError(error, "Could not save the inspection report.")
   }
