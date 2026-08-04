@@ -889,30 +889,41 @@ function drawFirstPageHeader(
   }
 
   const wrappedRecipientHeight = (rList: typeof reportTo, width: number) => {
-    if (!rList.length) return 13
-    let cursorY = 7.8
-    rList.forEach((recipient) => {
-      const nameRtl = containsArabic(recipient.name)
-      setLanguage(doc, nameRtl, 7.5, true)
-      cursorY += textLines(doc, recipient.name, width - 6).length * 3.4
+    // Measure to the final rendered baseline instead of reserving a complete
+    // extra line-height (and a trailing recipient gap) below the content.
+    // This keeps only the padding actually needed by the bilingual first row.
+    if (!rList.length) return 10
 
-      if (recipient.role) {
-        const roleRtl = containsArabic(recipient.role)
-        setLanguage(doc, roleRtl, 6.5, false)
-        cursorY += textLines(doc, recipient.role, width - 6).length * 3.2
+    let cursorY = 7.8
+    let lastBaselineY = cursorY
+
+    rList.forEach((recipient, recipientIndex) => {
+      const measureField = (value: string, fontSize: number, bold: boolean, lineHeight: number) => {
+        const fieldRtl = containsArabic(value)
+        setLanguage(doc, fieldRtl, fontSize, bold)
+        const lines = textLines(doc, value, width - 6)
+        lines.forEach(() => {
+          lastBaselineY = cursorY
+          cursorY += lineHeight
+        })
       }
-      if (recipient.company) {
-        const companyRtl = containsArabic(recipient.company)
-        setLanguage(doc, companyRtl, 6.5, false)
-        cursorY += textLines(doc, recipient.company, width - 6).length * 3.2
-      }
+
+      measureField(recipient.name, 7.5, true, 3.4)
+      if (recipient.role) measureField(recipient.role, 6.5, false, 3.2)
+      if (recipient.company) measureField(recipient.company, 6.5, false, 3.2)
       if (recipient.email) {
         setLanguage(doc, false, 6.2, false)
-        cursorY += textLines(doc, recipient.email, width - 6).length * 3.2
+        const lines = textLines(doc, recipient.email, width - 6)
+        lines.forEach(() => {
+          lastBaselineY = cursorY
+          cursorY += 3.2
+        })
       }
-      cursorY += 1.2
+
+      if (recipientIndex < rList.length - 1) cursorY += 1.2
     })
-    return Math.max(13, cursorY + 1)
+
+    return lastBaselineY + 1.8
   }
 
   const locationLabelFontSize = 6.2
@@ -951,20 +962,26 @@ function drawFirstPageHeader(
   let recipientsRowH: number
 
   if (useBilingualLocationCell) {
-    const locationCellHeight = projectLocationFields.reduce(
-      (height, field, index) => {
-        const layout = getInlineLocationLayout(field.label, field.value, cellW)
-        return height
-          + layout.lines.length * locationLineHeight
-          + (index < projectLocationFields.length - 1 ? locationRowGap : 0)
-      },
-      locationTopInset + locationBottomInset,
-    )
+    let locationCursorY = locationTopInset
+    let locationLastBaselineY = locationTopInset
+
+    projectLocationFields.forEach((field, index) => {
+      const layout = getInlineLocationLayout(field.label, field.value, cellW)
+      layout.lines.forEach((_, lineIndex) => {
+        locationLastBaselineY = locationCursorY + lineIndex * locationLineHeight
+      })
+      locationCursorY += layout.lines.length * locationLineHeight
+      if (index < projectLocationFields.length - 1) locationCursorY += locationRowGap
+    })
+
+    const locationCellHeight = projectLocationFields.length
+      ? locationLastBaselineY + locationBottomInset
+      : locationTopInset + locationBottomInset
+
     recipientsRowH = Math.max(
       wrappedRecipientHeight(reportTo, cellW),
       locationCellHeight,
       wrappedRecipientHeight(ccTo, cellW),
-      13,
     )
   } else {
     const reportToH = getRecipientHeight(reportTo)
