@@ -927,19 +927,25 @@ function drawFirstPageHeader(
   let recipientsRowH: number
 
   if (useBilingualLocationCell) {
-    const addressLines = optionalLines(template.projectAddress, cellW - 6, 7, containsArabic(template.projectAddress))
-    const phaseLines = optionalLines(template.projectPhase, cellW - 6, 7, containsArabic(template.projectPhase))
-    const plotLines = optionalLines(template.projectPlotNo, cellW - 6, 7, containsArabic(template.projectPlotNo))
-    const addressValueHeight = Math.max(1, addressLines.length) * 3.2
-    const phaseValueHeight = Math.max(1, phaseLines.length) * 3.2
-    const plotValueHeight = Math.max(1, plotLines.length) * 3.2
-    const locationCellHeight = 7.8
-      + addressValueHeight
-      + 1.2 + 4
-      + phaseValueHeight
-      + 1.2 + 4
-      + plotValueHeight
-      + 1
+    const locationValueFontSize = 6.5
+    const locationLineHeight = 2.75
+    const locationLabelToValueGap = 2.8
+    const locationGroupGap = 0.6
+    const locationTopInset = 3.4
+    const locationBottomInset = 0.8
+    const locationValueLines = [
+      optionalLines(template.projectAddress, cellW - 6, locationValueFontSize, containsArabic(template.projectAddress)),
+      optionalLines(template.projectPhase, cellW - 6, locationValueFontSize, containsArabic(template.projectPhase)),
+      optionalLines(template.projectPlotNo, cellW - 6, locationValueFontSize, containsArabic(template.projectPlotNo)),
+    ]
+    const locationCellHeight = locationValueLines.reduce(
+      (height, lines, index) =>
+        height
+        + locationLabelToValueGap
+        + lines.length * locationLineHeight
+        + (index < locationValueLines.length - 1 ? locationGroupGap : 0),
+      locationTopInset + locationBottomInset,
+    )
     recipientsRowH = Math.max(
       wrappedRecipientHeight(reportTo, cellW),
       locationCellHeight,
@@ -1106,6 +1112,11 @@ function drawFirstPageHeader(
   }
 
   const drawProjectLocationColumn = (x: number, w: number) => {
+    const valueFontSize = 6.5
+    const valueLineHeight = 2.75
+    const labelToValueGap = 2.8
+    const groupGap = 0.6
+
     const drawLabel = (label: string, y: number) => {
       setLanguage(doc, false, 6.2, true)
       doc.setTextColor(100, 116, 139)
@@ -1115,27 +1126,30 @@ function drawFirstPageHeader(
     const drawOptionalValue = (value: string, y: number) => {
       if (!value.trim()) return 0
       const valueRtl = containsArabic(value)
-      setLanguage(doc, valueRtl, 7, false)
+      setLanguage(doc, valueRtl, valueFontSize, false)
       doc.setTextColor(15, 23, 42)
       const lines = textLines(doc, value, w - 6)
       const textX = valueRtl ? x + w - 3 : x + 3
       const align = valueRtl ? "right" : "left"
       lines.forEach((line, index) => {
-        writePdfText(doc, line, textX, y + index * 3.2, { align }, valueRtl)
+        writePdfText(doc, line, textX, y + index * valueLineHeight, { align }, valueRtl)
       })
-      return lines.length * 3.2
+      return lines.length * valueLineHeight
     }
 
-    drawLabel("Address", gridTop + 3.5)
-    const addressY = gridTop + 7.8
-    const addressHeight = drawOptionalValue(template.projectAddress, addressY) || 3.2
-    const phaseLabelY = addressY + addressHeight + 1.2
-    drawLabel("Phase", phaseLabelY)
-    const phaseValueY = phaseLabelY + 4
-    const phaseHeight = drawOptionalValue(template.projectPhase, phaseValueY) || 3.2
-    const plotLabelY = phaseValueY + phaseHeight + 1.2
-    drawLabel("Plot No.", plotLabelY)
-    drawOptionalValue(template.projectPlotNo, plotLabelY + 4)
+    const fields = [
+      { label: "Address", value: template.projectAddress },
+      { label: "Phase", value: template.projectPhase },
+      { label: "Plot No.", value: template.projectPlotNo },
+    ]
+    let cursorY = gridTop + 3.4
+
+    fields.forEach((field, index) => {
+      drawLabel(field.label, cursorY)
+      cursorY += labelToValueGap
+      cursorY += drawOptionalValue(field.value, cursorY)
+      if (index < fields.length - 1) cursorY += groupGap
+    })
   }
 
   if (useBilingualLocationCell) {
