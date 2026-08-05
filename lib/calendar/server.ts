@@ -5,6 +5,8 @@ import type {
   CalendarClientRequestViewModel,
   CalendarDataViewModel,
   CalendarEventViewModel,
+  CalendarSchedulingPersonViewModel,
+  CalendarSchedulingProjectViewModel,
 } from "@/lib/calendar/types"
 import { createAdminClient } from "@/lib/supabase/admin"
 
@@ -12,15 +14,23 @@ const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 const SCHEDULED_VISIT_STATUSES = ["scheduled"] as const
 const CALENDAR_VISIT_STATUSES = ["scheduled", "completed", "cancelled"] as const
 
-type ProjectScopeRow = { id: string; name: string }
+export type CalendarProjectAccessMode = "admin" | "supervisor"
+export type CalendarProjectScopeRow = {
+  id: string
+  name: string
+  assignedSupervisorId: string | null
+  supervisingOrganizationId: string | null
+  accessMode: CalendarProjectAccessMode
+}
+
 type SupabaseErrorFields = { code?: string; message?: string; details?: string; hint?: string }
 
-function validUuid(value: unknown): value is string {
+export function isValidCalendarUuid(value: unknown): value is string {
   return typeof value === "string" && UUID_PATTERN.test(value.trim())
 }
 
 function uniqueValidUuids(values: unknown[]): string[] {
-  return Array.from(new Set(values.filter(validUuid).map((value) => value.trim())))
+  return Array.from(new Set(values.filter(isValidCalendarUuid).map((value) => value.trim())))
 }
 
 function supabaseErrorFields(error: unknown): SupabaseErrorFields {
@@ -34,14 +44,7 @@ function supabaseErrorFields(error: unknown): SupabaseErrorFields {
   }
 }
 
-function logCalendarError({
-  operation,
-  userId,
-  projectCount,
-  rangeStart,
-  rangeEnd,
-  error,
-}: {
+function logCalendarError({ operation, userId, projectCount, rangeStart, rangeEnd, error }: {
   operation: string
   userId: string
   projectCount: number
@@ -87,67 +90,171 @@ function notesPreview(value: unknown): string | null {
   return normalized.length > 140 ? `${normalized.slice(0, 137)}...` : normalized
 }
 
-async function resolveCalendarProjectScope(userId: string): Promise<ProjectScopeRow[]> {
-  if (!validUuid(userId)) return []
+function readableRole(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const normalized = value.trim()
+  if (!normalized) return null
+  return normalized.split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ")
+}
+
+function normalizeProjectRow(row: any, accessMode: CalendarProjectAccessMode): CalendarProjectScopeRow | null {
+  if (!isValidCalendarUuid(row?.id)) return null
+  return {
+    id: row.id,
+    name: typeof row.name === "string" && row.name.trim() ? row.name.trim() : "Project",
+    assignedSupervisorId: isValidCalendarUuid(row.assigned_supervisor_id) ? row.assigned_supervisor_id : null,
+    supervisingOrganizationId: isValidCalendarUuid(row.supervising_organization_id) ? row.supervising_organization_id : null,
+    accessMode,
+  }
+}
+
+export async function resolveCalendarProjectScope(userId: string): Promise<CalendarProjectScopeRow[]> {
+  if (!isValidCalendarUuid(userId)) return []
   const admin = createAdminClient()
 
-  const [organizationMembershipResult, projectAdminMembershipResult, supervisorProjectResult] =
-    await Promise.all([
-      admin
-        .from("organization_memberships")
-        .select("organization_id")
-        .eq("user_id", userId)
-        .eq("status", "active")
-        .eq("role", "org_admin"),
-      admin
-        .from("project_user_memberships")
-        .select("project_id")
-        .eq("user_id", userId)
-        .eq("status", "active")
-        .eq("access_role", "project_admin"),
-      admin
-        .from("projects")
-        .select("id, name")
-        .eq("assigned_supervisor_id", userId),
-    ])
+  const [organizationMembershipResult, projectAdminMembershipResult, supervisorProjectResult] = await Promise.all([
+    admin.from("organization_memberships").select("organization_id").eq("user_id", userId).eq("status", "active").eq("role", "org_admin"),
+    admin.from("project_user_memberships").select("project_id").eq("user_id", userId).eq("status", "active").eq("access_role", "project_admin"),
+    admin.from("projects").select("id, name, assigned_supervisor_id, supervising_organization_id").eq("assigned_supervisor_id", userId),
+  ])
 
   if (organizationMembershipResult.error) throw organizationMembershipResult.error
   if (projectAdminMembershipResult.error) throw projectAdminMembershipResult.error
   if (supervisorProjectResult.error) throw supervisorProjectResult.error
 
-  const adminOrganizationIds = uniqueValidUuids(
-    (organizationMembershipResult.data ?? []).map((row: any) => row.organization_id),
-  )
-  const explicitProjectAdminIds = uniqueValidUuids(
-    (projectAdminMembershipResult.data ?? []).map((row: any) => row.project_id),
-  )
+  const adminOrganizationIds = uniqueValidUuids((organizationMembershipResult.data ?? []).map((row: any) => row.organization_id))
+  const explicitProjectAdminIds = uniqueValidUuids((projectAdminMembershipResult.data ?? []).map((row: any) => row.project_id))
+  const projectColumns = "id, name, assigned_supervisor_id, supervising_organization_id"
 
   const [organizationProjectsResult, explicitAdminProjectsResult] = await Promise.all([
     adminOrganizationIds.length
-      ? admin
-          .from("projects")
-          .select("id, name")
-          .in("supervising_organization_id", adminOrganizationIds)
-      : Promise.resolve({ data: [] as ProjectScopeRow[], error: null }),
+      ? admin.from("projects").select(projectColumns).in("supervising_organization_id", adminOrganizationIds)
+      : Promise.resolve({ data: [] as any[], error: null }),
     explicitProjectAdminIds.length
-      ? admin.from("projects").select("id, name").in("id", explicitProjectAdminIds)
-      : Promise.resolve({ data: [] as ProjectScopeRow[], error: null }),
+      ? admin.from("projects").select(projectColumns).in("id", explicitProjectAdminIds)
+      : Promise.resolve({ data: [] as any[], error: null }),
   ])
 
   if (organizationProjectsResult.error) throw organizationProjectsResult.error
   if (explicitAdminProjectsResult.error) throw explicitAdminProjectsResult.error
 
-  const projects = new Map<string, ProjectScopeRow>()
-  for (const row of [
-    ...(organizationProjectsResult.data ?? []),
-    ...(explicitAdminProjectsResult.data ?? []),
-    ...(supervisorProjectResult.data ?? []),
-  ] as any[]) {
-    if (!validUuid(row.id)) continue
-    projects.set(row.id, { id: row.id, name: typeof row.name === "string" ? row.name : "Project" })
+  const projects = new Map<string, CalendarProjectScopeRow>()
+  for (const row of [...(organizationProjectsResult.data ?? []), ...(explicitAdminProjectsResult.data ?? [])] as any[]) {
+    const project = normalizeProjectRow(row, "admin")
+    if (project) projects.set(project.id, project)
+  }
+  for (const row of supervisorProjectResult.data ?? []) {
+    const project = normalizeProjectRow(row, "supervisor")
+    if (project && !projects.has(project.id)) projects.set(project.id, project)
   }
 
   return Array.from(projects.values()).sort((left, right) => left.name.localeCompare(right.name))
+}
+
+export async function getCalendarSchedulingProjects({ userId, projects }: {
+  userId: string
+  projects: CalendarProjectScopeRow[]
+}): Promise<CalendarSchedulingProjectViewModel[]> {
+  if (!isValidCalendarUuid(userId) || !projects.length) return []
+
+  const schedulableProjects = projects.filter((project) =>
+    isValidCalendarUuid(project.id) &&
+    isValidCalendarUuid(project.assignedSupervisorId) &&
+    (project.accessMode === "admin" || project.assignedSupervisorId === userId),
+  )
+  if (!schedulableProjects.length) return []
+
+  const admin = createAdminClient()
+  const projectIds = uniqueValidUuids(schedulableProjects.map((project) => project.id))
+  const organizationIds = uniqueValidUuids(schedulableProjects.map((project) => project.supervisingOrganizationId))
+
+  const [projectMembershipResult, participantResult, organizationMembershipResult] = await Promise.all([
+    admin.from("project_user_memberships").select("project_id, user_id, access_role").in("project_id", projectIds).eq("status", "active"),
+    admin.from("project_participants").select("project_id, key_contact_user_id, project_role, participant_role_label").in("project_id", projectIds).eq("status", "active").not("key_contact_user_id", "is", null),
+    organizationIds.length
+      ? admin.from("organization_memberships").select("organization_id, user_id, role").in("organization_id", organizationIds).eq("status", "active")
+      : Promise.resolve({ data: [] as any[], error: null }),
+  ])
+
+  if (projectMembershipResult.error) throw projectMembershipResult.error
+  if (participantResult.error) throw participantResult.error
+  if (organizationMembershipResult.error) throw organizationMembershipResult.error
+
+  const allUserIds = uniqueValidUuids([
+    ...schedulableProjects.map((project) => project.assignedSupervisorId),
+    ...(projectMembershipResult.data ?? []).map((row: any) => row.user_id),
+    ...(participantResult.data ?? []).map((row: any) => row.key_contact_user_id),
+    ...(organizationMembershipResult.data ?? []).map((row: any) => row.user_id),
+  ])
+  const profileResult = allUserIds.length
+    ? await admin.from("profiles").select("id, full_name, email").in("id", allUserIds)
+    : { data: [] as any[], error: null }
+  if (profileResult.error) {
+    const fields = supabaseErrorFields(profileResult.error)
+    console.error("[calendar] scheduling profile display load failed", {
+      operation: "calendar scheduling profiles",
+      userId,
+      projectCount: schedulableProjects.length,
+      code: fields.code ?? null,
+      message: fields.message ?? "Unknown Supabase error",
+    })
+  }
+
+  const profileById = new Map((profileResult.data ?? []).map((profile: any) => [profile.id, profile]))
+  const membershipsByProject = new Map<string, any[]>()
+  for (const row of projectMembershipResult.data ?? []) {
+    const rows = membershipsByProject.get((row as any).project_id) ?? []
+    rows.push(row)
+    membershipsByProject.set((row as any).project_id, rows)
+  }
+  const participantsByProject = new Map<string, any[]>()
+  for (const row of participantResult.data ?? []) {
+    const rows = participantsByProject.get((row as any).project_id) ?? []
+    rows.push(row)
+    participantsByProject.set((row as any).project_id, rows)
+  }
+  const orgMembersByOrganization = new Map<string, any[]>()
+  for (const row of organizationMembershipResult.data ?? []) {
+    const rows = orgMembersByOrganization.get((row as any).organization_id) ?? []
+    rows.push(row)
+    orgMembersByOrganization.set((row as any).organization_id, rows)
+  }
+
+  const person = (id: string, role: string | null): CalendarSchedulingPersonViewModel => ({
+    id,
+    name: profileName(profileById.get(id)) ?? "Project participant",
+    role,
+  })
+
+  return schedulableProjects.map((project) => {
+    const people = new Map<string, CalendarSchedulingPersonViewModel>()
+    for (const membership of membershipsByProject.get(project.id) ?? []) {
+      if (!isValidCalendarUuid(membership.user_id)) continue
+      people.set(membership.user_id, person(membership.user_id, readableRole(membership.access_role)))
+    }
+    for (const participant of participantsByProject.get(project.id) ?? []) {
+      if (!isValidCalendarUuid(participant.key_contact_user_id)) continue
+      const role = readableRole(participant.participant_role_label) ?? readableRole(participant.project_role)
+      people.set(participant.key_contact_user_id, person(participant.key_contact_user_id, role))
+    }
+    if (project.supervisingOrganizationId) {
+      for (const membership of orgMembersByOrganization.get(project.supervisingOrganizationId) ?? []) {
+        if (!isValidCalendarUuid(membership.user_id)) continue
+        if (!people.has(membership.user_id)) people.set(membership.user_id, person(membership.user_id, readableRole(membership.role)))
+      }
+    }
+
+    const supervisorId = project.assignedSupervisorId as string
+    const supervisor = person(supervisorId, "Project Supervisor")
+    people.set(supervisorId, supervisor)
+
+    return {
+      id: project.id,
+      name: project.name,
+      supervisor,
+      participants: Array.from(people.values()).sort((left, right) => left.name.localeCompare(right.name)),
+    }
+  })
 }
 
 export function createEmptyCalendarData(monthKey: string): CalendarDataViewModel {
@@ -159,18 +266,13 @@ export function createEmptyCalendarData(monthKey: string): CalendarDataViewModel
     events: [],
     pendingRequests: [],
     summary: { pendingClientRequests: 0, upcomingVisits: 0, todaysVisits: 0 },
+    scheduling: { canSchedule: false, projects: [] },
   }
 }
 
-export async function getCalendarData({
-  userId,
-  monthKey,
-}: {
-  userId: string
-  monthKey: string
-}): Promise<CalendarDataViewModel> {
+export async function getCalendarData({ userId, monthKey }: { userId: string; monthKey: string }): Promise<CalendarDataViewModel> {
   const { rangeStart, rangeEnd } = getCalendarVisibleRange(monthKey)
-  let projects: ProjectScopeRow[] = []
+  let projects: CalendarProjectScopeRow[] = []
 
   try {
     projects = await resolveCalendarProjectScope(userId)
@@ -179,45 +281,16 @@ export async function getCalendarData({
 
     const admin = createAdminClient()
     const today = new Date().toISOString().slice(0, 10)
-    const requestColumns =
-      "id, project_id, requested_by, client_request_id, status, preferred_date, is_asap, preferred_time, notes, scheduled_date, scheduled_time, created_at"
+    const requestColumns = "id, project_id, requested_by, client_request_id, status, preferred_date, is_asap, preferred_time, notes, scheduled_date, scheduled_time, created_at"
 
-    const [pendingResult, pendingRangeResult, visitRangeResult, upcomingResult, todayResult] =
-      await Promise.all([
-        admin
-          .from("site_visit_requests")
-          .select(requestColumns)
-          .in("project_id", projectIds)
-          .eq("status", "pending")
-          .order("preferred_date", { ascending: true, nullsFirst: true })
-          .order("created_at", { ascending: true }),
-        admin
-          .from("site_visit_requests")
-          .select(requestColumns)
-          .in("project_id", projectIds)
-          .eq("status", "pending")
-          .gte("preferred_date", rangeStart)
-          .lte("preferred_date", rangeEnd),
-        admin
-          .from("site_visit_requests")
-          .select(requestColumns)
-          .in("project_id", projectIds)
-          .in("status", [...CALENDAR_VISIT_STATUSES])
-          .gte("scheduled_date", rangeStart)
-          .lte("scheduled_date", rangeEnd),
-        admin
-          .from("site_visit_requests")
-          .select("id", { count: "exact", head: true })
-          .in("project_id", projectIds)
-          .in("status", [...SCHEDULED_VISIT_STATUSES])
-          .gt("scheduled_date", today),
-        admin
-          .from("site_visit_requests")
-          .select("id", { count: "exact", head: true })
-          .in("project_id", projectIds)
-          .in("status", [...SCHEDULED_VISIT_STATUSES])
-          .eq("scheduled_date", today),
-      ])
+    const [pendingResult, pendingRangeResult, visitRangeResult, upcomingResult, todayResult, schedulingProjects] = await Promise.all([
+      admin.from("site_visit_requests").select(requestColumns).in("project_id", projectIds).eq("status", "pending").order("preferred_date", { ascending: true, nullsFirst: true }).order("created_at", { ascending: true }),
+      admin.from("site_visit_requests").select(requestColumns).in("project_id", projectIds).eq("status", "pending").gte("preferred_date", rangeStart).lte("preferred_date", rangeEnd),
+      admin.from("site_visit_requests").select(requestColumns).in("project_id", projectIds).in("status", [...CALENDAR_VISIT_STATUSES]).gte("scheduled_date", rangeStart).lte("scheduled_date", rangeEnd),
+      admin.from("site_visit_requests").select("id", { count: "exact", head: true }).in("project_id", projectIds).in("status", [...SCHEDULED_VISIT_STATUSES]).gt("scheduled_date", today),
+      admin.from("site_visit_requests").select("id", { count: "exact", head: true }).in("project_id", projectIds).in("status", [...SCHEDULED_VISIT_STATUSES]).eq("scheduled_date", today),
+      getCalendarSchedulingProjects({ userId, projects }),
+    ])
 
     const results = [
       ["pending requests", pendingResult],
@@ -228,14 +301,7 @@ export async function getCalendarData({
     ] as const
     for (const [operation, result] of results) {
       if (result.error) {
-        logCalendarError({
-          operation,
-          userId,
-          projectCount: projects.length,
-          rangeStart,
-          rangeEnd,
-          error: result.error,
-        })
+        logCalendarError({ operation, userId, projectCount: projects.length, rangeStart, rangeEnd, error: result.error })
         throw result.error
       }
     }
@@ -245,17 +311,7 @@ export async function getCalendarData({
     const profileResult = requesterIds.length
       ? await admin.from("profiles").select("id, full_name, email").in("id", requesterIds)
       : { data: [] as any[], error: null }
-    if (profileResult.error) {
-      logCalendarError({
-        operation: "requester profiles",
-        userId,
-        projectCount: projects.length,
-        rangeStart,
-        rangeEnd,
-        error: profileResult.error,
-      })
-      // Requester names are optional display data and must not break the calendar.
-    }
+    if (profileResult.error) logCalendarError({ operation: "requester profiles", userId, projectCount: projects.length, rangeStart, rangeEnd, error: profileResult.error })
 
     const projectNameById = new Map(projects.map((project) => [project.id, project.name]))
     const profileById = new Map((profileResult.data ?? []).map((profile: any) => [profile.id, profile]))
@@ -289,17 +345,13 @@ export async function getCalendarData({
     for (const row of visitRangeResult.data ?? []) {
       if (typeof row.scheduled_date !== "string") continue
       const isCancelled = row.status === "cancelled"
-      const explicitlyFromClientRequest = validUuid(row.client_request_id)
+      const explicitlyFromClientRequest = isValidCalendarUuid(row.client_request_id)
       events.push({
         id: row.id,
         projectId: row.project_id,
         projectName: projectNameById.get(row.project_id) ?? "Project",
         date: row.scheduled_date,
-        kind: isCancelled
-          ? "cancelled"
-          : explicitlyFromClientRequest
-            ? "approved_request"
-            : "scheduled_visit",
+        kind: isCancelled ? "cancelled" : explicitlyFromClientRequest ? "approved_request" : "scheduled_visit",
         timeLabel: clockTime(row.scheduled_time),
         secondaryLabel: isCancelled ? "Cancelled" : "Site Visit",
       })
@@ -322,16 +374,10 @@ export async function getCalendarData({
         upcomingVisits: upcomingResult.count ?? 0,
         todaysVisits: todayResult.count ?? 0,
       },
+      scheduling: { canSchedule: schedulingProjects.length > 0, projects: schedulingProjects },
     }
   } catch (error) {
-    logCalendarError({
-      operation: "calendar scope or data",
-      userId,
-      projectCount: projects.length,
-      rangeStart,
-      rangeEnd,
-      error,
-    })
+    logCalendarError({ operation: "calendar scope or data", userId, projectCount: projects.length, rangeStart, rangeEnd, error })
     throw error
   }
 }

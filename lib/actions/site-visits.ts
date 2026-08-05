@@ -1,11 +1,12 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { audit, AuthzError } from "@/lib/auth/guards"
+import { audit, AuthzError, getUserIdOrThrow } from "@/lib/auth/guards"
 import { sendSiteVisitRequestEmails } from "@/lib/email/site-visit"
 import { assertSiteVisitManager, assertSiteVisitRequester } from "@/lib/site-visits/access"
 import type { SiteVisitPreferredTime, SiteVisitStatus } from "@/lib/site-visits/types"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { getCalendarSchedulingProjects, resolveCalendarProjectScope } from "@/lib/calendar/server"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -334,6 +335,118 @@ export async function scheduleSiteVisitAction(input: {
   } catch (error) {
     if (error instanceof AuthzError) return { ok: false, error: error.message }
     return { ok: false, error: safeScheduleError(error) }
+  }
+}
+
+
+export async function createDirectSiteVisitAction(input: {
+  projectId: string
+  scheduledDate: string
+  scheduledTime: string
+  notes?: string | null
+  assignedUserIds?: string[]
+}): Promise<SiteVisitActionResult> {
+  if (!UUID_PATTERN.test(input.projectId)) return { ok: false, error: "Select a valid project." }
+  if (!DATE_PATTERN.test(input.scheduledDate) || !TIME_PATTERN.test(input.scheduledTime)) {
+    return { ok: false, error: "Select a valid visit date and time." }
+  }
+  if (input.scheduledDate < new Date().toISOString().slice(0, 10)) {
+    return { ok: false, error: "Visit date cannot be in the past." }
+  }
+
+  const assignedUserIds = Array.from(new Set(input.assignedUserIds ?? []))
+  if (assignedUserIds.some((id) => !UUID_PATTERN.test(id))) {
+    return { ok: false, error: "One or more selected participants are invalid." }
+  }
+
+  let actorId = "unknown"
+  let accessMode: "admin" | "supervisor" | "none" = "none"
+  try {
+    actorId = await getUserIdOrThrow()
+    const projectScope = await resolveCalendarProjectScope(actorId)
+    const scopedProject = projectScope.find((project) => project.id === input.projectId)
+    if (!scopedProject) {
+      throw new AuthzError("You do not have permission to schedule a Site Visit for this project.")
+    }
+
+    accessMode = scopedProject.accessMode
+    if (accessMode === "supervisor" && scopedProject.assignedSupervisorId !== actorId) {
+      throw new AuthzError("You are not the assigned Supervisor for this project.")
+    }
+
+    const schedulingProjects = await getCalendarSchedulingProjects({ userId: actorId, projects: projectScope })
+    const selectedProject = schedulingProjects.find((project) => project.id === input.projectId)
+    if (!selectedProject) {
+      throw new AuthzError("This project is not available for direct Site Visit scheduling.")
+    }
+    if (accessMode === "supervisor" && selectedProject.supervisor.id !== actorId) {
+      throw new AuthzError("You are not the assigned Supervisor for this project.")
+    }
+
+    const validParticipantIds = new Set(selectedProject.participants.map((participant) => participant.id))
+    if (assignedUserIds.some((id) => !validParticipantIds.has(id))) {
+      return {
+        ok: false,
+        error: "One or more selected participants can no longer be assigned to this project. Refresh and try again.",
+      }
+    }
+
+    const admin = createAdminClient()
+    const { data: createdRequestId, error: createError } = await admin.rpc("create_direct_site_visit", {
+      target_project_id: input.projectId,
+      actor_id: actorId,
+      visit_date: input.scheduledDate,
+      visit_time: input.scheduledTime,
+      visit_notes: cleanText(input.notes, 4000),
+      assigned_user_ids: assignedUserIds,
+    })
+    if (createError) throw createError
+    if (typeof createdRequestId !== "string" || !UUID_PATTERN.test(createdRequestId)) {
+      throw new Error("Direct Site Visit creation did not return a valid record id.")
+    }
+
+    await audit({
+      actorId,
+      action: "site_visit.scheduled",
+      entityType: "site_visit_request",
+      entityId: createdRequestId,
+      projectId: input.projectId,
+      metadata: { source: "calendar_direct", scheduledDate: input.scheduledDate, scheduledTime: input.scheduledTime, assignedUserIds },
+    })
+
+    revalidateSiteVisitPaths(input.projectId, createdRequestId)
+    revalidatePath("/calendar")
+    return { ok: true, requestId: createdRequestId }
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: error.message }
+
+    const fields = getSupabaseErrorFields(error)
+    console.error("[calendar] direct Site Visit scheduling failed", {
+      operation: "create direct Site Visit",
+      code: fields.code ?? null,
+      message: fields.message ?? "Unknown scheduling error",
+      details: fields.details ?? null,
+      hint: fields.hint ?? null,
+      selectedProjectId: input.projectId,
+      participantCount: assignedUserIds.length,
+      authorizationMode: accessMode,
+      actorResolved: actorId !== "unknown",
+    })
+
+    const message = (fields.message ?? "").toLowerCase()
+    if (fields.code === "PGRST202" || fields.code === "PGRST203" || fields.code === "42883" || message.includes("create_direct_site_visit") || message.includes("client_request_id")) {
+      return { ok: false, error: "Direct Site Visit scheduling is unavailable until the latest database migration is applied." }
+    }
+    if (message.includes("participant")) {
+      return { ok: false, error: "One or more selected participants can no longer be assigned to this project. Refresh and try again." }
+    }
+    if (message.includes("not authorized") || message.includes("permission")) {
+      return { ok: false, error: "You do not have permission to schedule a Site Visit for this project." }
+    }
+    if (message.includes("date and time") || fields.code === "22007") {
+      return { ok: false, error: "Select a valid visit date and time." }
+    }
+    return { ok: false, error: "The Site Visit could not be scheduled. Please try again." }
   }
 }
 

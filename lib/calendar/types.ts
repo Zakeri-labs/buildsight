@@ -32,6 +32,24 @@ export type CalendarSummaryViewModel = {
   todaysVisits: number
 }
 
+export type CalendarSchedulingPersonViewModel = {
+  id: string
+  name: string
+  role: string | null
+}
+
+export type CalendarSchedulingProjectViewModel = {
+  id: string
+  name: string
+  supervisor: CalendarSchedulingPersonViewModel
+  participants: CalendarSchedulingPersonViewModel[]
+}
+
+export type CalendarSchedulingViewModel = {
+  canSchedule: boolean
+  projects: CalendarSchedulingProjectViewModel[]
+}
+
 export type CalendarDataViewModel = {
   monthKey: string
   rangeStart: string
@@ -39,4 +57,5 @@ export type CalendarDataViewModel = {
   events: CalendarEventViewModel[]
   pendingRequests: CalendarClientRequestViewModel[]
   summary: CalendarSummaryViewModel
+  scheduling: CalendarSchedulingViewModel
 }

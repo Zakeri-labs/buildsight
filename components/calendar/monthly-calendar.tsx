@@ -80,6 +80,7 @@ function CalendarEventChip({ event }: { event: CalendarEventViewModel }) {
         "min-w-0 rounded-md border px-1.5 py-1 text-[10px] leading-tight",
         EVENT_STYLES[event.kind],
       )}
+      onClick={(clickEvent) => clickEvent.stopPropagation()}
       title={`${event.projectName}${details ? ` — ${details}` : ""}`}
       aria-label={`${event.projectName}${details ? `, ${details}` : ""}`}
     >
@@ -97,6 +98,7 @@ export function MonthlyCalendar({
   onPreviousMonth,
   onNextMonth,
   onToday,
+  onEmptyDayClick,
 }: {
   currentMonth: Date
   today: Date
@@ -105,6 +107,7 @@ export function MonthlyCalendar({
   onPreviousMonth: () => void
   onNextMonth: () => void
   onToday: () => void
+  onEmptyDayClick?: (date: string) => void
 }) {
   const visibleDays = getVisibleDays(currentMonth)
   const monthTitle = new Intl.DateTimeFormat("en-US", {
@@ -190,6 +193,7 @@ export function MonthlyCalendar({
                 const dayEvents = eventsByDate.get(key) ?? []
                 const visibleEvents = dayEvents.slice(0, MAX_VISIBLE_EVENTS)
                 const hiddenEventCount = Math.max(0, dayEvents.length - visibleEvents.length)
+                const canScheduleDay = Boolean(onEmptyDayClick) && dayEvents.length === 0
                 const fullDateLabel = new Intl.DateTimeFormat("en-US", {
                   weekday: "long",
                   month: "long",
@@ -203,11 +207,19 @@ export function MonthlyCalendar({
                     role="gridcell"
                     aria-label={fullDateLabel}
                     aria-current={isToday ? "date" : undefined}
+                    tabIndex={canScheduleDay ? 0 : undefined}
+                    onClick={() => { if (canScheduleDay) onEmptyDayClick?.(key) }}
+                    onKeyDown={(keyboardEvent) => {
+                      if (!canScheduleDay || !["Enter", " "].includes(keyboardEvent.key)) return
+                      keyboardEvent.preventDefault()
+                      onEmptyDayClick?.(key)
+                    }}
                     className={cn(
                       "group min-h-[104px] border-r border-b bg-card p-2.5 transition-colors hover:bg-muted/35",
                       isLastColumn && "border-r-0",
                       isLastRow && "border-b-0",
                       !belongsToCurrentMonth && "bg-muted/20 text-muted-foreground/70",
+                      canScheduleDay && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                     )}
                   >
                     <div className="flex items-start justify-between">
