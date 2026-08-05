@@ -1,0 +1,181 @@
+import { ChevronLeft, ChevronRight } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { cn } from "@/lib/utils"
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const
+
+const LEGEND_ITEMS = [
+  { label: "Client Request", dotClassName: "bg-slate-400 dark:bg-slate-500" },
+  { label: "Scheduled Visit", dotClassName: "bg-blue-500" },
+  { label: "Approved Request", dotClassName: "bg-emerald-500" },
+  { label: "Cancelled", dotClassName: "bg-red-300 dark:bg-red-400" },
+] as const
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+function addDays(date: Date, amount: number) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount)
+}
+
+function isSameDay(left: Date, right: Date) {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  )
+}
+
+function getVisibleDays(month: Date) {
+  const firstDay = startOfMonth(month)
+  const gridStart = addDays(firstDay, -firstDay.getDay())
+  const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0)
+  const trailingDayCount = 6 - lastDay.getDay()
+  const visibleDayCount = Math.max(35, firstDay.getDay() + lastDay.getDate() + trailingDayCount)
+
+  return Array.from({ length: visibleDayCount }, (_, index) => addDays(gridStart, index))
+}
+
+function CalendarLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2" aria-label="Future event color legend">
+      {LEGEND_ITEMS.map((item) => (
+        <div key={item.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className={cn("size-2 rounded-full", item.dotClassName)} aria-hidden="true" />
+          <span>{item.label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function MonthlyCalendar({
+  currentMonth,
+  today,
+  onPreviousMonth,
+  onNextMonth,
+  onToday,
+}: {
+  currentMonth: Date
+  today: Date
+  onPreviousMonth: () => void
+  onNextMonth: () => void
+  onToday: () => void
+}) {
+  const visibleDays = getVisibleDays(currentMonth)
+  const monthTitle = new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(currentMonth)
+
+  return (
+    <Card className="min-w-0 gap-0 py-0">
+      <CardHeader className="gap-4 border-b px-4 py-4 sm:px-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-lg font-semibold tracking-tight text-foreground" aria-live="polite">
+            {monthTitle}
+          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center rounded-lg border bg-background p-0.5 shadow-xs">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={onPreviousMonth}
+                aria-label="Show previous month"
+              >
+                <ChevronLeft aria-hidden="true" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={onNextMonth}
+                aria-label="Show next month"
+              >
+                <ChevronRight aria-hidden="true" />
+              </Button>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={onToday}>
+              Today
+            </Button>
+          </div>
+        </div>
+        <CalendarLegend />
+      </CardHeader>
+
+      <CardContent className="px-0">
+        <div className="max-w-full overflow-x-auto overscroll-x-contain">
+          <div className="min-w-[700px]">
+            <div
+              className="grid grid-cols-7 border-b bg-muted/35"
+              role="row"
+              aria-label="Days of the week"
+            >
+              {WEEKDAYS.map((weekday) => (
+                <div
+                  key={weekday}
+                  role="columnheader"
+                  className="border-r px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground last:border-r-0"
+                >
+                  {weekday}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7" role="grid" aria-label={`${monthTitle} calendar`}>
+              {visibleDays.map((day, index) => {
+                const belongsToCurrentMonth = day.getMonth() === currentMonth.getMonth()
+                const isToday = isSameDay(day, today)
+                const isLastColumn = index % 7 === 6
+                const isLastRow = index >= visibleDays.length - 7
+                const fullDateLabel = new Intl.DateTimeFormat("en-US", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                }).format(day)
+
+                return (
+                  <div
+                    key={`${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`}
+                    role="gridcell"
+                    aria-label={fullDateLabel}
+                    aria-current={isToday ? "date" : undefined}
+                    className={cn(
+                      "group min-h-[104px] border-r border-b bg-card p-2.5 transition-colors hover:bg-muted/35",
+                      isLastColumn && "border-r-0",
+                      isLastRow && "border-b-0",
+                      !belongsToCurrentMonth && "bg-muted/20 text-muted-foreground/70"
+                    )}
+                  >
+                    <div className="flex items-start justify-between">
+                      <span
+                        className={cn(
+                          "flex size-7 items-center justify-center rounded-lg text-xs font-medium tabular-nums",
+                          belongsToCurrentMonth ? "text-foreground" : "text-muted-foreground/70",
+                          isToday &&
+                            "border border-primary/50 bg-primary/10 font-semibold text-primary ring-2 ring-primary/10"
+                        )}
+                      >
+                        {day.getDate()}
+                      </span>
+                    </div>
+                    <div
+                      className="mt-1.5 min-h-14 space-y-1"
+                      data-calendar-events
+                      aria-hidden="true"
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
