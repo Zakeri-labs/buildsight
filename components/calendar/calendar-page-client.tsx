@@ -4,13 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { CalendarPlus } from "lucide-react"
 
 import { CalendarSummaryCards } from "@/components/calendar/calendar-summary-cards"
+import { ClientVisitRequestDialog } from "@/components/calendar/client-visit-request-dialog"
 import { ClientVisitRequestsPanel } from "@/components/calendar/client-visit-requests-panel"
 import { MonthlyCalendar } from "@/components/calendar/monthly-calendar"
 import { ScheduleSiteVisitDialog } from "@/components/calendar/schedule-site-visit-dialog"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { calendarMonthKey } from "@/lib/calendar/date"
-import type { CalendarDataViewModel } from "@/lib/calendar/types"
+import type { CalendarClientRequestViewModel, CalendarDataViewModel } from "@/lib/calendar/types"
 
 function monthStart(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1)
@@ -51,6 +52,9 @@ export function CalendarPageClient({
   const [needsInitialReload, setNeedsInitialReload] = useState(Boolean(initialError))
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
   const [scheduleDate, setScheduleDate] = useState(() => localDateKey(new Date()))
+  const [selectedRequest, setSelectedRequest] = useState<CalendarClientRequestViewModel | null>(null)
+  const [requestDetailsOpen, setRequestDetailsOpen] = useState(false)
+  const [requestScheduleOpen, setRequestScheduleOpen] = useState(false)
   const selectedMonthKey = calendarMonthKey(currentMonth)
 
   useEffect(() => {
@@ -77,20 +81,58 @@ export function CalendarPageClient({
     return () => controller.abort()
   }, [selectedMonthKey, data.monthKey, needsInitialReload])
 
-  const refreshSelectedMonth = useCallback(async () => {
+  const refreshSelectedMonth = useCallback(async ({
+    successMessage,
+    refreshErrorMessage,
+  }: {
+    successMessage?: string
+    refreshErrorMessage: string
+  }) => {
     setIsLoading(true)
     setError(null)
     try {
       const payload = await requestCalendarData(selectedMonthKey)
       setData(payload)
       setNeedsInitialReload(false)
-      setSuccess("Site Visit scheduled successfully.")
+      setSuccess(successMessage ?? null)
     } catch {
-      setError("The Site Visit was scheduled, but the Calendar could not be refreshed. Please try again.")
+      setError(refreshErrorMessage)
     } finally {
       setIsLoading(false)
     }
   }, [selectedMonthKey])
+
+  const refreshAfterDirectSchedule = useCallback(() => refreshSelectedMonth({
+    successMessage: "Site Visit scheduled successfully.",
+    refreshErrorMessage: "The Site Visit was scheduled, but the Calendar could not be refreshed. Please try again.",
+  }), [refreshSelectedMonth])
+
+  const refreshAfterRequestApproval = useCallback(async () => {
+    setSelectedRequest(null)
+    setRequestDetailsOpen(false)
+    await refreshSelectedMonth({
+      successMessage: "Client Visit Request approved and scheduled.",
+      refreshErrorMessage: "The request was processed, but the Calendar could not be refreshed. Please try again.",
+    })
+  }, [refreshSelectedMonth])
+
+  const refreshAfterRequestRejection = useCallback(async () => {
+    setSelectedRequest(null)
+    setRequestDetailsOpen(false)
+    await refreshSelectedMonth({
+      successMessage: "Client Visit Request rejected.",
+      refreshErrorMessage: "The request was rejected, but the Calendar could not be refreshed. Please try again.",
+    })
+  }, [refreshSelectedMonth])
+
+  const refreshAfterStaleRequest = useCallback(async () => {
+    setSelectedRequest(null)
+    setRequestDetailsOpen(false)
+    setRequestScheduleOpen(false)
+    await refreshSelectedMonth({
+      refreshErrorMessage: "Unable to refresh the Calendar. Please try again.",
+    })
+  }, [refreshSelectedMonth])
 
   function showPreviousMonth() {
     setCurrentMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))
@@ -111,9 +153,34 @@ export function CalendarPageClient({
     setScheduleDialogOpen(true)
   }
 
+  function openClientRequest(request: CalendarClientRequestViewModel) {
+    setSelectedRequest(request)
+    setSuccess(null)
+    setRequestDetailsOpen(true)
+  }
+
+  function openClientRequestById(requestId: string) {
+    const request = data.pendingRequests.find((item) => item.id === requestId)
+    if (request) openClientRequest(request)
+  }
+
+  function approveClientRequest(request: CalendarClientRequestViewModel) {
+    if (!request.canManage || !request.canApprove) return
+    setSelectedRequest(request)
+    setRequestDetailsOpen(false)
+    setRequestScheduleOpen(true)
+  }
+
   const visibleEvents = useMemo(
     () => (data.monthKey === selectedMonthKey ? data.events : []),
     [data.events, data.monthKey, selectedMonthKey],
+  )
+
+  const selectedRequestProjects = useMemo(
+    () => selectedRequest
+      ? data.scheduling.projects.filter((project) => project.id === selectedRequest.projectId)
+      : [],
+    [data.scheduling.projects, selectedRequest],
   )
 
   const calendar = (
@@ -126,6 +193,7 @@ export function CalendarPageClient({
       onNextMonth={showNextMonth}
       onToday={showCurrentMonth}
       onEmptyDayClick={data.scheduling.canSchedule ? openScheduleDialog : undefined}
+      onClientRequestClick={openClientRequestById}
     />
   )
 
@@ -164,7 +232,7 @@ export function CalendarPageClient({
 
       <div className="hidden min-w-0 items-stretch gap-5 lg:grid lg:grid-cols-[minmax(0,7fr)_minmax(280px,3fr)]">
         {calendar}
-        <ClientVisitRequestsPanel requests={data.pendingRequests} />
+        <ClientVisitRequestsPanel requests={data.pendingRequests} onRequestClick={openClientRequest} />
       </div>
 
       <Tabs defaultValue="calendar" className="min-w-0 lg:hidden">
@@ -174,7 +242,7 @@ export function CalendarPageClient({
         </TabsList>
         <TabsContent value="calendar" className="min-w-0 pt-2">{calendar}</TabsContent>
         <TabsContent value="requests" className="pt-2">
-          <ClientVisitRequestsPanel requests={data.pendingRequests} />
+          <ClientVisitRequestsPanel requests={data.pendingRequests} onRequestClick={openClientRequest} />
         </TabsContent>
       </Tabs>
 
@@ -184,7 +252,28 @@ export function CalendarPageClient({
           onOpenChange={setScheduleDialogOpen}
           projects={data.scheduling.projects}
           initialDate={scheduleDate}
-          onScheduled={refreshSelectedMonth}
+          onScheduled={refreshAfterDirectSchedule}
+        />
+      ) : null}
+
+      <ClientVisitRequestDialog
+        request={selectedRequest}
+        open={requestDetailsOpen}
+        onOpenChange={setRequestDetailsOpen}
+        onApprove={approveClientRequest}
+        onRejected={refreshAfterRequestRejection}
+        onRefreshRequired={refreshAfterStaleRequest}
+      />
+
+      {selectedRequest && selectedRequest.canApprove && selectedRequestProjects.length ? (
+        <ScheduleSiteVisitDialog
+          open={requestScheduleOpen}
+          onOpenChange={setRequestScheduleOpen}
+          projects={selectedRequestProjects}
+          initialDate={selectedRequest.requestedDate ?? localDateKey(new Date())}
+          request={selectedRequest}
+          onScheduled={refreshAfterRequestApproval}
+          onRefreshRequired={refreshAfterStaleRequest}
         />
       ) : null}
     </div>

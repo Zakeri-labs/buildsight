@@ -15,8 +15,14 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { createDirectSiteVisitAction } from "@/lib/actions/site-visits"
-import type { CalendarSchedulingProjectViewModel } from "@/lib/calendar/types"
+import {
+  approveCalendarClientVisitRequestAction,
+  createDirectSiteVisitAction,
+} from "@/lib/actions/site-visits"
+import type {
+  CalendarClientRequestViewModel,
+  CalendarSchedulingProjectViewModel,
+} from "@/lib/calendar/types"
 import { localDateInputValue } from "@/lib/site-visits/format"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -28,38 +34,46 @@ export function ScheduleSiteVisitDialog({
   onOpenChange,
   projects,
   initialDate,
+  request = null,
   onScheduled,
+  onRefreshRequired,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   projects: CalendarSchedulingProjectViewModel[]
   initialDate: string
+  request?: CalendarClientRequestViewModel | null
   onScheduled: () => Promise<void> | void
+  onRefreshRequired?: () => Promise<void> | void
 }) {
-  const [projectId, setProjectId] = useState(projects[0]?.id ?? "")
-  const [date, setDate] = useState(initialDate)
+  const requestProject = request ? projects.find((project) => project.id === request.projectId) ?? null : null
+  const [projectId, setProjectId] = useState(request?.projectId ?? projects[0]?.id ?? "")
+  const [date, setDate] = useState(request?.requestedDate ?? initialDate)
   const [time, setTime] = useState("")
-  const [notes, setNotes] = useState("")
+  const [notes, setNotes] = useState(request?.notes ?? "")
   const [assignedUserIds, setAssignedUserIds] = useState<string[]>([])
   const [error, setError] = useState("")
   const [pending, startTransition] = useTransition()
 
   const selectedProject = useMemo(
-    () => projects.find((project) => project.id === projectId) ?? projects[0] ?? null,
-    [projectId, projects],
+    () => requestProject ?? projects.find((project) => project.id === projectId) ?? projects[0] ?? null,
+    [projectId, projects, requestProject],
   )
 
   useEffect(() => {
     if (!open) return
-    setProjectId((current) => projects.some((project) => project.id === current) ? current : projects[0]?.id ?? "")
-    setDate(initialDate)
+    setProjectId((current) => request?.projectId ?? (
+      projects.some((project) => project.id === current) ? current : projects[0]?.id ?? ""
+    ))
+    setDate(request?.requestedDate ?? initialDate)
     setTime("")
-    setNotes("")
+    setNotes(request?.notes ?? "")
     setAssignedUserIds([])
     setError("")
-  }, [open, initialDate, projects])
+  }, [open, initialDate, projects, request])
 
   function changeProject(value: unknown) {
+    if (request) return
     setProjectId(String(value))
     setAssignedUserIds([])
     setError("")
@@ -75,6 +89,10 @@ export function ScheduleSiteVisitDialog({
     if (pending) return
     if (!selectedProject || !UUID_PATTERN.test(projectId)) {
       setError("Select a valid project.")
+      return
+    }
+    if (request && selectedProject.id !== request.projectId) {
+      setError("The Client Visit Request project could not be validated.")
       return
     }
     if (!DATE_PATTERN.test(date) || !TIME_PATTERN.test(time)) {
@@ -93,21 +111,36 @@ export function ScheduleSiteVisitDialog({
 
     setError("")
     startTransition(async () => {
-      const result = await createDirectSiteVisitAction({
-        projectId,
-        scheduledDate: date,
-        scheduledTime: time,
-        notes,
-        assignedUserIds,
-      })
+      const result = request
+        ? await approveCalendarClientVisitRequestAction({
+            requestId: request.id,
+            scheduledDate: date,
+            scheduledTime: time,
+            notes,
+            assignedUserIds,
+          })
+        : await createDirectSiteVisitAction({
+            projectId,
+            scheduledDate: date,
+            scheduledTime: time,
+            notes,
+            assignedUserIds,
+          })
+
       if (result.ok === false) {
         setError(result.error)
+        if (request && result.error === "This request has already been processed.") {
+          await onRefreshRequired?.()
+        }
         return
       }
       await onScheduled()
       onOpenChange(false)
     })
   }
+
+  const isRequestApproval = Boolean(request)
+  const projectIsFixed = isRequestApproval || projects.length === 1
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen: boolean) => {
@@ -118,13 +151,17 @@ export function ScheduleSiteVisitDialog({
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Schedule Site Visit</DialogTitle>
-          <DialogDescription>Schedule a direct Site Visit for an authorized project.</DialogDescription>
+          <DialogDescription>
+            {isRequestApproval
+              ? "Confirm the schedule for this Client Visit Request. The client's requested values remain unchanged."
+              : "Schedule a direct Site Visit for an authorized project."}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">
           <div className="grid gap-2">
             <Label>Project</Label>
-            {projects.length === 1 && selectedProject ? (
+            {projectIsFixed && selectedProject ? (
               <div className="flex h-10 items-center gap-2 rounded-lg border bg-muted/30 px-3 text-sm font-medium">
                 <MapPinned className="size-4 text-primary" aria-hidden="true" />
                 <span className="truncate">{selectedProject.name}</span>
@@ -140,6 +177,12 @@ export function ScheduleSiteVisitDialog({
               </Select>
             )}
           </div>
+
+          {request ? (
+            <div className="rounded-lg border bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
+              Requested: {request.isAsap || !request.requestedDate ? "ASAP" : request.requestedDate} · {request.preferredTimeLabel}
+            </div>
+          ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
@@ -185,7 +228,9 @@ export function ScheduleSiteVisitDialog({
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>Cancel</Button>
-          <Button type="button" onClick={submit} disabled={pending || !projectId || !date || !time}>{pending ? "Scheduling..." : "Schedule Visit"}</Button>
+          <Button type="button" onClick={submit} disabled={pending || !projectId || !date || !time}>
+            {pending ? "Scheduling..." : isRequestApproval ? "Approve and Schedule" : "Schedule Visit"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

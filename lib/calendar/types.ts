@@ -20,10 +20,16 @@ export type CalendarClientRequestViewModel = {
   projectName: string
   requestedDate: string | null
   isAsap: boolean
+  preferredTime: "morning" | "afternoon" | "any_time"
   preferredTimeLabel: string
   requestedBy: string | null
+  purpose: string | null
+  notes: string | null
   notesPreview: string | null
+  createdAt: string
   status: "pending"
+  canManage: boolean
+  canApprove: boolean
 }
 
 export type CalendarSummaryViewModel = {

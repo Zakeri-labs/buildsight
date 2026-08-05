@@ -281,7 +281,7 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
 
     const admin = createAdminClient()
     const today = new Date().toISOString().slice(0, 10)
-    const requestColumns = "id, project_id, requested_by, client_request_id, status, preferred_date, is_asap, preferred_time, notes, scheduled_date, scheduled_time, created_at"
+    const requestColumns = "id, project_id, requested_by, client_request_id, status, preferred_date, is_asap, preferred_time, purpose, notes, scheduled_date, scheduled_time, created_at"
 
     const [pendingResult, pendingRangeResult, visitRangeResult, upcomingResult, todayResult, schedulingProjects] = await Promise.all([
       admin.from("site_visit_requests").select(requestColumns).in("project_id", projectIds).eq("status", "pending").order("preferred_date", { ascending: true, nullsFirst: true }).order("created_at", { ascending: true }),
@@ -315,6 +315,8 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
 
     const projectNameById = new Map(projects.map((project) => [project.id, project.name]))
     const profileById = new Map((profileResult.data ?? []).map((profile: any) => [profile.id, profile]))
+    const schedulableProjectIds = new Set(schedulingProjects.map((project) => project.id))
+    const manageableProjectIds = new Set(projects.map((project) => project.id))
 
     const pendingRequests: CalendarClientRequestViewModel[] = pendingRows.map((row: any) => ({
       id: row.id,
@@ -322,10 +324,16 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
       projectName: projectNameById.get(row.project_id) ?? "Project",
       requestedDate: typeof row.preferred_date === "string" ? row.preferred_date : null,
       isAsap: Boolean(row.is_asap),
+      preferredTime: row.preferred_time === "morning" || row.preferred_time === "afternoon" ? row.preferred_time : "any_time",
       preferredTimeLabel: preferredTimeLabel(row.preferred_time),
       requestedBy: profileName(profileById.get(row.requested_by)),
+      purpose: typeof row.purpose === "string" && row.purpose.trim() ? row.purpose.trim() : null,
+      notes: typeof row.notes === "string" && row.notes.trim() ? row.notes.trim() : null,
       notesPreview: notesPreview(row.notes),
+      createdAt: typeof row.created_at === "string" ? row.created_at : "",
       status: "pending",
+      canManage: manageableProjectIds.has(row.project_id),
+      canApprove: schedulableProjectIds.has(row.project_id),
     }))
 
     const events: CalendarEventViewModel[] = []

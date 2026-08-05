@@ -71,16 +71,35 @@ function CalendarLegend() {
   )
 }
 
-function CalendarEventChip({ event }: { event: CalendarEventViewModel }) {
+function CalendarEventChip({
+  event,
+  onClientRequestClick,
+}: {
+  event: CalendarEventViewModel
+  onClientRequestClick?: (requestId: string) => void
+}) {
   const details = [event.secondaryLabel, event.timeLabel].filter(Boolean).join(" · ")
+  const canOpenRequest = event.kind === "client_request" && Boolean(onClientRequestClick)
 
   return (
     <div
       className={cn(
         "min-w-0 rounded-md border px-1.5 py-1 text-[10px] leading-tight",
         EVENT_STYLES[event.kind],
+        canOpenRequest && "cursor-pointer hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       )}
-      onClick={(clickEvent) => clickEvent.stopPropagation()}
+      role={canOpenRequest ? "button" : undefined}
+      tabIndex={canOpenRequest ? 0 : undefined}
+      onClick={(clickEvent) => {
+        clickEvent.stopPropagation()
+        if (canOpenRequest) onClientRequestClick?.(event.id)
+      }}
+      onKeyDown={(keyboardEvent) => {
+        if (!canOpenRequest || !["Enter", " "].includes(keyboardEvent.key)) return
+        keyboardEvent.preventDefault()
+        keyboardEvent.stopPropagation()
+        onClientRequestClick?.(event.id)
+      }}
       title={`${event.projectName}${details ? ` — ${details}` : ""}`}
       aria-label={`${event.projectName}${details ? `, ${details}` : ""}`}
     >
@@ -99,6 +118,7 @@ export function MonthlyCalendar({
   onNextMonth,
   onToday,
   onEmptyDayClick,
+  onClientRequestClick,
 }: {
   currentMonth: Date
   today: Date
@@ -108,6 +128,7 @@ export function MonthlyCalendar({
   onNextMonth: () => void
   onToday: () => void
   onEmptyDayClick?: (date: string) => void
+  onClientRequestClick?: (requestId: string) => void
 }) {
   const visibleDays = getVisibleDays(currentMonth)
   const monthTitle = new Intl.DateTimeFormat("en-US", {
@@ -236,7 +257,7 @@ export function MonthlyCalendar({
                     </div>
                     <div className="mt-1.5 min-h-14 space-y-1" data-calendar-events>
                       {visibleEvents.map((event) => (
-                        <CalendarEventChip key={event.id} event={event} />
+                        <CalendarEventChip key={event.id} event={event} onClientRequestClick={onClientRequestClick} />
                       ))}
                       {hiddenEventCount > 0 ? (
                         <div className="px-1 text-[10px] font-medium text-muted-foreground">

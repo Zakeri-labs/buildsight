@@ -25,9 +25,11 @@ function displayDate(request: CalendarClientRequestViewModel) {
 export function ClientVisitRequestsPanel({
   requests,
   className,
+  onRequestClick,
 }: {
   requests: CalendarClientRequestViewModel[]
   className?: string
+  onRequestClick?: (request: CalendarClientRequestViewModel) => void
 }) {
   return (
     <Card className={cn("h-full min-h-[360px]", className)}>
@@ -47,7 +49,12 @@ export function ClientVisitRequestsPanel({
         <CardContent className="min-h-0 flex-1 overflow-y-auto px-0">
           <div className="divide-y">
             {requests.map((request) => (
-              <article key={request.id} className="px-4 py-3.5">
+              <button
+                key={request.id}
+                type="button"
+                onClick={() => onRequestClick?.(request)}
+                className="block w-full px-4 py-3.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h2 className="truncate text-sm font-semibold text-foreground">
@@ -71,7 +78,7 @@ export function ClientVisitRequestsPanel({
                     {request.notesPreview}
                   </p>
                 ) : null}
-              </article>
+              </button>
             ))}
           </div>
         </CardContent>

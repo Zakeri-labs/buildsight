@@ -450,6 +450,206 @@ export async function createDirectSiteVisitAction(input: {
   }
 }
 
+
+function safeCalendarRequestManagementError(error: unknown) {
+  const fields = getSupabaseErrorFields(error)
+  const message = (fields.message ?? "").toLowerCase()
+
+  if (message.includes("already been processed")) return "This request has already been processed."
+  if (
+    fields.code === "PGRST202" ||
+    fields.code === "PGRST203" ||
+    fields.code === "42883" ||
+    message.includes("approve_calendar_site_visit_request") ||
+    message.includes("reject_calendar_site_visit_request")
+  ) {
+    return "Client Visit Request management is unavailable until the latest database migration is applied."
+  }
+  if (message.includes("not authorized") || message.includes("permission")) {
+    return "You do not have permission to manage this Client Visit Request."
+  }
+  if (message.includes("participant") || message.includes("assignee") || fields.code === "23503") {
+    return "One or more selected participants can no longer be assigned to this project. Refresh and try again."
+  }
+  if (message.includes("supervisor")) {
+    return "The project must have an assigned Project Supervisor before this request can be scheduled."
+  }
+  if (message.includes("date and time") || fields.code === "22007") {
+    return "Select a valid confirmed visit date and time."
+  }
+  if (message.includes("not found")) return "This Client Visit Request could not be found."
+  return "The Client Visit Request could not be processed. Please refresh and try again."
+}
+
+async function resolveCalendarClientRequestForAction(requestId: string) {
+  const actorId = await getUserIdOrThrow()
+  const admin = createAdminClient()
+  const { data: request, error: requestError } = await admin
+    .from("site_visit_requests")
+    .select("id, project_id, status, client_request_id")
+    .eq("id", requestId)
+    .maybeSingle()
+
+  if (requestError) throw requestError
+  if (!request) throw new Error("Site visit request not found")
+  if (request.status !== "pending") throw new Error("This request has already been processed")
+  if (!UUID_PATTERN.test(request.project_id) || !UUID_PATTERN.test(request.client_request_id ?? "")) {
+    throw new Error("This record is not a pending Client Visit Request")
+  }
+
+  const projectScope = await resolveCalendarProjectScope(actorId)
+  const scopedProject = projectScope.find((project) => project.id === request.project_id)
+  if (!scopedProject) throw new AuthzError("You do not have permission to manage this Client Visit Request.")
+  if (scopedProject.accessMode === "supervisor" && scopedProject.assignedSupervisorId !== actorId) {
+    throw new AuthzError("You are not the assigned Project Supervisor for this project.")
+  }
+
+  return { actorId, admin, request, projectScope, scopedProject }
+}
+
+export async function approveCalendarClientVisitRequestAction(input: {
+  requestId: string
+  scheduledDate: string
+  scheduledTime: string
+  notes?: string | null
+  assignedUserIds?: string[]
+}): Promise<SiteVisitActionResult> {
+  if (!UUID_PATTERN.test(input.requestId)) return { ok: false, error: "Invalid Client Visit Request." }
+  if (!DATE_PATTERN.test(input.scheduledDate) || !TIME_PATTERN.test(input.scheduledTime)) {
+    return { ok: false, error: "Select a valid confirmed visit date and time." }
+  }
+  if (input.scheduledDate < new Date().toISOString().slice(0, 10)) {
+    return { ok: false, error: "Visit date cannot be in the past." }
+  }
+
+  const assignedUserIds = Array.from(new Set(input.assignedUserIds ?? []))
+  if (assignedUserIds.some((id) => !UUID_PATTERN.test(id))) {
+    return { ok: false, error: "One or more selected participants are invalid." }
+  }
+
+  let projectId = "unknown"
+  let authorizationMode: "admin" | "supervisor" | "none" = "none"
+  try {
+    const { actorId, admin, request, projectScope, scopedProject } = await resolveCalendarClientRequestForAction(input.requestId)
+    projectId = request.project_id
+    authorizationMode = scopedProject.accessMode
+
+    const schedulingProjects = await getCalendarSchedulingProjects({ userId: actorId, projects: projectScope })
+    const selectedProject = schedulingProjects.find((project) => project.id === request.project_id)
+    if (!selectedProject) {
+      return { ok: false, error: "The project must have an assigned Project Supervisor before this request can be scheduled." }
+    }
+    if (scopedProject.accessMode === "supervisor" && selectedProject.supervisor.id !== actorId) {
+      throw new AuthzError("You are not the assigned Project Supervisor for this project.")
+    }
+
+    const validParticipantIds = new Set(selectedProject.participants.map((participant) => participant.id))
+    if (assignedUserIds.some((id) => !validParticipantIds.has(id))) {
+      return { ok: false, error: "One or more selected participants can no longer be assigned to this project. Refresh and try again." }
+    }
+
+    const { data: approvedRequestId, error: approvalError } = await admin.rpc(
+      "approve_calendar_site_visit_request",
+      {
+        target_request_id: input.requestId,
+        actor_id: actorId,
+        visit_date: input.scheduledDate,
+        visit_time: input.scheduledTime,
+        visit_notes: cleanText(input.notes, 4000),
+        assigned_user_ids: assignedUserIds,
+      },
+    )
+    if (approvalError) throw approvalError
+    if (typeof approvedRequestId !== "string" || !UUID_PATTERN.test(approvedRequestId)) {
+      throw new Error("Request approval did not return a valid record id")
+    }
+
+    await audit({
+      actorId,
+      action: "site_visit.request_approved_and_scheduled",
+      entityType: "site_visit_request",
+      entityId: input.requestId,
+      projectId: request.project_id,
+      metadata: {
+        source: "calendar_client_request",
+        scheduledDate: input.scheduledDate,
+        scheduledTime: input.scheduledTime,
+        assignedUserIds,
+      },
+    })
+
+    revalidateSiteVisitPaths(request.project_id, input.requestId)
+    revalidatePath("/calendar")
+    return { ok: true, requestId: input.requestId }
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: error.message }
+    const fields = getSupabaseErrorFields(error)
+    console.error("[calendar] Client Visit Request approval failed", {
+      operation: "approve and schedule Client Visit Request",
+      requestId: input.requestId,
+      projectId,
+      code: fields.code ?? null,
+      message: fields.message ?? "Unknown request approval error",
+      details: fields.details ?? null,
+      hint: fields.hint ?? null,
+      participantCount: assignedUserIds.length,
+      authorizationMode,
+    })
+    return { ok: false, error: safeCalendarRequestManagementError(error) }
+  }
+}
+
+export async function rejectCalendarClientVisitRequestAction(input: {
+  requestId: string
+}): Promise<SiteVisitActionResult> {
+  if (!UUID_PATTERN.test(input.requestId)) return { ok: false, error: "Invalid Client Visit Request." }
+
+  let projectId = "unknown"
+  let authorizationMode: "admin" | "supervisor" | "none" = "none"
+  try {
+    const { actorId, admin, request, scopedProject } = await resolveCalendarClientRequestForAction(input.requestId)
+    projectId = request.project_id
+    authorizationMode = scopedProject.accessMode
+
+    const { data: rejectedRequestId, error: rejectionError } = await admin.rpc(
+      "reject_calendar_site_visit_request",
+      { target_request_id: input.requestId, actor_id: actorId },
+    )
+    if (rejectionError) throw rejectionError
+    if (typeof rejectedRequestId !== "string" || !UUID_PATTERN.test(rejectedRequestId)) {
+      throw new Error("Request rejection did not return a valid record id")
+    }
+
+    await audit({
+      actorId,
+      action: "site_visit.request_rejected",
+      entityType: "site_visit_request",
+      entityId: input.requestId,
+      projectId: request.project_id,
+      metadata: { source: "calendar_client_request" },
+    })
+
+    revalidateSiteVisitPaths(request.project_id, input.requestId)
+    revalidatePath("/calendar")
+    return { ok: true, requestId: input.requestId }
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: error.message }
+    const fields = getSupabaseErrorFields(error)
+    console.error("[calendar] Client Visit Request rejection failed", {
+      operation: "reject Client Visit Request",
+      requestId: input.requestId,
+      projectId,
+      code: fields.code ?? null,
+      message: fields.message ?? "Unknown request rejection error",
+      details: fields.details ?? null,
+      hint: fields.hint ?? null,
+      participantCount: 0,
+      authorizationMode,
+    })
+    return { ok: false, error: safeCalendarRequestManagementError(error) }
+  }
+}
+
 export async function updateSiteVisitStatusAction(input: {
   requestId: string
   status: Extract<SiteVisitStatus, "completed" | "cancelled">
