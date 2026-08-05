@@ -2,8 +2,8 @@ export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 import { ProjectsList, type ProjectRow } from "@/components/projects/projects-list"
-import { requireOnboarded, isOrgAdmin } from "@/lib/auth/session"
-import { canAdministerProject } from "@/lib/auth/guards"
+import { requireOnboarded } from "@/lib/auth/session"
+import { canAdministerOrganization, canAdministerProject } from "@/lib/auth/guards"
 import { getOrgProjects } from "@/lib/db/domain"
 import { PROJECT_TYPES, isProjectTypeValue } from "@/lib/projects/project-options"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
@@ -34,9 +34,10 @@ export default async function ProjectsPage({
   const primaryMembership = session.memberships[0]
   const organizationId = session.supervisingOrg?.id ?? primaryMembership?.organization?.id
   const projects = organizationId ? await getOrgProjects(organizationId, session.userId) : []
-  const canDeleteProjects = Boolean(
-    session.supervisingOrg && isOrgAdmin(session, session.supervisingOrg.id),
-  )
+  const canCreateProjects = session.supervisingOrg
+    ? await canAdministerOrganization(session.supervisingOrg.id)
+    : false
+  const canDeleteProjects = canCreateProjects
   const editPermissions = await Promise.all(projects.map((project) => canAdministerProject(project.id)))
 
   const rows: ProjectRow[] = projects.map((project, index) => ({
@@ -65,6 +66,7 @@ export default async function ProjectsPage({
       projects={rows}
       createdProjectId={params.created}
       canDeleteProjects={canDeleteProjects}
+      canCreateProjects={canCreateProjects}
     />
   )
 }

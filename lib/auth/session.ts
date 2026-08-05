@@ -1,5 +1,4 @@
 import "server-only"
-import { cache } from "react"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import type { Organization, OrganizationRole, Profile } from "@/lib/db/types"
@@ -22,42 +21,11 @@ export type SessionContext = {
  * Reads run through the RLS-scoped server client, so results are already
  * limited to what the user is allowed to see.
  */
-const DEMO_SESSION: SessionContext = {
-  userId: "00000000-0000-0000-0000-000000000001",
-  email: "arman@provision.om",
-  profile: {
-    id: "00000000-0000-0000-0000-000000000001",
-    full_name: "Arman Haddad",
-    email: "arman@provision.om",
-    avatar_url: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  memberships: [
-    {
-      role: "org_admin",
-      organization: {
-        id: "00000000-0000-0000-0000-000000000002",
-        name: "Provision Consultancy",
-        code: "PROV",
-        type: "supervising",
-        created_at: new Date().toISOString(),
-      } as any,
-    },
-  ],
-  supervisingOrg: {
-    id: "00000000-0000-0000-0000-000000000002",
-    name: "Provision Consultancy",
-    code: "PROV",
-    type: "supervising",
-    created_at: new Date().toISOString(),
-  } as any,
-}
-
-export const getSession = cache(async (): Promise<SessionContext | null> => {
+export async function getSession(): Promise<SessionContext | null> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!url || url.includes("placeholder")) {
-    return DEMO_SESSION
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anonKey || url.includes("placeholder")) {
+    return null
   }
 
   try {
@@ -65,7 +33,7 @@ export const getSession = cache(async (): Promise<SessionContext | null> => {
     const {
       data: { user },
     } = await supabase.auth.getUser()
-    if (!user) return DEMO_SESSION
+    if (!user) return null
 
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle()
 
@@ -90,10 +58,14 @@ export const getSession = cache(async (): Promise<SessionContext | null> => {
       memberships,
       supervisingOrg,
     }
-  } catch {
-    return DEMO_SESSION
+  } catch (error) {
+    console.error(
+      "getSession failed to resolve the request-scoped user:",
+      error instanceof Error ? error.message : "Unknown error",
+    )
+    return null
   }
-})
+}
 
 /** Require a signed-in user or redirect to login. */
 export async function requireSession(): Promise<SessionContext> {

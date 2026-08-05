@@ -1,13 +1,17 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { ProjectCreateForm } from "@/components/projects/project-create-form"
-import { isOrgAdmin, requireOnboarded } from "@/lib/auth/session"
+import { requireOnboarded } from "@/lib/auth/session"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { canAdministerOrganization } from "@/lib/auth/guards"
 
 export async function ProjectCreateContent() {
   const session = await requireOnboarded()
   const supervisingOrg = session.supervisingOrg
+  const canCreateProjects = supervisingOrg
+    ? await canAdministerOrganization(supervisingOrg.id)
+    : false
 
-  if (!supervisingOrg || !isOrgAdmin(session, supervisingOrg.id)) {
+  if (!supervisingOrg || !canCreateProjects) {
     return (
       <div className="mx-auto max-w-2xl">
         <Card>

@@ -5,6 +5,7 @@ import { useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { isInvitationPath, safeNextPath } from "@/lib/auth/redirects"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,8 +14,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 function SignUpCard() {
   const router = useRouter()
   const params = useSearchParams()
-  const next = params.get("next") ?? "/onboarding"
-  const prefillEmail = params.get("email") ?? ""
+  const next = safeNextPath(params.get("next"), "/onboarding")
+  const prefillEmail = params.get("email")?.trim().toLowerCase() ?? ""
+  const invitationFlow = isInvitationPath(next) && Boolean(prefillEmail)
+  const loginHref = invitationFlow
+    ? `/auth/login?${new URLSearchParams({ next, email: prefillEmail }).toString()}`
+    : "/auth/login"
   const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState(prefillEmail)
   const [password, setPassword] = useState("")
@@ -25,35 +30,66 @@ function SignUpCard() {
     e.preventDefault()
     setLoading(true)
     setError(null)
-    const supabase = createClient()
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo:
-          process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ?? `${window.location.origin}/auth/callback`,
-        data: { full_name: fullName },
-      },
-    })
-    if (error) {
-      setError(error.message)
+
+    try {
+      const supabase = createClient()
+      const callbackUrl = new URL(
+        process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ?? "/auth/callback",
+        window.location.origin,
+      )
+      callbackUrl.searchParams.set("next", next)
+
+      const normalizedEmail = email.trim().toLowerCase()
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+        options: {
+          emailRedirectTo: callbackUrl.toString(),
+          data: { full_name: fullName.trim() },
+        },
+      })
+      if (signUpError) {
+        setError(
+          invitationFlow
+            ? "Unable to create this account. Sign in instead if the invited email already has an account."
+            : signUpError.message,
+        )
+        return
+      }
+
+      // If email confirmation is disabled, a session exists immediately.
+      if (data.session) {
+        router.replace(next)
+        router.refresh()
+        return
+      }
+
+      router.replace(
+        `/auth/sign-up-success?${new URLSearchParams({ next, email: normalizedEmail }).toString()}`,
+      )
+    } catch (error) {
+      setError(
+        invitationFlow
+          ? "Unable to create the invited account. Please try again."
+          : error instanceof Error
+            ? error.message
+            : "Unable to create your account. Please try again.",
+      )
+    } finally {
       setLoading(false)
-      return
     }
-    // If email confirmation is disabled, a session exists immediately.
-    if (data.session) {
-      router.push(next)
-      router.refresh()
-      return
-    }
-    router.push(`/auth/sign-up-success?next=${encodeURIComponent(next)}`)
   }
+
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-xl">Create your account</CardTitle>
-        <CardDescription>Set up your Provision supervising organization</CardDescription>
+        <CardDescription>
+          {invitationFlow
+            ? "Create your account to accept the organization invitation"
+            : "Set up your Provision supervising organization"}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -76,8 +112,14 @@ function SignUpCard() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              readOnly={invitationFlow}
               placeholder="you@company.com"
             />
+            {invitationFlow && (
+              <p className="text-xs text-muted-foreground">
+                This email is fixed to the address that received the invitation.
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="password">Password</Label>
@@ -98,7 +140,7 @@ function SignUpCard() {
         </form>
         <p className="mt-4 text-center text-sm text-muted-foreground">
           {"Already have an account? "}
-          <Link href="/auth/login" className="font-medium text-accent underline-offset-4 hover:underline">
+          <Link href={loginHref} className="font-medium text-accent underline-offset-4 hover:underline">
             Sign in
           </Link>
         </p>

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { ArrowRight, Eye, EyeOff, Lock, Mail, ShieldCheck } from "lucide-react"
 import { signInWithPassword } from "@/lib/actions/auth"
+import { isInvitationPath, safeNextPath } from "@/lib/auth/redirects"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -14,8 +15,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 function LoginCard() {
   const router = useRouter()
   const params = useSearchParams()
-  const next = params.get("next") ?? "/"
-  const [email, setEmail] = useState("")
+  const next = safeNextPath(params.get("next"), "/")
+  const prefillEmail = params.get("email")?.trim().toLowerCase() ?? ""
+  const invitationFlow = isInvitationPath(next) && Boolean(prefillEmail)
+  const signUpHref = invitationFlow
+    ? `/auth/sign-up?${new URLSearchParams({ next, email: prefillEmail }).toString()}`
+    : "/auth/sign-up"
+  const [email, setEmail] = useState(prefillEmail)
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -29,14 +35,20 @@ function LoginCard() {
     try {
       const result = await signInWithPassword(email, password)
       if (result.error) {
-        setError(result.error)
+        setError(invitationFlow ? "Unable to sign in with this email and password." : result.error)
         return
       }
 
-      router.push(next)
+      router.replace(next)
       router.refresh()
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Unable to sign in. Please try again.")
+      setError(
+        invitationFlow
+          ? "Unable to sign in with the invited account. Please try again."
+          : error instanceof Error
+            ? error.message
+            : "Unable to sign in. Please try again.",
+      )
     } finally {
       setLoading(false)
     }
@@ -77,10 +89,16 @@ function LoginCard() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                readOnly={invitationFlow}
                 placeholder="admin@provision.test"
                 className="h-11 border-slate-200 bg-slate-50/50 pl-9 text-sm focus:bg-background dark:border-slate-700 dark:bg-slate-800/50"
               />
             </div>
+            {invitationFlow && (
+              <p className="text-[11px] text-muted-foreground">
+                Sign in with the email address that received the invitation.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -142,7 +160,7 @@ function LoginCard() {
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {"Don't have an account? "}
             <Link
-              href="/auth/sign-up"
+              href={signUpHref}
               className="font-semibold text-primary underline-offset-4 hover:underline"
             >
               Sign up

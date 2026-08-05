@@ -773,6 +773,7 @@ export async function createProject(input: {
 }): Promise<ActionResult<{ id: string; ownerIds: string[] }>> {
   let createdProjectId: string | null = null
   try {
+    const actorId = await assertOrgAdmin(input.supervisingOrgId)
     const name = input.name.trim()
     if (name.length < 2) return { ok: false, error: "Project name is too short." }
     if (input.projectType && !isProjectTypeValue(input.projectType)) {
@@ -846,7 +847,6 @@ export async function createProject(input: {
       (coordinates.latitude != null && coordinates.longitude != null
         ? coordinateLabel(coordinates.latitude, coordinates.longitude)
         : null)
-    const actorId = await assertOrgAdmin(input.supervisingOrgId)
     const admin = createAdminClient()
 
     const { data: org } = await admin
