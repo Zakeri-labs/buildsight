@@ -1,15 +1,46 @@
 "use client"
 
-import { useState } from "react"
-import { Check, Copy, Mail } from "lucide-react"
+import { useEffect, useState, useTransition, type FocusEvent } from "react"
+import { AlertCircle, Check, Copy, Loader2, Mail, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  resendInvitationEmail,
+  type InvitationDeliveryErrorCategory,
+  type InvitationDeliveryStatus,
+} from "@/lib/actions/invitations"
 
 export type InviteResult = {
+  invitationId: string
   email: string
-  token: string
+  invitationUrl: string | null
   userExists: boolean
+  emailStatus: InvitationDeliveryStatus
+  emailErrorCategory?: InvitationDeliveryErrorCategory
+}
+
+function deliveryCopy(result: InviteResult): { title: string; description: string } {
+  if (result.emailStatus === "accepted") {
+    return {
+      title: "Invitation email sent",
+      description: `Resend accepted the invitation email request for ${result.email}. This confirms provider submission, not final inbox delivery.`,
+    }
+  }
+
+  if (result.emailStatus === "not_configured") {
+    return {
+      title: "Invitation created",
+      description: `Email delivery is not configured, so no email was sent to ${result.email}. You can share the secure invitation link manually.`,
+    }
+  }
+
+  const description =
+    result.emailErrorCategory === "site_origin_unavailable"
+      ? `The invitation was created, but email was not sent because a trusted public site URL could not be resolved.`
+      : `The invitation was created, but the email request for ${result.email} was not accepted. You can retry or share the secure link manually.`
+
+  return { title: "Invitation created — email not sent", description }
 }
 
 export function InviteLinkDialog({
@@ -19,37 +50,101 @@ export function InviteLinkDialog({
   result: InviteResult | null
   onClose: () => void
 }) {
+  const [current, setCurrent] = useState<InviteResult | null>(result)
   const [copied, setCopied] = useState(false)
-  const link = result ? `${typeof window !== "undefined" ? window.location.origin : ""}/invite/${result.token}` : ""
+  const [retryError, setRetryError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
 
-  async function copy() {
-    await navigator.clipboard.writeText(link)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1800)
+  useEffect(() => {
+    setCurrent(result)
+    setCopied(false)
+    setRetryError(null)
+  }, [result])
+
+  const copy = current ? deliveryCopy(current) : null
+
+  async function copyLink() {
+    if (!current?.invitationUrl) return
+    setRetryError(null)
+    try {
+      await navigator.clipboard.writeText(current.invitationUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    } catch {
+      setRetryError("Could not copy the invitation link. Select and copy it manually.")
+    }
+  }
+
+  function retryEmail() {
+    if (!current) return
+    setRetryError(null)
+    startTransition(async () => {
+      const response = await resendInvitationEmail(current.invitationId)
+      if (!response.ok || !response.data) {
+        setRetryError(response.ok ? "Could not resend the invitation email." : response.error)
+        return
+      }
+      setCurrent({ ...response.data, email: current.email })
+    })
   }
 
   return (
-    <Dialog open={result != null} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={current != null} onOpenChange={(open: boolean) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Invitation sent</DialogTitle>
-          <DialogDescription className="text-pretty">
-            {result?.userExists
-              ? `${result.email} already has a Provision account. They'll see this invitation after signing in — you can also share the link directly.`
-              : `We've created an invitation for ${result?.email}. Share this secure link so they can register and join.`}
-          </DialogDescription>
+          <DialogTitle>{copy?.title ?? "Invitation"}</DialogTitle>
+          <DialogDescription className="text-pretty">{copy?.description}</DialogDescription>
         </DialogHeader>
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Mail className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input readOnly value={link} className="ps-9 text-xs" onFocus={(e) => e.currentTarget.select()} />
+
+        {current?.emailStatus !== "accepted" && (
+          <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            <p>The invitation remains pending. No membership has been created or accepted.</p>
           </div>
-          <Button type="button" variant="outline" onClick={copy} className="shrink-0 bg-transparent">
-            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-            {copied ? "Copied" : "Copy"}
-          </Button>
-        </div>
-        <DialogFooter>
+        )}
+
+        {current?.invitationUrl ? (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Secure manual sharing link</p>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Mail className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  readOnly
+                  value={current.invitationUrl}
+                  className="ps-9 text-xs"
+                  onFocus={(event: FocusEvent<HTMLInputElement>) => event.currentTarget.select()}
+                />
+              </div>
+              <Button type="button" variant="outline" onClick={copyLink} className="shrink-0 bg-transparent">
+                {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                {copied ? "Copied" : "Copy"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+            A safe public invitation link is unavailable. Configure the application&apos;s trusted public site URL before retrying.
+          </p>
+        )}
+
+        {current?.userExists && (
+          <p className="text-xs text-muted-foreground">
+            This email already has an account. The invitation link will use the existing sign-in flow and will not create a duplicate user.
+          </p>
+        )}
+
+        {retryError && <p className="text-sm text-destructive">{retryError}</p>}
+
+        <DialogFooter className="sm:justify-between">
+          {current && current.emailStatus !== "accepted" ? (
+            <Button type="button" variant="outline" onClick={retryEmail} disabled={pending} className="bg-transparent">
+              {pending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              Retry email
+            </Button>
+          ) : (
+            <span />
+          )}
           <Button onClick={onClose}>Done</Button>
         </DialogFooter>
       </DialogContent>

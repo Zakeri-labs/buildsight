@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertOrgAdmin, assertProjectAdmin, audit, AuthzError } from "@/lib/auth/guards"
-import { createInvitation } from "@/lib/actions/invitations"
+import { createInvitation, type InvitationActionData } from "@/lib/actions/invitations"
 import { createOrganization } from "@/lib/actions/organizations"
 import type { ProjectAccessRole, ProjectOrgRole } from "@/lib/db/types"
 import { PROJECT_ACCESS_ROLES, PROJECT_ORG_ROLES } from "@/lib/db/types"
@@ -1292,7 +1292,7 @@ export async function createOrgAndAddToProject(input: {
   organizationName: string
   projectRole: ProjectOrgRole
   adminEmail: string
-}): Promise<ActionResult<{ organizationId: string; token: string; userExists: boolean }>> {
+}): Promise<ActionResult<InvitationActionData & { organizationId: string }>> {
   try {
     // assertProjectAdmin also covers supervising-org admins of this project.
     await assertProjectAdmin(input.projectId)
@@ -1340,8 +1340,7 @@ export async function createOrgAndAddToProject(input: {
       ok: true,
       data: {
         organizationId,
-        token: inviteResult.data.token,
-        userExists: inviteResult.data.userExists,
+        ...inviteResult.data,
       },
     }
   } catch (err) {
