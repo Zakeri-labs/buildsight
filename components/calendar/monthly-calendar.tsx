@@ -2,9 +2,11 @@ import { ChevronLeft, ChevronRight } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import type { CalendarEventViewModel } from "@/lib/calendar/types"
 import { cn } from "@/lib/utils"
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const
+const MAX_VISIBLE_EVENTS = 2
 
 const LEGEND_ITEMS = [
   { label: "Client Request", dotClassName: "bg-slate-400 dark:bg-slate-500" },
@@ -12,6 +14,17 @@ const LEGEND_ITEMS = [
   { label: "Approved Request", dotClassName: "bg-emerald-500" },
   { label: "Cancelled", dotClassName: "bg-red-300 dark:bg-red-400" },
 ] as const
+
+const EVENT_STYLES: Record<CalendarEventViewModel["kind"], string> = {
+  client_request:
+    "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200",
+  scheduled_visit:
+    "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/60 dark:text-blue-200",
+  approved_request:
+    "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200",
+  cancelled:
+    "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/60 dark:text-red-200",
+}
 
 function startOfMonth(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1)
@@ -29,6 +42,12 @@ function isSameDay(left: Date, right: Date) {
   )
 }
 
+function dateKey(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
 function getVisibleDays(month: Date) {
   const firstDay = startOfMonth(month)
   const gridStart = addDays(firstDay, -firstDay.getDay())
@@ -41,7 +60,7 @@ function getVisibleDays(month: Date) {
 
 function CalendarLegend() {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2" aria-label="Future event color legend">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2" aria-label="Calendar event color legend">
       {LEGEND_ITEMS.map((item) => (
         <div key={item.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span className={cn("size-2 rounded-full", item.dotClassName)} aria-hidden="true" />
@@ -52,15 +71,37 @@ function CalendarLegend() {
   )
 }
 
+function CalendarEventChip({ event }: { event: CalendarEventViewModel }) {
+  const details = [event.secondaryLabel, event.timeLabel].filter(Boolean).join(" · ")
+
+  return (
+    <div
+      className={cn(
+        "min-w-0 rounded-md border px-1.5 py-1 text-[10px] leading-tight",
+        EVENT_STYLES[event.kind],
+      )}
+      title={`${event.projectName}${details ? ` — ${details}` : ""}`}
+      aria-label={`${event.projectName}${details ? `, ${details}` : ""}`}
+    >
+      <span className="block truncate font-semibold">{event.projectName}</span>
+      <span className="mt-0.5 block truncate opacity-80">{details}</span>
+    </div>
+  )
+}
+
 export function MonthlyCalendar({
   currentMonth,
   today,
+  events,
+  isLoading,
   onPreviousMonth,
   onNextMonth,
   onToday,
 }: {
   currentMonth: Date
   today: Date
+  events: CalendarEventViewModel[]
+  isLoading: boolean
   onPreviousMonth: () => void
   onNextMonth: () => void
   onToday: () => void
@@ -70,14 +111,27 @@ export function MonthlyCalendar({
     month: "long",
     year: "numeric",
   }).format(currentMonth)
+  const eventsByDate = new Map<string, CalendarEventViewModel[]>()
+  for (const event of events) {
+    const dayEvents = eventsByDate.get(event.date) ?? []
+    dayEvents.push(event)
+    eventsByDate.set(event.date, dayEvents)
+  }
 
   return (
     <Card className="min-w-0 gap-0 py-0">
       <CardHeader className="gap-4 border-b px-4 py-4 sm:px-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground" aria-live="polite">
-            {monthTitle}
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold tracking-tight text-foreground" aria-live="polite">
+              {monthTitle}
+            </h2>
+            {isLoading ? (
+              <span className="animate-pulse text-xs text-muted-foreground" role="status">
+                Loading...
+              </span>
+            ) : null}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center rounded-lg border bg-background p-0.5 shadow-xs">
               <Button
@@ -132,6 +186,10 @@ export function MonthlyCalendar({
                 const isToday = isSameDay(day, today)
                 const isLastColumn = index % 7 === 6
                 const isLastRow = index >= visibleDays.length - 7
+                const key = dateKey(day)
+                const dayEvents = eventsByDate.get(key) ?? []
+                const visibleEvents = dayEvents.slice(0, MAX_VISIBLE_EVENTS)
+                const hiddenEventCount = Math.max(0, dayEvents.length - visibleEvents.length)
                 const fullDateLabel = new Intl.DateTimeFormat("en-US", {
                   weekday: "long",
                   month: "long",
@@ -141,7 +199,7 @@ export function MonthlyCalendar({
 
                 return (
                   <div
-                    key={`${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`}
+                    key={key}
                     role="gridcell"
                     aria-label={fullDateLabel}
                     aria-current={isToday ? "date" : undefined}
@@ -149,7 +207,7 @@ export function MonthlyCalendar({
                       "group min-h-[104px] border-r border-b bg-card p-2.5 transition-colors hover:bg-muted/35",
                       isLastColumn && "border-r-0",
                       isLastRow && "border-b-0",
-                      !belongsToCurrentMonth && "bg-muted/20 text-muted-foreground/70"
+                      !belongsToCurrentMonth && "bg-muted/20 text-muted-foreground/70",
                     )}
                   >
                     <div className="flex items-start justify-between">
@@ -158,17 +216,22 @@ export function MonthlyCalendar({
                           "flex size-7 items-center justify-center rounded-lg text-xs font-medium tabular-nums",
                           belongsToCurrentMonth ? "text-foreground" : "text-muted-foreground/70",
                           isToday &&
-                            "border border-primary/50 bg-primary/10 font-semibold text-primary ring-2 ring-primary/10"
+                            "border border-primary/50 bg-primary/10 font-semibold text-primary ring-2 ring-primary/10",
                         )}
                       >
                         {day.getDate()}
                       </span>
                     </div>
-                    <div
-                      className="mt-1.5 min-h-14 space-y-1"
-                      data-calendar-events
-                      aria-hidden="true"
-                    />
+                    <div className="mt-1.5 min-h-14 space-y-1" data-calendar-events>
+                      {visibleEvents.map((event) => (
+                        <CalendarEventChip key={event.id} event={event} />
+                      ))}
+                      {hiddenEventCount > 0 ? (
+                        <div className="px-1 text-[10px] font-medium text-muted-foreground">
+                          +{hiddenEventCount} more
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 )
               })}
