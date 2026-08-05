@@ -2,8 +2,7 @@ import { randomUUID } from "node:crypto"
 import { revalidatePath } from "next/cache"
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient } from "@/lib/supabase/server"
-import { assertProjectAdmin, audit, AuthzError } from "@/lib/auth/guards"
+import { assertProjectAdmin, assertProjectReadAccess, audit, AuthzError } from "@/lib/auth/guards"
 import {
   detectProjectImageMimeType,
   isAllowedProjectImageType,
@@ -71,46 +70,55 @@ export async function GET(request: NextRequest) {
     return new NextResponse("Invalid image path", { status: 400 })
   }
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return new NextResponse("Unauthorized", { status: 401 })
+  try {
+    await assertProjectReadAccess(requestedProjectId)
 
-  const [{ data: project }, { data: imageRecord }] = await Promise.all([
-    supabase.from("projects").select("id, image").eq("id", requestedProjectId).maybeSingle(),
-    supabase
-      .from("project_images")
-      .select("id")
-      .eq("project_id", requestedProjectId)
-      .eq("storage_path", path)
-      .maybeSingle(),
-  ])
-  if (!project) return new NextResponse("Forbidden", { status: 403 })
+    const admin = createAdminClient()
+    const [{ data: project, error: projectError }, { data: imageRecord, error: imageRecordError }] =
+      await Promise.all([
+        admin.from("projects").select("id, image").eq("id", requestedProjectId).maybeSingle(),
+        admin
+          .from("project_images")
+          .select("id")
+          .eq("project_id", requestedProjectId)
+          .eq("storage_path", path)
+          .maybeSingle(),
+      ])
 
-  const legacyAssignedPath = projectImageStoragePath(project.image, requestedProjectId)
-  if (!imageRecord && legacyAssignedPath !== path) {
-    return new NextResponse("Image not assigned to this project", { status: 404 })
+    if (projectError) throw projectError
+    if (imageRecordError) throw imageRecordError
+    if (!project) return new NextResponse("Image not found", { status: 404 })
+
+    const legacyAssignedPath = projectImageStoragePath(project.image, requestedProjectId)
+    if (!imageRecord && legacyAssignedPath !== path) {
+      return new NextResponse("Image not assigned to this project", { status: 404 })
+    }
+
+    const { data: image, error: imageError } = await admin.storage.from(PROJECT_IMAGE_BUCKET).download(path)
+    if (imageError || !image) return new NextResponse("Image not found", { status: 404 })
+
+    const bytes = new Uint8Array(await image.arrayBuffer())
+    const contentType = detectProjectImageMimeType(bytes) ?? image.type ?? "application/octet-stream"
+    if (!isAllowedProjectImageType(contentType)) return new NextResponse("Image not found", { status: 404 })
+
+    return new NextResponse(bytes, {
+      status: 200,
+      headers: {
+        "Content-Type": contentType,
+        "Content-Length": String(bytes.byteLength),
+        "Cache-Control": "private, no-store, max-age=0",
+        Vary: "Cookie",
+        "X-Content-Type-Options": "nosniff",
+      },
+    })
+  } catch (error) {
+    if (error instanceof AuthzError) {
+      const status = error.message === "Not authenticated" ? 401 : 403
+      return new NextResponse(status === 401 ? "Unauthorized" : "Forbidden", { status })
+    }
+    console.error("project image read failed", error instanceof Error ? error.message : "Unknown error")
+    return new NextResponse("Unable to load image", { status: 500 })
   }
-
-  const admin = createAdminClient()
-  const { data: image, error: imageError } = await admin.storage.from(PROJECT_IMAGE_BUCKET).download(path)
-  if (imageError || !image) return new NextResponse("Image not found", { status: 404 })
-
-  const bytes = new Uint8Array(await image.arrayBuffer())
-  const contentType = detectProjectImageMimeType(bytes) ?? image.type ?? "application/octet-stream"
-  if (!isAllowedProjectImageType(contentType)) return new NextResponse("Image not found", { status: 404 })
-
-  return new NextResponse(bytes, {
-    status: 200,
-    headers: {
-      "Content-Type": contentType,
-      "Content-Length": String(bytes.byteLength),
-      "Cache-Control": "private, no-store, max-age=0",
-      Vary: "Cookie",
-      "X-Content-Type-Options": "nosniff",
-    },
-  })
 }
 
 export async function POST(request: NextRequest) {

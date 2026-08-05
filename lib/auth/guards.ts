@@ -43,6 +43,82 @@ export async function assertOrgAdmin(organizationId: string): Promise<string> {
   return userId
 }
 
+/**
+ * Confirm the current user may read `projectId` through the same access paths
+ * used by the project list and detail pages. This includes direct project
+ * membership, an active linked project participant, an active membership in
+ * the supervising organization, or an active organization assignment to the
+ * project.
+ */
+export async function assertProjectReadAccess(projectId: string): Promise<string> {
+  const userId = await getUserIdOrThrow()
+  const admin = createAdminClient()
+
+  const [projectResult, projectMembershipResult, participantResult, organizationMembershipResult] =
+    await Promise.all([
+      admin
+        .from("projects")
+        .select("id, supervising_organization_id")
+        .eq("id", projectId)
+        .maybeSingle(),
+      admin
+        .from("project_user_memberships")
+        .select("id")
+        .eq("project_id", projectId)
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle(),
+      admin
+        .from("project_participants")
+        .select("id")
+        .eq("project_id", projectId)
+        .eq("key_contact_user_id", userId)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle(),
+      admin
+        .from("organization_memberships")
+        .select("organization_id")
+        .eq("user_id", userId)
+        .eq("status", "active"),
+    ])
+
+  if (projectResult.error) throw projectResult.error
+  if (projectMembershipResult.error) throw projectMembershipResult.error
+  if (participantResult.error) throw participantResult.error
+  if (organizationMembershipResult.error) throw organizationMembershipResult.error
+  if (!projectResult.data) throw new AuthzError("Project not found")
+
+  if (projectMembershipResult.data || participantResult.data) return userId
+
+  const organizationIds = Array.from(
+    new Set(
+      (organizationMembershipResult.data ?? [])
+        .map((membership: any) => membership.organization_id as string)
+        .filter(Boolean),
+    ),
+  )
+
+  if (organizationIds.includes(projectResult.data.supervising_organization_id)) return userId
+
+  if (organizationIds.length > 0) {
+    const { data: projectOrganizationMembership, error: projectOrganizationError } = await admin
+      .from("project_organization_memberships")
+      .select("id")
+      .eq("project_id", projectId)
+      .in("organization_id", organizationIds)
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle()
+
+    if (projectOrganizationError) throw projectOrganizationError
+    if (projectOrganizationMembership) return userId
+  }
+
+  throw new AuthzError("You do not have access to this project")
+}
+
 /** Confirm the current user is an active project member or belongs to the supervising organization. */
 export async function assertProjectMember(projectId: string): Promise<string> {
   const userId = await getUserIdOrThrow()
