@@ -10,6 +10,10 @@ const PUBLIC_SITE_URL_ENV_KEYS = [
   "BASE_URL",
 ] as const
 
+type ResolveSiteOriginOptions = {
+  requireConfiguredSiteUrl?: boolean
+}
+
 function normalizeOrigin(value: string | null | undefined, defaultProtocol = "https:"): string | null {
   const trimmed = value?.trim()
   if (!trimmed) return null
@@ -30,7 +34,55 @@ function firstHeaderValue(value: string | null): string {
 }
 
 function isLocalHostname(hostname: string): boolean {
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]"
+  return (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname === "127.0.0.1" ||
+    hostname === "0.0.0.0" ||
+    hostname === "[::1]" ||
+    hostname === "[::]" ||
+    hostname === "host.docker.internal"
+  )
+}
+
+function resolveConfiguredSiteOrigin(): string | null {
+  const origin = normalizeOrigin(process.env.NEXT_PUBLIC_SITE_URL)
+  if (!origin) return null
+
+  const parsed = new URL(origin)
+  const productionRuntime = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production"
+  if (productionRuntime && (parsed.protocol !== "https:" || isLocalHostname(parsed.hostname.toLowerCase()))) {
+    return null
+  }
+
+  return origin
+}
+
+/**
+ * Resolve the origin used specifically for Supabase sign-up email confirmations.
+ * This path intentionally accepts only NEXT_PUBLIC_SITE_URL and never falls back
+ * to request headers, Vercel deployment hosts, legacy environment variables, or
+ * a local-development URL.
+ */
+export function resolveAuthConfirmationOrigin(): string | null {
+  const configuredValue = process.env.NEXT_PUBLIC_SITE_URL?.trim()
+  if (!configuredValue || !/^https?:\/\//i.test(configuredValue)) return null
+
+  try {
+    const parsed = new URL(configuredValue)
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null
+    if (parsed.username || parsed.password) return null
+
+    const hostname = parsed.hostname.toLowerCase()
+    const productionRuntime = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production"
+    if (productionRuntime && (parsed.protocol !== "https:" || isLocalHostname(hostname))) {
+      return null
+    }
+
+    return parsed.origin
+  } catch {
+    return null
+  }
 }
 
 function hostnameFromHost(host: string): string {
@@ -52,8 +104,16 @@ function normalizedVercelHost(value: string | undefined): string {
  * Production must use an explicit configured URL or Vercel's trusted production URL.
  * Preview request hosts are accepted only when they match Vercel-provided deployment hosts.
  */
-export async function resolveSiteOrigin(): Promise<string | null> {
+export async function resolveSiteOrigin(
+  options: ResolveSiteOriginOptions = {},
+): Promise<string | null> {
+  const configuredSiteOrigin = resolveConfiguredSiteOrigin()
+  if (configuredSiteOrigin) return configuredSiteOrigin
+
+  if (options.requireConfiguredSiteUrl) return null
+
   for (const key of PUBLIC_SITE_URL_ENV_KEYS) {
+    if (key === "NEXT_PUBLIC_SITE_URL") continue
     const origin = normalizeOrigin(process.env[key])
     if (origin) return origin
   }
@@ -96,14 +156,14 @@ export async function resolveSiteOrigin(): Promise<string | null> {
       return `${protocol}://${requestHost}`
     }
 
-    return "http://localhost:3000"
+    return null
   }
 
   return null
 }
 
 export async function buildAuthCallbackUrl(nextPath: string): Promise<string | null> {
-  const origin = await resolveSiteOrigin()
+  const origin = resolveAuthConfirmationOrigin()
   if (!origin) return null
 
   const callbackUrl = new URL("/auth/callback", origin)
