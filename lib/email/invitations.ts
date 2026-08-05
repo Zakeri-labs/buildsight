@@ -2,20 +2,22 @@ import "server-only"
 
 import type { OrganizationRole } from "@/lib/db/types"
 import { roleLabel } from "@/lib/db/types"
+import { resolveInvitationEmailConfiguration } from "@/lib/email/config"
 
 export type InvitationEmailFailureCategory =
   | "missing_api_key"
   | "missing_sender"
   | "invalid_invitation_url"
+  | "invalid_sender"
   | "provider_rejected"
   | "provider_missing_id"
   | "network_error"
 
 export type InvitationEmailResult =
-  | { status: "accepted"; providerMessageId: string }
+  | { status: "sent"; providerMessageId: string }
   | { status: "not_configured"; category: "missing_api_key" | "missing_sender" }
   | {
-      status: "failed"
+      status: "provider_error"
       category: Exclude<InvitationEmailFailureCategory, "missing_api_key" | "missing_sender">
       providerStatus?: number
     }
@@ -65,22 +67,43 @@ function isSafeInvitationUrl(value: string): boolean {
 
 /**
  * Submit an organization invitation email through the project's existing
- * server-side Resend delivery architecture. "accepted" means Resend accepted
+ * server-side Resend delivery architecture. "sent" means Resend accepted
  * the API request and returned a provider message id; it does not prove inbox
  * delivery.
  */
 export async function sendInvitationEmail(input: InvitationEmailInput): Promise<InvitationEmailResult> {
-  const apiKey = process.env.RESEND_API_KEY?.trim()
-  if (!apiKey) return { status: "not_configured", category: "missing_api_key" }
+  const configuration = resolveInvitationEmailConfiguration()
+  const runtimeEnvironment = process.env.VERCEL_ENV || process.env.NODE_ENV || "unknown"
 
-  const from =
-    process.env.INVITATION_FROM_EMAIL?.trim() ||
-    process.env.SITE_VISIT_FROM_EMAIL?.trim() ||
-    process.env.REPORT_CC_FROM_EMAIL?.trim()
-  if (!from) return { status: "not_configured", category: "missing_sender" }
+  if (configuration.status === "not_configured") {
+    console.error("Invitation email configuration is unavailable", {
+      operation: "organization_invitation_email",
+      runtimeEnvironment,
+      hasResendApiKey: configuration.hasApiKey,
+      senderVariable: configuration.senderVariable,
+      senderResolved: false,
+      category: configuration.category,
+    })
+    return { status: "not_configured", category: configuration.category }
+  }
+
+  if (configuration.status === "invalid_sender") {
+    console.error("Invitation email sender format is invalid", {
+      operation: "organization_invitation_email",
+      runtimeEnvironment,
+      hasResendApiKey: configuration.hasApiKey,
+      senderVariable: configuration.senderVariable,
+      senderResolved: true,
+      senderFormatValid: false,
+      category: configuration.category,
+    })
+    return { status: "provider_error", category: "invalid_sender" }
+  }
+
+  const { apiKey, from, senderVariable } = configuration
 
   if (!isSafeInvitationUrl(input.invitationUrl)) {
-    return { status: "failed", category: "invalid_invitation_url" }
+    return { status: "provider_error", category: "invalid_invitation_url" }
   }
 
   const role = roleLabel(input.organizationRole)
@@ -151,29 +174,35 @@ export async function sendInvitationEmail(input: InvitationEmailInput): Promise<
 
     if (!response.ok) {
       console.error("Invitation email provider rejected request", {
+        operation: "organization_invitation_email",
         provider: "resend",
         status: response.status,
+        senderVariable,
       })
-      return { status: "failed", category: "provider_rejected", providerStatus: response.status }
+      return { status: "provider_error", category: "provider_rejected", providerStatus: response.status }
     }
 
     const payload = (await response.json().catch(() => null)) as { id?: unknown; error?: unknown } | null
     if (payload?.error || !isValidProviderMessageId(payload?.id)) {
       console.error("Invitation email provider response did not contain a valid message id", {
+        operation: "organization_invitation_email",
         provider: "resend",
         status: response.status,
+        senderVariable,
         validMessageId: false,
       })
-      return { status: "failed", category: "provider_missing_id", providerStatus: response.status }
+      return { status: "provider_error", category: "provider_missing_id", providerStatus: response.status }
     }
 
-    return { status: "accepted", providerMessageId: payload.id.trim() }
+    return { status: "sent", providerMessageId: payload.id.trim() }
   } catch (error) {
     console.error("Invitation email request failed", {
+      operation: "organization_invitation_email",
       provider: "resend",
+      senderVariable,
       category: "network_error",
       message: error instanceof Error ? error.message : "Unknown error",
     })
-    return { status: "failed", category: "network_error" }
+    return { status: "provider_error", category: "network_error" }
   }
 }

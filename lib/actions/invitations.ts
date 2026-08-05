@@ -24,7 +24,7 @@ export type ActionResult<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string }
 
-export type InvitationDeliveryStatus = "accepted" | "failed" | "not_configured"
+export type InvitationDeliveryStatus = "sent" | "provider_error" | "not_configured"
 export type InvitationDeliveryErrorCategory = InvitationEmailFailureCategory | "site_origin_unavailable"
 
 export type InvitationActionData = {
@@ -76,7 +76,7 @@ async function buildInvitationUrl(token: string): Promise<{ origin: string | nul
 }
 
 function mapEmailResult(result: InvitationEmailResult): Pick<InvitationActionData, "emailStatus" | "emailErrorCategory"> {
-  if (result.status === "accepted") return { emailStatus: "accepted" }
+  if (result.status === "sent") return { emailStatus: "sent" }
   return { emailStatus: result.status, emailErrorCategory: result.category }
 }
 
@@ -125,7 +125,7 @@ async function submitInvitationEmail(input: {
     })
     return {
       invitationUrl: null,
-      emailStatus: "failed",
+      emailStatus: "provider_error",
       emailErrorCategory: "site_origin_unavailable",
     }
   }

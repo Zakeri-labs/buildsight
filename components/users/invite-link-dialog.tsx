@@ -21,24 +21,24 @@ export type InviteResult = {
 }
 
 function deliveryCopy(result: InviteResult): { title: string; description: string } {
-  if (result.emailStatus === "accepted") {
+  if (result.emailStatus === "sent") {
     return {
       title: "Invitation email sent",
-      description: `Resend accepted the invitation email request for ${result.email}. This confirms provider submission, not final inbox delivery.`,
+      description: `Invitation email sent to ${result.email}.`,
     }
   }
 
   if (result.emailStatus === "not_configured") {
     return {
       title: "Invitation created",
-      description: `Email delivery is not configured, so no email was sent to ${result.email}. You can share the secure invitation link manually.`,
+      description: "Invitation email is not configured. The secure invitation link was created and can be shared manually.",
     }
   }
 
   const description =
     result.emailErrorCategory === "site_origin_unavailable"
-      ? `The invitation was created, but email was not sent because a trusted public site URL could not be resolved.`
-      : `The invitation was created, but the email request for ${result.email} was not accepted. You can retry or share the secure link manually.`
+      ? "The invitation was created, but email was not sent because a trusted public site URL could not be resolved."
+      : "The invitation was created, but the email provider rejected the message. Check the configured sender and email service settings, then retry."
 
   return { title: "Invitation created — email not sent", description }
 }
@@ -96,7 +96,7 @@ export function InviteLinkDialog({
           <DialogDescription className="text-pretty">{copy?.description}</DialogDescription>
         </DialogHeader>
 
-        {current?.emailStatus !== "accepted" && (
+        {current?.emailStatus !== "sent" && (
           <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
             <AlertCircle className="mt-0.5 size-4 shrink-0" />
             <p>The invitation remains pending. No membership has been created or accepted.</p>
@@ -137,7 +137,7 @@ export function InviteLinkDialog({
         {retryError && <p className="text-sm text-destructive">{retryError}</p>}
 
         <DialogFooter className="sm:justify-between">
-          {current && current.emailStatus !== "accepted" ? (
+          {current && current.emailStatus !== "sent" ? (
             <Button type="button" variant="outline" onClick={retryEmail} disabled={pending} className="bg-transparent">
               {pending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
               Retry email
