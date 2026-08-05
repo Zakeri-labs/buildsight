@@ -1,7 +1,6 @@
 import "server-only"
 import { cookies } from "next/headers"
-
-export const SELECTED_PROJECT_COOKIE = "bs_project"
+import { SELECTED_PROJECT_COOKIE } from "@/lib/project-scope-constants"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 const ALL_PROJECT_SCOPE_VALUES = new Set(["all", "null", "undefined"])

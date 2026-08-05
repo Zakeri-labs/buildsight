@@ -1,7 +1,14 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
+import { resolveDefaultLandingDestination } from "@/lib/auth/default-landing"
+import { ALL_PROJECTS_SCOPE_VALUE, SELECTED_PROJECT_COOKIE } from "@/lib/project-scope-constants"
 
 const PUBLIC_PATHS = ["/auth", "/invite", "/_next", "/favicon", "/api/health"]
+
+function preserveResponseCookies(source: NextResponse, target: NextResponse) {
+  source.cookies.getAll().forEach((cookie) => target.cookies.set(cookie))
+  return target
+}
 
 export async function updateSession(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -39,10 +46,35 @@ export async function updateSession(request: NextRequest) {
     const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p))
 
     if (!user && !isPublic) {
-      const url = request.nextUrl.clone()
-      url.pathname = "/auth/login"
-      url.searchParams.set("next", pathname)
-      return NextResponse.redirect(url)
+      const loginUrl = request.nextUrl.clone()
+      loginUrl.pathname = "/auth/login"
+      loginUrl.searchParams.set("next", pathname)
+      return preserveResponseCookies(supabaseResponse, NextResponse.redirect(loginUrl))
+    }
+
+    // Apply the role-based rule only to the default application root. Explicit
+    // invitation, confirmation, and protected deep-link destinations never pass
+    // through this branch, so their trusted `next` path remains authoritative.
+    if (user && pathname === "/") {
+      const landing = await resolveDefaultLandingDestination(user.id)
+
+      if (landing.mode === "supervisor") {
+        const calendarUrl = request.nextUrl.clone()
+        calendarUrl.pathname = landing.destination
+        calendarUrl.search = ""
+        return preserveResponseCookies(supabaseResponse, NextResponse.redirect(calendarUrl))
+      }
+
+      if (landing.mode === "admin") {
+        request.cookies.set(SELECTED_PROJECT_COOKIE, ALL_PROJECTS_SCOPE_VALUE)
+        const response = NextResponse.next({ request })
+        response.cookies.set(SELECTED_PROJECT_COOKIE, ALL_PROJECTS_SCOPE_VALUE, {
+          path: "/",
+          maxAge: 60 * 60 * 24 * 365,
+          sameSite: "lax",
+        })
+        return preserveResponseCookies(supabaseResponse, response)
+      }
     }
 
     return supabaseResponse
