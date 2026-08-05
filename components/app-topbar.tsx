@@ -7,6 +7,7 @@ import { ProfileAvatar } from "@/components/profile/profile-avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -89,43 +90,40 @@ export function AppTopbar({
         {/* Notifications */}
         <ReviewNotificationCenter initialFeed={notificationFeed} userId={currentUser.id} />
 
-        {/* User profile link & menu */}
-        <div className="flex items-center gap-1 rounded-xl p-0.5 hover:bg-muted/50">
-          <Link
-            href="/settings"
-            className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-muted"
-            title={t.settings.title}
-          >
-            <ProfileAvatar
-              name={currentUser.name}
-              email={currentUser.email}
-              avatarUrl={currentUser.avatarUrl}
-              size="md"
-              fallbackClassName="bg-primary text-primary-foreground"
-            />
-            <span className="hidden flex-col items-start leading-tight lg:flex">
-              <span className="text-sm font-semibold">{currentUser.name}</span>
-              <span className="text-xs text-muted-foreground">{userRoleLabel}</span>
-            </span>
-          </Link>
-
+        {/* User profile menu */}
+        <div className="flex items-center rounded-xl p-0.5 hover:bg-muted/50">
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
                 <button
                   type="button"
                   aria-label="User Menu"
-                  className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-muted"
                 >
-                  <ChevronDown className="size-4" />
+                  <ProfileAvatar
+                    name={currentUser.name}
+                    email={currentUser.email}
+                    avatarUrl={currentUser.avatarUrl}
+                    size="md"
+                    fallbackClassName="bg-primary text-primary-foreground"
+                  />
+                  <span className="hidden flex-col items-start leading-tight lg:flex">
+                    <span className="text-sm font-semibold">{currentUser.name}</span>
+                    <span className="text-xs text-muted-foreground">{userRoleLabel}</span>
+                  </span>
+                  <span className="flex size-8 items-center justify-center rounded-lg text-muted-foreground">
+                    <ChevronDown className="size-4" />
+                  </span>
                 </button>
               }
             />
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel className="flex flex-col">
-                <span>{currentUser.name}</span>
-                <span className="text-xs font-normal text-muted-foreground">{currentUser.email}</span>
-              </DropdownMenuLabel>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="flex flex-col">
+                  <span>{currentUser.name}</span>
+                  <span className="text-xs font-normal text-muted-foreground">{currentUser.email}</span>
+                </DropdownMenuLabel>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem render={<Link href="/settings">{t.settings.title}</Link>} />
               <DropdownMenuItem render={<Link href="/users">{t.settings.tabAccess}</Link>} />

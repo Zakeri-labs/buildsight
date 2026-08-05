@@ -62,7 +62,12 @@ export function MembersTab({
       setInviteOpen(false)
       setEmail("")
       setRole("org_member")
-      if (res.data) setInviteResult({ email, token: res.data.token, userExists: res.data.userExists })
+      if (res.data) {
+        setInviteResult({
+          ...res.data,
+          email: email.trim().toLowerCase(),
+        })
+      }
     })
   }
 
@@ -155,7 +160,11 @@ export function MembersTab({
         </CardContent>
       </Card>
 
-      <InviteLinkDialog result={inviteResult} onClose={() => setInviteResult(null)} />
+      <InviteLinkDialog
+        result={inviteResult}
+        onClose={() => setInviteResult(null)}
+        manualShareOnly
+      />
     </div>
   )
 }

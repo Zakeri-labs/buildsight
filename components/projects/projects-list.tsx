@@ -232,10 +232,12 @@ export function ProjectsList({
   projects = mockProjects,
   createdProjectId,
   canDeleteProjects = false,
+  canCreateProjects = false,
 }: {
   projects?: ProjectRow[]
   createdProjectId?: string
   canDeleteProjects?: boolean
+  canCreateProjects?: boolean
 }) {
   const { locale } = useI18n()
   const router = useRouter()
@@ -408,13 +410,15 @@ export function ProjectsList({
             <span>{locale === "ar" ? "تصدير" : "Export"}</span>
           </button>
 
-          <Link
-            href="/projects/new"
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-950 px-4 text-xs font-semibold text-white shadow-xs hover:bg-blue-900 active:bg-blue-950 dark:bg-blue-600 dark:hover:bg-blue-700"
-          >
-            <Plus className="size-4" />
-            <span>{locale === "ar" ? "+ مشروع جديد" : "+ New Project"}</span>
-          </Link>
+          {canCreateProjects ? (
+            <Link
+              href="/projects/new"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-950 px-4 text-xs font-semibold text-white shadow-xs hover:bg-blue-900 active:bg-blue-950 dark:bg-blue-600 dark:hover:bg-blue-700"
+            >
+              <Plus className="size-4" />
+              <span>{locale === "ar" ? "+ مشروع جديد" : "+ New Project"}</span>
+            </Link>
+          ) : null}
         </div>
       </div>
 

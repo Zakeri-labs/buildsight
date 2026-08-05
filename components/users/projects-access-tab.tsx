@@ -487,7 +487,12 @@ function AddOrganizationDialog({
           return
         }
         setOpen(false)
-        if (res.data) onInvite({ email: adminEmail, token: res.data.token, userExists: res.data.userExists })
+        if (res.data) {
+          onInvite({
+            ...res.data,
+            email: adminEmail.trim().toLowerCase(),
+          })
+        }
         reset()
       }
     })

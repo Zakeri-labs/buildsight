@@ -223,6 +223,17 @@ export async function audit(entry: {
   })
 }
 
+/** Read-only permission check for organization-admin-only controls. */
+export async function canAdministerOrganization(organizationId: string): Promise<boolean> {
+  try {
+    await assertOrgAdmin(organizationId)
+    return true
+  } catch (error) {
+    if (error instanceof AuthzError) return false
+    throw error
+  }
+}
+
 /** Read-only permission check for rendering project administration controls. */
 export async function canAdministerProject(projectId: string): Promise<boolean> {
   try {

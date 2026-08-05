@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertOrgAdmin, assertProjectAdmin, audit, AuthzError } from "@/lib/auth/guards"
-import { createInvitation } from "@/lib/actions/invitations"
+import { createInvitation, type InvitationActionData } from "@/lib/actions/invitations"
 import { createOrganization } from "@/lib/actions/organizations"
 import type { ProjectAccessRole, ProjectOrgRole } from "@/lib/db/types"
 import { PROJECT_ACCESS_ROLES, PROJECT_ORG_ROLES } from "@/lib/db/types"
@@ -773,6 +773,7 @@ export async function createProject(input: {
 }): Promise<ActionResult<{ id: string; ownerIds: string[] }>> {
   let createdProjectId: string | null = null
   try {
+    const actorId = await assertOrgAdmin(input.supervisingOrgId)
     const name = input.name.trim()
     if (name.length < 2) return { ok: false, error: "Project name is too short." }
     if (input.projectType && !isProjectTypeValue(input.projectType)) {
@@ -846,7 +847,6 @@ export async function createProject(input: {
       (coordinates.latitude != null && coordinates.longitude != null
         ? coordinateLabel(coordinates.latitude, coordinates.longitude)
         : null)
-    const actorId = await assertOrgAdmin(input.supervisingOrgId)
     const admin = createAdminClient()
 
     const { data: org } = await admin
@@ -1292,7 +1292,7 @@ export async function createOrgAndAddToProject(input: {
   organizationName: string
   projectRole: ProjectOrgRole
   adminEmail: string
-}): Promise<ActionResult<{ organizationId: string; token: string; userExists: boolean }>> {
+}): Promise<ActionResult<InvitationActionData & { organizationId: string }>> {
   try {
     // assertProjectAdmin also covers supervising-org admins of this project.
     await assertProjectAdmin(input.projectId)
@@ -1340,8 +1340,7 @@ export async function createOrgAndAddToProject(input: {
       ok: true,
       data: {
         organizationId,
-        token: inviteResult.data.token,
-        userExists: inviteResult.data.userExists,
+        ...inviteResult.data,
       },
     }
   } catch (err) {

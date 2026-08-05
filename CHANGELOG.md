@@ -1,3 +1,10 @@
+## 2026-08-05
+
+- Fixed organization invitation session isolation so signed-out/private browser requests no longer receive a fallback user identity.
+- Preserved invitation context through account switching, sign-in, sign-up, and email confirmation, then continued acceptance automatically.
+- Added atomic, server-validated invitation acceptance for organization and optional project memberships.
+- Database migration required: execute `scripts/sql/050_atomic_invitation_acceptance.sql`.
+
 ## 2026-08-03
 
 - Fixed atomic Site Visit scheduling and rescheduling, participant validation, and safe server errors.

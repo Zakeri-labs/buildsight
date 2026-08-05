@@ -2,6 +2,27 @@
 
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { safeNextPath } from "@/lib/auth/redirects"
+import { buildAuthCallbackUrl } from "@/lib/auth/site-origin"
+
+export async function getSignUpEmailRedirect(
+  nextPath: string,
+): Promise<{ url: string | null; error: string | null }> {
+  const next = safeNextPath(nextPath, "/onboarding")
+  const url = await buildAuthCallbackUrl(next)
+
+  if (!url) {
+    console.error(
+      "Unable to resolve a trusted public site origin for the Supabase email confirmation callback.",
+    )
+    return {
+      url: null,
+      error: "Email confirmation is not configured for this deployment. Please contact an administrator.",
+    }
+  }
+
+  return { url, error: null }
+}
 
 export async function signInWithPassword(
   email: string,
