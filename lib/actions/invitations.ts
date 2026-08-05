@@ -8,6 +8,7 @@ import { assertOrgAdmin, audit, AuthzError } from "@/lib/auth/guards"
 import { createClient } from "@/lib/supabase/server"
 import { authUserExistsByEmail } from "@/lib/auth/auth-users"
 import { resolveSiteOrigin } from "@/lib/auth/site-origin"
+import { resolveInvitationEmailConfiguration } from "@/lib/email/config"
 import {
   sendInvitationEmail,
   type InvitationEmailFailureCategory,
@@ -115,13 +116,26 @@ async function submitInvitationEmail(input: {
   emailStatus: InvitationDeliveryStatus
   emailErrorCategory?: InvitationDeliveryErrorCategory
 }> {
-  const { origin, url } = await buildInvitationUrl(input.token)
+  const { url } = await buildInvitationUrl(input.token)
 
   if (!url) {
+    const emailConfiguration = resolveInvitationEmailConfiguration()
     console.error("Invitation email not submitted because the trusted site origin is unavailable", {
-      email: redactEmail(input.email),
-      resolvedOrigin: origin,
-      production: process.env.NODE_ENV === "production",
+      operation: "organization_invitation_email",
+      failureCategory: "site_origin_unavailable",
+      providerHttpStatus: null,
+      runtimeEnvironment: process.env.VERCEL_ENV || process.env.NODE_ENV || "unknown",
+      environmentVariablesPresent: {
+        ...emailConfiguration.environmentPresence,
+        NEXT_PUBLIC_SITE_URL: Boolean(process.env.NEXT_PUBLIC_SITE_URL?.trim()),
+        NEXT_PUBLIC_APP_URL: Boolean(process.env.NEXT_PUBLIC_APP_URL?.trim()),
+        APP_URL: Boolean(process.env.APP_URL?.trim()),
+        SITE_URL: Boolean(process.env.SITE_URL?.trim()),
+        BASE_URL: Boolean(process.env.BASE_URL?.trim()),
+        VERCEL_PROJECT_PRODUCTION_URL: Boolean(process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim()),
+      },
+      selectedSenderVariable: emailConfiguration.senderVariable,
+      providerDetails: null,
     })
     return {
       invitationUrl: null,

@@ -2,7 +2,10 @@ import "server-only"
 
 import type { OrganizationRole } from "@/lib/db/types"
 import { roleLabel } from "@/lib/db/types"
-import { resolveInvitationEmailConfiguration } from "@/lib/email/config"
+import {
+  resolveInvitationEmailConfiguration,
+  type InvitationEmailConfiguration,
+} from "@/lib/email/config"
 
 export type InvitationEmailFailureCategory =
   | "missing_api_key"
@@ -65,6 +68,65 @@ function isSafeInvitationUrl(value: string): boolean {
   }
 }
 
+type ProviderPayload = {
+  id?: unknown
+  name?: unknown
+  message?: unknown
+  error?: unknown
+  statusCode?: unknown
+}
+
+function sanitizeProviderText(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  return trimmed
+    .replace(/\bBearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/\bre_[A-Za-z0-9_-]+\b/g, "[redacted-api-key]")
+    .replace(/https?:\/\/\S+/gi, "[redacted-url]")
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]")
+    .slice(0, 300)
+}
+
+function safeProviderErrorDetails(payload: ProviderPayload | null, rawBody: string): Record<string, string | number> | null {
+  const nestedError = payload?.error && typeof payload.error === "object"
+    ? (payload.error as { name?: unknown; message?: unknown })
+    : null
+  const details: Record<string, string | number> = {}
+  const name = sanitizeProviderText(payload?.name ?? nestedError?.name)
+  const message = sanitizeProviderText(
+    payload?.message ??
+      nestedError?.message ??
+      (typeof payload?.error === "string" ? payload.error : null) ??
+      rawBody,
+  )
+
+  if (name) details.name = name
+  if (message) details.message = message
+  if (typeof payload?.statusCode === "number") details.statusCode = payload.statusCode
+
+  return Object.keys(details).length ? details : null
+}
+
+function logInvitationEmailFailure(input: {
+  message: string
+  configuration: InvitationEmailConfiguration
+  category: InvitationEmailFailureCategory
+  providerStatus?: number
+  providerDetails?: Record<string, string | number> | null
+}) {
+  console.error(input.message, {
+    operation: "organization_invitation_email",
+    failureCategory: input.category,
+    providerHttpStatus: input.providerStatus ?? null,
+    runtimeEnvironment: process.env.VERCEL_ENV || process.env.NODE_ENV || "unknown",
+    environmentVariablesPresent: input.configuration.environmentPresence,
+    selectedSenderVariable: input.configuration.senderVariable,
+    providerDetails: input.providerDetails ?? null,
+  })
+}
+
 /**
  * Submit an organization invitation email through the project's existing
  * server-side Resend delivery architecture. "sent" means Resend accepted
@@ -73,36 +135,33 @@ function isSafeInvitationUrl(value: string): boolean {
  */
 export async function sendInvitationEmail(input: InvitationEmailInput): Promise<InvitationEmailResult> {
   const configuration = resolveInvitationEmailConfiguration()
-  const runtimeEnvironment = process.env.VERCEL_ENV || process.env.NODE_ENV || "unknown"
 
   if (configuration.status === "not_configured") {
-    console.error("Invitation email configuration is unavailable", {
-      operation: "organization_invitation_email",
-      runtimeEnvironment,
-      hasResendApiKey: configuration.hasApiKey,
-      senderVariable: configuration.senderVariable,
-      senderResolved: false,
+    logInvitationEmailFailure({
+      message: "Invitation email configuration is unavailable",
+      configuration,
       category: configuration.category,
     })
     return { status: "not_configured", category: configuration.category }
   }
 
   if (configuration.status === "invalid_sender") {
-    console.error("Invitation email sender format is invalid", {
-      operation: "organization_invitation_email",
-      runtimeEnvironment,
-      hasResendApiKey: configuration.hasApiKey,
-      senderVariable: configuration.senderVariable,
-      senderResolved: true,
-      senderFormatValid: false,
-      category: configuration.category,
+    logInvitationEmailFailure({
+      message: "Invitation email sender format is invalid",
+      configuration,
+      category: "invalid_sender",
     })
     return { status: "provider_error", category: "invalid_sender" }
   }
 
-  const { apiKey, from, senderVariable } = configuration
+  const { apiKey, from } = configuration
 
   if (!isSafeInvitationUrl(input.invitationUrl)) {
+    logInvitationEmailFailure({
+      message: "Invitation email contains an invalid public invitation URL",
+      configuration,
+      category: "invalid_invitation_url",
+    })
     return { status: "provider_error", category: "invalid_invitation_url" }
   }
 
@@ -172,36 +231,47 @@ export async function sendInvitationEmail(input: InvitationEmailInput): Promise<
       }),
     })
 
+    const rawBody = await response.text().catch(() => "")
+    let payload: ProviderPayload | null = null
+    if (rawBody) {
+      try {
+        payload = JSON.parse(rawBody) as ProviderPayload
+      } catch {
+        payload = null
+      }
+    }
+
     if (!response.ok) {
-      console.error("Invitation email provider rejected request", {
-        operation: "organization_invitation_email",
-        provider: "resend",
-        status: response.status,
-        senderVariable,
+      logInvitationEmailFailure({
+        message: "Invitation email provider rejected request",
+        configuration,
+        category: "provider_rejected",
+        providerStatus: response.status,
+        providerDetails: safeProviderErrorDetails(payload, rawBody),
       })
       return { status: "provider_error", category: "provider_rejected", providerStatus: response.status }
     }
 
-    const payload = (await response.json().catch(() => null)) as { id?: unknown; error?: unknown } | null
     if (payload?.error || !isValidProviderMessageId(payload?.id)) {
-      console.error("Invitation email provider response did not contain a valid message id", {
-        operation: "organization_invitation_email",
-        provider: "resend",
-        status: response.status,
-        senderVariable,
-        validMessageId: false,
+      logInvitationEmailFailure({
+        message: "Invitation email provider response did not contain a valid message id",
+        configuration,
+        category: "provider_missing_id",
+        providerStatus: response.status,
+        providerDetails: safeProviderErrorDetails(payload, rawBody),
       })
       return { status: "provider_error", category: "provider_missing_id", providerStatus: response.status }
     }
 
     return { status: "sent", providerMessageId: payload.id.trim() }
   } catch (error) {
-    console.error("Invitation email request failed", {
-      operation: "organization_invitation_email",
-      provider: "resend",
-      senderVariable,
+    logInvitationEmailFailure({
+      message: "Invitation email request failed",
+      configuration,
       category: "network_error",
-      message: error instanceof Error ? error.message : "Unknown error",
+      providerDetails: {
+        message: sanitizeProviderText(error instanceof Error ? error.message : "Unknown error") ?? "Unknown error",
+      },
     })
     return { status: "provider_error", category: "network_error" }
   }
