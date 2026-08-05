@@ -1,11 +1,18 @@
 import { createClient } from "@/lib/supabase/server"
 import { safeNextPath } from "@/lib/auth/redirects"
+import { resolveSiteOrigin } from "@/lib/auth/site-origin"
 import { NextRequest, NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = request.nextUrl
+  const { searchParams } = request.nextUrl
+  const origin = await resolveSiteOrigin()
+
+  if (!origin) {
+    console.error("Auth callback could not resolve a trusted site origin for this deployment.")
+    return NextResponse.json({ error: "Authentication callback is not configured." }, { status: 500 })
+  }
   const code = searchParams.get("code")
   const next = safeNextPath(searchParams.get("next"), "/")
 

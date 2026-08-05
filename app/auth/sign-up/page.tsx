@@ -5,6 +5,7 @@ import { useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { getSignUpEmailRedirect } from "@/lib/actions/auth"
 import { isInvitationPath, safeNextPath } from "@/lib/auth/redirects"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -32,19 +33,19 @@ function SignUpCard() {
     setError(null)
 
     try {
-      const supabase = createClient()
-      const callbackUrl = new URL(
-        process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ?? "/auth/callback",
-        window.location.origin,
-      )
-      callbackUrl.searchParams.set("next", next)
+      const callback = await getSignUpEmailRedirect(next)
+      if (!callback.url) {
+        setError(callback.error ?? "Unable to prepare email confirmation for this deployment.")
+        return
+      }
 
+      const supabase = createClient()
       const normalizedEmail = email.trim().toLowerCase()
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: normalizedEmail,
         password,
         options: {
-          emailRedirectTo: callbackUrl.toString(),
+          emailRedirectTo: callback.url,
           data: { full_name: fullName.trim() },
         },
       })
