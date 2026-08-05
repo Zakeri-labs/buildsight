@@ -1,4 +1,4 @@
-import { CalendarCheck2, CalendarClock, MessageSquareClock } from "lucide-react"
+import { CalendarCheck2, CalendarClock, MessageSquare } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -7,7 +7,7 @@ const summaries = [
   {
     label: "Pending Client Requests",
     value: 0,
-    icon: MessageSquareClock,
+    icon: MessageSquare,
     prominent: true,
   },
   {
