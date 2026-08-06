@@ -3,6 +3,7 @@ import { ProjectCreateForm } from "@/components/projects/project-create-form"
 import { requireOnboarded } from "@/lib/auth/session"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { canAdministerOrganization } from "@/lib/auth/guards"
+import { isProjectSupervisorOrganizationRole } from "@/lib/projects/supervisor-candidates"
 
 export async function ProjectCreateContent() {
   const session = await requireOnboarded()
@@ -60,7 +61,7 @@ export async function ProjectCreateContent() {
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
   const supervisorOptions = userOptions.filter((user) =>
-    user.organizationRole === "org_admin" || user.organizationRole === "org_manager",
+    isProjectSupervisorOrganizationRole(user.organizationRole),
   )
 
   const organizationIds = Array.from(

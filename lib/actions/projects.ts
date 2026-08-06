@@ -20,6 +20,7 @@ import {
   type SupervisionTypeValue,
 } from "@/lib/projects/project-options"
 import { validateOwnerIdCardFile } from "@/lib/projects/owner-id-card"
+import { isProjectSupervisorOrganizationRole } from "@/lib/projects/supervisor-candidates"
 import {
   calculateProjectOutstandingAmount,
   normalizeOptionalProjectAmount,
@@ -49,6 +50,7 @@ export type ProjectDeletionImpact = {
 }
 
 const MAX_SUPERVISION_TYPE_OTHER_LENGTH = 150
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 const PROJECT_STATUS_VALUES = new Set([
   "active",
@@ -863,6 +865,9 @@ export async function createProject(input: {
     const requestedAssigneeIds = Array.from(
       new Set([assignedUserId, assignedSupervisorId].filter((value): value is string => Boolean(value))),
     )
+    if (requestedAssigneeIds.some((userId) => !UUID_PATTERN.test(userId))) {
+      return { ok: false, error: "One of the selected project users is no longer available." }
+    }
     if (requestedAssigneeIds.length) {
       const { data: assigneeMemberships, error: assigneeMembershipError } = await admin
         .from("organization_memberships")
@@ -880,9 +885,9 @@ export async function createProject(input: {
       }
       if (
         assignedSupervisorId &&
-        !["org_admin", "org_manager"].includes(membershipByUser.get(assignedSupervisorId) ?? "")
+        !isProjectSupervisorOrganizationRole(membershipByUser.get(assignedSupervisorId))
       ) {
-        return { ok: false, error: "Select an organization administrator or manager as supervisor." }
+        return { ok: false, error: "Select an active organization administrator, manager, or member as supervisor." }
       }
     }
 
