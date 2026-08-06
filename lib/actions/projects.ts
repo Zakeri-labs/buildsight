@@ -10,7 +10,7 @@ import type { ProjectAccessRole, ProjectOrgRole } from "@/lib/db/types"
 import { PROJECT_ACCESS_ROLES, PROJECT_ORG_ROLES } from "@/lib/db/types"
 import type { ActionResult } from "@/lib/actions/invitations"
 import { coordinateLabel } from "@/lib/locations/types"
-import { SELECTED_PROJECT_COOKIE } from "@/lib/project-scope"
+import { ALL_PROJECTS_SCOPE_VALUE, SELECTED_PROJECT_COOKIE } from "@/lib/project-scope-constants"
 import {
   isProjectPriorityValue,
   isProjectTypeValue,
@@ -297,7 +297,7 @@ export async function deleteProject(input: {
 
     const cookieStore = await cookies()
     if (cookieStore.get(SELECTED_PROJECT_COOKIE)?.value === input.projectId) {
-      cookieStore.set(SELECTED_PROJECT_COOKIE, "all", {
+      cookieStore.set(SELECTED_PROJECT_COOKIE, ALL_PROJECTS_SCOPE_VALUE, {
         path: "/",
         maxAge: 60 * 60 * 24 * 365,
         sameSite: "lax",
