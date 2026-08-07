@@ -1313,11 +1313,25 @@ export function ProjectCreateForm({
             ) : null}
 
             {step === 2 ? (
-              <div className="space-y-5">
-                <div className="flex justify-end">
+              <div className="space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="w-full space-y-2 sm:max-w-xs">
+                    <Label htmlFor="owner-count">{copy.ownerCount}</Label>
+                    <Select value={String(owners.length)} onValueChange={(value) => setOwnerCount(Number(value ?? 1))} disabled={pending}>
+                      <SelectTrigger id="owner-count" className="h-10 w-full">
+                        <SelectValue>{(value) => String(value ?? owners.length)}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: MAX_OWNERS }, (_, index) => index + 1).map((count) => (
+                          <SelectItem key={count} value={String(count)}>{count}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   <Button
                     variant="outline"
-                    className="h-10 bg-transparent"
+                    className="h-10 w-full bg-transparent sm:w-auto"
                     disabled={pending}
                     render={
                       <Link href="/users?tab=members" target="_blank" rel="noopener noreferrer">
@@ -1325,20 +1339,6 @@ export function ProjectCreateForm({
                       </Link>
                     }
                   />
-                </div>
-
-                <div className="max-w-xs space-y-2">
-                  <Label htmlFor="owner-count">{copy.ownerCount}</Label>
-                  <Select value={String(owners.length)} onValueChange={(value) => setOwnerCount(Number(value ?? 1))} disabled={pending}>
-                    <SelectTrigger id="owner-count" className="h-10 w-full">
-                      <SelectValue>{(value) => String(value ?? owners.length)}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: MAX_OWNERS }, (_, index) => index + 1).map((count) => (
-                        <SelectItem key={count} value={String(count)}>{count}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
 
                 <div className="grid gap-4 lg:grid-cols-2">
