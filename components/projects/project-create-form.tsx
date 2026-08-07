@@ -39,6 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ProjectLocationField } from "@/components/projects/project-location-field"
+import { ProjectOwnerVisitorSelector } from "@/components/projects/project-owner-visitor-selector"
 import {
   ProjectFinancialFields,
   type ProjectFinancialFormValues,
@@ -82,6 +83,7 @@ import {
   validateProjectImageFile,
 } from "@/lib/projects/project-image"
 import { validateProjectFinancialForm } from "@/lib/projects/project-financial"
+import type { ProjectOwnerVisitorOption } from "@/lib/actions/project-owner-visitors"
 import { cn } from "@/lib/utils"
 
 type OwnerDetails = {
@@ -200,6 +202,7 @@ export function ProjectCreateForm({
   const [assignedUserId, setAssignedUserId] = useState("")
   const [assignedSupervisorId, setAssignedSupervisorId] = useState("")
   const [owners, setOwners] = useState<OwnerDetails[]>([emptyOwner()])
+  const [selectedOwnerVisitor, setSelectedOwnerVisitor] = useState<ProjectOwnerVisitorOption | null>(null)
   const [contractorOrganizationId, setContractorOrganizationId] = useState("")
   const [contractorCompanyName, setContractorCompanyName] = useState("")
   const [contractorRegistrationNumber, setContractorRegistrationNumber] = useState("")
@@ -314,6 +317,14 @@ export function ProjectCreateForm({
         description: "وصف المشروع",
         descriptionPlaceholder: "نبذة مختصرة عن نطاق المشروع وأهدافه",
         ownerCount: "عدد المالكين",
+        selectExistingVisitor: "اختيار زائر مسجل",
+        selectExistingVisitorPlaceholder: "اختر زائرًا مسجلًا",
+        enterOwnerManually: "إدخال بيانات المالك يدويًا",
+        inviteNewVisitor: "دعوة زائر جديد",
+        searchVisitors: "البحث بالاسم أو البريد أو الهاتف",
+        loadingVisitors: "جارٍ تحديث الزوار…",
+        noVisitors: "لا يوجد زوار مسجلون مطابقون.",
+        retryVisitors: "إعادة المحاولة",
         owner: "المالك",
         ownerName: "اسم المالك",
         ownerNamePlaceholder: "اسم المالك أو الجهة",
@@ -410,6 +421,14 @@ export function ProjectCreateForm({
         description: "Project Description",
         descriptionPlaceholder: "Briefly describe the project scope and objectives",
         ownerCount: "Number of Owners",
+        selectExistingVisitor: "Select Existing Visitor",
+        selectExistingVisitorPlaceholder: "Select a registered visitor",
+        enterOwnerManually: "Enter Owner details manually",
+        inviteNewVisitor: "Invite New Visitor",
+        searchVisitors: "Search name, email, or phone",
+        loadingVisitors: "Refreshing visitors…",
+        noVisitors: "No registered visitors found.",
+        retryVisitors: "Retry",
         owner: "Owner",
         ownerName: "Owner Name",
         ownerNamePlaceholder: "Owner or client organization",
@@ -471,6 +490,27 @@ export function ProjectCreateForm({
     setOwners((current) => current.map((owner, ownerIndex) => (
       ownerIndex === index ? { ...owner, [field]: value } : owner
     )))
+    setError(null)
+  }
+
+  function selectOwnerVisitor(visitor: ProjectOwnerVisitorOption) {
+    setSelectedOwnerVisitor(visitor)
+    setOwners((current) => current.map((owner, index) => (
+      index === 0
+        ? {
+            ...owner,
+            name: visitor.organizationName || visitor.name,
+            contactName: visitor.name,
+            contactEmail: visitor.email,
+            contactPhone: visitor.phone,
+          }
+        : owner
+    )))
+    setError(null)
+  }
+
+  function useManualOwnerEntry() {
+    setSelectedOwnerVisitor(null)
     setError(null)
   }
 
@@ -1265,6 +1305,24 @@ export function ProjectCreateForm({
 
             {step === 2 ? (
               <div className="space-y-5">
+                <ProjectOwnerVisitorSelector
+                  supervisingOrgId={supervisingOrg.id}
+                  selectedVisitor={selectedOwnerVisitor}
+                  onSelectVisitor={selectOwnerVisitor}
+                  onManualEntry={useManualOwnerEntry}
+                  disabled={pending}
+                  labels={{
+                    label: copy.selectExistingVisitor,
+                    placeholder: copy.selectExistingVisitorPlaceholder,
+                    manual: copy.enterOwnerManually,
+                    invite: copy.inviteNewVisitor,
+                    search: copy.searchVisitors,
+                    loading: copy.loadingVisitors,
+                    empty: copy.noVisitors,
+                    retry: copy.retryVisitors,
+                  }}
+                />
+
                 <div className="max-w-xs space-y-2">
                   <Label htmlFor="owner-count">{copy.ownerCount}</Label>
                   <Select value={String(owners.length)} onValueChange={(value) => setOwnerCount(Number(value ?? 1))} disabled={pending}>
