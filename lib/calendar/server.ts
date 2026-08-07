@@ -15,7 +15,7 @@ export const CALENDAR_PENDING_REQUEST_STATUS = "pending" as const
 const SCHEDULED_VISIT_STATUSES = ["scheduled"] as const
 const TODAY_VISIT_STATUSES = ["scheduled", "completed"] as const
 const CALENDAR_VISIT_STATUSES = ["scheduled", "completed", "cancelled"] as const
-const CALENDAR_REQUEST_COLUMNS = "id, project_id, requested_by, client_request_id, status, preferred_date, is_asap, preferred_time, purpose, notes, scheduled_date, scheduled_time, created_at"
+const CALENDAR_REQUEST_COLUMNS = "id, project_id, requested_by, client_request_id, status, preferred_date, is_asap, preferred_time, purpose, notes, scheduled_date, scheduled_time, report_visit_number, created_at"
 
 export type CalendarProjectAccessMode = "admin" | "supervisor"
 export type CalendarProjectScopeRow = {

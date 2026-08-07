@@ -7,7 +7,6 @@ import {
   resolveCalendarProjectScope,
   resolveExplicitSupervisorProjectScope,
 } from "@/lib/calendar/server"
-import { loadNextProjectVisitNumber } from "@/lib/db/project-stages"
 import type { MemberHomepageData, MemberHomepageRequest, MemberHomepageVisit } from "@/lib/member-homepage/types"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient as createServerClient } from "@/lib/supabase/server"
@@ -223,25 +222,16 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
       )
       requiredReportsToday = visitRows.length
 
-      const visitNumberProjectIds = Array.from(new Set(visitRows.map((row: any) => row.project_id as string)))
-      const visitNumberByProjectId = new Map<string, number | null>()
-
-      await Promise.all(visitNumberProjectIds.map(async (projectId) => {
-        try {
-          visitNumberByProjectId.set(projectId, await loadNextProjectVisitNumber(projectId))
-        } catch (error) {
-          logLoadError("Stage Report Visit Number", userId, visitProjects.length, error)
-          visitNumberByProjectId.set(projectId, null)
-        }
-      }))
-
       const reportObligations = visitRows.map((row: any) => {
         const stage = unansweredStageByProjectId.get(row.project_id) ?? null
+        const reservedVisitNumber = Number.isInteger(row.report_visit_number) && row.report_visit_number > 0
+          ? row.report_visit_number as number
+          : null
         return {
           siteVisitRequestId: row.id as string,
           projectId: row.project_id as string,
           stageId: stage?.id ?? null,
-          visitNumber: visitNumberByProjectId.get(row.project_id) ?? null,
+          visitNumber: reservedVisitNumber,
         }
       })
 
@@ -317,7 +307,10 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
         const linkedVisitNumber = linkedReportMatchesProject && Number.isInteger(linkedReport?.visit_number) && linkedReport.visit_number > 0
           ? linkedReport.visit_number as number
           : null
-        const visitNumber = isCompleted ? linkedVisitNumber : visitNumberByProjectId.get(row.project_id) ?? null
+        const reservedVisitNumber = Number.isInteger(row.report_visit_number) && row.report_visit_number > 0
+          ? row.report_visit_number as number
+          : null
+        const visitNumber = isCompleted ? linkedVisitNumber ?? reservedVisitNumber : reservedVisitNumber
         const hasCoordinates = project.latitude !== null && project.longitude !== null
         const googleMapsUrl = hasCoordinates
           ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${project.latitude},${project.longitude}`)}`

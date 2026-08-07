@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { assertProjectAdmin, assertProjectMember, assertProjectReviewer, audit, AuthzError } from "@/lib/auth/guards"
 import { resolveCalendarProjectScope } from "@/lib/calendar/server"
+import { loadNextProjectVisitNumber } from "@/lib/db/project-stages"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 import {
@@ -401,10 +402,12 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       ? existing.site_visit_request_id
       : null)
 
+    let siteVisitReportVisitNumber: number | null = null
     if (siteVisitRequestId) {
+      await assertLinkedSiteVisitCompletionAuthority(actorId, input.projectId)
       const { data: siteVisit, error: siteVisitError } = await admin
         .from("site_visit_requests")
-        .select("id, project_id, status")
+        .select("id, project_id, status, report_visit_number")
         .eq("id", siteVisitRequestId)
         .eq("project_id", input.projectId)
         .maybeSingle()
@@ -412,9 +415,25 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       if (!siteVisit || !["scheduled", "completed"].includes(siteVisit.status)) {
         return { ok: false, error: "This Site Visit is not available for the selected project." }
       }
-    }
-    if (input.submit && directStage && siteVisitRequestId) {
-      await assertLinkedSiteVisitCompletionAuthority(actorId, input.projectId)
+      if (!Number.isInteger(siteVisit.report_visit_number) || siteVisit.report_visit_number <= 0) {
+        return { ok: false, error: "This Site Visit does not have a valid Report Visit Number." }
+      }
+      siteVisitReportVisitNumber = siteVisit.report_visit_number
+      const { data: reportForSiteVisit, error: reportForSiteVisitError } = await admin
+        .from("term_responses")
+        .select("id, project_id, project_stage_id, visit_number")
+        .eq("site_visit_request_id", siteVisitRequestId)
+        .maybeSingle()
+      if (reportForSiteVisitError) throw reportForSiteVisitError
+      if (reportForSiteVisit && reportForSiteVisit.id !== input.responseId) {
+        return { ok: false, error: "This Site Visit already has a Stage Report." }
+      }
+      if (!existing && siteVisit.status === "completed") {
+        return { ok: false, error: "This Site Visit has already been completed." }
+      }
+      if (existing?.site_visit_request_id === siteVisitRequestId && existing.visit_number !== siteVisitReportVisitNumber) {
+        return { ok: false, error: "The linked Site Visit and Report Visit Number do not match." }
+      }
     }
     if (existing && existing.project_stage_id !== projectStageId) {
       return { ok: false, error: "This report does not belong to the selected stage." }
@@ -471,7 +490,7 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       : input.saveStatus === "in_progress" ? "in_progress" : "draft"
     const now = new Date().toISOString()
     let reportNumber = existing?.report_number ?? reportNumberCandidates(input.responseId)[0]
-    let assignedVisitNumber = existing?.visit_number ?? 1
+    let assignedVisitNumber = existing?.visit_number ?? siteVisitReportVisitNumber ?? 1
 
     if (existing) {
       const updatePayload: Record<string, unknown> = {
@@ -494,14 +513,7 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         throw error
       }
     } else {
-      const { data: maxVisit } = await admin
-        .from("term_responses")
-        .select("visit_number")
-        .eq("project_id", input.projectId)
-        .order("visit_number", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      assignedVisitNumber = (maxVisit?.visit_number ?? 0) + 1
+      assignedVisitNumber = siteVisitReportVisitNumber ?? await loadNextProjectVisitNumber(input.projectId)
       const formattedVisitNo = String(assignedVisitNumber).padStart(3, "0")
 
       const { data: proj } = await admin

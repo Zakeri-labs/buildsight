@@ -1,8 +1,9 @@
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { InspectionReportForm } from "@/components/stages/inspection-report-form"
 import { requireOnboarded } from "@/lib/auth/session"
-import { loadNextProjectVisitNumber, loadProjectStage } from "@/lib/db/project-stages"
+import { loadNextProjectVisitNumber, loadProjectStage, loadSiteVisitReportContext } from "@/lib/db/project-stages"
 import { loadProjectParticipantsOnly } from "@/lib/report-cc/server"
+import { resolveCalendarProjectScope } from "@/lib/calendar/server"
 
 export default async function NewStageReportPage({
   params,
@@ -13,12 +14,26 @@ export default async function NewStageReportPage({
 }) {
   const [{ projectId, stageId }, query, session] = await Promise.all([params, searchParams, requireOnboarded()])
   const rawSiteVisitRequestId = Array.isArray(query.siteVisitRequestId) ? query.siteVisitRequestId[0] : query.siteVisitRequestId
-  const siteVisitRequestId = typeof rawSiteVisitRequestId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawSiteVisitRequestId)
-    ? rawSiteVisitRequestId
+  const hasSiteVisitRequestId = typeof rawSiteVisitRequestId === "string" && rawSiteVisitRequestId.trim().length > 0
+  const siteVisitRequestId = hasSiteVisitRequestId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawSiteVisitRequestId!)
+    ? rawSiteVisitRequestId!.trim()
     : null
+  if (hasSiteVisitRequestId && !siteVisitRequestId) notFound()
   const data = await loadProjectStage(projectId, stageId, session.userId)
   if (!data || data.stage.status === "disabled") notFound()
-  const [ccCandidates, nextVisitNumber] = await Promise.all([loadProjectParticipantsOnly(projectId), loadNextProjectVisitNumber(projectId)])
+
+  const reportScope = siteVisitRequestId ? await resolveCalendarProjectScope(session.userId) : []
+  if (siteVisitRequestId && !reportScope.some((project) => project.id === projectId)) notFound()
+
+  const [ccCandidates, siteVisitContext] = await Promise.all([
+    loadProjectParticipantsOnly(projectId),
+    siteVisitRequestId ? loadSiteVisitReportContext(projectId, siteVisitRequestId) : Promise.resolve(null),
+  ])
+  if (siteVisitRequestId && !siteVisitContext) notFound()
+  if (siteVisitContext?.linkedReport) {
+    redirect(`/projects/${projectId}/stages/${siteVisitContext.linkedReport.projectStageId}/reports/${siteVisitContext.linkedReport.id}`)
+  }
+  const nextVisitNumber = siteVisitContext?.visitNumber ?? await loadNextProjectVisitNumber(projectId)
   const currentUserPerson = {
     id: session.userId,
     name: session.profile?.full_name || session.email.split("@")[0] || "User",

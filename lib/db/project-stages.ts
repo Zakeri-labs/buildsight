@@ -756,16 +756,72 @@ export async function loadProjectStageTerm(projectId: string, termId: string, us
 }
 
 export async function loadNextProjectVisitNumber(projectId: string) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) {
+    throw new Error("Invalid project identifier.")
+  }
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from("term_responses")
-    .select("visit_number")
+  const [reportResult, siteVisitResult] = await Promise.all([
+    admin
+      .from("term_responses")
+      .select("visit_number")
+      .eq("project_id", projectId)
+      .order("visit_number", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from("site_visit_requests")
+      .select("report_visit_number")
+      .eq("project_id", projectId)
+      .not("report_visit_number", "is", null)
+      .order("report_visit_number", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
+  if (reportResult.error) throw reportResult.error
+  if (siteVisitResult.error) throw siteVisitResult.error
+  const reportMax = Number.isInteger(reportResult.data?.visit_number) ? reportResult.data!.visit_number : 0
+  const reservedMax = Number.isInteger(siteVisitResult.data?.report_visit_number) ? siteVisitResult.data!.report_visit_number : 0
+  return Math.max(reportMax, reservedMax) + 1
+}
+
+export async function loadSiteVisitReportContext(projectId: string, siteVisitRequestId: string) {
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  if (!uuidPattern.test(projectId) || !uuidPattern.test(siteVisitRequestId)) return null
+
+  const admin = createAdminClient()
+  const { data: visit, error: visitError } = await admin
+    .from("site_visit_requests")
+    .select("id, project_id, status, report_visit_number")
+    .eq("id", siteVisitRequestId)
     .eq("project_id", projectId)
-    .order("visit_number", { ascending: false })
-    .limit(1)
     .maybeSingle()
-  if (error) throw error
-  return (data?.visit_number ?? 0) + 1
+  if (visitError) throw visitError
+  if (!visit || !["scheduled", "completed"].includes(visit.status)) return null
+  if (!Number.isInteger(visit.report_visit_number) || visit.report_visit_number <= 0) {
+    throw new Error("This Site Visit does not have a valid Report Visit Number.")
+  }
+
+  const { data: linkedReport, error: linkedReportError } = await admin
+    .from("term_responses")
+    .select("id, project_stage_id, visit_number, status")
+    .eq("site_visit_request_id", siteVisitRequestId)
+    .maybeSingle()
+  if (linkedReportError) throw linkedReportError
+
+  return {
+    id: visit.id as string,
+    projectId: visit.project_id as string,
+    status: visit.status as string,
+    visitNumber: visit.report_visit_number as number,
+    linkedReport: linkedReport
+      ? {
+          id: linkedReport.id as string,
+          projectStageId: linkedReport.project_stage_id as string,
+          visitNumber: linkedReport.visit_number as number,
+          status: linkedReport.status as string,
+        }
+      : null,
+  }
 }
 
 export async function loadDirectProjectStageReport(projectId: string, stageId: string, reportId: string, userId: string) {
