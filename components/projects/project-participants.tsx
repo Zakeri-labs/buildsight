@@ -157,7 +157,7 @@ function UserPicker({
   return (
     <div className="space-y-2">
       <Label>Select User</Label>
-      <div className="relative">
+      <div>
         <Button
           type="button"
           variant="outline"
@@ -183,7 +183,7 @@ function UserPicker({
         </Button>
 
         {open ? (
-          <div className="absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-lg border bg-popover shadow-lg">
+          <div className="mt-1 overflow-hidden rounded-lg border bg-popover shadow-lg">
             <div className="relative border-b p-2">
               <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -197,7 +197,7 @@ function UserPicker({
                 }}
               />
             </div>
-            <div className="max-h-56 overflow-y-auto p-1.5">
+            <div className="max-h-[min(18rem,42dvh)] overflow-y-auto overscroll-contain p-1.5">
               {filteredUsers.length === 0 ? (
                 <p className="px-3 py-5 text-center text-sm text-muted-foreground">No matching users found.</p>
               ) : (
@@ -389,13 +389,24 @@ function AddParticipantDialog({ projectId, users }: { projectId: string; users: 
           </Button>
         }
       />
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent
+        className={cn(
+          "max-h-[calc(100dvh-2rem)] sm:max-w-lg",
+          participantType &&
+            "h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:h-[min(42rem,calc(100dvh-3rem))]",
+        )}
+      >
         <DialogHeader>
           <DialogTitle>Add Participant</DialogTitle>
           <DialogDescription>Add a registered user or an external contractor contact to this project.</DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[65vh] space-y-4 overflow-y-auto px-0.5 py-1">
+        <div
+          className={cn(
+            "space-y-4 overflow-y-auto overscroll-contain px-0.5 py-1",
+            participantType ? "min-h-0" : "max-h-[65vh]",
+          )}
+        >
           <div className="space-y-2">
             <Label>Participant Type</Label>
             <Select value={participantType} onValueChange={(value) => changeParticipantType((value ?? "") as AddParticipantType | "")} disabled={pending}>
