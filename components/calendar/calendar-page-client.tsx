@@ -9,6 +9,7 @@ import { ClientVisitRequestsPanel } from "@/components/calendar/client-visit-req
 import { MobileWeeklyCalendar } from "@/components/calendar/mobile-weekly-calendar"
 import { MonthlyCalendar } from "@/components/calendar/monthly-calendar"
 import { ScheduleSiteVisitDialog } from "@/components/calendar/schedule-site-visit-dialog"
+import { SiteVisitRequestDialog } from "@/components/site-visits/site-visit-request-dialog"
 import { useCurrentUser } from "@/components/current-user-provider"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -51,6 +52,7 @@ export function CalendarPageClient({
 }) {
   const currentUser = useCurrentUser()
   const isMember = currentUser.role === "org_member"
+  const isViewer = currentUser.role === "viewer"
   const [today] = useState(() => new Date())
   const [currentMonth, setCurrentMonth] = useState(() => monthStart(new Date()))
   const [mobileSelectedDate, setMobileSelectedDate] = useState(() => new Date())
@@ -230,16 +232,25 @@ export function CalendarPageClient({
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Calendar</h1>
         <p className="mt-1 text-sm text-muted-foreground">Manage scheduled site visits and client visit requests.</p>
       </div>
-      <Button
-        type="button"
-        size="lg"
-        disabled={!data.scheduling.canSchedule}
-        aria-disabled={!data.scheduling.canSchedule}
-        onClick={() => openScheduleDialog(localDateKey(new Date()))}
-      >
-        <CalendarPlus data-icon="inline-start" aria-hidden="true" />
-        Schedule Visit
-      </Button>
+      {isViewer ? (
+        data.requesting.canRequest ? (
+          <SiteVisitRequestDialog
+            projects={data.requesting.projects}
+            triggerLabel="Request Site Visit"
+          />
+        ) : null
+      ) : (
+        <Button
+          type="button"
+          size="lg"
+          disabled={!data.scheduling.canSchedule}
+          aria-disabled={!data.scheduling.canSchedule}
+          onClick={() => openScheduleDialog(localDateKey(new Date()))}
+        >
+          <CalendarPlus data-icon="inline-start" aria-hidden="true" />
+          Schedule Visit
+        </Button>
+      )}
     </header>
   )
 

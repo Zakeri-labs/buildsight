@@ -360,7 +360,7 @@ export async function createDirectSiteVisitAction(input: {
   }
 
   let actorId = "unknown"
-  let accessMode: "admin" | "supervisor" | "none" = "none"
+  let accessMode: "admin" | "supervisor" | "viewer_owner" | "none" = "none"
   try {
     actorId = await getUserIdOrThrow()
     const projectScope = await resolveCalendarProjectScope(actorId)
@@ -370,6 +370,9 @@ export async function createDirectSiteVisitAction(input: {
     }
 
     accessMode = scopedProject.accessMode
+    if (accessMode === "viewer_owner") {
+      throw new AuthzError("Viewer Owners may request a Site Visit but cannot schedule one directly.")
+    }
     if (accessMode === "supervisor" && scopedProject.assignedSupervisorId !== actorId) {
       throw new AuthzError("You are not the assigned Supervisor for this project.")
     }
@@ -500,6 +503,9 @@ async function resolveCalendarClientRequestForAction(requestId: string) {
   const projectScope = await resolveCalendarProjectScope(actorId)
   const scopedProject = projectScope.find((project) => project.id === request.project_id)
   if (!scopedProject) throw new AuthzError("You do not have permission to manage this Client Visit Request.")
+  if (scopedProject.accessMode === "viewer_owner") {
+    throw new AuthzError("Viewer Owners may request Site Visits but cannot approve, schedule, or reject Client Visit Requests.")
+  }
   if (scopedProject.accessMode === "supervisor" && scopedProject.assignedSupervisorId !== actorId) {
     throw new AuthzError("You are not the assigned Project Supervisor for this project.")
   }
@@ -528,7 +534,7 @@ export async function approveCalendarClientVisitRequestAction(input: {
   }
 
   let projectId = "unknown"
-  let authorizationMode: "admin" | "supervisor" | "none" = "none"
+  let authorizationMode: "admin" | "supervisor" | "viewer_owner" | "none" = "none"
   try {
     const { actorId, admin, request, projectScope, scopedProject } = await resolveCalendarClientRequestForAction(input.requestId)
     projectId = request.project_id
@@ -605,7 +611,7 @@ export async function rejectCalendarClientVisitRequestAction(input: {
   if (!UUID_PATTERN.test(input.requestId)) return { ok: false, error: "Invalid Client Visit Request." }
 
   let projectId = "unknown"
-  let authorizationMode: "admin" | "supervisor" | "none" = "none"
+  let authorizationMode: "admin" | "supervisor" | "viewer_owner" | "none" = "none"
   try {
     const { actorId, admin, request, scopedProject } = await resolveCalendarClientRequestForAction(input.requestId)
     projectId = request.project_id

@@ -17,7 +17,7 @@ const TODAY_VISIT_STATUSES = ["scheduled", "completed"] as const
 const CALENDAR_VISIT_STATUSES = ["scheduled", "completed", "cancelled"] as const
 const CALENDAR_REQUEST_COLUMNS = "id, project_id, requested_by, client_request_id, status, preferred_date, is_asap, preferred_time, purpose, notes, scheduled_date, scheduled_time, report_visit_number, created_at"
 
-export type CalendarProjectAccessMode = "admin" | "supervisor"
+export type CalendarProjectAccessMode = "admin" | "supervisor" | "viewer_owner"
 export type CalendarProjectScopeRow = {
   id: string
   name: string
@@ -144,38 +144,81 @@ export async function resolveCalendarProjectScope(userId: string): Promise<Calen
   if (!isValidCalendarUuid(userId)) return []
   const admin = createAdminClient()
 
-  const [organizationMembershipResult, projectAdminMembershipResult, supervisorProjects] = await Promise.all([
+  const [organizationMembershipResult, projectAdminMembershipResult, supervisorProjects, viewerMembershipResult] = await Promise.all([
     admin.from("organization_memberships").select("organization_id").eq("user_id", userId).eq("status", "active").eq("role", "org_admin"),
     admin.from("project_user_memberships").select("project_id").eq("user_id", userId).eq("status", "active").eq("access_role", "project_admin"),
     resolveExplicitSupervisorProjectScope(userId),
+    admin.from("organization_memberships").select("organization_id").eq("user_id", userId).eq("status", "active").eq("role", "viewer"),
   ])
 
   if (organizationMembershipResult.error) throw organizationMembershipResult.error
   if (projectAdminMembershipResult.error) throw projectAdminMembershipResult.error
+  if (viewerMembershipResult.error) throw viewerMembershipResult.error
 
   const adminOrganizationIds = uniqueValidUuids((organizationMembershipResult.data ?? []).map((row: any) => row.organization_id))
+  const viewerOrganizationIds = uniqueValidUuids((viewerMembershipResult.data ?? []).map((row: any) => row.organization_id))
+  const viewerOrganizationIdSet = new Set(viewerOrganizationIds)
   const explicitProjectAdminIds = uniqueValidUuids((projectAdminMembershipResult.data ?? []).map((row: any) => row.project_id))
   const projectColumns = "id, name, code, latitude, longitude, assigned_supervisor_id, supervising_organization_id"
 
-  const [organizationProjectsResult, explicitAdminProjectsResult] = await Promise.all([
+  const viewerOwnerResult = viewerOrganizationIds.length
+    ? await admin.from("project_owners").select("project_id").eq("viewer_user_id", userId)
+    : { data: [] as any[], error: null }
+  if (viewerOwnerResult.error) throw viewerOwnerResult.error
+  const viewerOwnedProjectIds = uniqueValidUuids((viewerOwnerResult.data ?? []).map((row: any) => row.project_id))
+  const viewerOwnedProjectIdSet = new Set(viewerOwnedProjectIds)
+
+  const [organizationProjectsResult, explicitAdminProjectsResult, viewerOwnerProjectsResult] = await Promise.all([
     adminOrganizationIds.length
       ? admin.from("projects").select(projectColumns).in("supervising_organization_id", adminOrganizationIds)
       : Promise.resolve({ data: [] as any[], error: null }),
     explicitProjectAdminIds.length
       ? admin.from("projects").select(projectColumns).in("id", explicitProjectAdminIds)
       : Promise.resolve({ data: [] as any[], error: null }),
+    viewerOwnedProjectIds.length && viewerOrganizationIds.length
+      ? admin.from("projects").select(projectColumns).in("id", viewerOwnedProjectIds).in("supervising_organization_id", viewerOrganizationIds)
+      : Promise.resolve({ data: [] as any[], error: null }),
   ])
 
   if (organizationProjectsResult.error) throw organizationProjectsResult.error
   if (explicitAdminProjectsResult.error) throw explicitAdminProjectsResult.error
+  if (viewerOwnerProjectsResult.error) throw viewerOwnerProjectsResult.error
 
   const projects = new Map<string, CalendarProjectScopeRow>()
-  for (const row of [...(organizationProjectsResult.data ?? []), ...(explicitAdminProjectsResult.data ?? [])] as any[]) {
-    const project = normalizeProjectRow(row, "admin")
+  const addPrivilegedProject = (row: any, accessMode: "admin" | "supervisor") => {
+    const supervisingOrganizationId = isValidCalendarUuid(row?.supervising_organization_id) ? row.supervising_organization_id : null
+
+    // A Viewer organization role is always owner-scoped for Calendar access.
+    // Stale project-admin/supervisor links must not restore management access.
+    if (supervisingOrganizationId && viewerOrganizationIdSet.has(supervisingOrganizationId)) {
+      if (!viewerOwnedProjectIdSet.has(row.id)) return
+      const ownerProject = normalizeProjectRow(row, "viewer_owner")
+      if (ownerProject) projects.set(ownerProject.id, ownerProject)
+      return
+    }
+
+    const project = normalizeProjectRow(row, accessMode)
     if (project) projects.set(project.id, project)
   }
+
+  for (const row of organizationProjectsResult.data ?? []) addPrivilegedProject(row, "admin")
+  for (const row of explicitAdminProjectsResult.data ?? []) {
+    if (!projects.has((row as any).id)) addPrivilegedProject(row, "admin")
+  }
   for (const project of supervisorProjects) {
-    if (!projects.has(project.id)) projects.set(project.id, project)
+    if (!projects.has(project.id)) addPrivilegedProject({
+      id: project.id,
+      name: project.name,
+      code: project.code,
+      latitude: project.latitude,
+      longitude: project.longitude,
+      assigned_supervisor_id: project.assignedSupervisorId,
+      supervising_organization_id: project.supervisingOrganizationId,
+    }, "supervisor")
+  }
+  for (const row of viewerOwnerProjectsResult.data ?? []) {
+    const project = normalizeProjectRow(row, "viewer_owner")
+    if (project) projects.set(project.id, project)
   }
 
   return Array.from(projects.values()).sort((left, right) => left.name.localeCompare(right.name))
@@ -243,7 +286,7 @@ export async function getCalendarSchedulingProjects({ userId, projects }: {
   const schedulableProjects = projects.filter((project) =>
     isValidCalendarUuid(project.id) &&
     isValidCalendarUuid(project.assignedSupervisorId) &&
-    (project.accessMode === "admin" || project.assignedSupervisorId === userId),
+    (project.accessMode === "admin" || project.accessMode === "supervisor"),
   )
   if (!schedulableProjects.length) return []
 
@@ -350,6 +393,7 @@ export function createEmptyCalendarData(monthKey: string): CalendarDataViewModel
     pendingRequests: [],
     summary: { pendingClientRequests: 0, upcomingVisits: 0, todaysVisits: 0 },
     scheduling: { canSchedule: false, projects: [] },
+    requesting: { canRequest: false, projects: [] },
   }
 }
 
@@ -362,13 +406,23 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
     const projectIds = uniqueValidUuids(projects.map((project) => project.id))
     if (!projectIds.length) return createEmptyCalendarData(monthKey)
 
+    const projectById = new Map(projects.map((project) => [project.id, project]))
+    const rowIsVisibleToUser = (row: any) => {
+      const project = projectById.get(row?.project_id)
+      if (!project) return false
+      return project.accessMode !== "viewer_owner" || row.requested_by === userId
+    }
+    const requestProjects = projects
+      .filter((project) => project.accessMode === "viewer_owner")
+      .map((project) => ({ id: project.id, name: project.name, canRequest: true as const, canManage: false as const }))
+
     const admin = createAdminClient()
     const today = new Date().toISOString().slice(0, 10)
     const [pendingResult, pendingRangeResult, visitRangeResult, upcomingResult, todayResult, schedulingProjects] = await Promise.all([
       getCalendarPendingRequestRows(projectIds),
       admin.from("site_visit_requests").select(CALENDAR_REQUEST_COLUMNS).in("project_id", projectIds).eq("status", CALENDAR_PENDING_REQUEST_STATUS).gte("preferred_date", rangeStart).lte("preferred_date", rangeEnd),
       getCalendarVisibleSiteVisitRows(projectIds, rangeStart, rangeEnd),
-      admin.from("site_visit_requests").select("id", { count: "exact", head: true }).in("project_id", projectIds).in("status", [...SCHEDULED_VISIT_STATUSES]).gt("scheduled_date", today),
+      admin.from("site_visit_requests").select("id, project_id, requested_by").in("project_id", projectIds).in("status", [...SCHEDULED_VISIT_STATUSES]).gt("scheduled_date", today),
       getCalendarScheduledSiteVisitRowsForDate(projectIds, today),
       getCalendarSchedulingProjects({ userId, projects }),
     ])
@@ -387,7 +441,16 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
       }
     }
 
-    const pendingRows = pendingResult.data ?? []
+    // Viewer Owners may see/request only their own Client Visit records inside
+    // an owned project. Admin/Supervisor Calendar scope retains its existing
+    // project-wide visibility. This mirrors the site_visit_requests RLS policy
+    // even though this server loader uses the admin client after authorization.
+    const pendingRows = (pendingResult.data ?? []).filter(rowIsVisibleToUser)
+    const pendingRangeRows = (pendingRangeResult.data ?? []).filter(rowIsVisibleToUser)
+    const visitRangeRows = (visitRangeResult.data ?? []).filter(rowIsVisibleToUser)
+    const upcomingRows = (upcomingResult.data ?? []).filter(rowIsVisibleToUser)
+    const todayRows = (todayResult.data ?? []).filter(rowIsVisibleToUser)
+
     const requesterIds = uniqueValidUuids(pendingRows.map((row: any) => row.requested_by))
     const profileResult = requesterIds.length
       ? await admin.from("profiles").select("id, full_name, email").in("id", requesterIds)
@@ -397,7 +460,9 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
     const projectNameById = new Map(projects.map((project) => [project.id, project.name]))
     const profileById = new Map((profileResult.data ?? []).map((profile: any) => [profile.id, profile]))
     const schedulableProjectIds = new Set(schedulingProjects.map((project) => project.id))
-    const manageableProjectIds = new Set(projects.map((project) => project.id))
+    const manageableProjectIds = new Set(
+      projects.filter((project) => project.accessMode === "admin" || project.accessMode === "supervisor").map((project) => project.id),
+    )
 
     const pendingRequests: CalendarClientRequestViewModel[] = pendingRows.map((row: any) => ({
       id: row.id,
@@ -418,7 +483,7 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
     }))
 
     const events: CalendarEventViewModel[] = []
-    for (const row of pendingRangeResult.data ?? []) {
+    for (const row of pendingRangeRows) {
       if (typeof row.preferred_date !== "string") continue
       events.push({
         id: row.id,
@@ -431,7 +496,7 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
       })
     }
 
-    for (const row of visitRangeResult.data ?? []) {
+    for (const row of visitRangeRows) {
       if (typeof row.scheduled_date !== "string") continue
       const isCancelled = row.status === "cancelled"
       const isCompleted = row.status === "completed"
@@ -467,10 +532,11 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
       pendingRequests,
       summary: {
         pendingClientRequests: pendingRequests.length,
-        upcomingVisits: upcomingResult.count ?? 0,
-        todaysVisits: (todayResult.data ?? []).length,
+        upcomingVisits: upcomingRows.length,
+        todaysVisits: todayRows.length,
       },
       scheduling: { canSchedule: schedulingProjects.length > 0, projects: schedulingProjects },
+      requesting: { canRequest: requestProjects.length > 0, projects: requestProjects },
     }
   } catch (error) {
     logCalendarError({ operation: "calendar scope or data", userId, projectCount: projects.length, rangeStart, rangeEnd, error })

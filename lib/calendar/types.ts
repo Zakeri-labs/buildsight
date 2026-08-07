@@ -57,6 +57,18 @@ export type CalendarSchedulingViewModel = {
   projects: CalendarSchedulingProjectViewModel[]
 }
 
+export type CalendarRequestProjectViewModel = {
+  id: string
+  name: string
+  canRequest: true
+  canManage: false
+}
+
+export type CalendarRequestingViewModel = {
+  canRequest: boolean
+  projects: CalendarRequestProjectViewModel[]
+}
+
 export type CalendarDataViewModel = {
   monthKey: string
   rangeStart: string
@@ -65,4 +77,5 @@ export type CalendarDataViewModel = {
   pendingRequests: CalendarClientRequestViewModel[]
   summary: CalendarSummaryViewModel
   scheduling: CalendarSchedulingViewModel
+  requesting: CalendarRequestingViewModel
 }

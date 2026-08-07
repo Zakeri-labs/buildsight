@@ -24,11 +24,15 @@ const CLIENT_PARTICIPANT_LABELS = new Set(["client", "client / owner", "owner", 
 
 export type SiteVisitAccessMap = Map<string, SiteVisitProjectAccess>
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 function normalized(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : ""
 }
 
 export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVisitAccessMap> {
+  if (!UUID_PATTERN.test(userId)) return new Map()
+
   try {
     const admin = createAdminClient()
 
@@ -98,6 +102,7 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
   for (const project of assignedSupervisorProjectResult.data ?? []) candidateProjectIds.add((project as any).id)
   for (const membership of projectOrganizations as any[]) candidateProjectIds.add(membership.project_id)
   for (const project of supervisingProjectsResult.data ?? []) candidateProjectIds.add((project as any).id)
+  for (const projectId of viewerOwnedProjectIds) candidateProjectIds.add(projectId)
 
   if (!candidateProjectIds.size) return new Map()
 
@@ -143,6 +148,8 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
     // immutable project Owner relationship.
     if (supervisingOrgRole === "viewer" && !viewerOwnedProjectIds.has(projectId)) continue
 
+    const isViewerOwner = supervisingOrgRole === "viewer" && viewerOwnedProjectIds.has(projectId)
+
     const isClientRequester =
       linkedParticipants.some(
         (participant) =>
@@ -165,25 +172,33 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
           ),
       )
 
-    const canRequest = isClientRequester || isAdminRequester
+    // A canonical Viewer-backed Owner is a client requester for that exact
+    // project even when the Owner contact snapshot is not separately linked as
+    // a client participant. The immutable project_owners.viewer_user_id link is
+    // the authorization source of truth.
+    const canRequest = isViewerOwner || isClientRequester || isAdminRequester
 
     const isAssignedProjectSupervisor = (project as any).assigned_supervisor_id === userId
 
-    const canManage =
-      isAssignedProjectSupervisor ||
-      directMemberships.some((membership) =>
-        (SITE_VISIT_MANAGER_PROJECT_ROLES as readonly string[]).includes(membership.access_role),
-      ) ||
-      supervisingOrgRole === "org_admin" ||
-      supervisingOrgRole === "org_manager" ||
-      projectOrgMemberships.some(
-        (membership) =>
-          membership.project_role === "consultant" &&
-          ["org_admin", "org_manager"].includes(orgRoleById.get(membership.organization_id) ?? ""),
-      ) ||
-      linkedParticipants.some((participant) =>
-        SITE_VISIT_MANAGER_PARTICIPANT_LABELS.has(normalized(participant.participant_role_label)),
-      )
+    // Viewer Owners may request a visit, but the Viewer organization role never
+    // grants scheduling/approval authority. This keeps stale participant or
+    // project-membership rows from accidentally promoting a Viewer.
+    const canManage = supervisingOrgRole === "viewer"
+      ? false
+      : isAssignedProjectSupervisor ||
+        directMemberships.some((membership) =>
+          (SITE_VISIT_MANAGER_PROJECT_ROLES as readonly string[]).includes(membership.access_role),
+        ) ||
+        supervisingOrgRole === "org_admin" ||
+        supervisingOrgRole === "org_manager" ||
+        projectOrgMemberships.some(
+          (membership) =>
+            membership.project_role === "consultant" &&
+            ["org_admin", "org_manager"].includes(orgRoleById.get(membership.organization_id) ?? ""),
+        ) ||
+        linkedParticipants.some((participant) =>
+          SITE_VISIT_MANAGER_PARTICIPANT_LABELS.has(normalized(participant.participant_role_label)),
+        )
 
     if (canRequest || canManage) {
       result.set(projectId, {
