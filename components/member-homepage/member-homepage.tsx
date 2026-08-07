@@ -173,15 +173,15 @@ function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
 
         <div className="flex flex-col items-center justify-center gap-1 border-l px-0.5 py-1">
           {isCompleted ? (
-            <button type="button" aria-label="Open stage response (completed visit)" aria-disabled="true" className={disabledActionClass} disabled>
+            <button type="button" aria-label="Add report (completed visit)" aria-disabled="true" className={disabledActionClass} disabled>
               <FilePlus2 className="size-4 sm:size-[18px]" aria-hidden="true" />
             </button>
           ) : visit.stageResponseHref ? (
-            <Link href={visit.stageResponseHref} aria-label="Open stage response" className={actionClass}>
+            <Link href={visit.stageResponseHref} aria-label="Open report entry" className={actionClass}>
               <FilePlus2 className="size-4 sm:size-[18px]" aria-hidden="true" />
             </Link>
           ) : (
-            <button type="button" aria-label="Open stage response" className={disabledActionClass} disabled>
+            <button type="button" aria-label="Open report entry" className={disabledActionClass} disabled>
               <FilePlus2 className="size-4 sm:size-[18px]" aria-hidden="true" />
             </button>
           )}

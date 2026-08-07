@@ -1,12 +1,13 @@
 "use client"
 
 import { ArrowRight, Building2, ClipboardList, FileText, ImageIcon, MapPin } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import type { ReportEntryProject } from "@/lib/report-entry/server"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import type { ReportEntryProject, ReportEntrySiteVisitContext } from "@/lib/report-entry/server"
 import { startReportEntryAction } from "@/lib/report-entry/actions"
 import { cn } from "@/lib/utils"
 
@@ -23,29 +24,64 @@ function stageNumber(index: number) {
 export function ReportEntry({
   projects,
   errorCode,
+  linkedSiteVisit,
 }: {
   projects: ReportEntryProject[]
   errorCode?: string | null
+  linkedSiteVisit?: ReportEntrySiteVisitContext | null
 }) {
-  const initialProjectId = projects.length === 1 ? projects[0]!.id : ""
+  const initialProjectId = linkedSiteVisit?.projectId ?? (projects.length === 1 ? projects[0]!.id : "")
   const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId)
   const [selectedStageId, setSelectedStageId] = useState("")
+  const [linkedSiteVisitId, setLinkedSiteVisitId] = useState<string | null>(linkedSiteVisit?.id ?? null)
+  const [pendingProjectId, setPendingProjectId] = useState<string | null>(null)
+  const [changeProjectOpen, setChangeProjectOpen] = useState(false)
+  const stageListRef = useRef<HTMLDivElement>(null)
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId],
   )
 
-  const handleProjectChange = (projectId: string) => {
+  const applyProjectChange = (projectId: string) => {
     setSelectedProjectId(projectId)
     setSelectedStageId("")
+    if (stageListRef.current) stageListRef.current.scrollTop = 0
+  }
+
+  const handleProjectChange = (projectId: string) => {
+    if (projectId === selectedProjectId) return
+
+    if (linkedSiteVisitId && linkedSiteVisit && projectId !== linkedSiteVisit.projectId) {
+      setPendingProjectId(projectId)
+      setChangeProjectOpen(true)
+      return
+    }
+
+    applyProjectChange(projectId)
+  }
+
+  const confirmProjectChange = () => {
+    if (pendingProjectId === null) return
+    applyProjectChange(pendingProjectId)
+    setLinkedSiteVisitId(null)
+    setPendingProjectId(null)
+    setChangeProjectOpen(false)
+  }
+
+  const handleProjectDialogOpenChange = (open: boolean) => {
+    setChangeProjectOpen(open)
+    if (!open) setPendingProjectId(null)
   }
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4 md:space-y-5">
       <div className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Stage reporting</p>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Report Entry</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Report Entry</h1>
+          {linkedSiteVisitId ? <Badge variant="secondary">Linked to scheduled visit</Badge> : null}
+        </div>
         <p className="text-sm text-muted-foreground">Choose a supervised project and stage to open the existing report response workflow.</p>
       </div>
 
@@ -55,7 +91,9 @@ export function ReportEntry({
             ? "That project is not available in your Supervisor scope."
             : errorCode === "invalid-stage"
               ? "That stage is not available for the selected project."
-              : "Select a valid supervised project and stage."}
+              : errorCode === "invalid-visit"
+                ? "That scheduled Site Visit is no longer available for reporting."
+                : "Select a valid supervised project and stage."}
         </div>
       ) : null}
 
@@ -157,8 +195,13 @@ export function ReportEntry({
                 </div>
 
                 {selectedProject.stages.length ? (
-                  <div className="-mx-4 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0" role="listbox" aria-label="Project stages">
-                    <div className="flex w-max min-w-full gap-2.5">
+                  <div
+                    ref={stageListRef}
+                    className="max-h-[13rem] w-full overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-border bg-card [scrollbar-gutter:stable]"
+                    role="listbox"
+                    aria-label="Project stages"
+                  >
+                    <div className="divide-y divide-border">
                       {selectedProject.stages.map((stage, index) => {
                         const selected = selectedStageId === stage.id
                         return (
@@ -169,19 +212,21 @@ export function ReportEntry({
                             aria-selected={selected}
                             onClick={() => setSelectedStageId(stage.id)}
                             className={cn(
-                              "flex min-h-[4.25rem] w-[9.5rem] shrink-0 items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
+                              "flex min-h-[3.2rem] w-full items-center gap-3 px-3 py-2 text-left transition-colors focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40",
                               selected
-                                ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                                : "border-border bg-card text-card-foreground hover:border-primary/40 hover:bg-muted/40",
+                                ? "bg-primary/10 text-foreground shadow-[inset_3px_0_0_0_var(--primary)]"
+                                : "bg-card text-card-foreground hover:bg-muted/40",
                             )}
                           >
-                            <span className={cn(
-                              "flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold tabular-nums",
-                              selected ? "bg-primary-foreground/15 text-primary-foreground" : "bg-primary/10 text-primary",
-                            )}>
+                            <span
+                              className={cn(
+                                "flex h-7 w-9 shrink-0 items-center justify-center rounded-md text-[11px] font-bold tabular-nums",
+                                selected ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary",
+                              )}
+                            >
                               {stageNumber(index)}
                             </span>
-                            <span className="line-clamp-2 min-w-0 text-xs font-semibold leading-snug">{stage.name}</span>
+                            <span className="min-w-0 flex-1 text-sm font-semibold leading-snug">{stage.name}</span>
                           </button>
                         )
                       })}
@@ -197,6 +242,7 @@ export function ReportEntry({
               <form action={startReportEntryAction} className="pt-1">
                 <input type="hidden" name="projectId" value={selectedProject.id} />
                 <input type="hidden" name="stageId" value={selectedStageId} />
+                {linkedSiteVisitId ? <input type="hidden" name="siteVisitId" value={linkedSiteVisitId} /> : null}
                 <Button type="submit" size="lg" disabled={!selectedStageId} className="h-11 w-full gap-2 text-sm font-semibold">
                   Start Report
                   <ArrowRight className="size-4" aria-hidden="true" />
@@ -216,6 +262,25 @@ export function ReportEntry({
           )}
         </>
       )}
+
+      <Dialog open={changeProjectOpen} onOpenChange={handleProjectDialogOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Change project?</DialogTitle>
+            <DialogDescription>
+              This Report Entry was opened from a scheduled Site Visit. If you change the project, the new report will no longer be linked to that visit and the original visit will remain incomplete.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => handleProjectDialogOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={confirmProjectChange}>
+              Change Project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

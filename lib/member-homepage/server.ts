@@ -325,8 +325,8 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
           projectCode: project.code?.trim() || null,
           stageName,
           visitNumber,
-          stageResponseHref: !isCompleted && stageId
-            ? `/projects/${project.id}/stages/${stageId}/reports/new?siteVisitRequestId=${encodeURIComponent(row.id)}`
+          stageResponseHref: !isCompleted
+            ? `/report-entry?siteVisitId=${encodeURIComponent(row.id)}`
             : null,
           googleMapsUrl,
         }]

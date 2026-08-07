@@ -33,10 +33,11 @@ export function AppShell({
   const isMemberProjects = pathname === "/projects" && isMember
   const isMemberCalendar = pathname.startsWith("/calendar") && isMember
   const isMemberReportEntry = pathname === "/report-entry" && isMember
+  const isMemberStageReport = /^\/projects\/[^/]+\/stages\/[^/]+\/reports\/new$/.test(pathname) && isMember
   const isMemberDashboard = (pathname === "/" || pathname === "/memberhomepage") && isMember
-  const isMemberMobileShell = isMemberDashboard || isMemberProjects || isMemberCalendar || isMemberReportEntry
-  const isCompactMemberMobileShell = isMemberHomepage || isMemberProjects || isMemberCalendar || isMemberReportEntry
-  const showMemberBottomNavigation = isMemberMobileShell
+  const isMemberMobileShell = isMemberDashboard || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberStageReport
+  const isCompactMemberMobileShell = isMemberHomepage || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberStageReport
+  const showMemberBottomNavigation = isMemberMobileShell && !isMemberStageReport
 
   const activeProjectName =
     selectedProjectId === "all" ? null : projects.find((project) => project.id === selectedProjectId)?.name ?? null
@@ -72,11 +73,13 @@ export function AppShell({
         )}
         <main
           className={
-            showMemberBottomNavigation
-              ? isCompactMemberMobileShell
-                ? "flex-1 px-4 py-4 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
-                : "flex-1 px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
-              : "flex-1 px-4 py-5 md:px-8 md:py-6"
+            isMemberStageReport
+              ? "flex-1 px-2 py-3 md:px-8 md:py-6"
+              : showMemberBottomNavigation
+                ? isCompactMemberMobileShell
+                  ? "flex-1 px-4 py-4 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
+                  : "flex-1 px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
+                : "flex-1 px-4 py-5 md:px-8 md:py-6"
           }
         >
           {children}

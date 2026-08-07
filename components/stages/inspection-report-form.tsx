@@ -9,6 +9,7 @@ import {
   Bold,
   Check,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
   FileDown,
   FileText,
@@ -20,6 +21,7 @@ import {
   List,
   ListOrdered,
   Loader2,
+  MessageSquare,
   Plus,
   Redo2,
   Save,
@@ -62,6 +64,7 @@ import {
   validateEvidenceImage,
   validateStageDocument,
   type ChecklistItem,
+  type ChecklistResult,
   type ReportSectionKey,
   type ReportTypeValue,
   type ResponseStatus,
@@ -455,6 +458,7 @@ export function InspectionReportForm({
   const [success, setSuccess] = useState<string | null>(null)
   const [reviewComments, setReviewComments] = useState("")
   const [approvalHistory, setApprovalHistory] = useState(response?.approvals ?? [])
+  const [expandedChecklistCommentId, setExpandedChecklistCommentId] = useState<string | null>(null)
   const [ccSelection, setCcSelection] = useState<ReportCcSelection>(() => initialRecipientSelection(
     ccCandidates,
     initialCcRecipients,
@@ -796,25 +800,25 @@ export function InspectionReportForm({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 pb-24">
-      <Link href={reportsHref} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:gap-5 md:pb-24">
+      <Link href={reportsHref} className="inline-flex w-fit items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground md:gap-2 md:text-sm">
         <ArrowLeft className="size-4 flip-rtl" />{copy.back}
       </Link>
 
-      <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+      <nav aria-label="Breadcrumb" className="hidden flex-wrap items-center gap-1.5 text-xs text-muted-foreground md:flex">
         <span>{project.name}</span><span aria-hidden>/</span><span>{cleanStageName}</span>
         <span aria-hidden>/</span><span className="font-medium text-foreground">{response ? response.reportTitle.replace(/^\d+[\.\s\-]+/, "") : (locale === "ar" ? "تقرير جديد" : "New Report")}</span>
       </nav>
 
       <Card className="overflow-hidden border-primary/20 py-0">
-        <div className="bg-primary px-5 py-4 text-primary-foreground sm:px-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-white/15"><ClipboardCheck className="size-6" /></span>
+        <div className="bg-primary px-3 py-3 text-primary-foreground md:px-6 md:py-4">
+          <div className="flex items-start justify-between gap-2 md:items-center md:gap-3">
+            <div className="flex min-w-0 items-center gap-2 md:gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/15 md:size-11 md:rounded-xl"><ClipboardCheck className="size-5 md:size-6" /></span>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-white/70">{parentTerm ? "Sub-term Response" : "Construction Inspection / Report"}</p>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl font-semibold sm:text-2xl">{cleanTermReportName}</h1>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-white/70 md:text-xs">{parentTerm ? "Sub-term Response" : "Construction Inspection / Report"}</p>
+                <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 md:mt-1 md:gap-2">
+                  <h1 className="min-w-0 text-base font-semibold leading-tight md:text-2xl">{cleanTermReportName}</h1>
                   <Badge
                     variant="outline"
                     className={reportDefinition.required
@@ -827,7 +831,7 @@ export function InspectionReportForm({
                 </div>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex shrink-0 flex-col items-end gap-1 md:flex-row md:flex-wrap md:items-center md:gap-2">
               {responseId ? (
                 <StageTranslationActions
                   projectId={project.id}
@@ -847,7 +851,7 @@ export function InspectionReportForm({
             </div>
           </div>
         </div>
-        <CardContent className="grid gap-px bg-border p-0 sm:grid-cols-2 lg:grid-cols-3">
+        <CardContent className="grid grid-cols-3 gap-px bg-border p-0 md:grid-cols-2 lg:grid-cols-3">
           <HeaderCell label={copy.project} value={project.name} />
           <HeaderCell label={copy.stage} value={cleanStageName} />
           <HeaderCell label={copy.visitNo} value={formattedVisitNo} />
@@ -862,10 +866,10 @@ export function InspectionReportForm({
       </Card>
 
       <Card className="gap-0 py-0">
-        <CardHeader className="border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6">
-          <CardTitle className="text-base font-semibold text-blue-950 dark:text-blue-100">{copy.basic}</CardTitle>
+        <CardHeader className="border-b border-blue-200/80 bg-blue-100/70 px-3 py-2.5 dark:border-blue-800/60 dark:bg-blue-900/50 md:px-6 md:py-3.5">
+          <CardTitle className="text-sm font-semibold text-blue-950 dark:text-blue-100 md:text-base">{copy.basic}</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-5 p-5 sm:p-6">
+        <CardContent className="grid gap-3 p-3 md:gap-5 md:p-6">
           <div className="space-y-2">
             <Label htmlFor="report-title">{copy.title} <span className="text-destructive">*</span></Label>
             <Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} />
@@ -920,7 +924,7 @@ export function InspectionReportForm({
         </Card>
       ) : null}
 
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-1 md:gap-5 xl:grid-cols-2">
         <AttachmentCard
           title={copy.evidence}
           description={copy.evidenceHint}
@@ -956,86 +960,96 @@ export function InspectionReportForm({
 
       {reportDefinition.responseType === "combined" || reportDefinition.responseType === "inspection_checklist" ? (
         <Card className="gap-0 py-0">
-          <div className="flex items-center justify-between border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6">
-            <CardTitle className="text-base font-semibold text-blue-950 dark:text-blue-100">{copy.checklist}</CardTitle>
+          <div className="flex items-center justify-between border-b border-blue-200/80 bg-blue-100/70 px-3 py-2.5 dark:border-blue-800/60 dark:bg-blue-900/50 md:px-6 md:py-3.5">
+            <CardTitle className="text-sm font-semibold text-blue-950 dark:text-blue-100 md:text-base">{copy.checklist}</CardTitle>
             <Button type="button" variant="outline" size="sm" disabled={isLocked} onClick={() => setContent((current) => ({ ...current, checklist: [...current.checklist, { id: crypto.randomUUID(), label: "", checked: false, result: "" }] }))}><Plus className="size-4" />{copy.addItem}</Button>
           </div>
-          <CardContent className="space-y-3 p-5 sm:p-6">
-            {content.checklist.length ? content.checklist.map((item, index) => (
-              <div key={item.id} className={cn("grid gap-2 rounded-xl border bg-muted/20 p-3 sm:items-center", reportDefinition.responseType === "inspection_checklist" ? "sm:grid-cols-[minmax(0,1fr)_150px_minmax(180px,0.55fr)_auto]" : "sm:grid-cols-[auto_minmax(0,1fr)_minmax(180px,0.55fr)_auto]")}>
-                {reportDefinition.responseType === "inspection_checklist" ? (
-                  <>
-                    <Input value={item.label} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))} placeholder={`Check item ${index + 1}`} />
-                    <Select value={item.result || "pending"} onValueChange={(value) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, result: value === "pending" ? "" : (value as "pass" | "fail" | "na"), checked: value === "pass" } : row) }))} disabled={isLocked}>
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent><SelectItem value="pending">Select result</SelectItem><SelectItem value="pass">Pass</SelectItem><SelectItem value="fail">Fail</SelectItem><SelectItem value="na">N/A</SelectItem></SelectContent>
-                    </Select>
-                  </>
-                ) : (
-                  <>
-                    {(() => {
-                      const itemResult = item.result || (item.checked ? "pass" : "")
-                      let btnClasses = "border-slate-300 bg-slate-100/90 text-slate-400 hover:bg-slate-200/90 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
-                      let icon = <Check className="size-3.5" />
-                      let statusTooltip = "Empty / Click to change state"
+          <CardContent className="space-y-1.5 p-2 md:space-y-3 md:p-6">
+            {content.checklist.length ? (
+              <>
+                <div className={cn("grid items-center gap-1.5 px-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground md:hidden", reportDefinition.responseType === "inspection_checklist" ? "grid-cols-[64px_minmax(0,1fr)_58px]" : "grid-cols-[30px_minmax(0,1fr)_58px]")}>
+                  <span>{locale === "ar" ? "الحالة" : "Status"}</span>
+                  <span>{locale === "ar" ? "بند الفحص" : "Inspection Item"}</span>
+                  <span className="text-center">{locale === "ar" ? "تعليق" : "Comment"}</span>
+                </div>
+                {content.checklist.map((item, index) => (
+                  <div key={item.id} className="contents">
+                    <div className="rounded-lg border bg-muted/20 p-1.5 md:hidden">
+                      <div className={cn("grid items-center gap-1.5", reportDefinition.responseType === "inspection_checklist" ? "grid-cols-[64px_minmax(0,1fr)_58px]" : "grid-cols-[30px_minmax(0,1fr)_58px]")}>
+                        {reportDefinition.responseType === "inspection_checklist" ? (
+                          <Select value={item.result || "pending"} onValueChange={(value) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, result: value === "pending" ? "" : (value as "pass" | "fail" | "na"), checked: value === "pass" } : row) }))} disabled={isLocked}>
+                            <SelectTrigger className="h-8 min-w-0 px-1 text-[10px]"><SelectValue /></SelectTrigger>
+                            <SelectContent><SelectItem value="pending">Pending</SelectItem><SelectItem value="pass">Pass</SelectItem><SelectItem value="fail">Fail</SelectItem><SelectItem value="na">N/A</SelectItem></SelectContent>
+                          </Select>
+                        ) : (() => {
+                          const itemResult = item.result || (item.checked ? "pass" : "")
+                          let btnClasses = "border-slate-300 bg-slate-100/90 text-slate-400 hover:bg-slate-200/90 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
+                          let icon = <Check className="size-3.5" />
+                          let statusTooltip = "Empty / Click to change state"
+                          if (itemResult === "pass") { btnClasses = "border-emerald-600 bg-emerald-600 text-white shadow-2xs hover:bg-emerald-700 dark:border-emerald-600 dark:bg-emerald-600"; icon = <Check className="size-3.5 stroke-[2.5]" />; statusTooltip = "Done / Passed" }
+                          else if (itemResult === "fail") { btnClasses = "border-rose-600 bg-rose-600 text-white shadow-2xs hover:bg-rose-700 dark:border-rose-600 dark:bg-rose-600"; icon = <X className="size-3.5 stroke-[2.5]" />; statusTooltip = "Not Done / Failed" }
+                          else if (itemResult === "in_progress") { btnClasses = "border-amber-500 bg-amber-500 text-white shadow-2xs hover:bg-amber-600 dark:border-amber-500 dark:bg-amber-500"; icon = <Hourglass className="size-3" />; statusTooltip = "In Progress" }
+                          return <button type="button" disabled={isLocked} onClick={() => {
+                            let nextResult: ChecklistResult = ""; let nextChecked = false
+                            if (!itemResult) { nextResult = "pass"; nextChecked = true }
+                            else if (itemResult === "pass") nextResult = "fail"
+                            else if (itemResult === "fail") nextResult = "in_progress"
+                            setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, result: nextResult, checked: nextChecked } : row) }))
+                          }} className={cn("flex size-7 shrink-0 items-center justify-center rounded-md border transition-all duration-150", btnClasses)} title={statusTooltip} aria-label={`Mark checklist item ${index + 1}: ${statusTooltip}`}>{icon}</button>
+                        })()}
+                        <Input className="h-8 min-w-0 px-2 text-xs leading-tight" value={item.label} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))} placeholder={`Checklist item ${index + 1}`} />
+                        <div className="flex items-center justify-end gap-0.5">
+                          <button type="button" disabled={isLocked} aria-label={`Edit comment for checklist item ${index + 1}`} aria-expanded={expandedChecklistCommentId === item.id} onClick={() => setExpandedChecklistCommentId((current) => current === item.id ? null : item.id)} className={cn("relative flex size-7 items-center justify-center rounded-md border text-muted-foreground transition-colors", item.notes?.trim() ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-background hover:bg-muted")}>
+                            <MessageSquare className="size-3.5" />
+                            {item.notes?.trim() ? <span className="absolute end-0.5 top-0.5 size-1.5 rounded-full bg-primary" aria-hidden="true" /> : null}
+                          </button>
+                          <Button type="button" variant="ghost" size="icon-xs" disabled={isLocked} onClick={() => { setExpandedChecklistCommentId((current) => current === item.id ? null : current); setContent((current) => ({ ...current, checklist: current.checklist.filter((row) => row.id !== item.id) })) }} aria-label={copy.remove}><Trash2 className="size-3.5" /></Button>
+                        </div>
+                      </div>
+                      {expandedChecklistCommentId === item.id ? (
+                        <div className="mt-1.5 border-t pt-1.5">
+                          <Input className="h-8 px-2 text-xs" value={item.notes ?? ""} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, notes: event.target.value } : row) }))} placeholder="Comment / reference" />
+                        </div>
+                      ) : null}
+                    </div>
 
-                      if (itemResult === "pass") {
-                        btnClasses = "border-emerald-600 bg-emerald-600 text-white shadow-2xs hover:bg-emerald-700 dark:border-emerald-600 dark:bg-emerald-600"
-                        icon = <Check className="size-4 stroke-[2.5]" />
-                        statusTooltip = "Done / Passed"
-                      } else if (itemResult === "fail") {
-                        btnClasses = "border-rose-600 bg-rose-600 text-white shadow-2xs hover:bg-rose-700 dark:border-rose-600 dark:bg-rose-600"
-                        icon = <X className="size-4 stroke-[2.5]" />
-                        statusTooltip = "Not Done / Failed"
-                      } else if (itemResult === "in_progress") {
-                        btnClasses = "border-amber-500 bg-amber-500 text-white shadow-2xs hover:bg-amber-600 dark:border-amber-500 dark:bg-amber-500"
-                        icon = <Hourglass className="size-3.5" />
-                        statusTooltip = "In Progress"
-                      }
-
-                      return (
-                        <button
-                          type="button"
-                          disabled={isLocked}
-                          onClick={() => {
-                            let nextResult: ChecklistResult = ""
-                            let nextChecked = false
-                            if (!itemResult) {
-                              nextResult = "pass"
-                              nextChecked = true
-                            } else if (itemResult === "pass") {
-                              nextResult = "fail"
-                              nextChecked = false
-                            } else if (itemResult === "fail") {
-                              nextResult = "in_progress"
-                              nextChecked = false
-                            } else {
-                              nextResult = ""
-                              nextChecked = false
-                            }
-
-                            setContent((current) => ({
-                              ...current,
-                              checklist: current.checklist.map((row) =>
-                                row.id === item.id ? { ...row, result: nextResult, checked: nextChecked } : row
-                              ),
-                            }))
-                          }}
-                          className={cn("flex size-7 shrink-0 items-center justify-center rounded-lg border transition-all duration-150", btnClasses)}
-                          title={statusTooltip}
-                          aria-label={`Mark checklist item ${index + 1}: ${statusTooltip}`}
-                        >
-                          {icon}
-                        </button>
-                      )
-                    })()}
-                    <Input value={item.label} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))} placeholder={`Checklist item ${index + 1}`} />
-                  </>
-                )}
-                <Input value={item.notes ?? ""} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, notes: event.target.value } : row) }))} placeholder="Comment / reference" />
-                <Button type="button" variant="ghost" size="icon" disabled={isLocked} onClick={() => setContent((current) => ({ ...current, checklist: current.checklist.filter((row) => row.id !== item.id) }))} aria-label={copy.remove}><Trash2 className="size-4" /></Button>
-              </div>
-            )) : <p className="py-4 text-center text-sm text-muted-foreground">No checklist items. Add items for this inspection.</p>}
+                    <div className={cn("hidden gap-2 rounded-xl border bg-muted/20 p-3 md:grid md:items-center", reportDefinition.responseType === "inspection_checklist" ? "sm:grid-cols-[minmax(0,1fr)_150px_minmax(180px,0.55fr)_auto]" : "sm:grid-cols-[auto_minmax(0,1fr)_minmax(180px,0.55fr)_auto]")}>
+                      {reportDefinition.responseType === "inspection_checklist" ? (
+                        <>
+                          <Input value={item.label} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))} placeholder={`Check item ${index + 1}`} />
+                          <Select value={item.result || "pending"} onValueChange={(value) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, result: value === "pending" ? "" : (value as "pass" | "fail" | "na"), checked: value === "pass" } : row) }))} disabled={isLocked}>
+                            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                            <SelectContent><SelectItem value="pending">Select result</SelectItem><SelectItem value="pass">Pass</SelectItem><SelectItem value="fail">Fail</SelectItem><SelectItem value="na">N/A</SelectItem></SelectContent>
+                          </Select>
+                        </>
+                      ) : (
+                        <>
+                          {(() => {
+                            const itemResult = item.result || (item.checked ? "pass" : "")
+                            let btnClasses = "border-slate-300 bg-slate-100/90 text-slate-400 hover:bg-slate-200/90 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
+                            let icon = <Check className="size-3.5" />
+                            let statusTooltip = "Empty / Click to change state"
+                            if (itemResult === "pass") { btnClasses = "border-emerald-600 bg-emerald-600 text-white shadow-2xs hover:bg-emerald-700 dark:border-emerald-600 dark:bg-emerald-600"; icon = <Check className="size-4 stroke-[2.5]" />; statusTooltip = "Done / Passed" }
+                            else if (itemResult === "fail") { btnClasses = "border-rose-600 bg-rose-600 text-white shadow-2xs hover:bg-rose-700 dark:border-rose-600 dark:bg-rose-600"; icon = <X className="size-4 stroke-[2.5]" />; statusTooltip = "Not Done / Failed" }
+                            else if (itemResult === "in_progress") { btnClasses = "border-amber-500 bg-amber-500 text-white shadow-2xs hover:bg-amber-600 dark:border-amber-500 dark:bg-amber-500"; icon = <Hourglass className="size-3.5" />; statusTooltip = "In Progress" }
+                            return <button type="button" disabled={isLocked} onClick={() => {
+                              let nextResult: ChecklistResult = ""; let nextChecked = false
+                              if (!itemResult) { nextResult = "pass"; nextChecked = true }
+                              else if (itemResult === "pass") nextResult = "fail"
+                              else if (itemResult === "fail") nextResult = "in_progress"
+                              setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, result: nextResult, checked: nextChecked } : row) }))
+                            }} className={cn("flex size-7 shrink-0 items-center justify-center rounded-lg border transition-all duration-150", btnClasses)} title={statusTooltip} aria-label={`Mark checklist item ${index + 1}: ${statusTooltip}`}>{icon}</button>
+                          })()}
+                          <Input value={item.label} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))} placeholder={`Checklist item ${index + 1}`} />
+                        </>
+                      )}
+                      <Input value={item.notes ?? ""} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, notes: event.target.value } : row) }))} placeholder="Comment / reference" />
+                      <Button type="button" variant="ghost" size="icon" disabled={isLocked} onClick={() => setContent((current) => ({ ...current, checklist: current.checklist.filter((row) => row.id !== item.id) }))} aria-label={copy.remove}><Trash2 className="size-4" /></Button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            ) : <p className="py-4 text-center text-sm text-muted-foreground">No checklist items. Add items for this inspection.</p>}
           </CardContent>
         </Card>
       ) : null}
@@ -1055,8 +1069,8 @@ export function InspectionReportForm({
       {!workflowActive ? <div role="status" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100"><AlertCircle className="mt-0.5 size-4 shrink-0" />This workflow item is disabled for the project. Existing review history remains available, but new employee work is blocked.</div> : null}
 
       {((canReview && pendingReview) || (workflowActive && isEditable)) ? (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-4 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur md:start-64 md:px-8">
-          <div className="mx-auto flex max-w-7xl flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/95 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur md:start-64 md:z-30 md:px-8 md:py-3">
+          <div className="mx-auto flex max-w-7xl flex-col-reverse gap-1.5 md:flex-row md:items-center md:justify-between md:gap-3">
             <div className="flex min-w-0 flex-1 items-center gap-2">
               {error ? (
                 <div role="alert" className="flex max-w-xl items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
@@ -1071,7 +1085,7 @@ export function InspectionReportForm({
               ) : null}
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3 shrink-0">
+            <div className="flex w-full flex-wrap items-center justify-end gap-1.5 md:w-auto md:gap-3 shrink-0">
               {canReview && pendingReview ? (
                 <div className="flex items-center gap-2">
                   <Button
@@ -1098,11 +1112,11 @@ export function InspectionReportForm({
                 </div>
               ) : null}
               {workflowActive && isEditable ? (
-                <>
-                  <Button variant="outline" size="lg" disabled={busy !== null} onClick={() => void save("draft")}>{busy === "draft" ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}{copy.saveDraft}</Button>
-                  <Button variant="outline" size="lg" disabled={busy !== null} onClick={() => void save("progress")}>{busy === "progress" ? <Loader2 className="size-4 animate-spin" /> : <ClipboardCheck className="size-4" />}{copy.saveProgress}</Button>
-                  <Button size="lg" disabled={busy !== null} onClick={() => void save("submit")}>{busy === "submit" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}{copy.submit}</Button>
-                </>
+                <div className="grid w-full grid-cols-3 gap-1.5 md:flex md:w-auto md:items-center md:gap-3">
+                  <Button variant="outline" size="lg" className="min-w-0 px-1.5 text-[10px] md:px-2.5 md:text-sm" disabled={busy !== null} onClick={() => void save("draft")}>{busy === "draft" ? <Loader2 className="size-3.5 animate-spin md:size-4" /> : <Save className="size-3.5 md:size-4" />}<span className="md:hidden">Draft</span><span className="hidden md:inline">{copy.saveDraft}</span></Button>
+                  <Button variant="outline" size="lg" className="min-w-0 px-1.5 text-[10px] md:px-2.5 md:text-sm" disabled={busy !== null} onClick={() => void save("progress")}>{busy === "progress" ? <Loader2 className="size-3.5 animate-spin md:size-4" /> : <ClipboardCheck className="size-3.5 md:size-4" />}<span className="md:hidden">In Progress</span><span className="hidden md:inline">{copy.saveProgress}</span></Button>
+                  <Button size="lg" className="min-w-0 px-1.5 text-[10px] md:px-2.5 md:text-sm" disabled={busy !== null} onClick={() => void save("submit")}>{busy === "submit" ? <Loader2 className="size-3.5 animate-spin md:size-4" /> : <Send className="size-3.5 md:size-4" />}<span className="md:hidden">Submit</span><span className="hidden md:inline">{copy.submit}</span></Button>
+                </div>
               ) : null}
             </div>
           </div>
@@ -1113,19 +1127,19 @@ export function InspectionReportForm({
 }
 
 function HeaderCell({ label, value, person }: { label: string; value: string; person?: ProjectStagePerson | null }) {
-  return <div className="min-h-20 bg-card px-5 py-4"><p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>{person ? <div className="mt-2 flex items-center gap-2"><Avatar size="sm">{person.avatarUrl ? <AvatarImage src={profileAvatarDisplayUrl(person.avatarUrl)} alt="" /> : null}<AvatarFallback>{initials(person.name)}</AvatarFallback></Avatar><span className="truncate font-medium">{value}</span></div> : <p className="mt-2 font-medium">{value}</p>}</div>
+  return <div className="min-w-0 bg-card px-2 py-2.5 md:min-h-20 md:px-5 md:py-4"><p className="text-[8px] font-semibold uppercase tracking-wide text-muted-foreground md:text-[11px] md:tracking-wider">{label}</p>{person ? <div className="mt-1 flex min-w-0 items-center gap-1.5 md:mt-2 md:gap-2"><span className="hidden md:inline-flex"><Avatar size="sm">{person.avatarUrl ? <AvatarImage src={profileAvatarDisplayUrl(person.avatarUrl)} alt="" /> : null}<AvatarFallback>{initials(person.name)}</AvatarFallback></Avatar></span><span className="min-w-0 break-words text-[11px] font-medium leading-tight md:truncate md:text-base md:leading-normal">{value}</span></div> : <p className="mt-1 break-words text-[11px] font-medium leading-tight [overflow-wrap:anywhere] md:mt-2 md:break-normal md:text-base md:leading-normal md:[overflow-wrap:normal]">{value}</p>}</div>
 }
 
 function AttachmentCard({ title, description, icon, actionLabel, onAction, disabled, children }: { title: string; description: string; icon: ReactNode; actionLabel: string; onAction: () => void; disabled: boolean; children: ReactNode }) {
   return (
-    <Card className="gap-0 py-0">
-      <div className="flex items-center justify-between gap-4 border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6">
+    <Card className="min-w-0 gap-0 py-0">
+      <div className="flex items-center justify-between gap-1.5 border-b border-blue-200/80 bg-blue-100/70 px-2 py-2 dark:border-blue-800/60 dark:bg-blue-900/50 md:gap-4 md:px-6 md:py-3.5">
         <div className="min-w-0 flex-1">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold text-blue-950 dark:text-blue-100">
-            <span className="text-primary">{icon}</span>
+          <CardTitle className="flex items-center gap-1 text-[11px] font-semibold leading-tight text-blue-950 dark:text-blue-100 md:gap-2 md:text-base">
+            <span className="hidden text-primary md:inline-flex">{icon}</span>
             {title}
           </CardTitle>
-          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+          <p className="mt-0.5 hidden text-xs text-muted-foreground md:block">{description}</p>
         </div>
         <Button
           type="button"
@@ -1134,12 +1148,12 @@ function AttachmentCard({ title, description, icon, actionLabel, onAction, disab
           disabled={disabled}
           title={actionLabel}
           aria-label={actionLabel}
-          className="size-11 shrink-0 rounded-xl p-0 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+          className="size-8 shrink-0 rounded-lg p-0 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary md:size-11 md:rounded-xl"
         >
-          <UploadCloud className="size-5 text-primary" />
+          <UploadCloud className="size-4 text-primary md:size-5" />
         </Button>
       </div>
-      <CardContent className="p-5">{children}</CardContent>
+      <CardContent className="p-2 md:p-5">{children}</CardContent>
     </Card>
   )
 }
@@ -1151,7 +1165,7 @@ function EmptyAttachment({ text, compact = false, onClick }: { text: string; com
       className={cn(
         "flex items-center justify-center rounded-xl border border-dashed text-center text-xs text-muted-foreground transition-colors",
         onClick && "cursor-pointer hover:border-primary/40 hover:bg-primary/5 hover:text-primary",
-        compact ? "min-h-20" : "col-span-full min-h-32",
+        compact ? "min-h-14 md:min-h-20" : "col-span-full min-h-20 md:min-h-32",
       )}
     >
       <span>
@@ -1168,7 +1182,7 @@ function EvidenceTile({ src, name, progress, onRemove }: { src: string; name: st
 
 function DocumentRow({ name, href, progress, onRemove }: { name: string; href?: string; progress?: number; onRemove?: () => void }) {
   const body = <><span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><FileText className="size-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{name}</p>{progress !== undefined && progress > 0 ? <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary" style={{ width: `${progress}%` }} /></div> : <p className="text-xs text-muted-foreground">Supporting document</p>}</div>{href ? <FileDown className="size-4 text-muted-foreground" /> : null}</>
-  return <div className="flex items-center gap-3 rounded-xl border px-3 py-2.5">{href ? <a href={href} className="flex min-w-0 flex-1 items-center gap-3 hover:text-primary">{body}</a> : body}{onRemove ? <Button type="button" variant="ghost" size="icon-sm" onClick={onRemove} aria-label={`Remove ${name}`}><Trash2 className="size-4" /></Button> : null}</div>
+  return <div className="flex items-center gap-1.5 rounded-lg border px-1.5 py-1.5 md:gap-3 md:rounded-xl md:px-3 md:py-2.5">{href ? <a href={href} className="flex min-w-0 flex-1 items-center gap-3 hover:text-primary">{body}</a> : body}{onRemove ? <Button type="button" variant="ghost" size="icon-sm" onClick={onRemove} aria-label={`Remove ${name}`}><Trash2 className="size-4" /></Button> : null}</div>
 }
 
 function escapeHtml(value: string) {
@@ -1186,6 +1200,7 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
   const savedRangeRef = useRef<Range | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [mobileExpanded, setMobileExpanded] = useState(false)
 
   useEffect(() => { if (editorRef.current && editorRef.current.innerHTML !== value) editorRef.current.innerHTML = value || "<p><br></p>" }, [])
   const saveSelection = () => {
@@ -1215,7 +1230,45 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
     catch (error) { setUploadError(error instanceof Error ? error.message : "Unable to upload inline image.") }
     finally { setUploading(false) }
   }
-  return <Card className="gap-0 overflow-hidden py-0"><CardHeader className="border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6"><CardTitle className="text-base font-semibold text-blue-950 dark:text-blue-100">{title}</CardTitle><p className="text-xs text-muted-foreground">{description}</p></CardHeader><div className="flex flex-wrap items-center gap-1 border-b bg-muted/35 px-3 py-2"><EditorButton label="Bold" onClick={() => command("bold")} disabled={disabled}><Bold /></EditorButton><EditorButton label="Italic" onClick={() => command("italic")} disabled={disabled}><Italic /></EditorButton><EditorButton label="Underline" onClick={() => command("underline")} disabled={disabled}><Underline /></EditorButton><span className="mx-1 h-5 w-px bg-border" /><EditorButton label="Bulleted list" onClick={() => command("insertUnorderedList")} disabled={disabled}><List /></EditorButton><EditorButton label="Numbered list" onClick={() => command("insertOrderedList")} disabled={disabled}><ListOrdered /></EditorButton><EditorButton label="Link" onClick={addLink} disabled={disabled}><Link2 /></EditorButton>{allowTable ? <EditorButton label="Insert table" onClick={addTable} disabled={disabled}><Table2 /></EditorButton> : null}<EditorButton label="Inline image" onClick={() => { saveSelection(); imageInputRef.current?.click() }} disabled={disabled || uploading}>{uploading ? <Loader2 className="animate-spin" /> : <ImagePlus />}</EditorButton><span className="mx-1 h-5 w-px bg-border" /><EditorButton label="Undo" onClick={() => command("undo")} disabled={disabled}><Undo2 /></EditorButton><EditorButton label="Redo" onClick={() => command("redo")} disabled={disabled}><Redo2 /></EditorButton><input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={imageSelected} /></div>{uploadError ? <div className="border-b bg-red-50 px-4 py-2 text-xs text-red-700">{uploadError}</div> : null}<div ref={editorRef} contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-multiline="true" onFocus={saveSelection} onKeyUp={saveSelection} onMouseUp={saveSelection} onInput={() => onChange(editorRef.current?.innerHTML ?? "")} className="inspection-editor min-h-56 bg-background px-5 py-5 outline-none sm:px-7" /></Card>
+
+  return (
+    <Card className="gap-0 overflow-hidden py-0">
+      <div className="relative">
+        <CardHeader className="border-b border-blue-200/80 bg-blue-100/70 px-3 py-2.5 pe-10 dark:border-blue-800/60 dark:bg-blue-900/50 md:px-6 md:py-3.5 md:pe-6">
+          <CardTitle className="text-sm font-semibold text-blue-950 dark:text-blue-100 md:text-base">{title}</CardTitle>
+          <p className="hidden text-xs text-muted-foreground md:block">{description}</p>
+        </CardHeader>
+        <button
+          type="button"
+          className="absolute end-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-blue-950/70 transition-colors hover:bg-blue-200/70 md:hidden"
+          onClick={() => setMobileExpanded((expanded) => !expanded)}
+          aria-expanded={mobileExpanded}
+          aria-label={`${mobileExpanded ? "Collapse" : "Expand"} ${title}`}
+        >
+          <ChevronDown className={cn("size-4 transition-transform", !mobileExpanded && "-rotate-90")} />
+        </button>
+      </div>
+      <div className={cn(!mobileExpanded && "hidden md:block")}>
+        <div className="flex flex-wrap items-center gap-0.5 border-b bg-muted/35 px-2 py-1.5 md:gap-1 md:px-3 md:py-2">
+          <EditorButton label="Bold" onClick={() => command("bold")} disabled={disabled}><Bold /></EditorButton>
+          <EditorButton label="Italic" onClick={() => command("italic")} disabled={disabled}><Italic /></EditorButton>
+          <EditorButton label="Underline" onClick={() => command("underline")} disabled={disabled}><Underline /></EditorButton>
+          <span className="mx-0.5 h-5 w-px bg-border md:mx-1" />
+          <EditorButton label="Bulleted list" onClick={() => command("insertUnorderedList")} disabled={disabled}><List /></EditorButton>
+          <EditorButton label="Numbered list" onClick={() => command("insertOrderedList")} disabled={disabled}><ListOrdered /></EditorButton>
+          <EditorButton label="Link" onClick={addLink} disabled={disabled}><Link2 /></EditorButton>
+          {allowTable ? <EditorButton label="Insert table" onClick={addTable} disabled={disabled}><Table2 /></EditorButton> : null}
+          <EditorButton label="Inline image" onClick={() => { saveSelection(); imageInputRef.current?.click() }} disabled={disabled || uploading}>{uploading ? <Loader2 className="animate-spin" /> : <ImagePlus />}</EditorButton>
+          <span className="mx-0.5 h-5 w-px bg-border md:mx-1" />
+          <EditorButton label="Undo" onClick={() => command("undo")} disabled={disabled}><Undo2 /></EditorButton>
+          <EditorButton label="Redo" onClick={() => command("redo")} disabled={disabled}><Redo2 /></EditorButton>
+          <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={imageSelected} />
+        </div>
+        {uploadError ? <div className="border-b bg-red-50 px-4 py-2 text-xs text-red-700">{uploadError}</div> : null}
+        <div ref={editorRef} contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-multiline="true" onFocus={saveSelection} onKeyUp={saveSelection} onMouseUp={saveSelection} onInput={() => onChange(editorRef.current?.innerHTML ?? "")} className="inspection-editor min-h-36 bg-background px-3 py-3 text-sm outline-none md:min-h-56 md:px-7 md:py-5" />
+      </div>
+    </Card>
+  )
 }
 
 function EditorButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: ReactNode }) {

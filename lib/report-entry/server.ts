@@ -31,6 +31,11 @@ export type ReportEntryProject = {
   stages: ReportEntryStage[]
 }
 
+export type ReportEntrySiteVisitContext = {
+  id: string
+  projectId: string
+}
+
 function isUuid(value: unknown): value is string {
   return typeof value === "string" && UUID_PATTERN.test(value.trim())
 }
@@ -162,4 +167,32 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
       }]
     })
     .sort((left, right) => left.name.localeCompare(right.name))
+}
+
+/**
+ * Validates optional Site Visit context against the already-authorized Supervisor
+ * project ids returned to Report Entry. This is server-only and never trusts the
+ * query parameter by itself. Only active scheduled visits can start a linked report.
+ */
+export async function getReportEntrySiteVisitContext(
+  siteVisitId: string,
+  supervisedProjectIds: string[],
+): Promise<ReportEntrySiteVisitContext | null> {
+  if (!isUuid(siteVisitId)) return null
+
+  const projectIds = Array.from(new Set(supervisedProjectIds.filter((id): id is string => isUuid(id))))
+  if (!projectIds.length) return null
+
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("site_visit_requests")
+    .select("id, project_id, status")
+    .eq("id", siteVisitId)
+    .in("project_id", projectIds)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data || data.status !== "scheduled" || !isUuid(data.id) || !isUuid(data.project_id)) return null
+
+  return { id: data.id, projectId: data.project_id }
 }

@@ -1,21 +1,34 @@
-import { redirect } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 
 import { ReportEntry } from "@/components/report-entry/report-entry"
 import { requireOnboarded } from "@/lib/auth/session"
-import { getReportEntryProjects } from "@/lib/report-entry/server"
+import { getReportEntryProjects, getReportEntrySiteVisitContext } from "@/lib/report-entry/server"
 
 export const dynamic = "force-dynamic"
 
 export default async function ReportEntryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string | string[] }>
+  searchParams: Promise<{ error?: string | string[]; siteVisitId?: string | string[] }>
 }) {
   const [session, query] = await Promise.all([requireOnboarded(), searchParams])
   if (session.memberships[0]?.role !== "org_member") redirect("/")
 
   const projects = await getReportEntryProjects(session.userId)
   const errorCode = Array.isArray(query.error) ? query.error[0] : query.error
+  const rawSiteVisitId = Array.isArray(query.siteVisitId) ? query.siteVisitId[0] : query.siteVisitId
+  const hasSiteVisitContext = typeof rawSiteVisitId === "string" && rawSiteVisitId.trim().length > 0
+  const linkedSiteVisit = hasSiteVisitContext
+    ? await getReportEntrySiteVisitContext(rawSiteVisitId!.trim(), projects.map((project) => project.id))
+    : null
 
-  return <ReportEntry projects={projects} errorCode={errorCode ?? null} />
+  if (hasSiteVisitContext && !linkedSiteVisit) notFound()
+
+  return (
+    <ReportEntry
+      projects={projects}
+      errorCode={errorCode ?? null}
+      linkedSiteVisit={linkedSiteVisit}
+    />
+  )
 }

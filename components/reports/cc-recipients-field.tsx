@@ -297,11 +297,11 @@ export function CcRecipientsField({
   return (
     <>
       <Card className={cn("gap-0 py-0 overflow-hidden", compact && "shadow-none")}>
-        <CardHeader className="relative border-b border-blue-200/80 bg-blue-100/70 py-3.5 pl-14 pr-5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:pl-16 sm:pr-6">
+        <CardHeader className="relative border-b border-blue-200/80 bg-blue-100/70 py-2.5 pl-11 pr-3 dark:border-blue-800/60 dark:bg-blue-900/50 md:py-3.5 md:pl-16 md:pr-6">
           <button
             type="button"
             onClick={() => setIsRecipientsExpanded((expanded) => !expanded)}
-            className="absolute left-4 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-blue-950/70 transition-colors hover:bg-blue-200/70 hover:text-blue-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 dark:text-blue-100/75 dark:hover:bg-blue-800/70 dark:hover:text-blue-100 sm:left-5"
+            className="absolute left-2 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-blue-950/70 transition-colors hover:bg-blue-200/70 hover:text-blue-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 dark:text-blue-100/75 dark:hover:bg-blue-800/70 dark:hover:text-blue-100 md:left-5 md:size-8"
             aria-label={
               isRecipientsExpanded
                 ? isAr
@@ -324,11 +324,11 @@ export function CcRecipientsField({
           </button>
 
           <div>
-            <CardTitle className="flex items-center gap-2 text-base font-semibold text-blue-950 dark:text-blue-100">
+            <CardTitle className="flex items-center gap-1.5 text-sm font-semibold text-blue-950 dark:text-blue-100 md:gap-2 md:text-base">
               <Mail className="size-4 text-primary" />
               {isAr ? "مستلمو التقرير والنسخ" : "Report Recipients & Copies"}
             </CardTitle>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <p className="mt-0.5 hidden text-xs text-muted-foreground md:block">
               {isAr
                 ? "حدد الأشخاص المعنيين بالمستند من المشاركين في المشروع أو أضف جهات خارجية."
                 : "Specify primary report recipients and notification copies from project participants."}
@@ -340,7 +340,7 @@ export function CcRecipientsField({
           id={recipientsContentId}
           hidden={!isRecipientsExpanded}
           aria-hidden={!isRecipientsExpanded}
-          className="p-5 sm:p-6"
+          className="p-3 md:p-6"
         >
           <div className="grid gap-6 md:grid-cols-2">
             {/* Column 1: Report To */}
