@@ -31,10 +31,11 @@ export function AppShell({
   const isMember = currentUser.role === "org_member"
   const isMemberHomepage = pathname === "/memberhomepage" && isMember
   const isMemberProjects = pathname === "/projects" && isMember
+  const isMemberCalendar = pathname.startsWith("/calendar") && isMember
   const isMemberDashboard = (pathname === "/" || pathname === "/memberhomepage") && isMember
-  const isMemberMobileShell = isMemberDashboard || isMemberProjects
-  const isCompactMemberMobileShell = isMemberHomepage || isMemberProjects
-  const showMemberBottomNavigation = isMemberMobileShell || (isMember && pathname.startsWith("/calendar"))
+  const isMemberMobileShell = isMemberDashboard || isMemberProjects || isMemberCalendar
+  const isCompactMemberMobileShell = isMemberHomepage || isMemberProjects || isMemberCalendar
+  const showMemberBottomNavigation = isMemberMobileShell
 
   const activeProjectName =
     selectedProjectId === "all" ? null : projects.find((project) => project.id === selectedProjectId)?.name ?? null
