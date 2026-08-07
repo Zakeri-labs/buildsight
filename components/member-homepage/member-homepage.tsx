@@ -90,47 +90,50 @@ function RequestRow({ request }: { request: MemberHomepageRequest }) {
 
 function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
   const scheduledTime = formatTime(visit.scheduledTime)
-  const actionClass = "inline-flex size-10 items-center justify-center rounded-xl border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+  const actionClass =
+    "inline-flex size-9 shrink-0 items-center justify-center rounded-lg border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
   const disabledActionClass = `${actionClass} cursor-not-allowed opacity-40 hover:bg-background hover:text-muted-foreground`
 
   return (
     <Card size="sm" className="overflow-hidden py-0">
-      <div className="grid min-h-[6rem] grid-cols-[3.5rem_minmax(0,1.15fr)_minmax(0,0.9fr)_3.25rem] items-stretch sm:min-h-[5.5rem] sm:grid-cols-[4.5rem_minmax(0,1.2fr)_minmax(0,0.9fr)_5.75rem]">
-        <div className="flex min-w-0 flex-col items-center justify-center border-r bg-muted/30 px-1.5 text-center">
+      <div className="grid min-h-[4.5rem] grid-cols-[3.1rem_minmax(0,1.15fr)_minmax(4.7rem,0.9fr)_5rem] items-stretch sm:min-h-[4.25rem] sm:grid-cols-[4rem_minmax(0,1.3fr)_minmax(6rem,1fr)_5.5rem]">
+        <div className="flex min-w-0 flex-col items-center justify-center bg-sidebar px-1 text-center text-white">
           {scheduledTime ? (
             <>
-              <span className="text-sm font-semibold leading-4 tabular-nums sm:text-base">{scheduledTime.time}</span>
-              <span className="mt-0.5 text-[10px] font-semibold uppercase leading-3 tracking-wide text-muted-foreground sm:text-[11px]">{scheduledTime.period}</span>
+              <span className="text-sm font-bold leading-4 tabular-nums sm:text-base">{scheduledTime.time}</span>
+              <span className="mt-0.5 text-[10px] font-bold uppercase leading-3 tracking-wide text-white/85 sm:text-[11px]">{scheduledTime.period}</span>
             </>
           ) : (
-            <span className="text-sm font-semibold text-muted-foreground">—</span>
+            <span className="text-sm font-semibold text-white/75">—</span>
           )}
         </div>
 
-        <div className="flex min-w-0 flex-col justify-center px-2.5 py-2.5 sm:px-3">
-          <p className="min-w-0 break-words text-xs font-semibold leading-4 sm:text-sm sm:leading-5">{visit.projectName}</p>
+        <div className="flex min-w-0 flex-col justify-center px-2 py-1.5 sm:px-2.5">
+          <p className="min-w-0 break-words text-xs font-semibold leading-4 sm:text-sm">{visit.projectName}</p>
           {visit.projectCode ? (
-            <p className="mt-1 min-w-0 truncate text-[10px] leading-4 text-muted-foreground sm:text-xs">{visit.projectCode}</p>
+            <p className="mt-0.5 min-w-0 whitespace-normal break-words text-[10px] leading-3 text-muted-foreground sm:text-[11px] sm:leading-4">
+              {visit.projectCode}
+            </p>
           ) : null}
         </div>
 
-        <div className="flex min-w-0 flex-col justify-center border-l px-2 py-2.5 sm:px-3">
+        <div className="flex min-w-0 flex-col justify-center border-l px-2 py-1.5 sm:px-2.5">
           {visit.stageName ? (
-            <p className="min-w-0 break-words text-[11px] font-medium leading-4 sm:text-xs">{visit.stageName}</p>
+            <p className="min-w-0 truncate text-[11px] font-semibold leading-4 sm:text-xs">{visit.stageName}</p>
           ) : null}
           {visit.visitNumber ? (
-            <p className="mt-1 truncate text-[10px] leading-4 text-muted-foreground sm:text-xs">Visit No. {visit.visitNumber}</p>
+            <p className="mt-0.5 whitespace-nowrap text-[10px] leading-3 text-muted-foreground sm:text-[11px] sm:leading-4">Visit No. {visit.visitNumber}</p>
           ) : null}
         </div>
 
-        <div className="flex flex-col items-center justify-center gap-1.5 border-l px-1 sm:flex-row sm:gap-1">
+        <div className="flex items-center justify-center gap-1 border-l px-0.5">
           {visit.stageResponseHref ? (
             <Link href={visit.stageResponseHref} aria-label="Open stage response" className={actionClass}>
-              <FilePlus2 className="size-5" aria-hidden="true" />
+              <FilePlus2 className="size-[18px]" aria-hidden="true" />
             </Link>
           ) : (
             <button type="button" aria-label="Open stage response" className={disabledActionClass} disabled>
-              <FilePlus2 className="size-5" aria-hidden="true" />
+              <FilePlus2 className="size-[18px]" aria-hidden="true" />
             </button>
           )}
           {visit.googleMapsUrl ? (
@@ -141,11 +144,11 @@ function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
               aria-label="Open project location in Google Maps"
               className={actionClass}
             >
-              <MapPinned className="size-5" aria-hidden="true" />
+              <MapPinned className="size-[18px]" aria-hidden="true" />
             </a>
           ) : (
             <button type="button" aria-label="Open project location in Google Maps" className={disabledActionClass} disabled>
-              <MapPinned className="size-5" aria-hidden="true" />
+              <MapPinned className="size-[18px]" aria-hidden="true" />
             </button>
           )}
         </div>
@@ -205,7 +208,7 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
           <span className="text-xs tabular-nums text-muted-foreground">{data.visits.length}</span>
         </div>
         {data.visits.length ? (
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {data.visits.map((visit) => <VisitRow key={visit.id} visit={visit} />)}
           </div>
         ) : (

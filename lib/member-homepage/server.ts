@@ -99,13 +99,21 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
     const admin = createAdminClient()
     const today = new Date().toISOString().slice(0, 10)
 
-    const [stageResult, pendingResult, todayVisitsResult] = await Promise.all([
+    const [stageResult, unansweredStageResult, pendingResult, todayVisitsResult] = await Promise.all([
       metadataProjectIds.length
         ? admin
             .from("project_stages")
             .select("id, project_id, name, sort_order")
             .in("project_id", metadataProjectIds)
             .eq("status", "in_progress")
+            .order("sort_order", { ascending: true })
+        : Promise.resolve({ data: [] as any[], error: null }),
+      visitProjectIds.length
+        ? admin
+            .from("project_stages")
+            .select("id, project_id, name, status, sort_order")
+            .in("project_id", visitProjectIds)
+            .neq("status", "disabled")
             .order("sort_order", { ascending: true })
         : Promise.resolve({ data: [] as any[], error: null }),
       requestProjectIds.length
@@ -128,6 +136,32 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
       const name = typeof (stage as any).name === "string" ? (stage as any).name.trim() : ""
       if (!isValidUuid(projectId) || !isValidUuid(stageId) || !name || stageByProjectId.has(projectId)) continue
       stageByProjectId.set(projectId, { id: stageId, name })
+    }
+
+    if (unansweredStageResult.error) {
+      // The Stage is optional row metadata; a failure must not hide a valid scheduled visit.
+      logLoadError("unanswered project stages", userId, visitProjects.length, unansweredStageResult.error)
+    }
+
+    // project_stages.status is the active Stage-based workflow rollup. A Stage becomes
+    // completed only when its direct Stage reports are all approved/completed. Following
+    // the canonical sort_order, the first non-completed Stage is therefore the next/current
+    // Stage that still requires a response. Reading this state does not create a report or
+    // increment the existing project-wide Visit Number sequence.
+    const unansweredStageByProjectId = new Map<string, { id: string; name: string }>()
+    for (const stage of unansweredStageResult.error ? [] : unansweredStageResult.data ?? []) {
+      const projectId = (stage as any).project_id
+      const stageId = (stage as any).id
+      const name = typeof (stage as any).name === "string" ? (stage as any).name.trim() : ""
+      const status = typeof (stage as any).status === "string" ? (stage as any).status : ""
+      if (
+        !isValidUuid(projectId) ||
+        !isValidUuid(stageId) ||
+        !name ||
+        status === "completed" ||
+        unansweredStageByProjectId.has(projectId)
+      ) continue
+      unansweredStageByProjectId.set(projectId, { id: stageId, name })
     }
 
     let visitRequestsHasError = false
@@ -175,7 +209,7 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
       visits = visitRows.flatMap((row: any) => {
         const project = visitProjectById.get(row.project_id)
         if (!project) return []
-        const stage = stageByProjectId.get(row.project_id) ?? null
+        const stage = unansweredStageByProjectId.get(row.project_id) ?? null
         const hasCoordinates = project.latitude !== null && project.longitude !== null
         const googleMapsUrl = hasCoordinates
           ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${project.latitude},${project.longitude}`)}`
