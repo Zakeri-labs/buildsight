@@ -17,6 +17,7 @@ export type MemberHomepageRequest = {
 
 export type MemberHomepageVisit = {
   id: string
+  status: "scheduled" | "completed"
   scheduledDate: string
   scheduledTime: string | null
   projectName: string

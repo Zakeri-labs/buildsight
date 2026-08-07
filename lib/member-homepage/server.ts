@@ -3,6 +3,7 @@ import "server-only"
 import {
   getCalendarPendingRequestRows,
   getCalendarScheduledSiteVisitRowsForDate,
+  getCalendarTodaySiteVisitRowsForDate,
   resolveCalendarProjectScope,
   resolveExplicitSupervisorProjectScope,
 } from "@/lib/calendar/server"
@@ -126,14 +127,13 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
             .from("project_stages")
             .select("id, project_id, name, status, sort_order")
             .in("project_id", visitProjectIds)
-            .neq("status", "disabled")
             .order("sort_order", { ascending: true })
         : Promise.resolve({ data: [] as any[], error: null }),
       requestProjectIds.length
         ? getCalendarPendingRequestRows(requestProjectIds)
         : Promise.resolve({ data: [] as any[], error: null }),
       visitProjectIds.length
-        ? getCalendarScheduledSiteVisitRowsForDate(visitProjectIds, today)
+        ? getCalendarTodaySiteVisitRowsForDate(visitProjectIds, today)
         : Promise.resolve({ data: [] as any[], error: null }),
       visitProjectIds.length
         ? getCalendarScheduledSiteVisitRowsForDate(visitProjectIds, tomorrow)
@@ -165,16 +165,19 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
     // Stage that still requires a response. Reading this state does not create a report or
     // increment the existing project-wide Visit Number sequence.
     const unansweredStageByProjectId = new Map<string, { id: string; name: string }>()
+    const stageNameById = new Map<string, string>()
     for (const stage of unansweredStageResult.error ? [] : unansweredStageResult.data ?? []) {
       const projectId = (stage as any).project_id
       const stageId = (stage as any).id
       const name = typeof (stage as any).name === "string" ? (stage as any).name.trim() : ""
       const status = typeof (stage as any).status === "string" ? (stage as any).status : ""
+      if (isValidUuid(stageId) && name) stageNameById.set(stageId, name)
       if (
         !isValidUuid(projectId) ||
         !isValidUuid(stageId) ||
         !name ||
         status === "completed" ||
+        status === "disabled" ||
         unansweredStageByProjectId.has(projectId)
       ) continue
       unansweredStageByProjectId.set(projectId, { id: stageId, name })
@@ -213,7 +216,10 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
       todaysReportsHasError = true
     } else {
       const visitRows = (todayVisitsResult.data ?? []).filter((row: any) =>
-        isValidUuid(row.id) && isValidUuid(row.project_id) && typeof row.scheduled_date === "string",
+        isValidUuid(row.id) &&
+        isValidUuid(row.project_id) &&
+        typeof row.scheduled_date === "string" &&
+        (row.status === "scheduled" || row.status === "completed"),
       )
       requiredReportsToday = visitRows.length
 
@@ -235,15 +241,14 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
           siteVisitRequestId: row.id as string,
           projectId: row.project_id as string,
           stageId: stage?.id ?? null,
-          stageName: stage?.name ?? null,
           visitNumber: visitNumberByProjectId.get(row.project_id) ?? null,
         }
       })
 
-      // Use the authenticated server client here so the exact same report visibility/RLS
-      // available to the Member on Stage Report pages is respected. Loading this card is
-      // read-only and never creates, reserves, or increments a report Visit Number.
+      const explicitReportByVisitId = new Map<string, any>()
+      const legacyReportByIdentity = new Map<string, any>()
       const obligationProjectIds = Array.from(new Set(reportObligations.map((item) => item.projectId)))
+
       if (reportObligations.length && obligationProjectIds.length) {
         try {
           const userClient = await createServerClient()
@@ -264,8 +269,6 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
               completionStatuses.has(typeof report.status === "string" ? report.status : ""),
             )
 
-            const explicitReportByVisitId = new Map<string, any>()
-            const legacyReportByIdentity = new Map<string, any>()
             for (const report of completedRows) {
               if (isValidUuid((report as any).site_visit_request_id)) {
                 explicitReportByVisitId.set((report as any).site_visit_request_id, report)
@@ -279,28 +282,15 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
             }
 
             completedReportsToday = reportObligations.reduce((count, obligation) => {
-              if (!obligation.stageId) return count
-
               const explicit = explicitReportByVisitId.get(obligation.siteVisitRequestId)
-              if (
-                explicit &&
-                explicit.project_id === obligation.projectId &&
-                explicit.project_stage_id === obligation.stageId
-              ) {
-                return count + 1
-              }
+              if (explicit && explicit.project_id === obligation.projectId) return count + 1
 
-              // Legacy compatibility for reports saved before the explicit Site Visit FK was
-              // populated by the application. This is the existing canonical Stage Report
-              // identity only: Project + Stage + immutable project-scoped Visit Number. No
-              // date/title/list-index matching is used.
-              if (obligation.visitNumber) {
+              if (obligation.stageId && obligation.visitNumber) {
                 const legacy = legacyReportByIdentity.get(
                   `${obligation.projectId}:${obligation.stageId}:${obligation.visitNumber}`,
                 )
                 if (legacy) return count + 1
               }
-
               return count
             }, 0)
             completedReportsToday = Math.min(completedReportsToday, requiredReportsToday)
@@ -314,7 +304,20 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
       visits = visitRows.flatMap((row: any) => {
         const project = visitProjectById.get(row.project_id)
         if (!project) return []
-        const stage = unansweredStageByProjectId.get(row.project_id) ?? null
+
+        const isCompleted = row.status === "completed"
+        const linkedReport = isCompleted ? explicitReportByVisitId.get(row.id) ?? null : null
+        const linkedReportMatchesProject = linkedReport?.project_id === row.project_id
+        const linkedStageId = linkedReportMatchesProject && isValidUuid(linkedReport?.project_stage_id)
+          ? linkedReport.project_stage_id as string
+          : null
+        const activeStage = isCompleted ? null : unansweredStageByProjectId.get(row.project_id) ?? null
+        const stageId = linkedStageId ?? activeStage?.id ?? null
+        const stageName = linkedStageId ? stageNameById.get(linkedStageId) ?? null : activeStage?.name ?? null
+        const linkedVisitNumber = linkedReportMatchesProject && Number.isInteger(linkedReport?.visit_number) && linkedReport.visit_number > 0
+          ? linkedReport.visit_number as number
+          : null
+        const visitNumber = isCompleted ? linkedVisitNumber : visitNumberByProjectId.get(row.project_id) ?? null
         const hasCoordinates = project.latitude !== null && project.longitude !== null
         const googleMapsUrl = hasCoordinates
           ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${project.latitude},${project.longitude}`)}`
@@ -322,14 +325,15 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
 
         return [{
           id: row.id,
+          status: isCompleted ? "completed" as const : "scheduled" as const,
           scheduledDate: row.scheduled_date,
           scheduledTime: clockTime(row.scheduled_time),
           projectName: project.name?.trim() || "Project",
           projectCode: project.code?.trim() || null,
-          stageName: stage?.name ?? null,
-          visitNumber: visitNumberByProjectId.get(row.project_id) ?? null,
-          stageResponseHref: stage
-            ? `/projects/${project.id}/stages/${stage.id}/reports/new?siteVisitRequestId=${encodeURIComponent(row.id)}`
+          stageName,
+          visitNumber,
+          stageResponseHref: !isCompleted && stageId
+            ? `/projects/${project.id}/stages/${stageId}/reports/new?siteVisitRequestId=${encodeURIComponent(row.id)}`
             : null,
           googleMapsUrl,
         }]

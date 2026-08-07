@@ -11,6 +11,7 @@ const MAX_VISIBLE_EVENTS = 2
 const LEGEND_ITEMS = [
   { label: "Client Request", dotClassName: "bg-slate-400 dark:bg-slate-500" },
   { label: "Scheduled Visit", dotClassName: "bg-blue-500" },
+  { label: "Completed", dotClassName: "bg-green-500" },
   { label: "Approved Request", dotClassName: "bg-emerald-500" },
   { label: "Cancelled", dotClassName: "bg-red-300 dark:bg-red-400" },
 ] as const
@@ -20,6 +21,8 @@ const EVENT_STYLES: Record<CalendarEventViewModel["kind"], string> = {
     "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200",
   scheduled_visit:
     "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/60 dark:text-blue-200",
+  completed_visit:
+    "border-green-200 bg-green-50/80 text-green-700 dark:border-green-900 dark:bg-green-950/45 dark:text-green-200",
   approved_request:
     "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200",
   cancelled:

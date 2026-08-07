@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { assertProjectAdmin, assertProjectMember, assertProjectReviewer, audit, AuthzError } from "@/lib/auth/guards"
+import { resolveCalendarProjectScope } from "@/lib/calendar/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 import {
@@ -290,6 +291,74 @@ type SaveReportResponseInput = {
 
 type SavedReportResponse = { responseId: string; projectStageId: string; reportNumber: string; visitNumber: number; status: string }
 
+async function assertLinkedSiteVisitCompletionAuthority(actorId: string, projectId: string) {
+  const scope = await resolveCalendarProjectScope(actorId)
+  if (!scope.some((project) => project.id === projectId)) {
+    throw new AuthzError("You do not have permission to complete this Site Visit.")
+  }
+}
+
+function logLinkedSiteVisitCompletionError(error: unknown, input: { projectId: string; siteVisitRequestId: string; responseId: string }) {
+  const fields = error && typeof error === "object" ? error as Record<string, unknown> : {}
+  console.error("[stage-report] linked Site Visit completion failed", {
+    operation: "complete linked Site Visit after Stage Report submission",
+    projectId: input.projectId,
+    siteVisitRequestId: input.siteVisitRequestId,
+    responseId: input.responseId,
+    code: typeof fields.code === "string" ? fields.code : null,
+    message: typeof fields.message === "string" ? fields.message : error instanceof Error ? error.message : "Unknown Site Visit completion error",
+    details: typeof fields.details === "string" ? fields.details : null,
+    hint: typeof fields.hint === "string" ? fields.hint : null,
+  })
+}
+
+async function completeLinkedSiteVisitAfterReport(input: {
+  actorId: string
+  projectId: string
+  siteVisitRequestId: string
+  responseId: string
+}): Promise<boolean> {
+  await assertLinkedSiteVisitCompletionAuthority(input.actorId, input.projectId)
+  const admin = createAdminClient()
+  try {
+    const { data: current, error: currentError } = await admin
+      .from("site_visit_requests")
+      .select("id, project_id, status")
+      .eq("id", input.siteVisitRequestId)
+      .eq("project_id", input.projectId)
+      .maybeSingle()
+    if (currentError) throw currentError
+    if (!current) throw new Error("Linked Site Visit was not found.")
+    if (current.status === "completed") return false
+    if (current.status !== "scheduled") throw new Error("Only a scheduled Site Visit can be completed by a Stage Report.")
+
+    const completedAt = new Date().toISOString()
+    const { data: updated, error: updateError } = await admin
+      .from("site_visit_requests")
+      .update({ status: "completed", completed_at: completedAt, cancelled_at: null })
+      .eq("id", input.siteVisitRequestId)
+      .eq("project_id", input.projectId)
+      .eq("status", "scheduled")
+      .select("id")
+      .maybeSingle()
+    if (updateError) throw updateError
+    if (updated) return true
+
+    const { data: latest, error: latestError } = await admin
+      .from("site_visit_requests")
+      .select("status")
+      .eq("id", input.siteVisitRequestId)
+      .eq("project_id", input.projectId)
+      .maybeSingle()
+    if (latestError) throw latestError
+    if (latest?.status === "completed") return false
+    throw new Error("The linked Site Visit changed before it could be completed.")
+  } catch (error) {
+    logLinkedSiteVisitCompletionError(error, input)
+    throw error
+  }
+}
+
 async function saveReportResponse(input: SaveReportResponseInput): Promise<StageActionResult<SavedReportResponse>> {
   try {
     const actorId = await assertProjectMember(input.projectId)
@@ -325,7 +394,12 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
     if (rawSiteVisitRequestId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawSiteVisitRequestId)) {
       return { ok: false, error: "Invalid Site Visit context." }
     }
-    const siteVisitRequestId = rawSiteVisitRequestId || null
+    if (existing?.site_visit_request_id && rawSiteVisitRequestId && existing.site_visit_request_id !== rawSiteVisitRequestId) {
+      return { ok: false, error: "This report is already linked to another Site Visit." }
+    }
+    const siteVisitRequestId = rawSiteVisitRequestId || (directStage && typeof existing?.site_visit_request_id === "string"
+      ? existing.site_visit_request_id
+      : null)
 
     if (siteVisitRequestId) {
       const { data: siteVisit, error: siteVisitError } = await admin
@@ -339,16 +413,15 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         return { ok: false, error: "This Site Visit is not available for the selected project." }
       }
     }
+    if (input.submit && directStage && siteVisitRequestId) {
+      await assertLinkedSiteVisitCompletionAuthority(actorId, input.projectId)
+    }
     if (existing && existing.project_stage_id !== projectStageId) {
       return { ok: false, error: "This report does not belong to the selected stage." }
     }
     if (existing && existing.project_stage_term_id !== legacyTermId) {
       return { ok: false, error: directStage ? "This report does not belong to the selected stage." : "This report does not belong to the selected term." }
     }
-    if (existing?.site_visit_request_id && siteVisitRequestId && existing.site_visit_request_id !== siteVisitRequestId) {
-      return { ok: false, error: "This report is already linked to another Site Visit." }
-    }
-
     if (term && !term.parent_term_id) {
       const { count: activeSubtermCount, error: subtermError } = await admin
         .from("project_stage_terms")
@@ -468,6 +541,16 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       }
     }
 
+    let linkedSiteVisitTransitioned = false
+    if (input.submit && directStage && siteVisitRequestId) {
+      linkedSiteVisitTransitioned = await completeLinkedSiteVisitAfterReport({
+        actorId,
+        projectId: input.projectId,
+        siteVisitRequestId,
+        responseId: input.responseId,
+      })
+    }
+
     await audit({
       actorId,
       action: input.submit ? "stage_report.submitted" : "stage_report.saved",
@@ -476,7 +559,24 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       projectId: input.projectId,
       metadata: { stageId: projectStageId, termId: legacyTermId, reportNumber, reportName: directStage?.name ?? term!.report_name },
     })
+    if (linkedSiteVisitTransitioned && siteVisitRequestId) {
+      await audit({
+        actorId,
+        action: "site_visit.completed",
+        entityType: "site_visit_request",
+        entityId: siteVisitRequestId,
+        projectId: input.projectId,
+        metadata: { source: "stage_report", responseId: input.responseId, stageId: projectStageId },
+      })
+    }
+
     revalidateProjectStageViews(input.projectId)
+    if (input.submit && siteVisitRequestId) {
+      revalidatePath("/calendar")
+      revalidatePath("/memberhomepage")
+      revalidatePath("/site-visits")
+      revalidatePath(`/site-visits/${siteVisitRequestId}`)
+    }
     revalidatePath(`/projects/${input.projectId}/stages/${projectStageId}`)
     revalidatePath(
       directStage

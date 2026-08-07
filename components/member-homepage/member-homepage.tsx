@@ -1,6 +1,6 @@
 import Link from "next/link"
 
-import { AlertTriangle, CalendarPlus, Clock3, FilePlus2, FileText, MapPinned, MessageSquare } from "lucide-react"
+import { AlertTriangle, CalendarPlus, CheckCircle2, Clock3, FilePlus2, FileText, MapPinned, MessageSquare } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import type { MemberHomepageData, MemberHomepageRequest, MemberHomepageVisit } from "@/lib/member-homepage/types"
@@ -101,14 +101,24 @@ function RequestRow({ request }: { request: MemberHomepageRequest }) {
 
 function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
   const scheduledTime = formatTime(visit.scheduledTime)
+  const isCompleted = visit.status === "completed"
   const actionClass =
     "inline-flex size-8 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-9 sm:rounded-lg"
   const disabledActionClass = `${actionClass} cursor-not-allowed opacity-40 hover:bg-background hover:text-muted-foreground`
 
   return (
-    <Card size="sm" className="overflow-hidden py-0">
+    <Card
+      size="sm"
+      className={cn(
+        "overflow-hidden py-0",
+        isCompleted && "bg-muted/20 opacity-80 ring-1 ring-inset ring-green-200/60 dark:ring-green-900/50",
+      )}
+    >
       <div className="grid min-h-[4.15rem] grid-cols-[2.65rem_minmax(0,1.35fr)_minmax(5.3rem,1fr)_2.55rem] items-stretch sm:min-h-[4.25rem] sm:grid-cols-[3.5rem_minmax(0,1.35fr)_minmax(6.5rem,1fr)_3rem]">
-        <div className="flex min-w-0 flex-col items-center justify-center bg-sidebar px-1 text-center text-white">
+        <div className={cn(
+          "flex min-w-0 flex-col items-center justify-center bg-sidebar px-1 text-center text-white",
+          isCompleted && "bg-sidebar/80",
+        )}>
           {scheduledTime ? (
             <>
               <span className="text-[12px] font-bold leading-3.5 tabular-nums sm:text-sm sm:leading-4">{scheduledTime.time}</span>
@@ -135,10 +145,20 @@ function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
           {visit.visitNumber ? (
             <p className="mt-0.5 whitespace-nowrap text-[9px] leading-3 text-muted-foreground sm:text-[11px] sm:leading-4">Visit No. {visit.visitNumber}</p>
           ) : null}
+          {isCompleted ? (
+            <span className="mt-0.5 inline-flex items-center gap-0.5 text-[8px] font-medium leading-3 text-green-700 dark:text-green-300 sm:text-[10px]">
+              <CheckCircle2 className="size-2.5" aria-hidden="true" />
+              Completed
+            </span>
+          ) : null}
         </div>
 
         <div className="flex flex-col items-center justify-center gap-1 border-l px-0.5 py-1">
-          {visit.stageResponseHref ? (
+          {isCompleted ? (
+            <button type="button" aria-label="Open stage response (completed visit)" aria-disabled="true" className={disabledActionClass} disabled>
+              <FilePlus2 className="size-4 sm:size-[18px]" aria-hidden="true" />
+            </button>
+          ) : visit.stageResponseHref ? (
             <Link href={visit.stageResponseHref} aria-label="Open stage response" className={actionClass}>
               <FilePlus2 className="size-4 sm:size-[18px]" aria-hidden="true" />
             </Link>
@@ -147,7 +167,11 @@ function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
               <FilePlus2 className="size-4 sm:size-[18px]" aria-hidden="true" />
             </button>
           )}
-          {visit.googleMapsUrl ? (
+          {isCompleted ? (
+            <button type="button" aria-label="Open project location in Google Maps (completed visit)" aria-disabled="true" className={disabledActionClass} disabled>
+              <MapPinned className="size-4 sm:size-[18px]" aria-hidden="true" />
+            </button>
+          ) : visit.googleMapsUrl ? (
             <a
               href={visit.googleMapsUrl}
               target="_blank"

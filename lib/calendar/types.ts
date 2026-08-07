@@ -1,6 +1,7 @@
 export type CalendarEventKind =
   | "client_request"
   | "scheduled_visit"
+  | "completed_visit"
   | "approved_request"
   | "cancelled"
 

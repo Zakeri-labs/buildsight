@@ -13,6 +13,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 export const CALENDAR_PENDING_REQUEST_STATUS = "pending" as const
 const SCHEDULED_VISIT_STATUSES = ["scheduled"] as const
+const TODAY_VISIT_STATUSES = ["scheduled", "completed"] as const
 const CALENDAR_VISIT_STATUSES = ["scheduled", "completed", "cancelled"] as const
 const CALENDAR_REQUEST_COLUMNS = "id, project_id, requested_by, client_request_id, status, preferred_date, is_asap, preferred_time, purpose, notes, scheduled_date, scheduled_time, created_at"
 
@@ -220,6 +221,19 @@ export async function getCalendarScheduledSiteVisitRowsForDate(projectIds: strin
     .order("scheduled_time", { ascending: true, nullsFirst: false })
 }
 
+export async function getCalendarTodaySiteVisitRowsForDate(projectIds: string[], date: string) {
+  const validProjectIds = uniqueValidUuids(projectIds)
+  if (!validProjectIds.length || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { data: [] as any[], error: null }
+
+  return createAdminClient()
+    .from("site_visit_requests")
+    .select(CALENDAR_REQUEST_COLUMNS)
+    .in("project_id", validProjectIds)
+    .in("status", [...TODAY_VISIT_STATUSES])
+    .eq("scheduled_date", date)
+    .order("scheduled_time", { ascending: true, nullsFirst: false })
+}
+
 export async function getCalendarSchedulingProjects({ userId, projects }: {
   userId: string
   projects: CalendarProjectScopeRow[]
@@ -420,15 +434,22 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
     for (const row of visitRangeResult.data ?? []) {
       if (typeof row.scheduled_date !== "string") continue
       const isCancelled = row.status === "cancelled"
+      const isCompleted = row.status === "completed"
       const explicitlyFromClientRequest = isValidCalendarUuid(row.client_request_id)
       events.push({
         id: row.id,
         projectId: row.project_id,
         projectName: projectNameById.get(row.project_id) ?? "Project",
         date: row.scheduled_date,
-        kind: isCancelled ? "cancelled" : explicitlyFromClientRequest ? "approved_request" : "scheduled_visit",
+        kind: isCancelled
+          ? "cancelled"
+          : isCompleted
+            ? "completed_visit"
+            : explicitlyFromClientRequest
+              ? "approved_request"
+              : "scheduled_visit",
         timeLabel: clockTime(row.scheduled_time),
-        secondaryLabel: isCancelled ? "Cancelled" : "Site Visit",
+        secondaryLabel: isCancelled ? "Cancelled" : isCompleted ? "Completed" : "Site Visit",
       })
     }
 
