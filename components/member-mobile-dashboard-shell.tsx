@@ -116,7 +116,7 @@ export function MemberMobileBottomNavigation() {
       className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-18px_rgba(0,0,0,0.45)] backdrop-blur md:hidden"
     >
       <div className="relative mx-auto grid h-[4.5rem] max-w-lg grid-cols-5 items-stretch px-2">
-        <BottomNavItem label="Home" icon={Home} active={pathname === "/"} uiOnly />
+        <BottomNavItem label="Home" icon={Home} href="/dashboard" active={pathname === "/dashboard" || pathname === "/"} />
         <BottomNavItem
           label="Projects"
           icon={FolderKanban}

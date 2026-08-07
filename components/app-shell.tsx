@@ -28,7 +28,9 @@ export function AppShell({
 }) {
   const pathname = usePathname()
   const currentUser = useCurrentUser()
-  const isMemberDashboard = pathname === "/" && currentUser.role === "org_member"
+  const isMember = currentUser.role === "org_member"
+  const isMemberDashboard = (pathname === "/" || pathname === "/dashboard") && isMember
+  const showMemberBottomNavigation = isMemberDashboard || (isMember && pathname.startsWith("/calendar"))
 
   const activeProjectName =
     selectedProjectId === "all" ? null : projects.find((project) => project.id === selectedProjectId)?.name ?? null
@@ -62,14 +64,14 @@ export function AppShell({
         )}
         <main
           className={
-            isMemberDashboard
+            showMemberBottomNavigation
               ? "flex-1 px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
               : "flex-1 px-4 py-5 md:px-8 md:py-6"
           }
         >
           {children}
         </main>
-        {isMemberDashboard ? <MemberMobileBottomNavigation /> : null}
+        {showMemberBottomNavigation ? <MemberMobileBottomNavigation /> : null}
       </div>
     </div>
   )
