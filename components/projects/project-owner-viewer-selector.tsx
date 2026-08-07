@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { useMemo, useRef, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -16,6 +15,7 @@ import { cn } from "@/lib/utils"
 type ViewerLoadResult = Awaited<ReturnType<typeof loadProjectOwnerViewers>>
 
 export function ProjectOwnerViewerSelector({
+  id,
   supervisingOrgId,
   selectedViewer,
   onSelectViewer,
@@ -23,6 +23,7 @@ export function ProjectOwnerViewerSelector({
   disabled,
   labels,
 }: {
+  id: string
   supervisingOrgId: string
   selectedViewer: ProjectOwnerViewerOption | null
   onSelectViewer: (viewer: ProjectOwnerViewerOption) => void
@@ -32,7 +33,6 @@ export function ProjectOwnerViewerSelector({
     label: string
     placeholder: string
     manual: string
-    invite: string
     search: string
     loading: string
     empty: string
@@ -94,10 +94,8 @@ export function ProjectOwnerViewerSelector({
   }
 
   return (
-    <section className="rounded-2xl border bg-muted/10 p-4 sm:p-5" aria-labelledby="existing-viewer-selector-label">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="min-w-0 flex-1 space-y-2">
-          <Label id="existing-viewer-selector-label">{labels.label}</Label>
+    <div className="space-y-2" aria-labelledby={`${id}-label`}>
+      <Label id={`${id}-label`}>{labels.label}</Label>
           <div className="relative">
             <Button
               type="button"
@@ -106,7 +104,7 @@ export function ProjectOwnerViewerSelector({
               onClick={handleTriggerClick}
               disabled={disabled}
               aria-expanded={open}
-              aria-controls="existing-viewer-selector-panel"
+              aria-controls={`${id}-panel`}
             >
               <span className={cn("flex min-w-0 items-center gap-2 truncate text-start", !selectedViewer && "text-muted-foreground")}>
                 <span className="truncate">
@@ -121,7 +119,7 @@ export function ProjectOwnerViewerSelector({
 
             {open ? (
               <div
-                id="existing-viewer-selector-panel"
+                id={`${id}-panel`}
                 className="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-lg"
               >
                 <div className="border-b p-2">
@@ -195,19 +193,6 @@ export function ProjectOwnerViewerSelector({
               </div>
             ) : null}
           </div>
-        </div>
-
-        <Button
-          variant="outline"
-          className="h-10 bg-transparent"
-          disabled={disabled}
-          render={
-            <Link href="/users?tab=members" target="_blank" rel="noopener noreferrer">
-              {labels.invite}
-            </Link>
-          }
-        />
-      </div>
-    </section>
+    </div>
   )
 }

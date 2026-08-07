@@ -202,7 +202,7 @@ export function ProjectCreateForm({
   const [assignedUserId, setAssignedUserId] = useState("")
   const [assignedSupervisorId, setAssignedSupervisorId] = useState("")
   const [owners, setOwners] = useState<OwnerDetails[]>([emptyOwner()])
-  const [selectedOwnerViewer, setSelectedOwnerViewer] = useState<ProjectOwnerViewerOption | null>(null)
+  const [selectedOwnerViewers, setSelectedOwnerViewers] = useState<(ProjectOwnerViewerOption | null)[]>([null])
   const [contractorOrganizationId, setContractorOrganizationId] = useState("")
   const [contractorCompanyName, setContractorCompanyName] = useState("")
   const [contractorRegistrationNumber, setContractorRegistrationNumber] = useState("")
@@ -477,7 +477,12 @@ export function ProjectCreateForm({
     setOwners((current) => {
       if (safeCount === current.length) return current
       if (safeCount < current.length) return current.slice(0, safeCount)
-      return [...current, ...Array.from({ length: safeCount - current.length }, emptyOwner)]
+      return [...current, ...Array.from({ length: safeCount - current.length }, () => emptyOwner())]
+    })
+    setSelectedOwnerViewers((current) => {
+      if (safeCount === current.length) return current
+      if (safeCount < current.length) return current.slice(0, safeCount)
+      return [...current, ...Array.from({ length: safeCount - current.length }, () => null)]
     })
     setError(null)
   }
@@ -493,10 +498,12 @@ export function ProjectCreateForm({
     setError(null)
   }
 
-  function selectOwnerViewer(viewer: ProjectOwnerViewerOption) {
-    setSelectedOwnerViewer(viewer)
+  function selectOwnerViewer(ownerIndex: number, viewer: ProjectOwnerViewerOption) {
+    setSelectedOwnerViewers((current) => current.map((selectedViewer, index) => (
+      index === ownerIndex ? viewer : selectedViewer
+    )))
     setOwners((current) => current.map((owner, index) => (
-      index === 0
+      index === ownerIndex
         ? {
             ...owner,
             name: viewer.ownerName,
@@ -509,8 +516,10 @@ export function ProjectCreateForm({
     setError(null)
   }
 
-  function useManualOwnerEntry() {
-    setSelectedOwnerViewer(null)
+  function useManualOwnerEntry(ownerIndex: number) {
+    setSelectedOwnerViewers((current) => current.map((selectedViewer, index) => (
+      index === ownerIndex ? null : selectedViewer
+    )))
     setError(null)
   }
 
@@ -1305,24 +1314,18 @@ export function ProjectCreateForm({
 
             {step === 2 ? (
               <div className="space-y-5">
-                <ProjectOwnerViewerSelector
-                  supervisingOrgId={supervisingOrg.id}
-                  selectedViewer={selectedOwnerViewer}
-                  onSelectViewer={selectOwnerViewer}
-                  onManualEntry={useManualOwnerEntry}
-                  disabled={pending}
-                  labels={{
-                    label: copy.selectExistingVisitor,
-                    placeholder: copy.selectExistingVisitorPlaceholder,
-                    manual: copy.enterOwnerManually,
-                    invite: copy.inviteNewVisitor,
-                    search: copy.searchVisitors,
-                    loading: copy.loadingVisitors,
-                    empty: copy.noVisitors,
-                    retry: copy.retryVisitors,
-                    pending: isArabic ? "معلق" : "Pending",
-                  }}
-                />
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    className="h-10 bg-transparent"
+                    disabled={pending}
+                    render={
+                      <Link href="/users?tab=members" target="_blank" rel="noopener noreferrer">
+                        {copy.inviteNewVisitor}
+                      </Link>
+                    }
+                  />
+                </div>
 
                 <div className="max-w-xs space-y-2">
                   <Label htmlFor="owner-count">{copy.ownerCount}</Label>
@@ -1345,6 +1348,28 @@ export function ProjectCreateForm({
                         <span className="flex size-7 items-center justify-center rounded-full bg-primary/10 text-xs text-primary">{index + 1}</span>
                         {copy.owner} {index + 1}
                       </h3>
+
+                      <div className="mb-4">
+                        <ProjectOwnerViewerSelector
+                          id={`owner-${index}-viewer`}
+                          supervisingOrgId={supervisingOrg.id}
+                          selectedViewer={selectedOwnerViewers[index] ?? null}
+                          onSelectViewer={(viewer) => selectOwnerViewer(index, viewer)}
+                          onManualEntry={() => useManualOwnerEntry(index)}
+                          disabled={pending}
+                          labels={{
+                            label: copy.selectExistingVisitor,
+                            placeholder: copy.selectExistingVisitorPlaceholder,
+                            manual: copy.enterOwnerManually,
+                            search: copy.searchVisitors,
+                            loading: copy.loadingVisitors,
+                            empty: copy.noVisitors,
+                            retry: copy.retryVisitors,
+                            pending: isArabic ? "معلق" : "Pending",
+                          }}
+                        />
+                      </div>
+
                       <div className="grid gap-4 sm:grid-cols-2">
                         <div className="sm:col-span-2">
                           <Field label={copy.ownerName} htmlFor={`owner-name-${index}`} required>
