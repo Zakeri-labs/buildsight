@@ -1,6 +1,7 @@
 import "server-only"
 
 import { createAdminClient } from "@/lib/supabase/admin"
+import { resolveProjectReadAccessForUser } from "@/lib/auth/project-access"
 import {
   EMPTY_TERM_RESPONSE_CONTENT,
   sanitizeReportHtml,
@@ -179,45 +180,20 @@ function parseContent(value: unknown): TermResponseContent {
 }
 
 async function projectAccess(projectId: string, userId: string) {
-  const admin = createAdminClient()
-  const { data: project, error } = await admin
-    .from("projects")
-    .select("id, name, code, supervising_organization_id")
-    .eq("id", projectId)
-    .maybeSingle()
-  if (error) throw error
-  if (!project) return null
+  const access = await resolveProjectReadAccessForUser(userId, projectId)
+  if (!access) return null
 
-  const [{ data: projectMembership }, { data: orgMembership }] = await Promise.all([
-    admin
-      .from("project_user_memberships")
-      .select("access_role")
-      .eq("project_id", projectId)
-      .eq("user_id", userId)
-      .eq("status", "active")
-      .limit(1)
-      .maybeSingle(),
-    admin
-      .from("organization_memberships")
-      .select("role")
-      .eq("organization_id", project.supervising_organization_id)
-      .eq("user_id", userId)
-      .eq("status", "active")
-      .limit(1)
-      .maybeSingle(),
-  ])
-
-  if (!projectMembership && !orgMembership) return null
   const canManage =
-    projectMembership?.access_role === "project_admin" ||
-    orgMembership?.role === "org_admin"
+    access.projectAccessRole === "project_admin" ||
+    access.supervisingOrganizationRole === "org_admin"
   const canReview =
     canManage ||
-    projectMembership?.access_role === "project_manager" ||
-    projectMembership?.access_role === "reviewer" ||
-    projectMembership?.access_role === "approver" ||
-    orgMembership?.role === "org_manager"
-  return { project, canReview, canManage }
+    access.projectAccessRole === "project_manager" ||
+    access.projectAccessRole === "reviewer" ||
+    access.projectAccessRole === "approver" ||
+    access.supervisingOrganizationRole === "org_manager"
+
+  return { project: access.project, canReview, canManage }
 }
 
 function derivedParentStatus(children: ProjectStageTermExecution[]): ProjectStageTermStatus {

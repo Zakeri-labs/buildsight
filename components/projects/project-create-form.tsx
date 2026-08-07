@@ -823,12 +823,17 @@ export function ProjectCreateForm({
           nextPaymentDueDate: financialValues.nextPaymentDueDate,
           invoiceReferencePaymentNote: financialValues.invoiceReferencePaymentNote,
           initialRemarks: financialValues.initialRemarks,
-          owners: owners.map((owner) => ({
-            name: owner.name,
-            contactName: owner.contactName,
-            contactEmail: owner.contactEmail,
-            contactPhone: owner.contactPhone,
-          })),
+          owners: owners.map((owner, index) => {
+            const selectedViewer = selectedOwnerViewers[index] ?? null
+            return {
+              name: owner.name,
+              contactName: owner.contactName,
+              contactEmail: owner.contactEmail,
+              contactPhone: owner.contactPhone,
+              viewerUserId: selectedViewer?.source === "registered" ? selectedViewer.id : null,
+              viewerInvitationId: selectedViewer?.source === "pending" ? selectedViewer.id : null,
+            }
+          }),
           contractor: {
             organizationId: contractorOrganizationId || null,
             companyName: contractorCompanyName,

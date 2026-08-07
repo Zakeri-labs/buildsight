@@ -29,8 +29,9 @@ function normalizedEmail(value: string | null | undefined) {
  * The canonical application role is organization role `viewer`. The list is a
  * read-only combination of active Viewer memberships and still-valid pending
  * Viewer invitations in the same supervising organization. Selecting an entry
- * never mutates membership or invitation state; it only provides data used to
- * prefill the existing project-owner snapshot fields.
+ * never mutates membership or invitation state; it prefills the editable Owner
+ * snapshot while the create action separately persists the option's immutable
+ * Viewer user/invitation identity for project authorization.
  */
 export async function loadProjectOwnerViewers(input: {
   supervisingOrgId: string

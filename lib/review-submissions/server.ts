@@ -118,15 +118,38 @@ export async function getReviewSubmissionFeed(input: {
 
     let reviewableProjectIds = candidateProjectIds
     if (!orgMembership) {
-      const { data: memberships, error: membershipError } = await admin
-        .from("project_user_memberships")
-        .select("project_id")
-        .eq("user_id", input.userId)
-        .eq("status", "active")
-        .in("access_role", [...PROJECT_REVIEW_ACCESS_ROLES])
-        .in("project_id", candidateProjectIds)
+      const [{ data: memberships, error: membershipError }, { data: viewerMembership, error: viewerMembershipError }] = await Promise.all([
+        admin
+          .from("project_user_memberships")
+          .select("project_id")
+          .eq("user_id", input.userId)
+          .eq("status", "active")
+          .in("access_role", [...PROJECT_REVIEW_ACCESS_ROLES])
+          .in("project_id", candidateProjectIds),
+        admin
+          .from("organization_memberships")
+          .select("id")
+          .eq("organization_id", input.organizationId)
+          .eq("user_id", input.userId)
+          .eq("role", "viewer")
+          .eq("status", "active")
+          .limit(1)
+          .maybeSingle(),
+      ])
       if (membershipError) throw membershipError
+      if (viewerMembershipError) throw viewerMembershipError
       reviewableProjectIds = Array.from(new Set((memberships ?? []).map((m: any) => m.project_id as string)))
+
+      if (viewerMembership) {
+        const { data: ownerRows, error: ownerError } = await admin
+          .from("project_owners")
+          .select("project_id")
+          .eq("viewer_user_id", input.userId)
+          .in("project_id", reviewableProjectIds)
+        if (ownerError) throw ownerError
+        const ownerProjectIds = new Set((ownerRows ?? []).map((row: any) => row.project_id as string))
+        reviewableProjectIds = reviewableProjectIds.filter((projectId) => ownerProjectIds.has(projectId))
+      }
     }
 
     if (!reviewableProjectIds.length) return { canReview: false, items: [] }

@@ -10,7 +10,7 @@ export default async function NcrsPage() {
   const orgId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id ?? null
   const projectId = await getSelectedProjectId()
 
-  const rows = orgId ? await getNcrs(orgId, projectId) : []
+  const rows = orgId ? await getNcrs(orgId, projectId, session.userId) : []
 
   const ncrs: NcrRecord[] = rows.map((r) => ({
     id: r.code,

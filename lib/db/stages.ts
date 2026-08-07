@@ -70,6 +70,7 @@ export async function resolveStageManagementOrganization(
   if (projectError) return null
 
   for (const project of projects ?? []) {
+    if (!(await canManageStageTemplates(project.supervising_organization_id, userId))) continue
     const organization = await readOrganization(project.supervising_organization_id)
     if (organization) return organization
   }
@@ -136,10 +137,34 @@ export async function canManageStageTemplates(organizationId: string, userId: st
   const projectIds = (projectMemberships ?? []).map((membership: any) => membership.project_id as string)
   if (projectIds.length === 0) return false
 
+  const { data: viewerMembership, error: viewerMembershipError } = await admin
+    .from("organization_memberships")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .eq("role", "viewer")
+    .limit(1)
+    .maybeSingle()
+  if (viewerMembershipError) return false
+
+  let eligibleProjectIds = projectIds
+  if (viewerMembership) {
+    const { data: ownerRows, error: ownerError } = await admin
+      .from("project_owners")
+      .select("project_id")
+      .eq("viewer_user_id", userId)
+      .in("project_id", projectIds)
+    if (ownerError) return false
+    const ownerProjectIds = new Set((ownerRows ?? []).map((row: any) => row.project_id as string))
+    eligibleProjectIds = projectIds.filter((projectId) => ownerProjectIds.has(projectId))
+  }
+  if (eligibleProjectIds.length === 0) return false
+
   const { data: managedProject, error: projectError } = await admin
     .from("projects")
     .select("id")
-    .in("id", projectIds)
+    .in("id", eligibleProjectIds)
     .eq("supervising_organization_id", organizationId)
     .limit(1)
     .maybeSingle()

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { assertOrgAdmin, assertProjectAdmin, audit, AuthzError } from "@/lib/auth/guards"
+import { assertOrgAdmin, assertProjectAdmin, assertProjectReadAccess, audit, AuthzError } from "@/lib/auth/guards"
 import { createInvitation, type InvitationActionData } from "@/lib/actions/invitations"
 import { createOrganization } from "@/lib/actions/organizations"
 import type { ProjectAccessRole, ProjectOrgRole } from "@/lib/db/types"
@@ -238,6 +238,7 @@ export async function getProjectDeletionImpact(input: {
   projectId: string
 }): Promise<ActionResult<ProjectDeletionImpact & { projectName: string }>> {
   try {
+    await assertProjectReadAccess(input.projectId)
     const admin = createAdminClient()
     const { data: project, error } = await admin
       .from("projects")
@@ -262,6 +263,7 @@ export async function deleteProject(input: {
   projectId: string
 }): Promise<ActionResult<{ impact: ProjectDeletionImpact; storageCleanupIncomplete: boolean }>> {
   try {
+    await assertProjectReadAccess(input.projectId)
     const admin = createAdminClient()
     const { data: project, error: projectError } = await admin
       .from("projects")
@@ -800,6 +802,8 @@ export async function createProject(input: {
     contactName?: string
     contactEmail?: string
     contactPhone?: string
+    viewerUserId?: string | null
+    viewerInvitationId?: string | null
   }>
   contractor?: {
     organizationId?: string | null
@@ -870,6 +874,8 @@ export async function createProject(input: {
       contactName: owner.contactName?.trim() || null,
       contactEmail: owner.contactEmail?.trim().toLowerCase() || null,
       contactPhone: owner.contactPhone?.trim() || null,
+      viewerUserId: owner.viewerUserId?.trim() || null,
+      viewerInvitationId: owner.viewerInvitationId?.trim() || null,
     }))
     if (owners.length > 10) return { ok: false, error: "A project can have up to 10 owners during creation." }
     if (owners.some((owner) => owner.name.length < 2)) {
@@ -895,6 +901,55 @@ export async function createProject(input: {
       .maybeSingle()
     if (org?.type !== "supervising") {
       return { ok: false, error: "Only a supervising organization can create projects." }
+    }
+
+    const selectedOwnerViewerUserIds = owners.map((owner) => owner.viewerUserId).filter((id): id is string => Boolean(id))
+    const selectedOwnerViewerInvitationIds = owners.map((owner) => owner.viewerInvitationId).filter((id): id is string => Boolean(id))
+    const ownerViewerUserIds = Array.from(new Set(selectedOwnerViewerUserIds))
+    const ownerViewerInvitationIds = Array.from(new Set(selectedOwnerViewerInvitationIds))
+    if (owners.some((owner) => owner.viewerUserId && owner.viewerInvitationId)) {
+      return { ok: false, error: "Select only one Viewer source for each owner." }
+    }
+    if (ownerViewerUserIds.length !== selectedOwnerViewerUserIds.length || ownerViewerInvitationIds.length !== selectedOwnerViewerInvitationIds.length) {
+      return { ok: false, error: "The same Viewer cannot be selected for more than one owner slot in a project." }
+    }
+    if (ownerViewerUserIds.some((id) => !UUID_PATTERN.test(id)) || ownerViewerInvitationIds.some((id) => !UUID_PATTERN.test(id))) {
+      return { ok: false, error: "One of the selected Viewers is no longer available." }
+    }
+
+    if (ownerViewerUserIds.length > 0) {
+      const { data: viewerMemberships, error: viewerMembershipError } = await admin
+        .from("organization_memberships")
+        .select("user_id")
+        .eq("organization_id", input.supervisingOrgId)
+        .eq("role", "viewer")
+        .eq("status", "active")
+        .in("user_id", ownerViewerUserIds)
+      if (viewerMembershipError) throw viewerMembershipError
+      const allowedViewerIds = new Set((viewerMemberships ?? []).map((membership) => membership.user_id))
+      if (ownerViewerUserIds.some((id) => !allowedViewerIds.has(id))) {
+        return { ok: false, error: "One of the selected Viewers is no longer an active Viewer in this organization." }
+      }
+    }
+
+    if (ownerViewerInvitationIds.length > 0) {
+      const { data: viewerInvitations, error: viewerInvitationError } = await admin
+        .from("invitations")
+        .select("id, organization_id, organization_role, status, expires_at")
+        .eq("organization_id", input.supervisingOrgId)
+        .eq("organization_role", "viewer")
+        .eq("status", "pending")
+        .in("id", ownerViewerInvitationIds)
+      if (viewerInvitationError) throw viewerInvitationError
+      const now = Date.now()
+      const validInvitationIds = new Set(
+        (viewerInvitations ?? [])
+          .filter((invitation) => new Date(invitation.expires_at).getTime() > now)
+          .map((invitation) => invitation.id),
+      )
+      if (ownerViewerInvitationIds.some((id) => !validInvitationIds.has(id))) {
+        return { ok: false, error: "One of the selected pending Viewer invitations is no longer available." }
+      }
     }
 
     const assignedUserId = input.assignedUserId?.trim() || null
@@ -1064,6 +1119,8 @@ export async function createProject(input: {
           contact_name: owner.contactName,
           contact_email: owner.contactEmail,
           contact_phone: owner.contactPhone,
+          viewer_user_id: owner.viewerUserId,
+          viewer_invitation_id: owner.viewerInvitationId,
         })),
       ).select("id, owner_order")
       if (ownersError) throw ownersError
@@ -1108,7 +1165,7 @@ export async function createProject(input: {
               organization_name: owner.name,
               participant_type: "client",
               project_role: "client",
-              key_contact_user_id: null,
+              key_contact_user_id: owner.viewerUserId,
               key_contact_name: owner.contactName,
               key_contact_email: owner.contactEmail,
               key_contact_phone: owner.contactPhone,

@@ -32,7 +32,7 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
   try {
     const admin = createAdminClient()
 
-  const [organizationMembershipResult, projectMembershipResult, participantResult, assignedSupervisorProjectResult] = await Promise.all([
+  const [organizationMembershipResult, projectMembershipResult, participantResult, assignedSupervisorProjectResult, viewerOwnerResult] = await Promise.all([
     admin
       .from("organization_memberships")
       .select("organization_id, role")
@@ -52,13 +52,19 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
       .from("projects")
       .select("id")
       .eq("assigned_supervisor_id", userId),
+    admin
+      .from("project_owners")
+      .select("project_id")
+      .eq("viewer_user_id", userId),
   ])
 
   if (organizationMembershipResult.error) throw organizationMembershipResult.error
   if (projectMembershipResult.error) throw projectMembershipResult.error
   if (participantResult.error) throw participantResult.error
   if (assignedSupervisorProjectResult.error) throw assignedSupervisorProjectResult.error
+  if (viewerOwnerResult.error) throw viewerOwnerResult.error
 
+  const viewerOwnedProjectIds = new Set((viewerOwnerResult.data ?? []).map((row: any) => row.project_id as string))
   const organizationMemberships = organizationMembershipResult.data ?? []
   const projectMemberships = projectMembershipResult.data ?? []
   const participants = participantResult.data ?? []
@@ -131,6 +137,11 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
     const linkedParticipants = participantsByProject.get(projectId) ?? []
     const projectOrgMemberships = projectOrganizationsByProject.get(projectId) ?? []
     const supervisingOrgRole = orgRoleById.get((project as any).supervising_organization_id as string)
+
+    // A Viewer never inherits project scope from organization/participant/project
+    // membership alone. Their project must be explicitly linked through the
+    // immutable project Owner relationship.
+    if (supervisingOrgRole === "viewer" && !viewerOwnedProjectIds.has(projectId)) continue
 
     const isClientRequester =
       linkedParticipants.some(

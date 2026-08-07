@@ -17,7 +17,7 @@ export default async function InspectionsPage() {
   const orgId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id ?? null
   const projectId = await getSelectedProjectId()
 
-  const rows = orgId ? await getInspections(orgId, projectId) : []
+  const rows = orgId ? await getInspections(orgId, projectId, session.userId) : []
 
   const inspections: InspectionRecord[] = rows.map((r) => ({
     id: r.code,

@@ -199,22 +199,46 @@ async function accessibleProjectIdsForUser(userId: string) {
   if (!validUserId) return []
 
   const admin = createAdminClient()
-  const [{ data: projectMemberships, error: projectMembershipError }, { data: orgMemberships, error: orgMembershipError }] = await Promise.all([
+  const [{ data: projectMemberships, error: projectMembershipError }, { data: orgMemberships, error: orgMembershipError }, { data: ownerRows, error: ownerError }] = await Promise.all([
     admin.from("project_user_memberships").select("project_id").eq("user_id", validUserId).eq("status", "active"),
-    admin.from("organization_memberships").select("organization_id").eq("user_id", validUserId).eq("status", "active"),
+    admin.from("organization_memberships").select("organization_id, role").eq("user_id", validUserId).eq("status", "active"),
+    admin.from("project_owners").select("project_id").eq("viewer_user_id", validUserId),
   ])
   if (projectMembershipError) throw projectMembershipError
   if (orgMembershipError) throw orgMembershipError
+  if (ownerError) throw ownerError
 
-  const organizationIds = validUuidList((orgMemberships ?? []).map((row: any) => row.organization_id))
-  const { data: orgProjects, error: orgProjectsError } = organizationIds.length
-    ? await admin.from("projects").select("id").in("supervising_organization_id", organizationIds)
+  const viewerOrgIds = new Set(
+    (orgMemberships ?? [])
+      .filter((row: any) => row.role === "viewer")
+      .map((row: any) => row.organization_id as string),
+  )
+  const nonViewerOrgIds = validUuidList(
+    (orgMemberships ?? [])
+      .filter((row: any) => row.role !== "viewer")
+      .map((row: any) => row.organization_id),
+  )
+  const viewerOwnedIds = new Set(validUuidList((ownerRows ?? []).map((row: any) => row.project_id)))
+
+  const { data: orgProjects, error: orgProjectsError } = nonViewerOrgIds.length
+    ? await admin.from("projects").select("id").in("supervising_organization_id", nonViewerOrgIds)
     : { data: [] as any[], error: null }
   if (orgProjectsError) throw orgProjectsError
 
+  const directProjectIds = validUuidList((projectMemberships ?? []).map((row: any) => row.project_id))
+  const { data: directProjects, error: directProjectsError } = directProjectIds.length
+    ? await admin.from("projects").select("id, supervising_organization_id").in("id", directProjectIds)
+    : { data: [] as any[], error: null }
+  if (directProjectsError) throw directProjectsError
+
+  const allowedDirectIds = (directProjects ?? [])
+    .filter((project: any) => !viewerOrgIds.has(project.supervising_organization_id) || viewerOwnedIds.has(project.id))
+    .map((project: any) => project.id)
+
   return validUuidList([
-    ...(projectMemberships ?? []).map((row: any) => row.project_id),
     ...(orgProjects ?? []).map((row: any) => row.id),
+    ...allowedDirectIds,
+    ...Array.from(viewerOwnedIds),
   ])
 }
 
