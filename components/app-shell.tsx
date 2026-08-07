@@ -1,6 +1,9 @@
 "use client"
 
 import { AppSidebar } from "@/components/app-sidebar"
+import { MemberMobileBottomNavigation, MemberMobileDashboardHeader } from "@/components/member-mobile-dashboard-shell"
+import { useCurrentUser } from "@/components/current-user-provider"
+import { usePathname } from "next/navigation"
 import { Suspense } from "react"
 import { AppTopbar } from "@/components/app-topbar"
 import { NavigationProgress } from "@/components/loading/navigation-progress"
@@ -23,16 +26,50 @@ export function AppShell({
   canAccessSiteVisits: boolean
   notificationFeed: AppNotificationFeed
 }) {
+  const pathname = usePathname()
+  const currentUser = useCurrentUser()
+  const isMemberDashboard = pathname === "/" && currentUser.role === "org_member"
+
   const activeProjectName =
     selectedProjectId === "all" ? null : projects.find((project) => project.id === selectedProjectId)?.name ?? null
 
   return (
     <div className="flex min-h-dvh bg-background">
       <Suspense fallback={null}><NavigationProgress /></Suspense>
-      <AppSidebar projects={projects} selectedProjectId={selectedProjectId} canManageStages={canManageStages} canAccessSiteVisits={canAccessSiteVisits} />
+      <div className={isMemberDashboard ? "hidden md:flex" : "flex"}>
+        <AppSidebar
+          projects={projects}
+          selectedProjectId={selectedProjectId}
+          canManageStages={canManageStages}
+          canAccessSiteVisits={canAccessSiteVisits}
+        />
+      </div>
       <div className="flex min-w-0 flex-1 flex-col">
-        <AppTopbar activeProjectName={activeProjectName} notificationFeed={notificationFeed} />
-        <main className="flex-1 px-4 py-5 md:px-8 md:py-6">{children}</main>
+        {isMemberDashboard ? (
+          <>
+            <div className="hidden md:block">
+              <AppTopbar activeProjectName={activeProjectName} notificationFeed={notificationFeed} />
+            </div>
+            <MemberMobileDashboardHeader
+              projects={projects}
+              selectedProjectId={selectedProjectId}
+              canManageStages={canManageStages}
+              canAccessSiteVisits={canAccessSiteVisits}
+            />
+          </>
+        ) : (
+          <AppTopbar activeProjectName={activeProjectName} notificationFeed={notificationFeed} />
+        )}
+        <main
+          className={
+            isMemberDashboard
+              ? "flex-1 px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
+              : "flex-1 px-4 py-5 md:px-8 md:py-6"
+          }
+        >
+          {children}
+        </main>
+        {isMemberDashboard ? <MemberMobileBottomNavigation /> : null}
       </div>
     </div>
   )

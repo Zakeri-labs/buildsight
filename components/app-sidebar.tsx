@@ -41,16 +41,19 @@ function NavLink({
   href,
   icon: Icon,
   active,
+  onNavigate,
 }: {
   label: string
   href: string
   icon: React.ElementType
   active: boolean
+  onNavigate?: () => void
 }) {
   return (
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
+      onClick={onNavigate}
       className={cn(
         "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
         active
@@ -77,11 +80,17 @@ export function AppSidebar({
   selectedProjectId,
   canManageStages,
   canAccessSiteVisits,
+  embedded = false,
+  hideAdministration = false,
+  onNavigate,
 }: {
   projects: ProjectOption[]
   selectedProjectId: string
   canManageStages: boolean
   canAccessSiteVisits: boolean
+  embedded?: boolean
+  hideAdministration?: boolean
+  onNavigate?: () => void
 }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -232,6 +241,7 @@ export function AppSidebar({
     setPendingSelection({ id: value, fromPathname: pathname })
     setProjectMenuOpen(false)
     setProjectSearch("")
+    onNavigate?.()
     window.dispatchEvent(new Event(NAVIGATION_START_EVENT))
 
     startTransition(async () => {
@@ -246,7 +256,12 @@ export function AppSidebar({
   }
 
   return (
-    <aside className="sticky top-0 flex h-dvh w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground">
+    <aside
+      className={cn(
+        "flex shrink-0 flex-col bg-sidebar text-sidebar-foreground",
+        embedded ? "relative h-full w-full" : "sticky top-0 h-dvh w-64",
+      )}
+    >
       <div className="flex h-20 items-center px-5">
         <Logo />
       </div>
@@ -360,21 +375,25 @@ export function AppSidebar({
                     ? pathname === `/projects/${contextProjectId}` || pathname.startsWith(`/projects/${contextProjectId}/gallery`)
                     : pathname.startsWith(item.href.split("?", 1)[0])
             }
+            onNavigate={onNavigate}
           />
         ))}
 
-        <div className="pt-4">
-          <SectionLabel>{t.nav.administration}</SectionLabel>
-          {adminItems.map((item) => (
-            <NavLink
-              key={item.href}
-              label={item.label}
-              href={item.href}
-              icon={item.icon}
-              active={pathname.startsWith(item.href)}
-            />
-          ))}
-        </div>
+        {!hideAdministration ? (
+          <div className="pt-4">
+            <SectionLabel>{t.nav.administration}</SectionLabel>
+            {adminItems.map((item) => (
+              <NavLink
+                key={item.href}
+                label={item.label}
+                href={item.href}
+                icon={item.icon}
+                active={pathname.startsWith(item.href)}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </div>
+        ) : null}
       </nav>
 
       <div className="border-t border-sidebar-border p-4">
