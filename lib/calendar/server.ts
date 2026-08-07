@@ -14,6 +14,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 export const CALENDAR_PENDING_REQUEST_STATUS = "pending" as const
 const SCHEDULED_VISIT_STATUSES = ["scheduled"] as const
 const CALENDAR_VISIT_STATUSES = ["scheduled", "completed", "cancelled"] as const
+const CALENDAR_REQUEST_COLUMNS = "id, project_id, requested_by, client_request_id, status, preferred_date, is_asap, preferred_time, purpose, notes, scheduled_date, scheduled_time, created_at"
 
 export type CalendarProjectAccessMode = "admin" | "supervisor"
 export type CalendarProjectScopeRow = {
@@ -169,6 +170,20 @@ export async function resolveCalendarProjectScope(userId: string): Promise<Calen
   return Array.from(projects.values()).sort((left, right) => left.name.localeCompare(right.name))
 }
 
+
+export async function getCalendarPendingRequestRows(projectIds: string[]) {
+  const validProjectIds = uniqueValidUuids(projectIds)
+  if (!validProjectIds.length) return { data: [] as any[], error: null }
+
+  return createAdminClient()
+    .from("site_visit_requests")
+    .select(CALENDAR_REQUEST_COLUMNS)
+    .in("project_id", validProjectIds)
+    .eq("status", CALENDAR_PENDING_REQUEST_STATUS)
+    .order("preferred_date", { ascending: true, nullsFirst: true })
+    .order("created_at", { ascending: true })
+}
+
 export async function getCalendarSchedulingProjects({ userId, projects }: {
   userId: string
   projects: CalendarProjectScopeRow[]
@@ -299,12 +314,10 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
 
     const admin = createAdminClient()
     const today = new Date().toISOString().slice(0, 10)
-    const requestColumns = "id, project_id, requested_by, client_request_id, status, preferred_date, is_asap, preferred_time, purpose, notes, scheduled_date, scheduled_time, created_at"
-
     const [pendingResult, pendingRangeResult, visitRangeResult, upcomingResult, todayResult, schedulingProjects] = await Promise.all([
-      admin.from("site_visit_requests").select(requestColumns).in("project_id", projectIds).eq("status", CALENDAR_PENDING_REQUEST_STATUS).order("preferred_date", { ascending: true, nullsFirst: true }).order("created_at", { ascending: true }),
-      admin.from("site_visit_requests").select(requestColumns).in("project_id", projectIds).eq("status", CALENDAR_PENDING_REQUEST_STATUS).gte("preferred_date", rangeStart).lte("preferred_date", rangeEnd),
-      admin.from("site_visit_requests").select(requestColumns).in("project_id", projectIds).in("status", [...CALENDAR_VISIT_STATUSES]).gte("scheduled_date", rangeStart).lte("scheduled_date", rangeEnd),
+      getCalendarPendingRequestRows(projectIds),
+      admin.from("site_visit_requests").select(CALENDAR_REQUEST_COLUMNS).in("project_id", projectIds).eq("status", CALENDAR_PENDING_REQUEST_STATUS).gte("preferred_date", rangeStart).lte("preferred_date", rangeEnd),
+      admin.from("site_visit_requests").select(CALENDAR_REQUEST_COLUMNS).in("project_id", projectIds).in("status", [...CALENDAR_VISIT_STATUSES]).gte("scheduled_date", rangeStart).lte("scheduled_date", rangeEnd),
       admin.from("site_visit_requests").select("id", { count: "exact", head: true }).in("project_id", projectIds).in("status", [...SCHEDULED_VISIT_STATUSES]).gt("scheduled_date", today),
       admin.from("site_visit_requests").select("id", { count: "exact", head: true }).in("project_id", projectIds).in("status", [...SCHEDULED_VISIT_STATUSES]).eq("scheduled_date", today),
       getCalendarSchedulingProjects({ userId, projects }),

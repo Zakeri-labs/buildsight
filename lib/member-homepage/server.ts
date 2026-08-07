@@ -1,6 +1,6 @@
 import "server-only"
 
-import { CALENDAR_PENDING_REQUEST_STATUS, resolveExplicitSupervisorProjectScope } from "@/lib/calendar/server"
+import { getCalendarPendingRequestRows, resolveCalendarProjectScope, resolveExplicitSupervisorProjectScope } from "@/lib/calendar/server"
 import type { MemberHomepageData, MemberHomepageRequest, MemberHomepageVisit } from "@/lib/member-homepage/types"
 import { createAdminClient } from "@/lib/supabase/admin"
 
@@ -61,8 +61,8 @@ function clockTime(value: unknown): string | null {
 /**
  * Read-only operational data for the Member homepage.
  *
- * The project scope is shared with Calendar's canonical explicit-Supervisor resolver:
- * projects.assigned_supervisor_id must equal the authenticated user id.
+ * Visit Requests reuse Calendar's exact server-side project scope and pending-request
+ * query. The lower Today's Visits section keeps its pre-existing data path unchanged.
  *
  * In this stage only Visit Requests are connected to the top summary cards. The
  * Today's Reports and Tomorrow's Visits cards intentionally remain placeholders.
@@ -71,47 +71,56 @@ function clockTime(value: unknown): string | null {
 export async function getMemberHomepageData(userId: string): Promise<MemberHomepageData> {
   if (!isValidUuid(userId)) return emptyData()
 
-  let supervisedProjectCount = 0
+  let calendarProjectCount = 0
 
   try {
-    const projects = await resolveExplicitSupervisorProjectScope(userId)
-    const validProjects = projects.filter((project) => isValidUuid(project.id))
-    supervisedProjectCount = validProjects.length
-    if (!validProjects.length) return emptyData()
+    // Visit Requests deliberately use the exact same resolved project scope as /calendar.
+    // The lower Today's Visits section keeps its pre-existing explicit-Supervisor scope.
+    const [calendarProjects, explicitSupervisorProjects] = await Promise.all([
+      resolveCalendarProjectScope(userId),
+      resolveExplicitSupervisorProjectScope(userId),
+    ])
 
-    const projectIds = validProjects.map((project) => project.id)
-    const projectById = new Map(validProjects.map((project) => [project.id, project]))
+    const requestProjects = calendarProjects.filter((project) => isValidUuid(project.id))
+    const visitProjects = explicitSupervisorProjects.filter((project) => isValidUuid(project.id))
+    const requestProjectIds = Array.from(new Set(requestProjects.map((project) => project.id)))
+    const visitProjectIds = Array.from(new Set(visitProjects.map((project) => project.id)))
+    calendarProjectCount = requestProjectIds.length
+
+    if (!requestProjectIds.length && !visitProjectIds.length) return emptyData()
+
+    const requestProjectById = new Map(requestProjects.map((project) => [project.id, project]))
+    const visitProjectById = new Map(visitProjects.map((project) => [project.id, project]))
+    const metadataProjectIds = Array.from(new Set([...requestProjectIds, ...visitProjectIds]))
     const admin = createAdminClient()
     const today = new Date().toISOString().slice(0, 10)
 
     const [stageResult, pendingResult, todayVisitsResult] = await Promise.all([
-      admin
-        .from("project_stages")
-        .select("id, project_id, name, sort_order")
-        .in("project_id", projectIds)
-        .eq("status", "in_progress")
-        .order("sort_order", { ascending: true }),
-      admin
-        .from("site_visit_requests")
-        .select("id, project_id, preferred_date, preferred_time, created_at, client_request_id")
-        .in("project_id", projectIds)
-        .eq("status", CALENDAR_PENDING_REQUEST_STATUS)
-        .not("client_request_id", "is", null)
-        .order("preferred_date", { ascending: true, nullsFirst: true })
-        .order("created_at", { ascending: true }),
-      // Preserve the already-existing lower Today's Visits section exactly as-is.
-      admin
-        .from("site_visit_requests")
-        .select("id, project_id, scheduled_date, scheduled_time, client_request_id")
-        .in("project_id", projectIds)
-        .eq("status", "scheduled")
-        .eq("scheduled_date", today)
-        .order("scheduled_time", { ascending: true, nullsFirst: false }),
+      metadataProjectIds.length
+        ? admin
+            .from("project_stages")
+            .select("id, project_id, name, sort_order")
+            .in("project_id", metadataProjectIds)
+            .eq("status", "in_progress")
+            .order("sort_order", { ascending: true })
+        : Promise.resolve({ data: [] as any[], error: null }),
+      requestProjectIds.length
+        ? getCalendarPendingRequestRows(requestProjectIds)
+        : Promise.resolve({ data: [] as any[], error: null }),
+      visitProjectIds.length
+        ? admin
+            .from("site_visit_requests")
+            .select("id, project_id, scheduled_date, scheduled_time, client_request_id")
+            .in("project_id", visitProjectIds)
+            .eq("status", "scheduled")
+            .eq("scheduled_date", today)
+            .order("scheduled_time", { ascending: true, nullsFirst: false })
+        : Promise.resolve({ data: [] as any[], error: null }),
     ])
 
     if (stageResult.error) {
       // Stage is optional display metadata; omit it rather than failing Visit Requests.
-      logLoadError("current project stages", userId, supervisedProjectCount, stageResult.error)
+      logLoadError("current project stages", userId, calendarProjectCount, stageResult.error)
     }
 
     const stageByProjectId = new Map<string, string>()
@@ -126,11 +135,11 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
     let requests: MemberHomepageRequest[] = []
     if (pendingResult.error) {
       visitRequestsHasError = true
-      logLoadError("pending Client Visit Requests", userId, supervisedProjectCount, pendingResult.error)
+      logLoadError("pending Client Visit Requests", userId, calendarProjectCount, pendingResult.error)
     } else {
       requests = (pendingResult.data ?? []).flatMap((row: any) => {
         if (!isValidUuid(row.id) || !isValidUuid(row.project_id)) return []
-        const project = projectById.get(row.project_id)
+        const project = requestProjectById.get(row.project_id)
         if (!project) return []
         return [{
           id: row.id,
@@ -145,13 +154,14 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
       })
     }
 
+    // Preserve the already-existing lower Today's Visits section exactly as-is.
     let visits: MemberHomepageVisit[] = []
     if (todayVisitsResult.error) {
-      logLoadError("today Site Visits", userId, supervisedProjectCount, todayVisitsResult.error)
+      logLoadError("today Site Visits", userId, visitProjects.length, todayVisitsResult.error)
     } else {
       visits = (todayVisitsResult.data ?? []).flatMap((row: any) => {
         if (!isValidUuid(row.id) || !isValidUuid(row.project_id) || typeof row.scheduled_date !== "string") return []
-        const project = projectById.get(row.project_id)
+        const project = visitProjectById.get(row.project_id)
         if (!project) return []
         return [{
           id: row.id,
@@ -181,7 +191,7 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
       visitRequestsHasError,
     }
   } catch (error) {
-    logLoadError("member homepage Supervisor scope", userId, supervisedProjectCount, error)
+    logLoadError("member homepage Calendar request scope", userId, calendarProjectCount, error)
     return emptyData(true)
   }
 }
