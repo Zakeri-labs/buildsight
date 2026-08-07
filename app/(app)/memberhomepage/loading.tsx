@@ -24,7 +24,7 @@ export default function MemberHomepageLoading() {
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 overflow-hidden" aria-label="Loading Member homepage">
       <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
         <PlaceholderSummaryCard label="Today's Reports" value={0} />
-        <PlaceholderSummaryCard label="Tomorrow's Visits" value={0} />
+        <PlaceholderSummaryCard label="Tomorrow's Visits" />
         <PlaceholderSummaryCard label="Visit Requests" />
       </div>
       <div className="space-y-3">

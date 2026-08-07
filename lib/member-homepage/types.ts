@@ -31,4 +31,5 @@ export type MemberHomepageData = {
   requests: MemberHomepageRequest[]
   visits: MemberHomepageVisit[]
   visitRequestsHasError: boolean
+  tomorrowsVisitsHasError: boolean
 }

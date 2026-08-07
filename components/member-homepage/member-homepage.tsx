@@ -31,11 +31,13 @@ function MetaLine({ children }: { children: React.ReactNode }) {
   return <p className="truncate text-[11px] leading-4 text-muted-foreground sm:text-xs">{children}</p>
 }
 
-function SummaryCard({ label, value, icon: Icon, prominent = false }: {
-  label: string
+function SummaryCard({ label, value, icon: Icon, prominent = false, hasError = false, reserveIconSpace = false }: {
+  label: React.ReactNode
   value: number
   icon: React.ElementType
   prominent?: boolean
+  hasError?: boolean
+  reserveIconSpace?: boolean
 }) {
   return (
     <Card
@@ -46,11 +48,20 @@ function SummaryCard({ label, value, icon: Icon, prominent = false }: {
       )}
     >
       <CardContent className="flex min-h-[5.5rem] flex-col justify-between gap-2 px-3">
-        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-1">
-          <p className="min-w-0 text-[10px] font-medium leading-[1.2] text-muted-foreground sm:text-xs sm:leading-4">{label}</p>
-          <Icon className={cn("mt-0.5 size-3.5 shrink-0 sm:size-4", prominent ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
+        <div className={cn(
+          "grid min-w-0 items-start gap-1",
+          reserveIconSpace ? "grid-cols-[minmax(0,1fr)_0.875rem]" : "grid-cols-[minmax(0,1fr)_auto]",
+        )}>
+          <p className="min-w-0 overflow-hidden text-[10px] font-medium leading-[1.2] text-muted-foreground sm:text-xs sm:leading-4">{label}</p>
+          <Icon
+            className={cn(
+              "mt-0.5 size-3.5 shrink-0 justify-self-end sm:size-4",
+              prominent ? "text-primary" : "text-muted-foreground",
+            )}
+            aria-hidden="true"
+          />
         </div>
-        <p className="text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{value}</p>
+        <p className="text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{hasError ? "—" : value}</p>
       </CardContent>
     </Card>
   )
@@ -176,7 +187,13 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 overflow-x-hidden">
       <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
         <SummaryCard label="Today's Reports" value={data.summary.todaysReports} icon={FileText} />
-        <SummaryCard label="Tomorrow's Visits" value={data.summary.tomorrowsVisits} icon={Clock3} />
+        <SummaryCard
+          label={<><span className="block">Tomorrow&apos;s</span><span className="block">Visits</span></>}
+          value={data.summary.tomorrowsVisits}
+          icon={Clock3}
+          hasError={data.tomorrowsVisitsHasError}
+          reserveIconSpace
+        />
         <SummaryCard label="Visit Requests" value={data.summary.pendingVisitRequests} icon={MessageSquare} prominent />
       </div>
 

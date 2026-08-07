@@ -18,12 +18,13 @@ function isValidUuid(value: unknown): value is string {
   return typeof value === "string" && UUID_PATTERN.test(value.trim())
 }
 
-function emptyData(visitRequestsHasError = false): MemberHomepageData {
+function emptyData(visitRequestsHasError = false, tomorrowsVisitsHasError = false): MemberHomepageData {
   return {
     summary: { todaysReports: 0, tomorrowsVisits: 0, pendingVisitRequests: 0 },
     requests: [],
     visits: [],
     visitRequestsHasError,
+    tomorrowsVisitsHasError,
   }
 }
 
@@ -68,9 +69,10 @@ function clockTime(value: unknown): string | null {
  * Read-only operational data for the Member homepage.
  *
  * Visit Requests reuse Calendar's exact server-side project scope and pending-request
- * query. Today's Visits reuse Calendar's scheduled-visit query for the exact date.
+ * query. Today's Visits and Tomorrow's Visits reuse Calendar's scheduled-visit query
+ * with the same explicit-Supervisor scope and date/status semantics.
  *
- * The Today's Reports and Tomorrow's Visits cards intentionally remain placeholders.
+ * The Today's Reports card intentionally remains a placeholder.
  */
 export async function getMemberHomepageData(userId: string): Promise<MemberHomepageData> {
   if (!isValidUuid(userId)) return emptyData()
@@ -98,8 +100,11 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
     const metadataProjectIds = Array.from(new Set([...requestProjectIds, ...visitProjectIds]))
     const admin = createAdminClient()
     const today = new Date().toISOString().slice(0, 10)
+    const tomorrowDate = new Date(`${today}T00:00:00.000Z`)
+    tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1)
+    const tomorrow = tomorrowDate.toISOString().slice(0, 10)
 
-    const [stageResult, unansweredStageResult, pendingResult, todayVisitsResult] = await Promise.all([
+    const [stageResult, unansweredStageResult, pendingResult, todayVisitsResult, tomorrowVisitsResult] = await Promise.all([
       metadataProjectIds.length
         ? admin
             .from("project_stages")
@@ -121,6 +126,9 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
         : Promise.resolve({ data: [] as any[], error: null }),
       visitProjectIds.length
         ? getCalendarScheduledSiteVisitRowsForDate(visitProjectIds, today)
+        : Promise.resolve({ data: [] as any[], error: null }),
+      visitProjectIds.length
+        ? getCalendarScheduledSiteVisitRowsForDate(visitProjectIds, tomorrow)
         : Promise.resolve({ data: [] as any[], error: null }),
     ])
 
@@ -233,19 +241,34 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
       )
     }
 
+    let tomorrowsVisitsHasError = false
+    let tomorrowsVisits = 0
+    if (tomorrowVisitsResult.error) {
+      tomorrowsVisitsHasError = true
+      logLoadError("tomorrow Site Visits", userId, visitProjects.length, tomorrowVisitsResult.error)
+    } else {
+      tomorrowsVisits = (tomorrowVisitsResult.data ?? []).filter((row: any) =>
+        isValidUuid(row.id) &&
+        isValidUuid(row.project_id) &&
+        typeof row.scheduled_date === "string" &&
+        row.scheduled_date === tomorrow,
+      ).length
+    }
+
     return {
       summary: {
-        // These two cards intentionally remain placeholders until their dedicated stages.
+        // Today's Reports intentionally remains a placeholder until its dedicated stage.
         todaysReports: 0,
-        tomorrowsVisits: 0,
+        tomorrowsVisits,
         pendingVisitRequests: requests.length,
       },
       requests,
       visits,
       visitRequestsHasError,
+      tomorrowsVisitsHasError,
     }
   } catch (error) {
     logLoadError("member homepage Calendar request scope", userId, calendarProjectCount, error)
-    return emptyData(true)
+    return emptyData(true, true)
   }
 }
