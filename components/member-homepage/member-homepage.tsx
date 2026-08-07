@@ -17,14 +17,14 @@ function formatDateBlock(value: string | null): { day: string; month: string } {
   }
 }
 
-function formatTime(value: string | null): string | null {
+function formatTime(value: string | null): { time: string; period: string } | null {
   if (!value || !/^\d{2}:\d{2}$/.test(value)) return null
   const [hourValue, minute] = value.split(":")
   const hour = Number(hourValue)
   if (!Number.isFinite(hour)) return null
   const period = hour >= 12 ? "PM" : "AM"
   const displayHour = hour % 12 || 12
-  return `${displayHour}:${minute} ${period}`
+  return { time: `${displayHour}:${minute}`, period }
 }
 
 function MetaLine({ children }: { children: React.ReactNode }) {
@@ -95,22 +95,35 @@ function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
 
   return (
     <Card size="sm" className="overflow-hidden py-0">
-      <div className="grid min-h-[5rem] grid-cols-[4.35rem_minmax(0,1fr)_minmax(4.75rem,0.8fr)_5.75rem] items-stretch">
-        <div className="flex min-w-0 items-center justify-center border-r bg-muted/30 px-1.5 text-center">
-          <span className="text-xs font-semibold leading-4 tabular-nums sm:text-sm">{scheduledTime ?? "—"}</span>
+      <div className="grid min-h-[6rem] grid-cols-[3.5rem_minmax(0,1.15fr)_minmax(0,0.9fr)_3.25rem] items-stretch sm:min-h-[5.5rem] sm:grid-cols-[4.5rem_minmax(0,1.2fr)_minmax(0,0.9fr)_5.75rem]">
+        <div className="flex min-w-0 flex-col items-center justify-center border-r bg-muted/30 px-1.5 text-center">
+          {scheduledTime ? (
+            <>
+              <span className="text-sm font-semibold leading-4 tabular-nums sm:text-base">{scheduledTime.time}</span>
+              <span className="mt-0.5 text-[10px] font-semibold uppercase leading-3 tracking-wide text-muted-foreground sm:text-[11px]">{scheduledTime.period}</span>
+            </>
+          ) : (
+            <span className="text-sm font-semibold text-muted-foreground">—</span>
+          )}
         </div>
 
-        <div className="flex min-w-0 flex-col justify-center px-2.5 py-2.5">
-          <p className="truncate text-xs font-semibold sm:text-sm">{visit.projectName}</p>
-          {visit.projectCode ? <MetaLine>{visit.projectCode}</MetaLine> : null}
+        <div className="flex min-w-0 flex-col justify-center px-2.5 py-2.5 sm:px-3">
+          <p className="min-w-0 break-words text-xs font-semibold leading-4 sm:text-sm sm:leading-5">{visit.projectName}</p>
+          {visit.projectCode ? (
+            <p className="mt-1 min-w-0 truncate text-[10px] leading-4 text-muted-foreground sm:text-xs">{visit.projectCode}</p>
+          ) : null}
         </div>
 
-        <div className="flex min-w-0 flex-col justify-center border-l px-2 py-2.5">
-          {visit.stageName ? <p className="truncate text-[11px] font-medium leading-4 sm:text-xs">{visit.stageName}</p> : null}
-          {visit.visitNumber ? <MetaLine>Visit No. {visit.visitNumber}</MetaLine> : null}
+        <div className="flex min-w-0 flex-col justify-center border-l px-2 py-2.5 sm:px-3">
+          {visit.stageName ? (
+            <p className="min-w-0 break-words text-[11px] font-medium leading-4 sm:text-xs">{visit.stageName}</p>
+          ) : null}
+          {visit.visitNumber ? (
+            <p className="mt-1 truncate text-[10px] leading-4 text-muted-foreground sm:text-xs">Visit No. {visit.visitNumber}</p>
+          ) : null}
         </div>
 
-        <div className="flex items-center justify-center gap-1 border-l px-1">
+        <div className="flex flex-col items-center justify-center gap-1.5 border-l px-1 sm:flex-row sm:gap-1">
           {visit.stageResponseHref ? (
             <Link href={visit.stageResponseHref} aria-label="Open stage response" className={actionClass}>
               <FilePlus2 className="size-5" aria-hidden="true" />
