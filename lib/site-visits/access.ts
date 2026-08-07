@@ -17,8 +17,6 @@ export const SITE_VISIT_REQUESTER_ORGANIZATION_ROLES = ["org_admin"] as const
 
 const SITE_VISIT_MANAGER_PARTICIPANT_LABELS = new Set([
   "project manager",
-  "project supervisor",
-  "supervisor",
   "site engineer",
 ])
 
@@ -34,7 +32,7 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
   try {
     const admin = createAdminClient()
 
-  const [organizationMembershipResult, projectMembershipResult, participantResult] = await Promise.all([
+  const [organizationMembershipResult, projectMembershipResult, participantResult, assignedSupervisorProjectResult] = await Promise.all([
     admin
       .from("organization_memberships")
       .select("organization_id, role")
@@ -50,11 +48,16 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
       .select("project_id, project_role, participant_role_label")
       .eq("key_contact_user_id", userId)
       .eq("status", "active"),
+    admin
+      .from("projects")
+      .select("id")
+      .eq("assigned_supervisor_id", userId),
   ])
 
   if (organizationMembershipResult.error) throw organizationMembershipResult.error
   if (projectMembershipResult.error) throw projectMembershipResult.error
   if (participantResult.error) throw participantResult.error
+  if (assignedSupervisorProjectResult.error) throw assignedSupervisorProjectResult.error
 
   const organizationMemberships = organizationMembershipResult.data ?? []
   const projectMemberships = projectMembershipResult.data ?? []
@@ -74,7 +77,7 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
     organizationIds.length
       ? admin
           .from("projects")
-          .select("id, name, supervising_organization_id")
+          .select("id, name, supervising_organization_id, assigned_supervisor_id")
           .in("supervising_organization_id", organizationIds)
       : Promise.resolve({ data: [] as any[], error: null }),
   ])
@@ -86,6 +89,7 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
   const candidateProjectIds = new Set<string>()
   for (const membership of projectMemberships as any[]) candidateProjectIds.add(membership.project_id)
   for (const participant of participants as any[]) candidateProjectIds.add(participant.project_id)
+  for (const project of assignedSupervisorProjectResult.data ?? []) candidateProjectIds.add((project as any).id)
   for (const membership of projectOrganizations as any[]) candidateProjectIds.add(membership.project_id)
   for (const project of supervisingProjectsResult.data ?? []) candidateProjectIds.add((project as any).id)
 
@@ -93,7 +97,7 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
 
   const { data: projectRows, error: projectsError } = await admin
     .from("projects")
-    .select("id, name, supervising_organization_id")
+    .select("id, name, supervising_organization_id, assigned_supervisor_id")
     .in("id", Array.from(candidateProjectIds))
     .order("name", { ascending: true })
   if (projectsError) throw projectsError
@@ -152,7 +156,10 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
 
     const canRequest = isClientRequester || isAdminRequester
 
+    const isAssignedProjectSupervisor = (project as any).assigned_supervisor_id === userId
+
     const canManage =
+      isAssignedProjectSupervisor ||
       directMemberships.some((membership) =>
         (SITE_VISIT_MANAGER_PROJECT_ROLES as readonly string[]).includes(membership.access_role),
       ) ||

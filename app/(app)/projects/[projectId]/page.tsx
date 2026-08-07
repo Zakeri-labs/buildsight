@@ -8,6 +8,7 @@ import { requireOnboarded } from "@/lib/auth/session"
 import { canAdministerProject } from "@/lib/auth/guards"
 import { getDashboardData, getOrgProjects } from "@/lib/db/domain"
 import { getProjectParticipants, getProjectParticipantUserOptions } from "@/lib/db/project-participants"
+import { getProjectSupervisorCandidates } from "@/lib/projects/supervisor-candidates-server"
 import { normalizeDocumentType } from "@/lib/documents/document-types"
 import { getInitialDocumentsForScope } from "@/lib/initial-documents/server"
 import { toProjectRecord } from "@/lib/projects/project-record"
@@ -114,7 +115,12 @@ export default async function ProjectDetailPage({
     getProjectParticipants(project.id),
     canAdministerProject(project.id),
   ])
-  const participantUsers = canManageImages ? await getProjectParticipantUserOptions(project.id) : []
+  const [participantUsers, supervisorOptions] = canManageImages
+    ? await Promise.all([
+        getProjectParticipantUserOptions(project.id),
+        getProjectSupervisorCandidates(organizationId),
+      ])
+    : [[], []]
   const projectCounts = dashboardData.projects.find((item) => item.id === project.id)
   const projectRecord = toProjectRecord(project, projectCounts)
 
@@ -149,12 +155,14 @@ export default async function ProjectDetailPage({
         description: project.description ?? "",
         latitude: project.latitude,
         longitude: project.longitude,
+        assignedSupervisorId: project.assignedSupervisorId,
       }}
       letters={letters}
       initialDocuments={initialDocumentsResult.documents}
       initialDocumentsError={initialDocumentsResult.errorMessage}
       participants={participants}
       participantUsers={participantUsers}
+      supervisorOptions={supervisorOptions}
       canManageImages={canManageImages}
       canEditProject={canManageImages}
     />

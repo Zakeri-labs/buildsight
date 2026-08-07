@@ -38,6 +38,7 @@ import {
   type ProjectTypeValue,
 } from "@/lib/projects/project-options"
 import { calculateProjectOutstandingAmount, validateProjectFinancialForm } from "@/lib/projects/project-financial"
+import type { ProjectSupervisorCandidate } from "@/lib/projects/supervisor-candidates"
 import {
   normalizeProjectStatus,
   PROJECT_STATUS_OPTIONS,
@@ -82,16 +83,19 @@ export type ProjectEditData = {
   description?: string
   latitude?: number | null
   longitude?: number | null
+  assignedSupervisorId?: string | null
 }
 
 export function ProjectEditDialog({
   project,
   locale,
+  supervisorOptions = [],
   onClose,
   onSaved,
 }: {
   project: ProjectEditData
   locale: string
+  supervisorOptions?: ProjectSupervisorCandidate[]
   onClose: () => void
   onSaved: (project: ProjectEditData & { supervisionTypeLabel: string }) => void
 }) {
@@ -115,6 +119,7 @@ export function ProjectEditDialog({
   )
   const [areaDistrict, setAreaDistrict] = useState(project.areaDistrict ?? "")
   const [description, setDescription] = useState(project.description ?? "")
+  const [assignedSupervisorId, setAssignedSupervisorId] = useState(project.assignedSupervisorId ?? "")
   const [financialValues, setFinancialValues] = useState<ProjectFinancialFormValues>({
     structureSupervisionFee: project.structureSupervisionFee == null ? "" : String(project.structureSupervisionFee),
     finishingSupervisionFee: project.finishingSupervisionFee == null ? "" : String(project.finishingSupervisionFee),
@@ -188,6 +193,10 @@ export function ProjectEditDialog({
         location: location.address,
         latitude: location.latitude,
         longitude: location.longitude,
+        assignedSupervisorId:
+          assignedSupervisorId !== (project.assignedSupervisorId ?? "")
+            ? (assignedSupervisorId || null)
+            : undefined,
       })
       if (!result.ok) {
         setError(result.error)
@@ -235,6 +244,7 @@ export function ProjectEditDialog({
         areaDistrict: areaDistrict.trim() || null,
         latitude: location.latitude,
         longitude: location.longitude,
+        assignedSupervisorId: assignedSupervisorId || null,
       })
     })
   }
@@ -400,6 +410,38 @@ export function ProjectEditDialog({
                   />
                 </div>
               ) : null}
+              <div className="space-y-2">
+                <Label>{isArabic ? "تعيين مشرف" : "Assign Supervisor"}</Label>
+                <Select
+                  value={assignedSupervisorId || "__unassigned__"}
+                  onValueChange={(value) => {
+                    const nextValue = value == null ? "" : String(value)
+                    setAssignedSupervisorId(nextValue === "__unassigned__" ? "" : nextValue)
+                    setError(null)
+                  }}
+                  disabled={pending}
+                >
+                  <SelectTrigger className="h-10 w-full">
+                    <SelectValue placeholder={isArabic ? "اختر مشرف المشروع" : "Select a project supervisor"}>
+                      {(value) => {
+                        if (!value || String(value) === "__unassigned__") return isArabic ? "غير معيّن" : "Unassigned"
+                        const supervisor = supervisorOptions.find((option) => option.id === String(value))
+                        return supervisor
+                          ? `${supervisor.name}${supervisor.email && supervisor.email !== supervisor.name ? ` — ${supervisor.email}` : ""}`
+                          : (isArabic ? "مشرف محدد" : "Selected supervisor")
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__unassigned__">{isArabic ? "غير معيّن" : "Unassigned"}</SelectItem>
+                    {supervisorOptions.map((supervisor) => (
+                      <SelectItem key={supervisor.id} value={supervisor.id}>
+                        {supervisor.name}{supervisor.email && supervisor.email !== supervisor.name ? ` — ${supervisor.email}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2">
                 <Label>{isArabic ? "الحالة" : "Status"}</Label>
                 <Select

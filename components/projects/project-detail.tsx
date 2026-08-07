@@ -21,6 +21,7 @@ import {
   ProjectEditDialog,
   type ProjectEditData,
 } from "@/components/projects/project-edit-dialog"
+import type { ProjectSupervisorCandidate } from "@/lib/projects/supervisor-candidates"
 import {
   normalizeProjectStatus,
   PROJECT_STATUS_BADGE_CLASS,
@@ -156,6 +157,7 @@ export function ProjectDetail({
   initialDocumentsError,
   participants,
   participantUsers = [],
+  supervisorOptions = [],
   canManageImages = false,
   canEditProject = false,
 }: {
@@ -166,6 +168,7 @@ export function ProjectDetail({
   initialDocumentsError?: string | null
   participants: ProjectParticipant[]
   participantUsers?: ProjectParticipantUserOption[]
+  supervisorOptions?: ProjectSupervisorCandidate[]
   canManageImages?: boolean
   canEditProject?: boolean
 }) {
@@ -694,6 +697,7 @@ export function ProjectDetail({
           key={currentEditProject.id}
           project={currentEditProject}
           locale={locale}
+          supervisorOptions={supervisorOptions}
           onClose={() => setEditOpen(false)}
           onSaved={(updated) => {
             setCurrentEditProject(updated)

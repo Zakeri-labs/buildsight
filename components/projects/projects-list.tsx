@@ -50,6 +50,7 @@ import {
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { supervisionTypeLabel, type ProjectTypeValue } from "@/lib/projects/project-options"
+import type { ProjectSupervisorCandidate } from "@/lib/projects/supervisor-candidates"
 import {
   deleteProject,
   getProjectDeletionImpact,
@@ -95,6 +96,7 @@ export interface ProjectRow {
   imageUrl: string
   latitude?: number | null
   longitude?: number | null
+  assignedSupervisorId?: string | null
   canEdit?: boolean
 }
 
@@ -233,11 +235,13 @@ export function ProjectsList({
   createdProjectId,
   canDeleteProjects = false,
   canCreateProjects = false,
+  supervisorOptions = [],
 }: {
   projects?: ProjectRow[]
   createdProjectId?: string
   canDeleteProjects?: boolean
   canCreateProjects?: boolean
+  supervisorOptions?: ProjectSupervisorCandidate[]
 }) {
   const { locale } = useI18n()
   const router = useRouter()
@@ -750,6 +754,7 @@ export function ProjectsList({
           key={editTarget.id}
           project={{ ...editTarget, projectTypeLabel: editTarget.projectType }}
           locale={locale}
+          supervisorOptions={supervisorOptions}
           onClose={() => setEditTarget(null)}
           onSaved={(updated) => {
             setProjectRows((current) => current.map((project) => (
@@ -767,6 +772,7 @@ export function ProjectsList({
                     description: updated.description,
                     latitude: updated.latitude,
                     longitude: updated.longitude,
+                    assignedSupervisorId: updated.assignedSupervisorId,
                   }
                 : project
             )))

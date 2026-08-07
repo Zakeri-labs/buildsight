@@ -13,6 +13,8 @@ import {
   type ContractorRole,
 } from "@/lib/projects/project-participant-types"
 import type { ProjectOrgRole } from "@/lib/db/types"
+import { isProjectSupervisorOrganizationRole } from "@/lib/projects/supervisor-candidates"
+import { setProjectSupervisorAssignment } from "@/lib/projects/supervisor-assignment"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -244,6 +246,35 @@ export async function addProjectParticipantAction(input: AddParticipantInput): P
     if (membershipError) throw membershipError
     if (projectOrganizationsError) throw projectOrganizationsError
     if (!memberships?.length) return { ok: false, error: "Only registered users with an active platform role can be added." }
+
+    if (input.participantType === "supervisor" && mappedRole.label === "Supervisor") {
+      const supervisorMembership = memberships.find(
+        (membership) =>
+          membership.organization_id === project.supervising_organization_id &&
+          isProjectSupervisorOrganizationRole(membership.role),
+      )
+      if (!supervisorMembership) {
+        return { ok: false, error: "Select an active Admin, Manager, or Member from the supervising organization as Project Supervisor." }
+      }
+
+      await setProjectSupervisorAssignment({
+        projectId: input.projectId,
+        supervisorId: profile.id,
+        actorId,
+      })
+
+      await audit({
+        actorId,
+        action: "project.supervisor_assigned",
+        entityType: "project",
+        organizationId: project.supervising_organization_id,
+        projectId: input.projectId,
+        metadata: { supervisorId: profile.id, source: "project_participant_supervisor" },
+      })
+      revalidateParticipantViews(input.projectId)
+      revalidatePath("/calendar")
+      return { ok: true }
+    }
 
     const projectOrganizationIds = new Set<string>([
       project.supervising_organization_id,

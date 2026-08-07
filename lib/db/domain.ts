@@ -16,6 +16,7 @@ export type DomainProject = {
   latitude: number | null
   longitude: number | null
   status: string
+  assignedSupervisorId: string | null
   projectType: string | null
   supervisionType: string | null
   supervisionTypeOther: string | null
@@ -152,7 +153,7 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
   try {
     const admin = createAdminClient()
   const projectColumns =
-    "id, name, code, location, latitude, longitude, status, project_type, supervision_type, supervision_type_other, plot_no, supervision_start_date, priority, included_structure_visits, included_finishing_visits, structure_supervision_fee, finishing_supervision_fee, received_amount, outstanding_amount, next_payment_amount, next_payment_due_date, invoice_reference_payment_note, initial_remarks, region, description, image, our_role, contractor, consultant, client, start_date, target_handover, contract_value, progress_planned, progress_actual, progress_delay, supervising_organization_id, sort_order"
+    "id, name, code, location, latitude, longitude, status, assigned_supervisor_id, project_type, supervision_type, supervision_type_other, plot_no, supervision_start_date, priority, included_structure_visits, included_finishing_visits, structure_supervision_fee, finishing_supervision_fee, received_amount, outstanding_amount, next_payment_amount, next_payment_due_date, invoice_reference_payment_note, initial_remarks, region, description, image, our_role, contractor, consultant, client, start_date, target_handover, contract_value, progress_planned, progress_actual, progress_delay, supervising_organization_id, sort_order"
 
   let data: any[] | null = null
   if (!userId) {
@@ -347,6 +348,7 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
     latitude: p.latitude,
     longitude: p.longitude,
     status: p.status,
+    assignedSupervisorId: typeof p.assigned_supervisor_id === "string" ? p.assigned_supervisor_id : null,
     projectType: p.project_type,
     supervisionType: p.supervision_type,
     supervisionTypeOther: p.supervision_type_other,

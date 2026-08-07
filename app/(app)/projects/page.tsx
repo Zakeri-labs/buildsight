@@ -8,6 +8,7 @@ import { getOrgProjects } from "@/lib/db/domain"
 import { PROJECT_TYPES, isProjectTypeValue } from "@/lib/projects/project-options"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 import { normalizeProjectStatus } from "@/lib/projects/project-status"
+import { getProjectSupervisorCandidates } from "@/lib/projects/supervisor-candidates-server"
 
 function projectTypeLabel(value: string | null) {
   return PROJECT_TYPES.find((type) => type.value === value)?.label ?? "—"
@@ -38,7 +39,10 @@ export default async function ProjectsPage({
     ? await canAdministerOrganization(session.supervisingOrg.id)
     : false
   const canDeleteProjects = canCreateProjects
-  const editPermissions = await Promise.all(projects.map((project) => canAdministerProject(project.id)))
+  const [editPermissions, supervisorOptions] = await Promise.all([
+    Promise.all(projects.map((project) => canAdministerProject(project.id))),
+    organizationId && canCreateProjects ? getProjectSupervisorCandidates(organizationId) : Promise.resolve([]),
+  ])
 
   const rows: ProjectRow[] = projects.map((project, index) => ({
     id: project.id,
@@ -58,6 +62,7 @@ export default async function ProjectsPage({
     imageUrl: projectImageDisplayUrl(project.image, project.id) ?? "/placeholder.svg",
     latitude: project.latitude,
     longitude: project.longitude,
+    assignedSupervisorId: project.assignedSupervisorId,
     canEdit: editPermissions[index] ?? false,
   }))
 
@@ -67,6 +72,7 @@ export default async function ProjectsPage({
       createdProjectId={params.created}
       canDeleteProjects={canDeleteProjects}
       canCreateProjects={canCreateProjects}
+      supervisorOptions={supervisorOptions}
     />
   )
 }

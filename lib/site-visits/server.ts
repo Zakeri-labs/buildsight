@@ -16,8 +16,6 @@ import { createAdminClient } from "@/lib/supabase/admin"
 
 const MANAGER_PARTICIPANT_LABELS = new Set([
   "project manager",
-  "project supervisor",
-  "supervisor",
   "site engineer",
 ])
 
@@ -331,7 +329,7 @@ export async function getSiteVisitEmailRecipients(
   const admin = createAdminClient()
   const { data: project, error: projectError } = await admin
     .from("projects")
-    .select("id, name, supervising_organization_id")
+    .select("id, name, supervising_organization_id, assigned_supervisor_id")
     .eq("id", projectId)
     .maybeSingle()
   if (projectError) throw projectError
@@ -380,6 +378,7 @@ export async function getSiteVisitEmailRecipients(
     new Set([
       ...(projectMembershipResult.data ?? []).map((row: any) => row.user_id as string),
       ...(orgMembershipResult.data ?? []).map((row: any) => row.user_id as string),
+      ...(typeof project.assigned_supervisor_id === "string" ? [project.assigned_supervisor_id] : []),
       ...participantUserIds,
     ]),
   ).filter((id) => id !== excludeUserId)

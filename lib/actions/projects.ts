@@ -21,6 +21,7 @@ import {
 } from "@/lib/projects/project-options"
 import { validateOwnerIdCardFile } from "@/lib/projects/owner-id-card"
 import { isProjectSupervisorOrganizationRole } from "@/lib/projects/supervisor-candidates"
+import { setProjectSupervisorAssignment } from "@/lib/projects/supervisor-assignment"
 import {
   calculateProjectOutstandingAmount,
   normalizeOptionalProjectAmount,
@@ -352,6 +353,7 @@ export async function updateProject(input: {
   location?: string
   latitude?: number | null
   longitude?: number | null
+  assignedSupervisorId?: string | null
 }): Promise<ActionResult> {
   try {
     const name = input.name.trim()
@@ -414,11 +416,34 @@ export async function updateProject(input: {
 
     const { data: project, error: lookupError } = await admin
       .from("projects")
-      .select("supervising_organization_id, structure_supervision_fee, finishing_supervision_fee, received_amount")
+      .select("supervising_organization_id, assigned_supervisor_id, structure_supervision_fee, finishing_supervision_fee, received_amount")
       .eq("id", input.projectId)
       .maybeSingle()
     if (lookupError) throw lookupError
     if (!project) return { ok: false, error: "Project not found." }
+
+    let normalizedSupervisorId: string | null | undefined
+    if (input.assignedSupervisorId !== undefined) {
+      const rawSupervisorId = input.assignedSupervisorId?.trim() || ""
+      normalizedSupervisorId = rawSupervisorId || null
+      if (normalizedSupervisorId && !UUID_PATTERN.test(normalizedSupervisorId)) {
+        return { ok: false, error: "Select a valid Project Supervisor." }
+      }
+
+      if (normalizedSupervisorId) {
+        const { data: supervisorMembership, error: supervisorMembershipError } = await admin
+          .from("organization_memberships")
+          .select("user_id, role")
+          .eq("organization_id", project.supervising_organization_id)
+          .eq("user_id", normalizedSupervisorId)
+          .eq("status", "active")
+          .maybeSingle()
+        if (supervisorMembershipError) throw supervisorMembershipError
+        if (!supervisorMembership || !isProjectSupervisorOrganizationRole(supervisorMembership.role)) {
+          return { ok: false, error: "Select an active organization administrator, manager, or member as supervisor." }
+        }
+      }
+    }
 
     const hasRelatedFinancialUpdate =
       input.structureSupervisionFee !== undefined ||
@@ -485,6 +510,14 @@ export async function updateProject(input: {
       .eq("id", input.projectId)
     if (error) throw error
 
+    if (normalizedSupervisorId !== undefined && normalizedSupervisorId !== project.assigned_supervisor_id) {
+      await setProjectSupervisorAssignment({
+        projectId: input.projectId,
+        supervisorId: normalizedSupervisorId,
+        actorId,
+      })
+    }
+
     await audit({
       actorId,
       action: "project.updated",
@@ -492,11 +525,15 @@ export async function updateProject(input: {
       entityId: input.projectId,
       organizationId: project.supervising_organization_id,
       projectId: input.projectId,
-      metadata: { name },
+      metadata: {
+        name,
+        ...(normalizedSupervisorId !== undefined ? { assignedSupervisorId: normalizedSupervisorId } : {}),
+      },
     })
     revalidatePath("/users")
     revalidatePath("/projects")
     revalidatePath(`/projects/${input.projectId}`)
+    revalidatePath("/calendar")
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not update project." }
@@ -984,18 +1021,26 @@ export async function createProject(input: {
     if (assignedSupervisorId && assignedSupervisorId !== actorId) {
       projectAssignments.set(assignedSupervisorId, "project_manager")
     }
+    let supervisorAccessMembershipId: string | null = null
     if (projectAssignments.size) {
-      const { error: assignmentMembershipError } = await admin.from("project_user_memberships").insert(
-        Array.from(projectAssignments, ([userId, accessRole]) => ({
-          project_id: created.id,
-          user_id: userId,
-          organization_id: input.supervisingOrgId,
-          access_role: accessRole,
-          status: "active",
-          created_by: actorId,
-        })),
-      )
+      const { data: assignmentMemberships, error: assignmentMembershipError } = await admin
+        .from("project_user_memberships")
+        .insert(
+          Array.from(projectAssignments, ([userId, accessRole]) => ({
+            project_id: created.id,
+            user_id: userId,
+            organization_id: input.supervisingOrgId,
+            access_role: accessRole,
+            status: "active",
+            created_by: actorId,
+          })),
+        )
+        .select("id, user_id")
       if (assignmentMembershipError) throw assignmentMembershipError
+      supervisorAccessMembershipId =
+        assignedSupervisorId && assignedSupervisorId !== actorId
+          ? ((assignmentMemberships ?? []).find((membership) => membership.user_id === assignedSupervisorId)?.id ?? null)
+          : null
     }
 
     if (contractorOrganizationId && contractorOrganizationId !== input.supervisingOrgId) {
@@ -1042,6 +1087,8 @@ export async function createProject(input: {
         organization_name: org.name,
         participant_type: "consultancy",
         project_role: "consultant",
+        participant_role_label: assignedSupervisorId ? "Supervisor" : null,
+        access_membership_id: supervisorAccessMembershipId,
         key_contact_user_id: assignedSupervisorId,
         key_contact_name:
           supervisorProfile.data?.full_name?.trim() || supervisorProfile.data?.email?.trim() || null,
@@ -1123,6 +1170,7 @@ export async function createProject(input: {
     revalidatePath("/", "layout")
     revalidatePath("/users")
     revalidatePath("/projects")
+    revalidatePath("/calendar")
     return {
       ok: true,
       data: {

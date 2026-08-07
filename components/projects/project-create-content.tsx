@@ -3,7 +3,7 @@ import { ProjectCreateForm } from "@/components/projects/project-create-form"
 import { requireOnboarded } from "@/lib/auth/session"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { canAdministerOrganization } from "@/lib/auth/guards"
-import { isProjectSupervisorOrganizationRole } from "@/lib/projects/supervisor-candidates"
+import { getProjectSupervisorCandidates } from "@/lib/projects/supervisor-candidates-server"
 
 export async function ProjectCreateContent() {
   const session = await requireOnboarded()
@@ -60,9 +60,7 @@ export async function ProjectCreateContent() {
       organizationRole: membershipRoleByUser.get(profile.id) || (profile.id === session.userId ? "org_admin" : "org_member"),
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
-  const supervisorOptions = userOptions.filter((user) =>
-    isProjectSupervisorOrganizationRole(user.organizationRole),
-  )
+  const supervisorOptions = await getProjectSupervisorCandidates(supervisingOrg.id)
 
   const organizationIds = Array.from(
     new Set((participantMemberships.data ?? []).map((membership) => membership.organization_id)),
