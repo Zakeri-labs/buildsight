@@ -30,8 +30,11 @@ export function AppShell({
   const currentUser = useCurrentUser()
   const isMember = currentUser.role === "org_member"
   const isMemberHomepage = pathname === "/memberhomepage" && isMember
+  const isMemberProjects = pathname === "/projects" && isMember
   const isMemberDashboard = (pathname === "/" || pathname === "/memberhomepage") && isMember
-  const showMemberBottomNavigation = isMemberDashboard || (isMember && pathname.startsWith("/calendar"))
+  const isMemberMobileShell = isMemberDashboard || isMemberProjects
+  const isCompactMemberMobileShell = isMemberHomepage || isMemberProjects
+  const showMemberBottomNavigation = isMemberMobileShell || (isMember && pathname.startsWith("/calendar"))
 
   const activeProjectName =
     selectedProjectId === "all" ? null : projects.find((project) => project.id === selectedProjectId)?.name ?? null
@@ -39,7 +42,7 @@ export function AppShell({
   return (
     <div className="flex min-h-dvh bg-background">
       <Suspense fallback={null}><NavigationProgress /></Suspense>
-      <div className={isMemberDashboard ? "hidden md:flex" : "flex"}>
+      <div className={isMemberMobileShell ? "hidden md:flex" : "flex"}>
         <AppSidebar
           projects={projects}
           selectedProjectId={selectedProjectId}
@@ -48,7 +51,7 @@ export function AppShell({
         />
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
-        {isMemberDashboard ? (
+        {isMemberMobileShell ? (
           <>
             <div className="hidden md:block">
               <AppTopbar activeProjectName={activeProjectName} notificationFeed={notificationFeed} />
@@ -58,7 +61,7 @@ export function AppShell({
               selectedProjectId={selectedProjectId}
               canManageStages={canManageStages}
               canAccessSiteVisits={canAccessSiteVisits}
-              compact={isMemberHomepage}
+              compact={isCompactMemberMobileShell}
             />
           </>
         ) : (
@@ -67,7 +70,7 @@ export function AppShell({
         <main
           className={
             showMemberBottomNavigation
-              ? isMemberHomepage
+              ? isCompactMemberMobileShell
                 ? "flex-1 px-4 py-4 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
                 : "flex-1 px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
               : "flex-1 px-4 py-5 md:px-8 md:py-6"
@@ -75,7 +78,7 @@ export function AppShell({
         >
           {children}
         </main>
-        {showMemberBottomNavigation ? <MemberMobileBottomNavigation compact={isMemberHomepage} /> : null}
+        {showMemberBottomNavigation ? <MemberMobileBottomNavigation compact={isCompactMemberMobileShell} /> : null}
       </div>
     </div>
   )
