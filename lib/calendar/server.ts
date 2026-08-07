@@ -21,6 +21,8 @@ export type CalendarProjectScopeRow = {
   id: string
   name: string
   code: string | null
+  latitude: number | null
+  longitude: number | null
   assignedSupervisorId: string | null
   supervisingOrganizationId: string | null
   accessMode: CalendarProjectAccessMode
@@ -100,12 +102,20 @@ function readableRole(value: unknown): string | null {
   return normalized.split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ")
 }
 
+function normalizeCoordinate(value: unknown, min: number, max: number): number | null {
+  if (value == null || (typeof value === "string" && !value.trim())) return null
+  const normalized = Number(value)
+  return Number.isFinite(normalized) && normalized >= min && normalized <= max ? normalized : null
+}
+
 function normalizeProjectRow(row: any, accessMode: CalendarProjectAccessMode): CalendarProjectScopeRow | null {
   if (!isValidCalendarUuid(row?.id)) return null
   return {
     id: row.id,
     name: typeof row.name === "string" && row.name.trim() ? row.name.trim() : "Project",
     code: typeof row.code === "string" && row.code.trim() ? row.code.trim() : null,
+    latitude: normalizeCoordinate(row.latitude, -90, 90),
+    longitude: normalizeCoordinate(row.longitude, -180, 180),
     assignedSupervisorId: isValidCalendarUuid(row.assigned_supervisor_id) ? row.assigned_supervisor_id : null,
     supervisingOrganizationId: isValidCalendarUuid(row.supervising_organization_id) ? row.supervising_organization_id : null,
     accessMode,
@@ -118,7 +128,7 @@ export async function resolveExplicitSupervisorProjectScope(userId: string): Pro
   const admin = createAdminClient()
   const { data, error } = await admin
     .from("projects")
-    .select("id, name, code, assigned_supervisor_id, supervising_organization_id")
+    .select("id, name, code, latitude, longitude, assigned_supervisor_id, supervising_organization_id")
     .eq("assigned_supervisor_id", userId)
 
   if (error) throw error
@@ -144,7 +154,7 @@ export async function resolveCalendarProjectScope(userId: string): Promise<Calen
 
   const adminOrganizationIds = uniqueValidUuids((organizationMembershipResult.data ?? []).map((row: any) => row.organization_id))
   const explicitProjectAdminIds = uniqueValidUuids((projectAdminMembershipResult.data ?? []).map((row: any) => row.project_id))
-  const projectColumns = "id, name, code, assigned_supervisor_id, supervising_organization_id"
+  const projectColumns = "id, name, code, latitude, longitude, assigned_supervisor_id, supervising_organization_id"
 
   const [organizationProjectsResult, explicitAdminProjectsResult] = await Promise.all([
     adminOrganizationIds.length
@@ -182,6 +192,32 @@ export async function getCalendarPendingRequestRows(projectIds: string[]) {
     .eq("status", CALENDAR_PENDING_REQUEST_STATUS)
     .order("preferred_date", { ascending: true, nullsFirst: true })
     .order("created_at", { ascending: true })
+}
+
+export async function getCalendarVisibleSiteVisitRows(projectIds: string[], rangeStart: string, rangeEnd: string) {
+  const validProjectIds = uniqueValidUuids(projectIds)
+  if (!validProjectIds.length) return { data: [] as any[], error: null }
+
+  return createAdminClient()
+    .from("site_visit_requests")
+    .select(CALENDAR_REQUEST_COLUMNS)
+    .in("project_id", validProjectIds)
+    .in("status", [...CALENDAR_VISIT_STATUSES])
+    .gte("scheduled_date", rangeStart)
+    .lte("scheduled_date", rangeEnd)
+}
+
+export async function getCalendarScheduledSiteVisitRowsForDate(projectIds: string[], date: string) {
+  const validProjectIds = uniqueValidUuids(projectIds)
+  if (!validProjectIds.length || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { data: [] as any[], error: null }
+
+  return createAdminClient()
+    .from("site_visit_requests")
+    .select(CALENDAR_REQUEST_COLUMNS)
+    .in("project_id", validProjectIds)
+    .in("status", [...SCHEDULED_VISIT_STATUSES])
+    .eq("scheduled_date", date)
+    .order("scheduled_time", { ascending: true, nullsFirst: false })
 }
 
 export async function getCalendarSchedulingProjects({ userId, projects }: {
@@ -317,9 +353,9 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
     const [pendingResult, pendingRangeResult, visitRangeResult, upcomingResult, todayResult, schedulingProjects] = await Promise.all([
       getCalendarPendingRequestRows(projectIds),
       admin.from("site_visit_requests").select(CALENDAR_REQUEST_COLUMNS).in("project_id", projectIds).eq("status", CALENDAR_PENDING_REQUEST_STATUS).gte("preferred_date", rangeStart).lte("preferred_date", rangeEnd),
-      admin.from("site_visit_requests").select(CALENDAR_REQUEST_COLUMNS).in("project_id", projectIds).in("status", [...CALENDAR_VISIT_STATUSES]).gte("scheduled_date", rangeStart).lte("scheduled_date", rangeEnd),
+      getCalendarVisibleSiteVisitRows(projectIds, rangeStart, rangeEnd),
       admin.from("site_visit_requests").select("id", { count: "exact", head: true }).in("project_id", projectIds).in("status", [...SCHEDULED_VISIT_STATUSES]).gt("scheduled_date", today),
-      admin.from("site_visit_requests").select("id", { count: "exact", head: true }).in("project_id", projectIds).in("status", [...SCHEDULED_VISIT_STATUSES]).eq("scheduled_date", today),
+      getCalendarScheduledSiteVisitRowsForDate(projectIds, today),
       getCalendarSchedulingProjects({ userId, projects }),
     ])
 
@@ -411,7 +447,7 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
       summary: {
         pendingClientRequests: pendingRequests.length,
         upcomingVisits: upcomingResult.count ?? 0,
-        todaysVisits: todayResult.count ?? 0,
+        todaysVisits: (todayResult.data ?? []).length,
       },
       scheduling: { canSchedule: schedulingProjects.length > 0, projects: schedulingProjects },
     }

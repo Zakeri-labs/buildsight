@@ -1,6 +1,12 @@
 import "server-only"
 
-import { getCalendarPendingRequestRows, resolveCalendarProjectScope, resolveExplicitSupervisorProjectScope } from "@/lib/calendar/server"
+import {
+  getCalendarPendingRequestRows,
+  getCalendarScheduledSiteVisitRowsForDate,
+  resolveCalendarProjectScope,
+  resolveExplicitSupervisorProjectScope,
+} from "@/lib/calendar/server"
+import { loadNextProjectVisitNumber } from "@/lib/db/project-stages"
 import type { MemberHomepageData, MemberHomepageRequest, MemberHomepageVisit } from "@/lib/member-homepage/types"
 import { createAdminClient } from "@/lib/supabase/admin"
 
@@ -62,11 +68,9 @@ function clockTime(value: unknown): string | null {
  * Read-only operational data for the Member homepage.
  *
  * Visit Requests reuse Calendar's exact server-side project scope and pending-request
- * query. The lower Today's Visits section keeps its pre-existing data path unchanged.
+ * query. Today's Visits reuse Calendar's scheduled-visit query for the exact date.
  *
- * In this stage only Visit Requests are connected to the top summary cards. The
- * Today's Reports and Tomorrow's Visits cards intentionally remain placeholders.
- * The existing lower Today's Visits section remains unchanged.
+ * The Today's Reports and Tomorrow's Visits cards intentionally remain placeholders.
  */
 export async function getMemberHomepageData(userId: string): Promise<MemberHomepageData> {
   if (!isValidUuid(userId)) return emptyData()
@@ -74,8 +78,8 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
   let calendarProjectCount = 0
 
   try {
-    // Visit Requests deliberately use the exact same resolved project scope as /calendar.
-    // The lower Today's Visits section keeps its pre-existing explicit-Supervisor scope.
+    // Visit Requests use Calendar's resolved project scope. Today's Visits stay limited
+    // to the exact explicit-Supervisor scope required for a non-admin Member.
     const [calendarProjects, explicitSupervisorProjects] = await Promise.all([
       resolveCalendarProjectScope(userId),
       resolveExplicitSupervisorProjectScope(userId),
@@ -108,27 +112,22 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
         ? getCalendarPendingRequestRows(requestProjectIds)
         : Promise.resolve({ data: [] as any[], error: null }),
       visitProjectIds.length
-        ? admin
-            .from("site_visit_requests")
-            .select("id, project_id, scheduled_date, scheduled_time, client_request_id")
-            .in("project_id", visitProjectIds)
-            .eq("status", "scheduled")
-            .eq("scheduled_date", today)
-            .order("scheduled_time", { ascending: true, nullsFirst: false })
+        ? getCalendarScheduledSiteVisitRowsForDate(visitProjectIds, today)
         : Promise.resolve({ data: [] as any[], error: null }),
     ])
 
     if (stageResult.error) {
-      // Stage is optional display metadata; omit it rather than failing Visit Requests.
+      // Stage is optional display metadata; omit it rather than failing requests or visits.
       logLoadError("current project stages", userId, calendarProjectCount, stageResult.error)
     }
 
-    const stageByProjectId = new Map<string, string>()
+    const stageByProjectId = new Map<string, { id: string; name: string }>()
     for (const stage of stageResult.error ? [] : stageResult.data ?? []) {
       const projectId = (stage as any).project_id
+      const stageId = (stage as any).id
       const name = typeof (stage as any).name === "string" ? (stage as any).name.trim() : ""
-      if (!isValidUuid(projectId) || !name || stageByProjectId.has(projectId)) continue
-      stageByProjectId.set(projectId, name)
+      if (!isValidUuid(projectId) || !isValidUuid(stageId) || !name || stageByProjectId.has(projectId)) continue
+      stageByProjectId.set(projectId, { id: stageId, name })
     }
 
     let visitRequestsHasError = false
@@ -147,30 +146,51 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
           preferredTimeLabel: preferredTimeLabel(row.preferred_time),
           projectName: project.name?.trim() || "Project",
           projectCode: project.code?.trim() || null,
-          stageName: stageByProjectId.get(row.project_id) ?? null,
+          stageName: stageByProjectId.get(row.project_id)?.name ?? null,
           // site_visit_requests has no canonical visit number for pending Client Requests.
           visitNumber: null,
         }]
       })
     }
 
-    // Preserve the already-existing lower Today's Visits section exactly as-is.
     let visits: MemberHomepageVisit[] = []
     if (todayVisitsResult.error) {
       logLoadError("today Site Visits", userId, visitProjects.length, todayVisitsResult.error)
     } else {
-      visits = (todayVisitsResult.data ?? []).flatMap((row: any) => {
-        if (!isValidUuid(row.id) || !isValidUuid(row.project_id) || typeof row.scheduled_date !== "string") return []
+      const visitRows = (todayVisitsResult.data ?? []).filter((row: any) =>
+        isValidUuid(row.id) && isValidUuid(row.project_id) && typeof row.scheduled_date === "string",
+      )
+      const visitNumberProjectIds = Array.from(new Set(visitRows.map((row: any) => row.project_id as string)))
+      const visitNumberByProjectId = new Map<string, number | null>()
+
+      await Promise.all(visitNumberProjectIds.map(async (projectId) => {
+        try {
+          visitNumberByProjectId.set(projectId, await loadNextProjectVisitNumber(projectId))
+        } catch (error) {
+          logLoadError("Stage Report Visit Number", userId, visitProjects.length, error)
+          visitNumberByProjectId.set(projectId, null)
+        }
+      }))
+
+      visits = visitRows.flatMap((row: any) => {
         const project = visitProjectById.get(row.project_id)
         if (!project) return []
+        const stage = stageByProjectId.get(row.project_id) ?? null
+        const hasCoordinates = project.latitude !== null && project.longitude !== null
+        const googleMapsUrl = hasCoordinates
+          ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${project.latitude},${project.longitude}`)}`
+          : null
+
         return [{
           id: row.id,
           scheduledDate: row.scheduled_date,
           scheduledTime: clockTime(row.scheduled_time),
           projectName: project.name?.trim() || "Project",
           projectCode: project.code?.trim() || null,
-          stageName: stageByProjectId.get(row.project_id) ?? null,
-          visitNumber: null,
+          stageName: stage?.name ?? null,
+          visitNumber: visitNumberByProjectId.get(row.project_id) ?? null,
+          stageResponseHref: stage ? `/projects/${project.id}/stages/${stage.id}/reports/new` : null,
+          googleMapsUrl,
         }]
       })
       visits.sort((left, right) =>

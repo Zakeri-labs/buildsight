@@ -1,4 +1,6 @@
-import { AlertTriangle, CalendarPlus, Clock3, FileText, MapPinned, MessageSquare } from "lucide-react"
+import Link from "next/link"
+
+import { AlertTriangle, CalendarPlus, Clock3, FilePlus2, FileText, MapPinned, MessageSquare } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import type { MemberHomepageData, MemberHomepageRequest, MemberHomepageVisit } from "@/lib/member-homepage/types"
@@ -15,11 +17,11 @@ function formatDateBlock(value: string | null): { day: string; month: string } {
   }
 }
 
-function formatTime(value: string | null): string {
-  if (!value || !/^\d{2}:\d{2}$/.test(value)) return "Time TBD"
+function formatTime(value: string | null): string | null {
+  if (!value || !/^\d{2}:\d{2}$/.test(value)) return null
   const [hourValue, minute] = value.split(":")
   const hour = Number(hourValue)
-  if (!Number.isFinite(hour)) return value
+  if (!Number.isFinite(hour)) return null
   const period = hour >= 12 ? "PM" : "AM"
   const displayHour = hour % 12 || 12
   return `${displayHour}:${minute} ${period}`
@@ -87,29 +89,52 @@ function RequestRow({ request }: { request: MemberHomepageRequest }) {
 }
 
 function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
+  const scheduledTime = formatTime(visit.scheduledTime)
+  const actionClass = "inline-flex size-10 items-center justify-center rounded-xl border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+  const disabledActionClass = `${actionClass} cursor-not-allowed opacity-40 hover:bg-background hover:text-muted-foreground`
+
   return (
-    <Card size="sm" className="py-0">
-      <div className="grid min-h-[5rem] grid-cols-[4.75rem_minmax(0,1fr)_2.75rem] items-stretch">
-        <div className="flex flex-col items-center justify-center border-r bg-muted/30 px-2 text-center">
-          <Clock3 className="mb-1 size-4 text-primary" aria-hidden="true" />
-          <span className="text-xs font-semibold leading-4 tabular-nums">{formatTime(visit.scheduledTime)}</span>
+    <Card size="sm" className="overflow-hidden py-0">
+      <div className="grid min-h-[5rem] grid-cols-[4.35rem_minmax(0,1fr)_minmax(4.75rem,0.8fr)_5.75rem] items-stretch">
+        <div className="flex min-w-0 items-center justify-center border-r bg-muted/30 px-1.5 text-center">
+          <span className="text-xs font-semibold leading-4 tabular-nums sm:text-sm">{scheduledTime ?? "—"}</span>
         </div>
-        <div className="min-w-0 self-center px-3 py-2.5">
-          <p className="truncate text-sm font-semibold">{visit.projectName}</p>
-          <div className="mt-1 grid min-w-0 grid-cols-1 gap-x-3 sm:grid-cols-2">
-            {visit.projectCode ? <MetaLine>Code: {visit.projectCode}</MetaLine> : null}
-            {visit.stageName ? <MetaLine>Stage: {visit.stageName}</MetaLine> : null}
-            {visit.visitNumber ? <MetaLine>Visit {visit.visitNumber}</MetaLine> : null}
-          </div>
+
+        <div className="flex min-w-0 flex-col justify-center px-2.5 py-2.5">
+          <p className="truncate text-xs font-semibold sm:text-sm">{visit.projectName}</p>
+          {visit.projectCode ? <MetaLine>{visit.projectCode}</MetaLine> : null}
         </div>
-        <div className="flex items-center justify-center pr-2">
-          <button
-            type="button"
-            aria-label="Visit quick action"
-            className="inline-flex size-10 items-center justify-center rounded-xl border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <MapPinned className="size-5" aria-hidden="true" />
-          </button>
+
+        <div className="flex min-w-0 flex-col justify-center border-l px-2 py-2.5">
+          {visit.stageName ? <p className="truncate text-[11px] font-medium leading-4 sm:text-xs">{visit.stageName}</p> : null}
+          {visit.visitNumber ? <MetaLine>Visit No. {visit.visitNumber}</MetaLine> : null}
+        </div>
+
+        <div className="flex items-center justify-center gap-1 border-l px-1">
+          {visit.stageResponseHref ? (
+            <Link href={visit.stageResponseHref} aria-label="Open stage response" className={actionClass}>
+              <FilePlus2 className="size-5" aria-hidden="true" />
+            </Link>
+          ) : (
+            <button type="button" aria-label="Open stage response" className={disabledActionClass} disabled>
+              <FilePlus2 className="size-5" aria-hidden="true" />
+            </button>
+          )}
+          {visit.googleMapsUrl ? (
+            <a
+              href={visit.googleMapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open project location in Google Maps"
+              className={actionClass}
+            >
+              <MapPinned className="size-5" aria-hidden="true" />
+            </a>
+          ) : (
+            <button type="button" aria-label="Open project location in Google Maps" className={disabledActionClass} disabled>
+              <MapPinned className="size-5" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </div>
     </Card>

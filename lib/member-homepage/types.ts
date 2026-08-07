@@ -22,6 +22,8 @@ export type MemberHomepageVisit = {
   projectCode: string | null
   stageName: string | null
   visitNumber: number | null
+  stageResponseHref: string | null
+  googleMapsUrl: string | null
 }
 
 export type MemberHomepageData = {
