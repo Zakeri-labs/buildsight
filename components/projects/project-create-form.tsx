@@ -39,7 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ProjectLocationField } from "@/components/projects/project-location-field"
-import { ProjectOwnerVisitorSelector } from "@/components/projects/project-owner-visitor-selector"
+import { ProjectOwnerViewerSelector } from "@/components/projects/project-owner-viewer-selector"
 import {
   ProjectFinancialFields,
   type ProjectFinancialFormValues,
@@ -83,7 +83,7 @@ import {
   validateProjectImageFile,
 } from "@/lib/projects/project-image"
 import { validateProjectFinancialForm } from "@/lib/projects/project-financial"
-import type { ProjectOwnerVisitorOption } from "@/lib/actions/project-owner-visitors"
+import type { ProjectOwnerViewerOption } from "@/lib/actions/project-owner-viewers"
 import { cn } from "@/lib/utils"
 
 type OwnerDetails = {
@@ -202,7 +202,7 @@ export function ProjectCreateForm({
   const [assignedUserId, setAssignedUserId] = useState("")
   const [assignedSupervisorId, setAssignedSupervisorId] = useState("")
   const [owners, setOwners] = useState<OwnerDetails[]>([emptyOwner()])
-  const [selectedOwnerVisitor, setSelectedOwnerVisitor] = useState<ProjectOwnerVisitorOption | null>(null)
+  const [selectedOwnerViewer, setSelectedOwnerViewer] = useState<ProjectOwnerViewerOption | null>(null)
   const [contractorOrganizationId, setContractorOrganizationId] = useState("")
   const [contractorCompanyName, setContractorCompanyName] = useState("")
   const [contractorRegistrationNumber, setContractorRegistrationNumber] = useState("")
@@ -317,13 +317,13 @@ export function ProjectCreateForm({
         description: "وصف المشروع",
         descriptionPlaceholder: "نبذة مختصرة عن نطاق المشروع وأهدافه",
         ownerCount: "عدد المالكين",
-        selectExistingVisitor: "اختيار زائر مسجل",
-        selectExistingVisitorPlaceholder: "اختر زائرًا مسجلًا",
+        selectExistingVisitor: "اختيار Viewer مسجل",
+        selectExistingVisitorPlaceholder: "اختر Viewer",
         enterOwnerManually: "إدخال بيانات المالك يدويًا",
-        inviteNewVisitor: "دعوة زائر جديد",
+        inviteNewVisitor: "دعوة Viewer جديد",
         searchVisitors: "البحث بالاسم أو البريد أو الهاتف",
-        loadingVisitors: "جارٍ تحديث الزوار…",
-        noVisitors: "لا يوجد زوار مسجلون مطابقون.",
+        loadingVisitors: "جارٍ تحديث Viewers…",
+        noVisitors: "لا يوجد Viewers مطابقون.",
         retryVisitors: "إعادة المحاولة",
         owner: "المالك",
         ownerName: "اسم المالك",
@@ -421,13 +421,13 @@ export function ProjectCreateForm({
         description: "Project Description",
         descriptionPlaceholder: "Briefly describe the project scope and objectives",
         ownerCount: "Number of Owners",
-        selectExistingVisitor: "Select Existing Visitor",
-        selectExistingVisitorPlaceholder: "Select a registered visitor",
+        selectExistingVisitor: "Select Existing Viewer",
+        selectExistingVisitorPlaceholder: "Select a viewer",
         enterOwnerManually: "Enter Owner details manually",
-        inviteNewVisitor: "Invite New Visitor",
+        inviteNewVisitor: "Invite New Viewer",
         searchVisitors: "Search name, email, or phone",
-        loadingVisitors: "Refreshing visitors…",
-        noVisitors: "No registered visitors found.",
+        loadingVisitors: "Refreshing viewers…",
+        noVisitors: "No viewers found.",
         retryVisitors: "Retry",
         owner: "Owner",
         ownerName: "Owner Name",
@@ -493,16 +493,16 @@ export function ProjectCreateForm({
     setError(null)
   }
 
-  function selectOwnerVisitor(visitor: ProjectOwnerVisitorOption) {
-    setSelectedOwnerVisitor(visitor)
+  function selectOwnerViewer(viewer: ProjectOwnerViewerOption) {
+    setSelectedOwnerViewer(viewer)
     setOwners((current) => current.map((owner, index) => (
       index === 0
         ? {
             ...owner,
-            name: visitor.organizationName || visitor.name,
-            contactName: visitor.name,
-            contactEmail: visitor.email,
-            contactPhone: visitor.phone,
+            name: viewer.ownerName,
+            contactName: viewer.contactName,
+            contactEmail: viewer.email,
+            contactPhone: viewer.phone,
           }
         : owner
     )))
@@ -510,7 +510,7 @@ export function ProjectCreateForm({
   }
 
   function useManualOwnerEntry() {
-    setSelectedOwnerVisitor(null)
+    setSelectedOwnerViewer(null)
     setError(null)
   }
 
@@ -1305,10 +1305,10 @@ export function ProjectCreateForm({
 
             {step === 2 ? (
               <div className="space-y-5">
-                <ProjectOwnerVisitorSelector
+                <ProjectOwnerViewerSelector
                   supervisingOrgId={supervisingOrg.id}
-                  selectedVisitor={selectedOwnerVisitor}
-                  onSelectVisitor={selectOwnerVisitor}
+                  selectedViewer={selectedOwnerViewer}
+                  onSelectViewer={selectOwnerViewer}
                   onManualEntry={useManualOwnerEntry}
                   disabled={pending}
                   labels={{
@@ -1320,6 +1320,7 @@ export function ProjectCreateForm({
                     loading: copy.loadingVisitors,
                     empty: copy.noVisitors,
                     retry: copy.retryVisitors,
+                    pending: isArabic ? "معلق" : "Pending",
                   }}
                 />
 
