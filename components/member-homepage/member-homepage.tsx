@@ -1,8 +1,15 @@
+"use client"
+
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useState } from "react"
 
 import { AlertTriangle, CalendarPlus, CheckCircle2, Clock3, FilePlus2, FileText, MapPinned, MessageSquare } from "lucide-react"
 
+import { ClientVisitRequestWorkflow } from "@/components/calendar/client-visit-request-workflow"
 import { Card, CardContent } from "@/components/ui/card"
+import { calendarMonthKey } from "@/lib/calendar/date"
+import type { CalendarClientRequestViewModel, CalendarDataViewModel } from "@/lib/calendar/types"
 import type { MemberHomepageData, MemberHomepageRequest, MemberHomepageVisit } from "@/lib/member-homepage/types"
 import { cn } from "@/lib/utils"
 
@@ -67,7 +74,15 @@ function SummaryCard({ label, value, icon: Icon, prominent = false, hasError = f
   )
 }
 
-function RequestRow({ request }: { request: MemberHomepageRequest }) {
+function RequestRow({
+  request,
+  onAction,
+  loading = false,
+}: {
+  request: MemberHomepageRequest
+  onAction: (requestId: string) => void
+  loading?: boolean
+}) {
   const date = formatDateBlock(request.requestedDate)
   return (
     <Card size="sm" className="py-0">
@@ -89,7 +104,10 @@ function RequestRow({ request }: { request: MemberHomepageRequest }) {
           <button
             type="button"
             aria-label="Schedule visit request"
-            className="inline-flex size-10 items-center justify-center rounded-xl border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-busy={loading || undefined}
+            disabled={loading}
+            onClick={() => onAction(request.id)}
+            className="inline-flex size-10 items-center justify-center rounded-xl border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60"
           >
             <CalendarPlus className="size-5" aria-hidden="true" />
           </button>
@@ -207,6 +225,64 @@ function EmptyState({ icon: Icon, title, description }: { icon: React.ElementTyp
 }
 
 export function MemberHomepage({ data }: { data: MemberHomepageData }) {
+  const router = useRouter()
+  const [selectedRequest, setSelectedRequest] = useState<CalendarClientRequestViewModel | null>(null)
+  const [calendarData, setCalendarData] = useState<CalendarDataViewModel | null>(null)
+  const [requestDialogOpen, setRequestDialogOpen] = useState(false)
+  const [loadingRequestId, setLoadingRequestId] = useState<string | null>(null)
+  const [requestActionError, setRequestActionError] = useState<string | null>(null)
+
+  async function openRequestWorkflow(requestId: string) {
+    if (loadingRequestId) return
+    setLoadingRequestId(requestId)
+    setRequestActionError(null)
+    try {
+      const monthKey = calendarMonthKey(new Date())
+      const response = await fetch(`/api/calendar?month=${encodeURIComponent(monthKey)}`, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      })
+      const payload = (await response.json().catch(() => null)) as CalendarDataViewModel | { error?: string } | null
+      if (!response.ok || !payload || !("monthKey" in payload)) {
+        throw new Error("Unable to load this Client Visit Request. Please try again.")
+      }
+
+      const request = payload.pendingRequests.find((item) => item.id === requestId) ?? null
+      if (!request) {
+        setRequestActionError("This Client Visit Request is no longer pending. Refreshing the page will show the latest status.")
+        router.refresh()
+        return
+      }
+      if (!request.canManage) {
+        setRequestActionError("You do not have permission to manage this Client Visit Request.")
+        return
+      }
+
+      setCalendarData(payload)
+      setSelectedRequest(request)
+      setRequestDialogOpen(true)
+    } catch {
+      setRequestActionError("Unable to load this Client Visit Request. Please try again.")
+    } finally {
+      setLoadingRequestId(null)
+    }
+  }
+
+  async function refreshAfterRequestScheduling() {
+    setSelectedRequest(null)
+    setCalendarData(null)
+    setRequestDialogOpen(false)
+    setRequestActionError(null)
+    router.refresh()
+  }
+
+  async function refreshAfterStaleRequest() {
+    setSelectedRequest(null)
+    setCalendarData(null)
+    setRequestDialogOpen(false)
+    router.refresh()
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 overflow-x-hidden">
       <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
@@ -246,11 +322,23 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
           </div>
         ) : data.requests.length ? (
           <div className="space-y-2.5">
-            {data.requests.map((request) => <RequestRow key={request.id} request={request} />)}
+            {data.requests.map((request) => (
+              <RequestRow
+                key={request.id}
+                request={request}
+                onAction={openRequestWorkflow}
+                loading={loadingRequestId === request.id}
+              />
+            ))}
           </div>
         ) : (
           <EmptyState icon={CalendarPlus} title="No pending visit requests" description="New client visit requests for your supervised projects will appear here." />
         )}
+        {requestActionError ? (
+          <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs leading-5 text-destructive">
+            {requestActionError}
+          </p>
+        ) : null}
       </section>
 
       <section className="space-y-3" aria-labelledby="member-today-visits-title">
@@ -266,6 +354,15 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
           <EmptyState icon={MapPinned} title="No visits scheduled today" description="Today's scheduled Site Visits for your supervised projects will appear here." />
         )}
       </section>
+
+      <ClientVisitRequestWorkflow
+        request={selectedRequest}
+        open={requestDialogOpen}
+        onOpenChange={setRequestDialogOpen}
+        schedulingProjects={calendarData?.scheduling.projects ?? []}
+        onScheduled={refreshAfterRequestScheduling}
+        onRefreshRequired={refreshAfterStaleRequest}
+      />
     </div>
   )
 }

@@ -3,8 +3,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 
 export type DefaultLandingResolution = {
-  destination: "/" | "/calendar"
-  mode: "admin" | "supervisor" | "fallback"
+  destination: "/" | "/memberhomepage"
+  mode: "admin" | "member" | "fallback"
 }
 
 type SupabaseErrorFields = {
@@ -82,22 +82,12 @@ export async function resolveDefaultLandingDestination(userId: string): Promise<
   // Admin takes precedence even when the same user is also an assigned Supervisor.
   if (roles.has("org_admin")) return { destination: "/", mode: "admin" }
 
-  // Only an actual organization Member can receive the Supervisor Calendar landing.
-  if (!roles.has("org_member")) return { destination: "/", mode: "fallback" }
-
-  const supervisorResult = await admin
-    .from("projects")
-    .select("id")
-    .eq("assigned_supervisor_id", normalizedUserId)
-    .limit(1)
-    .maybeSingle()
-
-  if (supervisorResult.error) {
-    logLandingLookupError("resolve explicit Project Supervisor assignment for default landing", supervisorResult.error)
-    return { destination: "/", mode: "fallback" }
+  // Every organization Member uses the dedicated Member homepage as the
+  // default landing destination. Explicit Supervisor assignments must not
+  // override the Member home route.
+  if (roles.has("org_member")) {
+    return { destination: "/memberhomepage", mode: "member" }
   }
 
-  return supervisorResult.data
-    ? { destination: "/calendar", mode: "supervisor" }
-    : { destination: "/", mode: "fallback" }
+  return { destination: "/", mode: "fallback" }
 }

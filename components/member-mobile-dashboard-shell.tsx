@@ -71,6 +71,7 @@ export function MemberMobileDashboardHeader({
             canAccessSiteVisits={canAccessSiteVisits}
             embedded
             hideAdministration
+            homeHref="/memberhomepage"
             onNavigate={() => setOpen(false)}
           />
         </SheetContent>
@@ -146,16 +147,18 @@ export function MemberMobileBottomNavigation({ compact = false }: { compact?: bo
         />
 
         <div className={cn("relative flex items-end justify-center", compact ? "pb-0.5" : "pb-1")}>
-          <button
-            type="button"
-            aria-label="Quick action"
+          <Link
+            href="/report-entry"
+            aria-label="Report Entry"
+            aria-current={pathname === "/report-entry" ? "page" : undefined}
             className={cn(
               "absolute inline-flex items-center justify-center rounded-full border-4 border-background bg-primary text-primary-foreground shadow-lg transition-transform active:scale-95",
               compact ? "-top-3 size-[3.75rem]" : "-top-5 size-14",
+              pathname === "/report-entry" && "ring-2 ring-primary/30 ring-offset-2 ring-offset-background",
             )}
           >
             <Plus className={compact ? "size-[1.875rem]" : "size-7"} aria-hidden="true" />
-          </button>
+          </Link>
         </div>
 
         <BottomNavItem label="Calendar" icon={CalendarDays} href="/calendar" active={pathname.startsWith("/calendar")} compact={compact} />

@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation"
 import { DateRangePill } from "@/components/dashboard/date-range-pill"
 import { PortfolioKpis, type KpiCardData } from "@/components/dashboard/portfolio-kpis"
 import { StatusDonutCard } from "@/components/dashboard/status-donut-card"
@@ -27,6 +28,15 @@ const emptyDashboard: DashboardData = {
 
 export default async function DashboardPage() {
   const session = await requireOnboarded()
+
+  // Keep Admin precedence identical to the default landing resolver while
+  // making the authenticated Member landing deterministic if middleware is bypassed.
+  const hasAdminRole = session.memberships.some((membership) => membership.role === "org_admin")
+  const hasMemberRole = session.memberships.some((membership) => membership.role === "org_member")
+  if (!hasAdminRole && hasMemberRole) {
+    redirect("/memberhomepage")
+  }
+
   const projectId = await getSelectedProjectId()
   const orgId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id ?? null
   const data = orgId ? await getDashboardData(orgId, projectId, session.userId) : emptyDashboard

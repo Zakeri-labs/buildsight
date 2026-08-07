@@ -32,9 +32,10 @@ export function AppShell({
   const isMemberHomepage = pathname === "/memberhomepage" && isMember
   const isMemberProjects = pathname === "/projects" && isMember
   const isMemberCalendar = pathname.startsWith("/calendar") && isMember
+  const isMemberReportEntry = pathname === "/report-entry" && isMember
   const isMemberDashboard = (pathname === "/" || pathname === "/memberhomepage") && isMember
-  const isMemberMobileShell = isMemberDashboard || isMemberProjects || isMemberCalendar
-  const isCompactMemberMobileShell = isMemberHomepage || isMemberProjects || isMemberCalendar
+  const isMemberMobileShell = isMemberDashboard || isMemberProjects || isMemberCalendar || isMemberReportEntry
+  const isCompactMemberMobileShell = isMemberHomepage || isMemberProjects || isMemberCalendar || isMemberReportEntry
   const showMemberBottomNavigation = isMemberMobileShell
 
   const activeProjectName =
@@ -49,6 +50,7 @@ export function AppShell({
           selectedProjectId={selectedProjectId}
           canManageStages={canManageStages}
           canAccessSiteVisits={canAccessSiteVisits}
+          homeHref={isMember ? "/memberhomepage" : "/"}
         />
       </div>
       <div className="flex min-w-0 flex-1 flex-col">

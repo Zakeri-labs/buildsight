@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { CalendarPlus } from "lucide-react"
 
 import { CalendarSummaryCards } from "@/components/calendar/calendar-summary-cards"
-import { ClientVisitRequestDialog } from "@/components/calendar/client-visit-request-dialog"
+import { ClientVisitRequestWorkflow } from "@/components/calendar/client-visit-request-workflow"
 import { ClientVisitRequestsPanel } from "@/components/calendar/client-visit-requests-panel"
 import { MobileWeeklyCalendar } from "@/components/calendar/mobile-weekly-calendar"
 import { MonthlyCalendar } from "@/components/calendar/monthly-calendar"
@@ -65,7 +65,6 @@ export function CalendarPageClient({
   const [scheduleDate, setScheduleDate] = useState(() => localDateKey(new Date()))
   const [selectedRequest, setSelectedRequest] = useState<CalendarClientRequestViewModel | null>(null)
   const [requestDetailsOpen, setRequestDetailsOpen] = useState(false)
-  const [requestScheduleOpen, setRequestScheduleOpen] = useState(false)
   const selectedMonthKey = calendarMonthKey(currentMonth)
 
   useEffect(() => {
@@ -127,19 +126,9 @@ export function CalendarPageClient({
     })
   }, [refreshSelectedMonth])
 
-  const refreshAfterRequestRejection = useCallback(async () => {
-    setSelectedRequest(null)
-    setRequestDetailsOpen(false)
-    await refreshSelectedMonth({
-      successMessage: "Client Visit Request rejected.",
-      refreshErrorMessage: "The request was rejected, but the Calendar could not be refreshed. Please try again.",
-    })
-  }, [refreshSelectedMonth])
-
   const refreshAfterStaleRequest = useCallback(async () => {
     setSelectedRequest(null)
     setRequestDetailsOpen(false)
-    setRequestScheduleOpen(false)
     await refreshSelectedMonth({
       refreshErrorMessage: "Unable to refresh the Calendar. Please try again.",
     })
@@ -193,23 +182,9 @@ export function CalendarPageClient({
     if (request) openClientRequest(request)
   }
 
-  function approveClientRequest(request: CalendarClientRequestViewModel) {
-    if (!request.canManage || !request.canApprove) return
-    setSelectedRequest(request)
-    setRequestDetailsOpen(false)
-    setRequestScheduleOpen(true)
-  }
-
   const visibleEvents = useMemo(
     () => (data.monthKey === selectedMonthKey ? data.events : []),
     [data.events, data.monthKey, selectedMonthKey],
-  )
-
-  const selectedRequestProjects = useMemo(
-    () => selectedRequest
-      ? data.scheduling.projects.filter((project) => project.id === selectedRequest.projectId)
-      : [],
-    [data.scheduling.projects, selectedRequest],
   )
 
   const calendar = (
@@ -328,26 +303,14 @@ export function CalendarPageClient({
         />
       ) : null}
 
-      <ClientVisitRequestDialog
+      <ClientVisitRequestWorkflow
         request={selectedRequest}
         open={requestDetailsOpen}
         onOpenChange={setRequestDetailsOpen}
-        onApprove={approveClientRequest}
-        onRejected={refreshAfterRequestRejection}
+        schedulingProjects={data.scheduling.projects}
+        onScheduled={refreshAfterRequestApproval}
         onRefreshRequired={refreshAfterStaleRequest}
       />
-
-      {selectedRequest && selectedRequest.canApprove && selectedRequestProjects.length ? (
-        <ScheduleSiteVisitDialog
-          open={requestScheduleOpen}
-          onOpenChange={setRequestScheduleOpen}
-          projects={selectedRequestProjects}
-          initialDate={selectedRequest.requestedDate ?? localDateKey(new Date())}
-          request={selectedRequest}
-          onScheduled={refreshAfterRequestApproval}
-          onRefreshRequired={refreshAfterStaleRequest}
-        />
-      ) : null}
     </div>
   )
 }

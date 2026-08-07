@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -12,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { rejectCalendarClientVisitRequestAction } from "@/lib/actions/site-visits"
 import type { CalendarClientRequestViewModel } from "@/lib/calendar/types"
 
 function displayDate(value: string | null, isAsap = false) {
@@ -40,9 +39,9 @@ function displayCreatedAt(value: string) {
 
 function DetailField({ label, value }: { label: string; value: string | null }) {
   return (
-    <div className="rounded-lg border bg-muted/20 px-3 py-2.5">
+    <div className="min-w-0 rounded-lg border bg-muted/20 px-3 py-2.5">
       <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1 text-sm font-medium text-foreground">{value || "Not provided"}</p>
+      <p className="mt-1 break-words text-sm font-medium leading-5 text-foreground">{value || "Not provided"}</p>
     </div>
   )
 }
@@ -52,139 +51,80 @@ export function ClientVisitRequestDialog({
   open,
   onOpenChange,
   onApprove,
-  onRejected,
-  onRefreshRequired,
 }: {
   request: CalendarClientRequestViewModel | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onApprove: (request: CalendarClientRequestViewModel) => void
-  onRejected: () => Promise<void> | void
-  onRefreshRequired: () => Promise<void> | void
 }) {
-  const [rejectOpen, setRejectOpen] = useState(false)
   const [error, setError] = useState("")
-  const [pending, startTransition] = useTransition()
 
   if (!request) return null
 
-  function rejectRequest() {
-    if (pending) return
-    setError("")
-    startTransition(async () => {
-      const result = await rejectCalendarClientVisitRequestAction({ requestId: request.id })
-      if (result.ok === false) {
-        setError(result.error)
-        if (result.error === "This request has already been processed.") await onRefreshRequired()
-        return
-      }
-      setRejectOpen(false)
-      onOpenChange(false)
-      await onRejected()
-    })
-  }
-
   return (
-    <>
-      <Dialog open={open} onOpenChange={(nextOpen) => {
-        if (pending) return
-        onOpenChange(nextOpen)
-        if (!nextOpen) {
-          setRejectOpen(false)
-          setError("")
-        }
-      }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
-          <DialogHeader>
-            <div className="flex items-start justify-between gap-4 pr-8">
-              <div className="min-w-0">
-                <DialogTitle>Client Visit Request</DialogTitle>
-                <DialogDescription className="mt-2">
-                  Review the client&apos;s requested visit details before taking action.
-                </DialogDescription>
-              </div>
-              <Badge variant="outline" className="shrink-0 text-muted-foreground">Pending</Badge>
+    <Dialog open={open} onOpenChange={(nextOpen) => {
+      onOpenChange(nextOpen)
+      if (!nextOpen) setError("")
+    }}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl max-sm:w-[calc(100vw-1rem)] max-sm:max-w-none max-sm:max-h-[calc(100dvh-1rem)] max-sm:gap-3 max-sm:p-4">
+        <DialogHeader className="max-sm:gap-1.5">
+          <div className="flex min-w-0 items-start justify-between gap-3 pr-8">
+            <div className="min-w-0">
+              <DialogTitle>Client Visit Request</DialogTitle>
+              <DialogDescription className="mt-1.5 max-sm:text-xs max-sm:leading-5">
+                Review the client&apos;s requested visit details before taking action.
+              </DialogDescription>
             </div>
-          </DialogHeader>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <DetailField label="Project" value={request.projectName} />
-            <DetailField label="Requesting Client" value={request.requestedBy} />
-            <DetailField label="Requested Date" value={displayDate(request.requestedDate, request.isAsap)} />
-            <DetailField label="Preferred Time" value={request.preferredTimeLabel} />
-            <DetailField label="Created" value={displayCreatedAt(request.createdAt)} />
-            <DetailField label="Status" value="Pending" />
+            <Badge variant="outline" className="shrink-0 text-muted-foreground">Pending</Badge>
           </div>
+        </DialogHeader>
 
-          {request.purpose ? (
-            <div className="rounded-lg border px-3 py-2.5">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Purpose</p>
-              <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-foreground">{request.purpose}</p>
-            </div>
-          ) : null}
+        <div className="grid min-w-0 gap-2.5 sm:grid-cols-2 sm:gap-3">
+          <DetailField label="Project" value={request.projectName} />
+          <DetailField label="Requesting Client" value={request.requestedBy} />
+          <DetailField label="Requested Date" value={displayDate(request.requestedDate, request.isAsap)} />
+          <DetailField label="Preferred Time" value={request.preferredTimeLabel} />
+          <DetailField label="Created" value={displayCreatedAt(request.createdAt)} />
+          <DetailField label="Status" value="Pending" />
+        </div>
 
-          <div className="rounded-lg border px-3 py-2.5">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Notes</p>
-            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-foreground/80">
-              {request.notes || "No additional notes were provided."}
-            </p>
+        {request.purpose ? (
+          <div className="min-w-0 rounded-lg border px-3 py-2.5">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Purpose</p>
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-foreground sm:leading-6">{request.purpose}</p>
           </div>
+        ) : null}
 
-          {error ? (
-            <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
+        <div className="min-w-0 rounded-lg border px-3 py-2.5">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Notes</p>
+          <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-foreground/80 sm:leading-6">
+            {request.notes || "No additional notes were provided."}
+          </p>
+        </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>Close</Button>
-            {request.canManage ? (
-              <Button type="button" variant="destructive" onClick={() => {
+        {error ? (
+          <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+
+        <DialogFooter className="max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:grid max-sm:grid-cols-2 max-sm:bg-background/95 max-sm:backdrop-blur-sm">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+          {request.canManage ? (
+            <Button
+              type="button"
+              onClick={() => {
                 setError("")
-                setRejectOpen(true)
-              }} disabled={pending}>
-                Reject
-              </Button>
-            ) : null}
-            {request.canManage ? (
-              <Button
-                type="button"
-                onClick={() => onApprove(request)}
-                disabled={pending || !request.canApprove}
-                title={request.canApprove ? undefined : "Assign a Project Supervisor before scheduling this request."}
-              >
-                Approve and Schedule
-              </Button>
-            ) : null}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={rejectOpen} onOpenChange={(nextOpen) => {
-        if (pending) return
-        setRejectOpen(nextOpen)
-        if (!nextOpen) setError("")
-      }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Reject Client Visit Request?</DialogTitle>
-            <DialogDescription>
-              This request will leave the pending queue and no Site Visit will be created.
-            </DialogDescription>
-          </DialogHeader>
-          {error ? (
-            <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setRejectOpen(false)} disabled={pending}>Cancel</Button>
-            <Button type="button" variant="destructive" onClick={rejectRequest} disabled={pending}>
-              {pending ? "Rejecting..." : "Reject Request"}
+                onApprove(request)
+              }}
+              disabled={!request.canApprove}
+              title={request.canApprove ? undefined : "Assign a Project Supervisor before scheduling this request."}
+            >
+              Approve and Schedule
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+          ) : null}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

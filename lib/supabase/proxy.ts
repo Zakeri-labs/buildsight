@@ -58,11 +58,11 @@ export async function updateSession(request: NextRequest) {
     if (user && pathname === "/") {
       const landing = await resolveDefaultLandingDestination(user.id)
 
-      if (landing.mode === "supervisor") {
-        const calendarUrl = request.nextUrl.clone()
-        calendarUrl.pathname = landing.destination
-        calendarUrl.search = ""
-        return preserveResponseCookies(supabaseResponse, NextResponse.redirect(calendarUrl))
+      if (landing.mode === "member") {
+        const memberHomeUrl = request.nextUrl.clone()
+        memberHomeUrl.pathname = landing.destination
+        memberHomeUrl.search = ""
+        return preserveResponseCookies(supabaseResponse, NextResponse.redirect(memberHomeUrl))
       }
 
       if (landing.mode === "admin") {

@@ -148,8 +148,8 @@ export function ScheduleSiteVisitDialog({
       onOpenChange(nextOpen)
       if (!nextOpen) setError("")
     }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg max-sm:w-[calc(100vw-1rem)] max-sm:max-w-none max-sm:max-h-[calc(100dvh-1rem)] max-sm:gap-3 max-sm:p-4">
+        <DialogHeader className="max-sm:gap-1.5">
           <DialogTitle>Schedule Site Visit</DialogTitle>
           <DialogDescription>
             {isRequestApproval
@@ -158,7 +158,7 @@ export function ScheduleSiteVisitDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4">
+        <div className="grid min-w-0 gap-4 max-sm:gap-3">
           <div className="grid gap-2">
             <Label>Project</Label>
             {projectIsFixed && selectedProject ? (
@@ -184,7 +184,7 @@ export function ScheduleSiteVisitDialog({
             </div>
           ) : null}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2 sm:gap-4">
             <div className="grid gap-2">
               <Label htmlFor="calendar-visit-date">Visit Date</Label>
               <Input id="calendar-visit-date" type="date" min={localDateInputValue()} value={date} onChange={(event: ChangeEvent<HTMLInputElement>) => setDate(event.target.value)} disabled={pending} className="h-10" />
@@ -205,7 +205,7 @@ export function ScheduleSiteVisitDialog({
 
           <div className="grid gap-2">
             <Label>Participants</Label>
-            <div className="grid max-h-48 gap-1 overflow-y-auto rounded-xl border p-2">
+            <div className="grid max-h-48 min-w-0 gap-1 overflow-y-auto rounded-xl border p-2 max-sm:max-h-40">
               {selectedProject?.participants.length ? selectedProject.participants.map((person) => (
                 <label key={person.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted">
                   <input type="checkbox" checked={assignedUserIds.includes(person.id)} onChange={() => toggleParticipant(person.id)} disabled={pending} className="size-4 rounded border-input accent-primary" />
@@ -226,7 +226,7 @@ export function ScheduleSiteVisitDialog({
           {error ? <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p> : null}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:grid max-sm:grid-cols-2 max-sm:bg-background/95 max-sm:backdrop-blur-sm">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>Cancel</Button>
           <Button type="button" onClick={submit} disabled={pending || !projectId || !date || !time}>
             {pending ? "Scheduling..." : isRequestApproval ? "Approve and Schedule" : "Schedule Visit"}

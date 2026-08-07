@@ -83,6 +83,7 @@ export function AppSidebar({
   embedded = false,
   hideAdministration = false,
   onNavigate,
+  homeHref = "/",
 }: {
   projects: ProjectOption[]
   selectedProjectId: string
@@ -91,6 +92,7 @@ export function AppSidebar({
   embedded?: boolean
   hideAdministration?: boolean
   onNavigate?: () => void
+  homeHref?: "/" | "/memberhomepage"
 }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -190,7 +192,7 @@ export function AppSidebar({
       }
 
   const moduleItems = [
-    { label: t.nav.dashboard, href: "/", icon: Home },
+    { label: t.nav.dashboard, href: homeHref, icon: Home },
     projectNavigationItem,
     ...(stageNavigationItem ? [stageNavigationItem] : []),
     {
@@ -367,8 +369,8 @@ export function AppSidebar({
             href={item.href}
             icon={item.icon}
             active={
-              item.href === "/"
-                ? pathname === "/"
+              item.href === homeHref
+                ? pathname === homeHref
                 : item.href.split("?", 1)[0] === "/projects"
                   ? pathname === "/projects" || pathname === "/projects/new"
                   : contextProjectId && item.href.split("?", 1)[0] === `/projects/${contextProjectId}`
