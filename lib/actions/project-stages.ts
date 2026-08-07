@@ -265,6 +265,7 @@ function revalidateProjectStageViews(projectId: string) {
   revalidatePath(`/projects/${projectId}/stages`)
   revalidatePath(`/projects/${projectId}`)
   revalidatePath("/projects")
+  revalidatePath("/memberhomepage")
   revalidatePath("/")
 }
 
@@ -284,6 +285,7 @@ type SaveReportResponseInput = {
   instructions?: string | null
   submit?: boolean
   saveStatus?: "draft" | "in_progress"
+  siteVisitRequestId?: string | null
 }
 
 type SavedReportResponse = { responseId: string; projectStageId: string; reportNumber: string; visitNumber: number; status: string }
@@ -309,7 +311,7 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
     const userClient = await createServerClient()
     const { data: existing, error: existingError } = await admin
       .from("term_responses")
-      .select("id, report_number, visit_number, status, created_by, project_stage_id, project_stage_term_id, responsible_user_id, approval_required, response_type")
+      .select("id, report_number, visit_number, status, created_by, project_stage_id, project_stage_term_id, responsible_user_id, approval_required, response_type, site_visit_request_id")
       .eq("id", input.responseId)
       .eq("project_id", input.projectId)
       .maybeSingle()
@@ -317,11 +319,34 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
 
     const projectStageId = directStage?.id ?? term!.project_stage_id
     const legacyTermId = directStage ? null : input.termId ?? null
+    const rawSiteVisitRequestId = directStage && typeof input.siteVisitRequestId === "string"
+      ? input.siteVisitRequestId.trim()
+      : ""
+    if (rawSiteVisitRequestId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawSiteVisitRequestId)) {
+      return { ok: false, error: "Invalid Site Visit context." }
+    }
+    const siteVisitRequestId = rawSiteVisitRequestId || null
+
+    if (siteVisitRequestId) {
+      const { data: siteVisit, error: siteVisitError } = await admin
+        .from("site_visit_requests")
+        .select("id, project_id, status")
+        .eq("id", siteVisitRequestId)
+        .eq("project_id", input.projectId)
+        .maybeSingle()
+      if (siteVisitError) throw siteVisitError
+      if (!siteVisit || !["scheduled", "completed"].includes(siteVisit.status)) {
+        return { ok: false, error: "This Site Visit is not available for the selected project." }
+      }
+    }
     if (existing && existing.project_stage_id !== projectStageId) {
       return { ok: false, error: "This report does not belong to the selected stage." }
     }
     if (existing && existing.project_stage_term_id !== legacyTermId) {
       return { ok: false, error: directStage ? "This report does not belong to the selected stage." : "This report does not belong to the selected term." }
+    }
+    if (existing?.site_visit_request_id && siteVisitRequestId && existing.site_visit_request_id !== siteVisitRequestId) {
+      return { ok: false, error: "This report is already linked to another Site Visit." }
     }
 
     if (term && !term.parent_term_id) {
@@ -385,6 +410,9 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         updated_by: actorId,
         completed_at: input.submit && !approvalRequired ? now : null,
       }
+      if (directStage && siteVisitRequestId && !existing.site_visit_request_id) {
+        updatePayload.site_visit_request_id = siteVisitRequestId
+      }
       if (input.submit) updatePayload.submitted_at = now
       else if (existing.status === "rejected") updatePayload.submitted_at = null
       const { error } = await userClient.from("term_responses").update(updatePayload).eq("id", existing.id)
@@ -416,6 +444,7 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         project_id: input.projectId,
         project_stage_id: projectStageId,
         project_stage_term_id: legacyTermId,
+        site_visit_request_id: directStage ? siteVisitRequestId : null,
         report_number: reportNumber,
         visit_number: assignedVisitNumber,
         report_type: input.reportType,

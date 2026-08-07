@@ -354,6 +354,7 @@ export function InspectionReportForm({
   ccCandidates,
   initialCcRecipients,
   stageSubterms,
+  siteVisitRequestId = null,
 }: {
   project: { id: string; name: string; code: string | null }
   stage: { id: string; name: string }
@@ -393,6 +394,7 @@ export function InspectionReportForm({
   ccCandidates: ProjectCcCandidate[]
   initialCcRecipients: ReportCcRecipient[]
   stageSubterms?: Array<{ id: string; reportName: string }>
+  siteVisitRequestId?: string | null
 }) {
   const router = useRouter()
   const reportDefinition = stageReportConfig ?? legacyTerm
@@ -510,7 +512,7 @@ export function InspectionReportForm({
       saveStatus,
     }
     const result = isDirectStageReport
-      ? await saveStageReportAction({ ...reportInput, stageId: resolvedStageId })
+      ? await saveStageReportAction({ ...reportInput, stageId: resolvedStageId, siteVisitRequestId })
       : await saveTermResponseAction({ ...reportInput, termId: reportDefinition.id })
     if (!result.ok) throw new Error(result.error)
     setResponseId(result.data.responseId)
@@ -656,7 +658,7 @@ export function InspectionReportForm({
           submit: true as const,
         }
         const result = isDirectStageReport
-          ? await saveStageReportAction({ ...reportInput, stageId: routeStageId })
+          ? await saveStageReportAction({ ...reportInput, stageId: routeStageId, siteVisitRequestId })
           : await saveTermResponseAction({ ...reportInput, termId: reportDefinition.id })
         if (!result.ok) throw new Error(result.error)
         routeStageId = result.data.projectStageId

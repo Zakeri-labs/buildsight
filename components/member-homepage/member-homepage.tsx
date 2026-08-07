@@ -33,7 +33,7 @@ function MetaLine({ children }: { children: React.ReactNode }) {
 
 function SummaryCard({ label, value, icon: Icon, prominent = false, hasError = false, reserveIconSpace = false }: {
   label: React.ReactNode
-  value: number
+  value: React.ReactNode
   icon: React.ElementType
   prominent?: boolean
   hasError?: boolean
@@ -186,7 +186,17 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 overflow-x-hidden">
       <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
-        <SummaryCard label="Today's Reports" value={data.summary.todaysReports} icon={FileText} />
+        <SummaryCard
+          label="Today's Reports"
+          value={(
+            <span className="inline-flex items-baseline gap-1">
+              <span>{data.summary.completedReportsToday}</span>
+              <span className="text-base font-medium text-muted-foreground sm:text-lg">/ {data.summary.requiredReportsToday}</span>
+            </span>
+          )}
+          icon={FileText}
+          hasError={data.todaysReportsHasError}
+        />
         <SummaryCard
           label={<><span className="block">Tomorrow&apos;s</span><span className="block">Visits</span></>}
           value={data.summary.tomorrowsVisits}

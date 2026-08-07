@@ -9,6 +9,7 @@ import {
 import { loadNextProjectVisitNumber } from "@/lib/db/project-stages"
 import type { MemberHomepageData, MemberHomepageRequest, MemberHomepageVisit } from "@/lib/member-homepage/types"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { createClient as createServerClient } from "@/lib/supabase/server"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 
@@ -18,13 +19,18 @@ function isValidUuid(value: unknown): value is string {
   return typeof value === "string" && UUID_PATTERN.test(value.trim())
 }
 
-function emptyData(visitRequestsHasError = false, tomorrowsVisitsHasError = false): MemberHomepageData {
+function emptyData(
+  visitRequestsHasError = false,
+  tomorrowsVisitsHasError = false,
+  todaysReportsHasError = false,
+): MemberHomepageData {
   return {
-    summary: { todaysReports: 0, tomorrowsVisits: 0, pendingVisitRequests: 0 },
+    summary: { completedReportsToday: 0, requiredReportsToday: 0, tomorrowsVisits: 0, pendingVisitRequests: 0 },
     requests: [],
     visits: [],
     visitRequestsHasError,
     tomorrowsVisitsHasError,
+    todaysReportsHasError,
   }
 }
 
@@ -72,7 +78,9 @@ function clockTime(value: unknown): string | null {
  * query. Today's Visits and Tomorrow's Visits reuse Calendar's scheduled-visit query
  * with the same explicit-Supervisor scope and date/status semantics.
  *
- * The Today's Reports card intentionally remains a placeholder.
+ * Today's Reports derives its denominator from the same Today Site Visit rows and
+ * matches completion only through the explicit Site Visit -> Stage Report relationship
+ * (with the existing Project + Stage + Visit Number identity as a legacy read fallback).
  */
 export async function getMemberHomepageData(userId: string): Promise<MemberHomepageData> {
   if (!isValidUuid(userId)) return emptyData()
@@ -196,12 +204,19 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
     }
 
     let visits: MemberHomepageVisit[] = []
+    let requiredReportsToday = 0
+    let completedReportsToday = 0
+    let todaysReportsHasError = false
+
     if (todayVisitsResult.error) {
       logLoadError("today Site Visits", userId, visitProjects.length, todayVisitsResult.error)
+      todaysReportsHasError = true
     } else {
       const visitRows = (todayVisitsResult.data ?? []).filter((row: any) =>
         isValidUuid(row.id) && isValidUuid(row.project_id) && typeof row.scheduled_date === "string",
       )
+      requiredReportsToday = visitRows.length
+
       const visitNumberProjectIds = Array.from(new Set(visitRows.map((row: any) => row.project_id as string)))
       const visitNumberByProjectId = new Map<string, number | null>()
 
@@ -213,6 +228,88 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
           visitNumberByProjectId.set(projectId, null)
         }
       }))
+
+      const reportObligations = visitRows.map((row: any) => {
+        const stage = unansweredStageByProjectId.get(row.project_id) ?? null
+        return {
+          siteVisitRequestId: row.id as string,
+          projectId: row.project_id as string,
+          stageId: stage?.id ?? null,
+          stageName: stage?.name ?? null,
+          visitNumber: visitNumberByProjectId.get(row.project_id) ?? null,
+        }
+      })
+
+      // Use the authenticated server client here so the exact same report visibility/RLS
+      // available to the Member on Stage Report pages is respected. Loading this card is
+      // read-only and never creates, reserves, or increments a report Visit Number.
+      const obligationProjectIds = Array.from(new Set(reportObligations.map((item) => item.projectId)))
+      if (reportObligations.length && obligationProjectIds.length) {
+        try {
+          const userClient = await createServerClient()
+          const { data: reportRows, error: reportError } = await userClient
+            .from("term_responses")
+            .select("id, project_id, project_stage_id, visit_number, status, site_visit_request_id")
+            .in("project_id", obligationProjectIds)
+
+          if (reportError) {
+            todaysReportsHasError = true
+            logLoadError("today Stage Report obligations", userId, visitProjects.length, reportError)
+          } else {
+            const completionStatuses = new Set(["submitted", "under_review", "approved", "completed"])
+            const completedRows = (reportRows ?? []).filter((report: any) =>
+              isValidUuid(report.id) &&
+              isValidUuid(report.project_id) &&
+              isValidUuid(report.project_stage_id) &&
+              completionStatuses.has(typeof report.status === "string" ? report.status : ""),
+            )
+
+            const explicitReportByVisitId = new Map<string, any>()
+            const legacyReportByIdentity = new Map<string, any>()
+            for (const report of completedRows) {
+              if (isValidUuid((report as any).site_visit_request_id)) {
+                explicitReportByVisitId.set((report as any).site_visit_request_id, report)
+              }
+              if (Number.isInteger((report as any).visit_number) && (report as any).visit_number > 0) {
+                legacyReportByIdentity.set(
+                  `${(report as any).project_id}:${(report as any).project_stage_id}:${(report as any).visit_number}`,
+                  report,
+                )
+              }
+            }
+
+            completedReportsToday = reportObligations.reduce((count, obligation) => {
+              if (!obligation.stageId) return count
+
+              const explicit = explicitReportByVisitId.get(obligation.siteVisitRequestId)
+              if (
+                explicit &&
+                explicit.project_id === obligation.projectId &&
+                explicit.project_stage_id === obligation.stageId
+              ) {
+                return count + 1
+              }
+
+              // Legacy compatibility for reports saved before the explicit Site Visit FK was
+              // populated by the application. This is the existing canonical Stage Report
+              // identity only: Project + Stage + immutable project-scoped Visit Number. No
+              // date/title/list-index matching is used.
+              if (obligation.visitNumber) {
+                const legacy = legacyReportByIdentity.get(
+                  `${obligation.projectId}:${obligation.stageId}:${obligation.visitNumber}`,
+                )
+                if (legacy) return count + 1
+              }
+
+              return count
+            }, 0)
+            completedReportsToday = Math.min(completedReportsToday, requiredReportsToday)
+          }
+        } catch (error) {
+          todaysReportsHasError = true
+          logLoadError("today Stage Report obligations", userId, visitProjects.length, error)
+        }
+      }
 
       visits = visitRows.flatMap((row: any) => {
         const project = visitProjectById.get(row.project_id)
@@ -231,7 +328,9 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
           projectCode: project.code?.trim() || null,
           stageName: stage?.name ?? null,
           visitNumber: visitNumberByProjectId.get(row.project_id) ?? null,
-          stageResponseHref: stage ? `/projects/${project.id}/stages/${stage.id}/reports/new` : null,
+          stageResponseHref: stage
+            ? `/projects/${project.id}/stages/${stage.id}/reports/new?siteVisitRequestId=${encodeURIComponent(row.id)}`
+            : null,
           googleMapsUrl,
         }]
       })
@@ -257,8 +356,8 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
 
     return {
       summary: {
-        // Today's Reports intentionally remains a placeholder until its dedicated stage.
-        todaysReports: 0,
+        completedReportsToday,
+        requiredReportsToday,
         tomorrowsVisits,
         pendingVisitRequests: requests.length,
       },
@@ -266,9 +365,10 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
       visits,
       visitRequestsHasError,
       tomorrowsVisitsHasError,
+      todaysReportsHasError,
     }
   } catch (error) {
     logLoadError("member homepage Calendar request scope", userId, calendarProjectCount, error)
-    return emptyData(true, true)
+    return emptyData(true, true, true)
   }
 }
