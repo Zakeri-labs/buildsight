@@ -29,7 +29,7 @@ export function AppShell({
   const pathname = usePathname()
   const currentUser = useCurrentUser()
   const isMember = currentUser.role === "org_member"
-  const isMemberDashboard = (pathname === "/" || pathname === "/dashboard") && isMember
+  const isMemberDashboard = (pathname === "/" || pathname === "/memberhomepage") && isMember
   const showMemberBottomNavigation = isMemberDashboard || (isMember && pathname.startsWith("/calendar"))
 
   const activeProjectName =
