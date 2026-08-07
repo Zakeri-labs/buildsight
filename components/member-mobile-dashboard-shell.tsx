@@ -16,29 +16,41 @@ export function MemberMobileDashboardHeader({
   selectedProjectId,
   canManageStages,
   canAccessSiteVisits,
+  compact = false,
 }: {
   projects: ProjectOption[]
   selectedProjectId: string
   canManageStages: boolean
   canAccessSiteVisits: boolean
+  compact?: boolean
 }) {
   const [open, setOpen] = useState(false)
 
   return (
     <>
-      <header className="sticky top-0 z-40 flex min-h-16 items-center justify-between border-b bg-background/95 px-4 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur md:hidden">
+      <header
+        className={cn(
+          "sticky top-0 z-40 flex items-center justify-between border-b bg-background/95 backdrop-blur md:hidden",
+          compact
+            ? "min-h-12 px-3 pb-1.5 pt-[calc(0.25rem+env(safe-area-inset-top))]"
+            : "min-h-16 px-4 pb-2 pt-[calc(0.5rem+env(safe-area-inset-top))]",
+        )}
+      >
         <div className="min-w-0">
-          <Logo variant="dark" className="dark:hidden" />
-          <Logo variant="white" className="hidden dark:flex" />
+          <Logo variant="dark" className={cn("dark:hidden", compact && "[&_img]:h-7 [&_img]:max-w-[140px]")} />
+          <Logo variant="white" className={cn("hidden dark:flex", compact && "[&_img]:h-7 [&_img]:max-w-[140px]")} />
         </div>
         <button
           type="button"
           aria-label="Open navigation menu"
           aria-expanded={open}
           onClick={() => setOpen(true)}
-          className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border bg-background text-foreground shadow-xs transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={cn(
+            "inline-flex shrink-0 items-center justify-center border bg-background text-foreground shadow-xs transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            compact ? "size-9 rounded-lg" : "size-11 rounded-xl",
+          )}
         >
-          <span className="flex w-5 flex-col gap-1.5" aria-hidden="true">
+          <span className={cn("flex flex-col", compact ? "w-4 gap-1" : "w-5 gap-1.5")} aria-hidden="true">
             <span className="h-0.5 w-full rounded-full bg-current" />
             <span className="h-0.5 w-full rounded-full bg-current" />
             <span className="h-0.5 w-full rounded-full bg-current" />
@@ -73,21 +85,24 @@ function BottomNavItem({
   href,
   active,
   uiOnly = false,
+  compact = false,
 }: {
   label: string
   icon: React.ElementType
   href?: string
   active?: boolean
   uiOnly?: boolean
+  compact?: boolean
 }) {
   const classes = cn(
-    "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] font-medium transition-colors",
+    "flex min-w-0 flex-1 flex-col items-center justify-center px-1 font-medium transition-colors",
+    compact ? "gap-0.5 py-1 text-[10px]" : "gap-1 py-2 text-[11px]",
     active ? "text-primary" : "text-muted-foreground",
   )
 
   const content = (
     <>
-      <Icon className="size-5" aria-hidden="true" />
+      <Icon className={compact ? "size-[18px]" : "size-5"} aria-hidden="true" />
       <span className="truncate">{label}</span>
     </>
   )
@@ -107,7 +122,7 @@ function BottomNavItem({
   )
 }
 
-export function MemberMobileBottomNavigation() {
+export function MemberMobileBottomNavigation({ compact = false }: { compact?: boolean }) {
   const pathname = usePathname()
 
   return (
@@ -115,27 +130,36 @@ export function MemberMobileBottomNavigation() {
       aria-label="Mobile navigation"
       className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-18px_rgba(0,0,0,0.45)] backdrop-blur md:hidden"
     >
-      <div className="relative mx-auto grid h-[4.5rem] max-w-lg grid-cols-5 items-stretch px-2">
-        <BottomNavItem label="Home" icon={Home} href="/memberhomepage" active={pathname === "/memberhomepage"} />
+      <div
+        className={cn(
+          "relative mx-auto grid max-w-lg grid-cols-5 items-stretch px-2",
+          compact ? "h-[3.75rem]" : "h-[4.5rem]",
+        )}
+      >
+        <BottomNavItem label="Home" icon={Home} href="/memberhomepage" active={pathname === "/memberhomepage"} compact={compact} />
         <BottomNavItem
           label="Projects"
           icon={FolderKanban}
           href="/projects"
           active={pathname === "/projects" || pathname.startsWith("/projects/")}
+          compact={compact}
         />
 
-        <div className="relative flex items-end justify-center pb-1">
+        <div className={cn("relative flex items-end justify-center", compact ? "pb-0.5" : "pb-1")}>
           <button
             type="button"
             aria-label="Quick action"
-            className="absolute -top-5 inline-flex size-14 items-center justify-center rounded-full border-4 border-background bg-primary text-primary-foreground shadow-lg transition-transform active:scale-95"
+            className={cn(
+              "absolute inline-flex items-center justify-center rounded-full border-4 border-background bg-primary text-primary-foreground shadow-lg transition-transform active:scale-95",
+              compact ? "-top-3 size-[3.75rem]" : "-top-5 size-14",
+            )}
           >
-            <Plus className="size-7" aria-hidden="true" />
+            <Plus className={compact ? "size-[1.875rem]" : "size-7"} aria-hidden="true" />
           </button>
         </div>
 
-        <BottomNavItem label="Calendar" icon={CalendarDays} href="/calendar" active={pathname.startsWith("/calendar")} />
-        <BottomNavItem label="Profile" icon={User} href="/settings" active={pathname.startsWith("/settings")} />
+        <BottomNavItem label="Calendar" icon={CalendarDays} href="/calendar" active={pathname.startsWith("/calendar")} compact={compact} />
+        <BottomNavItem label="Profile" icon={User} href="/settings" active={pathname.startsWith("/settings")} compact={compact} />
       </div>
     </nav>
   )

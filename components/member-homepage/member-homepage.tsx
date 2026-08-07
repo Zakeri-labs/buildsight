@@ -46,9 +46,9 @@ function SummaryCard({ label, value, icon: Icon, prominent = false }: {
       )}
     >
       <CardContent className="flex min-h-[5.5rem] flex-col justify-between gap-2 px-3">
-        <div className="flex items-start justify-between gap-1.5">
-          <p className="min-w-0 text-[11px] font-medium leading-4 text-muted-foreground sm:text-xs">{label}</p>
-          <Icon className={cn("size-4 shrink-0", prominent ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-1">
+          <p className="min-w-0 text-[10px] font-medium leading-[1.2] text-muted-foreground sm:text-xs sm:leading-4">{label}</p>
+          <Icon className={cn("mt-0.5 size-3.5 shrink-0 sm:size-4", prominent ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
         </div>
         <p className="text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{value}</p>
       </CardContent>
@@ -91,49 +91,49 @@ function RequestRow({ request }: { request: MemberHomepageRequest }) {
 function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
   const scheduledTime = formatTime(visit.scheduledTime)
   const actionClass =
-    "inline-flex size-9 shrink-0 items-center justify-center rounded-lg border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    "inline-flex size-8 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-9 sm:rounded-lg"
   const disabledActionClass = `${actionClass} cursor-not-allowed opacity-40 hover:bg-background hover:text-muted-foreground`
 
   return (
     <Card size="sm" className="overflow-hidden py-0">
-      <div className="grid min-h-[4.5rem] grid-cols-[3.1rem_minmax(0,1.15fr)_minmax(4.7rem,0.9fr)_5rem] items-stretch sm:min-h-[4.25rem] sm:grid-cols-[4rem_minmax(0,1.3fr)_minmax(6rem,1fr)_5.5rem]">
+      <div className="grid min-h-[4.15rem] grid-cols-[2.65rem_minmax(0,1.35fr)_minmax(5.3rem,1fr)_2.55rem] items-stretch sm:min-h-[4.25rem] sm:grid-cols-[3.5rem_minmax(0,1.35fr)_minmax(6.5rem,1fr)_3rem]">
         <div className="flex min-w-0 flex-col items-center justify-center bg-sidebar px-1 text-center text-white">
           {scheduledTime ? (
             <>
-              <span className="text-sm font-bold leading-4 tabular-nums sm:text-base">{scheduledTime.time}</span>
-              <span className="mt-0.5 text-[10px] font-bold uppercase leading-3 tracking-wide text-white/85 sm:text-[11px]">{scheduledTime.period}</span>
+              <span className="text-[12px] font-bold leading-3.5 tabular-nums sm:text-sm sm:leading-4">{scheduledTime.time}</span>
+              <span className="mt-0.5 text-[9px] font-bold uppercase leading-3 tracking-wide text-white/85 sm:text-[10px]">{scheduledTime.period}</span>
             </>
           ) : (
             <span className="text-sm font-semibold text-white/75">—</span>
           )}
         </div>
 
-        <div className="flex min-w-0 flex-col justify-center px-2 py-1.5 sm:px-2.5">
-          <p className="min-w-0 break-words text-xs font-semibold leading-4 sm:text-sm">{visit.projectName}</p>
+        <div className="flex min-w-0 flex-col justify-center px-1.5 py-1 sm:px-2.5 sm:py-1.5">
+          <p className="min-w-0 truncate text-[11px] font-semibold leading-3.5 sm:text-sm sm:leading-4">{visit.projectName}</p>
           {visit.projectCode ? (
-            <p className="mt-0.5 min-w-0 whitespace-normal break-words text-[10px] leading-3 text-muted-foreground sm:text-[11px] sm:leading-4">
+            <p className="mt-0.5 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] text-[9px] leading-[10px] text-muted-foreground sm:text-[11px] sm:leading-4">
               {visit.projectCode}
             </p>
           ) : null}
         </div>
 
-        <div className="flex min-w-0 flex-col justify-center border-l px-2 py-1.5 sm:px-2.5">
+        <div className="flex min-w-0 flex-col justify-center border-l px-1.5 py-1 sm:px-2.5 sm:py-1.5">
           {visit.stageName ? (
-            <p className="min-w-0 truncate text-[11px] font-semibold leading-4 sm:text-xs">{visit.stageName}</p>
+            <p className="line-clamp-2 min-w-0 break-words text-[10px] font-semibold leading-3 sm:text-xs sm:leading-4">{visit.stageName}</p>
           ) : null}
           {visit.visitNumber ? (
-            <p className="mt-0.5 whitespace-nowrap text-[10px] leading-3 text-muted-foreground sm:text-[11px] sm:leading-4">Visit No. {visit.visitNumber}</p>
+            <p className="mt-0.5 whitespace-nowrap text-[9px] leading-3 text-muted-foreground sm:text-[11px] sm:leading-4">Visit No. {visit.visitNumber}</p>
           ) : null}
         </div>
 
-        <div className="flex items-center justify-center gap-1 border-l px-0.5">
+        <div className="flex flex-col items-center justify-center gap-1 border-l px-0.5 py-1">
           {visit.stageResponseHref ? (
             <Link href={visit.stageResponseHref} aria-label="Open stage response" className={actionClass}>
-              <FilePlus2 className="size-[18px]" aria-hidden="true" />
+              <FilePlus2 className="size-4 sm:size-[18px]" aria-hidden="true" />
             </Link>
           ) : (
             <button type="button" aria-label="Open stage response" className={disabledActionClass} disabled>
-              <FilePlus2 className="size-[18px]" aria-hidden="true" />
+              <FilePlus2 className="size-4 sm:size-[18px]" aria-hidden="true" />
             </button>
           )}
           {visit.googleMapsUrl ? (
@@ -144,11 +144,11 @@ function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
               aria-label="Open project location in Google Maps"
               className={actionClass}
             >
-              <MapPinned className="size-[18px]" aria-hidden="true" />
+              <MapPinned className="size-4 sm:size-[18px]" aria-hidden="true" />
             </a>
           ) : (
             <button type="button" aria-label="Open project location in Google Maps" className={disabledActionClass} disabled>
-              <MapPinned className="size-[18px]" aria-hidden="true" />
+              <MapPinned className="size-4 sm:size-[18px]" aria-hidden="true" />
             </button>
           )}
         </div>

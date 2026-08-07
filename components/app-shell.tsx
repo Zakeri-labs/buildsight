@@ -29,6 +29,7 @@ export function AppShell({
   const pathname = usePathname()
   const currentUser = useCurrentUser()
   const isMember = currentUser.role === "org_member"
+  const isMemberHomepage = pathname === "/memberhomepage" && isMember
   const isMemberDashboard = (pathname === "/" || pathname === "/memberhomepage") && isMember
   const showMemberBottomNavigation = isMemberDashboard || (isMember && pathname.startsWith("/calendar"))
 
@@ -57,6 +58,7 @@ export function AppShell({
               selectedProjectId={selectedProjectId}
               canManageStages={canManageStages}
               canAccessSiteVisits={canAccessSiteVisits}
+              compact={isMemberHomepage}
             />
           </>
         ) : (
@@ -65,13 +67,15 @@ export function AppShell({
         <main
           className={
             showMemberBottomNavigation
-              ? "flex-1 px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
+              ? isMemberHomepage
+                ? "flex-1 px-4 py-4 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
+                : "flex-1 px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
               : "flex-1 px-4 py-5 md:px-8 md:py-6"
           }
         >
           {children}
         </main>
-        {showMemberBottomNavigation ? <MemberMobileBottomNavigation /> : null}
+        {showMemberBottomNavigation ? <MemberMobileBottomNavigation compact={isMemberHomepage} /> : null}
       </div>
     </div>
   )
