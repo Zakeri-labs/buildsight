@@ -1,29 +1,23 @@
 import "server-only"
 
-import { createAdminClient } from "@/lib/supabase/admin"
+import { CALENDAR_PENDING_REQUEST_STATUS, resolveExplicitSupervisorProjectScope } from "@/lib/calendar/server"
 import type { MemberHomepageData, MemberHomepageRequest, MemberHomepageVisit } from "@/lib/member-homepage/types"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
-const ACTIONABLE_REPORT_STATUSES = new Set(["draft", "in_progress", "rejected"])
 
 type SupabaseErrorFields = { code?: string; message?: string; details?: string; hint?: string }
-
-type ProjectRow = {
-  id: string
-  name: string
-  code: string | null
-}
 
 function isValidUuid(value: unknown): value is string {
   return typeof value === "string" && UUID_PATTERN.test(value.trim())
 }
 
-function emptyData(hasError = false): MemberHomepageData {
+function emptyData(visitRequestsHasError = false): MemberHomepageData {
   return {
-    summary: { todaysReports: 0, todaysVisits: 0, pendingVisitRequests: 0 },
+    summary: { todaysReports: 0, tomorrowsVisits: 0, pendingVisitRequests: 0 },
     requests: [],
     visits: [],
-    hasError,
+    visitRequestsHasError,
   }
 }
 
@@ -64,47 +58,33 @@ function clockTime(value: unknown): string | null {
   return /^\d{2}:\d{2}/.test(normalized) ? normalized.slice(0, 5) : null
 }
 
-function utcDayBounds(date = new Date()) {
-  const today = date.toISOString().slice(0, 10)
-  const tomorrowDate = new Date(`${today}T00:00:00.000Z`)
-  tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1)
-  return {
-    today,
-    start: `${today}T00:00:00.000Z`,
-    end: tomorrowDate.toISOString(),
-  }
-}
-
 /**
  * Read-only operational data for the Member homepage.
  *
- * Supervisor scope intentionally uses only projects.assigned_supervisor_id.
- * It does not inherit project membership, participant, cookie, or dashboard scope.
+ * The project scope is shared with Calendar's canonical explicit-Supervisor resolver:
+ * projects.assigned_supervisor_id must equal the authenticated user id.
+ *
+ * In this stage only Visit Requests are connected to the top summary cards. The
+ * Today's Reports and Tomorrow's Visits cards intentionally remain placeholders.
+ * The existing lower Today's Visits section remains unchanged.
  */
 export async function getMemberHomepageData(userId: string): Promise<MemberHomepageData> {
   if (!isValidUuid(userId)) return emptyData()
 
-  const admin = createAdminClient()
   let supervisedProjectCount = 0
 
   try {
-    const { data: projectRows, error: projectError } = await admin
-      .from("projects")
-      .select("id, name, code")
-      .eq("assigned_supervisor_id", userId)
-      .order("name", { ascending: true })
+    const projects = await resolveExplicitSupervisorProjectScope(userId)
+    const validProjects = projects.filter((project) => isValidUuid(project.id))
+    supervisedProjectCount = validProjects.length
+    if (!validProjects.length) return emptyData()
 
-    if (projectError) throw projectError
+    const projectIds = validProjects.map((project) => project.id)
+    const projectById = new Map(validProjects.map((project) => [project.id, project]))
+    const admin = createAdminClient()
+    const today = new Date().toISOString().slice(0, 10)
 
-    const projects = ((projectRows ?? []) as ProjectRow[]).filter((project) => isValidUuid(project.id))
-    supervisedProjectCount = projects.length
-    if (!projects.length) return emptyData()
-
-    const projectIds = projects.map((project) => project.id)
-    const projectById = new Map(projects.map((project) => [project.id, project]))
-    const { today, start, end } = utcDayBounds()
-
-    const [stageResult, pendingResult, todayVisitsResult, reportResult] = await Promise.all([
+    const [stageResult, pendingResult, todayVisitsResult] = await Promise.all([
       admin
         .from("project_stages")
         .select("id, project_id, name, sort_order")
@@ -115,10 +95,11 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
         .from("site_visit_requests")
         .select("id, project_id, preferred_date, preferred_time, created_at, client_request_id")
         .in("project_id", projectIds)
-        .eq("status", "pending")
+        .eq("status", CALENDAR_PENDING_REQUEST_STATUS)
         .not("client_request_id", "is", null)
         .order("preferred_date", { ascending: true, nullsFirst: true })
         .order("created_at", { ascending: true }),
+      // Preserve the already-existing lower Today's Visits section exactly as-is.
       admin
         .from("site_visit_requests")
         .select("id, project_id, scheduled_date, scheduled_time, client_request_id")
@@ -126,37 +107,11 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
         .eq("status", "scheduled")
         .eq("scheduled_date", today)
         .order("scheduled_time", { ascending: true, nullsFirst: false }),
-      // The active Stage-based report model has no explicit due-date relationship to Site Visits.
-      // Count only reports explicitly assigned to this user that were created today and still need their action.
-      admin
-        .from("term_responses")
-        .select("id, status")
-        .in("project_id", projectIds)
-        .eq("responsible_user_id", userId)
-        .not("project_stage_id", "is", null)
-        .gte("created_at", start)
-        .lt("created_at", end),
     ])
 
-    // Requests and visits are the operational core of this page. Fail safely if either cannot be loaded.
-    for (const [operation, result] of [
-      ["pending Client Visit Requests", pendingResult],
-      ["today Site Visits", todayVisitsResult],
-    ] as const) {
-      if (result.error) {
-        logLoadError(operation, userId, supervisedProjectCount, result.error)
-        throw result.error
-      }
-    }
-
-    let hasPartialError = false
     if (stageResult.error) {
-      hasPartialError = true
+      // Stage is optional display metadata; omit it rather than failing Visit Requests.
       logLoadError("current project stages", userId, supervisedProjectCount, stageResult.error)
-    }
-    if (reportResult.error) {
-      hasPartialError = true
-      logLoadError("today Stage-based reports", userId, supervisedProjectCount, reportResult.error)
     }
 
     const stageByProjectId = new Map<string, string>()
@@ -167,57 +122,66 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
       stageByProjectId.set(projectId, name)
     }
 
-    const requests: MemberHomepageRequest[] = (pendingResult.data ?? []).flatMap((row: any) => {
-      if (!isValidUuid(row.id) || !isValidUuid(row.project_id)) return []
-      const project = projectById.get(row.project_id)
-      if (!project) return []
-      return [{
-        id: row.id,
-        requestedDate: typeof row.preferred_date === "string" ? row.preferred_date : null,
-        preferredTimeLabel: preferredTimeLabel(row.preferred_time),
-        projectName: project.name?.trim() || "Project",
-        projectCode: project.code?.trim() || null,
-        stageName: stageByProjectId.get(row.project_id) ?? null,
-        visitNumber: null,
-      }]
-    })
+    let visitRequestsHasError = false
+    let requests: MemberHomepageRequest[] = []
+    if (pendingResult.error) {
+      visitRequestsHasError = true
+      logLoadError("pending Client Visit Requests", userId, supervisedProjectCount, pendingResult.error)
+    } else {
+      requests = (pendingResult.data ?? []).flatMap((row: any) => {
+        if (!isValidUuid(row.id) || !isValidUuid(row.project_id)) return []
+        const project = projectById.get(row.project_id)
+        if (!project) return []
+        return [{
+          id: row.id,
+          requestedDate: typeof row.preferred_date === "string" ? row.preferred_date : null,
+          preferredTimeLabel: preferredTimeLabel(row.preferred_time),
+          projectName: project.name?.trim() || "Project",
+          projectCode: project.code?.trim() || null,
+          stageName: stageByProjectId.get(row.project_id) ?? null,
+          // site_visit_requests has no canonical visit number for pending Client Requests.
+          visitNumber: null,
+        }]
+      })
+    }
 
-    const visits: MemberHomepageVisit[] = (todayVisitsResult.data ?? []).flatMap((row: any) => {
-      if (!isValidUuid(row.id) || !isValidUuid(row.project_id) || typeof row.scheduled_date !== "string") return []
-      const project = projectById.get(row.project_id)
-      if (!project) return []
-      return [{
-        id: row.id,
-        scheduledDate: row.scheduled_date,
-        scheduledTime: clockTime(row.scheduled_time),
-        projectName: project.name?.trim() || "Project",
-        projectCode: project.code?.trim() || null,
-        stageName: stageByProjectId.get(row.project_id) ?? null,
-        visitNumber: null,
-      }]
-    })
-
-    visits.sort((left, right) =>
-      (left.scheduledTime ?? "99:99").localeCompare(right.scheduledTime ?? "99:99") ||
-      left.projectName.localeCompare(right.projectName),
-    )
-
-    const todaysReports = reportResult.error
-      ? 0
-      : (reportResult.data ?? []).filter((row: any) => ACTIONABLE_REPORT_STATUSES.has(row.status)).length
+    let visits: MemberHomepageVisit[] = []
+    if (todayVisitsResult.error) {
+      logLoadError("today Site Visits", userId, supervisedProjectCount, todayVisitsResult.error)
+    } else {
+      visits = (todayVisitsResult.data ?? []).flatMap((row: any) => {
+        if (!isValidUuid(row.id) || !isValidUuid(row.project_id) || typeof row.scheduled_date !== "string") return []
+        const project = projectById.get(row.project_id)
+        if (!project) return []
+        return [{
+          id: row.id,
+          scheduledDate: row.scheduled_date,
+          scheduledTime: clockTime(row.scheduled_time),
+          projectName: project.name?.trim() || "Project",
+          projectCode: project.code?.trim() || null,
+          stageName: stageByProjectId.get(row.project_id) ?? null,
+          visitNumber: null,
+        }]
+      })
+      visits.sort((left, right) =>
+        (left.scheduledTime ?? "99:99").localeCompare(right.scheduledTime ?? "99:99") ||
+        left.projectName.localeCompare(right.projectName),
+      )
+    }
 
     return {
       summary: {
-        todaysReports,
-        todaysVisits: visits.length,
+        // These two cards intentionally remain placeholders until their dedicated stages.
+        todaysReports: 0,
+        tomorrowsVisits: 0,
         pendingVisitRequests: requests.length,
       },
       requests,
       visits,
-      hasError: hasPartialError,
+      visitRequestsHasError,
     }
   } catch (error) {
-    logLoadError("member homepage", userId, supervisedProjectCount, error)
+    logLoadError("member homepage Supervisor scope", userId, supervisedProjectCount, error)
     return emptyData(true)
   }
 }

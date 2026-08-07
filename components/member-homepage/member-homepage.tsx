@@ -135,23 +135,24 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 overflow-x-hidden">
       <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
         <SummaryCard label="Today's Reports" value={data.summary.todaysReports} icon={FileText} />
-        <SummaryCard label="Today's Visits" value={data.summary.todaysVisits} icon={Clock3} />
+        <SummaryCard label="Tomorrow's Visits" value={data.summary.tomorrowsVisits} icon={Clock3} />
         <SummaryCard label="Visit Requests" value={data.summary.pendingVisitRequests} icon={MessageSquare} prominent />
       </div>
-
-      {data.hasError ? (
-        <div className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-sm text-destructive">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <p>Some Member dashboard information could not be loaded. Please refresh and try again.</p>
-        </div>
-      ) : null}
 
       <section className="space-y-3" aria-labelledby="member-visit-requests-title">
         <div className="flex items-center justify-between gap-3">
           <h1 id="member-visit-requests-title" className="text-lg font-semibold tracking-tight">Visit Requests</h1>
           <span className="text-xs tabular-nums text-muted-foreground">{data.requests.length}</span>
         </div>
-        {data.requests.length ? (
+        {data.visitRequestsHasError ? (
+          <div className="flex min-h-20 items-center gap-3 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-destructive">
+            <AlertTriangle className="size-5 shrink-0" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Unable to load visit requests</p>
+              <p className="mt-0.5 text-xs leading-5 text-destructive/80">Please refresh and try again.</p>
+            </div>
+          </div>
+        ) : data.requests.length ? (
           <div className="space-y-2.5">
             {data.requests.map((request) => <RequestRow key={request.id} request={request} />)}
           </div>

@@ -1,6 +1,6 @@
 export type MemberHomepageSummary = {
   todaysReports: number
-  todaysVisits: number
+  tomorrowsVisits: number
   pendingVisitRequests: number
 }
 
@@ -28,5 +28,5 @@ export type MemberHomepageData = {
   summary: MemberHomepageSummary
   requests: MemberHomepageRequest[]
   visits: MemberHomepageVisit[]
-  hasError: boolean
+  visitRequestsHasError: boolean
 }

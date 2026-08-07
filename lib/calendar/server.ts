@@ -11,6 +11,7 @@ import type {
 import { createAdminClient } from "@/lib/supabase/admin"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
+export const CALENDAR_PENDING_REQUEST_STATUS = "pending" as const
 const SCHEDULED_VISIT_STATUSES = ["scheduled"] as const
 const CALENDAR_VISIT_STATUSES = ["scheduled", "completed", "cancelled"] as const
 
@@ -18,6 +19,7 @@ export type CalendarProjectAccessMode = "admin" | "supervisor"
 export type CalendarProjectScopeRow = {
   id: string
   name: string
+  code: string | null
   assignedSupervisorId: string | null
   supervisingOrganizationId: string | null
   accessMode: CalendarProjectAccessMode
@@ -102,29 +104,46 @@ function normalizeProjectRow(row: any, accessMode: CalendarProjectAccessMode): C
   return {
     id: row.id,
     name: typeof row.name === "string" && row.name.trim() ? row.name.trim() : "Project",
+    code: typeof row.code === "string" && row.code.trim() ? row.code.trim() : null,
     assignedSupervisorId: isValidCalendarUuid(row.assigned_supervisor_id) ? row.assigned_supervisor_id : null,
     supervisingOrganizationId: isValidCalendarUuid(row.supervising_organization_id) ? row.supervising_organization_id : null,
     accessMode,
   }
 }
 
+export async function resolveExplicitSupervisorProjectScope(userId: string): Promise<CalendarProjectScopeRow[]> {
+  if (!isValidCalendarUuid(userId)) return []
+
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("projects")
+    .select("id, name, code, assigned_supervisor_id, supervising_organization_id")
+    .eq("assigned_supervisor_id", userId)
+
+  if (error) throw error
+
+  return (data ?? [])
+    .map((row: any) => normalizeProjectRow(row, "supervisor"))
+    .filter((project): project is CalendarProjectScopeRow => Boolean(project))
+    .sort((left, right) => left.name.localeCompare(right.name))
+}
+
 export async function resolveCalendarProjectScope(userId: string): Promise<CalendarProjectScopeRow[]> {
   if (!isValidCalendarUuid(userId)) return []
   const admin = createAdminClient()
 
-  const [organizationMembershipResult, projectAdminMembershipResult, supervisorProjectResult] = await Promise.all([
+  const [organizationMembershipResult, projectAdminMembershipResult, supervisorProjects] = await Promise.all([
     admin.from("organization_memberships").select("organization_id").eq("user_id", userId).eq("status", "active").eq("role", "org_admin"),
     admin.from("project_user_memberships").select("project_id").eq("user_id", userId).eq("status", "active").eq("access_role", "project_admin"),
-    admin.from("projects").select("id, name, assigned_supervisor_id, supervising_organization_id").eq("assigned_supervisor_id", userId),
+    resolveExplicitSupervisorProjectScope(userId),
   ])
 
   if (organizationMembershipResult.error) throw organizationMembershipResult.error
   if (projectAdminMembershipResult.error) throw projectAdminMembershipResult.error
-  if (supervisorProjectResult.error) throw supervisorProjectResult.error
 
   const adminOrganizationIds = uniqueValidUuids((organizationMembershipResult.data ?? []).map((row: any) => row.organization_id))
   const explicitProjectAdminIds = uniqueValidUuids((projectAdminMembershipResult.data ?? []).map((row: any) => row.project_id))
-  const projectColumns = "id, name, assigned_supervisor_id, supervising_organization_id"
+  const projectColumns = "id, name, code, assigned_supervisor_id, supervising_organization_id"
 
   const [organizationProjectsResult, explicitAdminProjectsResult] = await Promise.all([
     adminOrganizationIds.length
@@ -143,9 +162,8 @@ export async function resolveCalendarProjectScope(userId: string): Promise<Calen
     const project = normalizeProjectRow(row, "admin")
     if (project) projects.set(project.id, project)
   }
-  for (const row of supervisorProjectResult.data ?? []) {
-    const project = normalizeProjectRow(row, "supervisor")
-    if (project && !projects.has(project.id)) projects.set(project.id, project)
+  for (const project of supervisorProjects) {
+    if (!projects.has(project.id)) projects.set(project.id, project)
   }
 
   return Array.from(projects.values()).sort((left, right) => left.name.localeCompare(right.name))
@@ -284,8 +302,8 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
     const requestColumns = "id, project_id, requested_by, client_request_id, status, preferred_date, is_asap, preferred_time, purpose, notes, scheduled_date, scheduled_time, created_at"
 
     const [pendingResult, pendingRangeResult, visitRangeResult, upcomingResult, todayResult, schedulingProjects] = await Promise.all([
-      admin.from("site_visit_requests").select(requestColumns).in("project_id", projectIds).eq("status", "pending").order("preferred_date", { ascending: true, nullsFirst: true }).order("created_at", { ascending: true }),
-      admin.from("site_visit_requests").select(requestColumns).in("project_id", projectIds).eq("status", "pending").gte("preferred_date", rangeStart).lte("preferred_date", rangeEnd),
+      admin.from("site_visit_requests").select(requestColumns).in("project_id", projectIds).eq("status", CALENDAR_PENDING_REQUEST_STATUS).order("preferred_date", { ascending: true, nullsFirst: true }).order("created_at", { ascending: true }),
+      admin.from("site_visit_requests").select(requestColumns).in("project_id", projectIds).eq("status", CALENDAR_PENDING_REQUEST_STATUS).gte("preferred_date", rangeStart).lte("preferred_date", rangeEnd),
       admin.from("site_visit_requests").select(requestColumns).in("project_id", projectIds).in("status", [...CALENDAR_VISIT_STATUSES]).gte("scheduled_date", rangeStart).lte("scheduled_date", rangeEnd),
       admin.from("site_visit_requests").select("id", { count: "exact", head: true }).in("project_id", projectIds).in("status", [...SCHEDULED_VISIT_STATUSES]).gt("scheduled_date", today),
       admin.from("site_visit_requests").select("id", { count: "exact", head: true }).in("project_id", projectIds).in("status", [...SCHEDULED_VISIT_STATUSES]).eq("scheduled_date", today),
