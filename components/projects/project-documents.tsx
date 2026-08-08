@@ -1,7 +1,9 @@
 "use client"
 
 import Link from "next/link"
+import { useState } from "react"
 import {
+  ChevronDown,
   Download,
   Eye,
   FileArchive,
@@ -76,17 +78,38 @@ function DocumentIcon({ type }: { type: ProjectDocument["type"] }) {
   )
 }
 
-export function ProjectDocuments({ projectId, documents }: { projectId: string; documents: ProjectDocument[] }) {
+export function ProjectDocuments({
+  projectId,
+  documents,
+  memberMobile = false,
+}: {
+  projectId: string
+  documents: ProjectDocument[]
+  memberMobile?: boolean
+}) {
   const projectQuery = encodeURIComponent(projectId)
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
     <Card className="gap-0 py-0">
-      <CardHeader className="gap-3 border-b px-5 py-4 sm:px-6 md:grid-cols-[1fr_auto] md:items-center">
-        <CardTitle className="flex items-center gap-2 text-base font-semibold sm:text-lg">
+      <CardHeader className={cn("gap-3 border-b px-5 py-4 sm:px-6 md:grid-cols-[1fr_auto] md:items-center", memberMobile && "max-md:px-3 max-md:py-2.5")}>
+        {memberMobile ? (
+          <button
+            type="button"
+            className="flex w-full min-w-0 items-center gap-2 text-start md:hidden"
+            aria-expanded={mobileOpen}
+            onClick={() => setMobileOpen((open) => !open)}
+          >
+            <FileText className="size-4 shrink-0 text-primary" />
+            <span className="min-w-0 flex-1 text-sm font-semibold">Project Letters ({documents.length})</span>
+            <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", mobileOpen && "rotate-180")} />
+          </button>
+        ) : null}
+        <CardTitle className={cn("flex items-center gap-2 text-base font-semibold sm:text-lg", memberMobile && "max-md:hidden")}>
           <FileText className="size-5 text-primary" />
           4. Project Letters
         </CardTitle>
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+        <div className={cn("flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end", memberMobile && "max-md:hidden")}>
           <CreateDocumentDialog
             projectId={projectId}
             triggerLabel="Create Letter"
@@ -102,7 +125,25 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
+        {memberMobile && mobileOpen ? (
+          <div className="border-b px-3 py-2.5 md:hidden">
+            <div className="flex gap-2">
+              <CreateDocumentDialog
+                projectId={projectId}
+                triggerLabel="Create Letter"
+                triggerClassName="h-8 flex-1 text-xs"
+              />
+              <Link
+                href={`/documents?project=${projectQuery}`}
+                className={cn(buttonVariants({ variant: "outline" }), "h-8 flex-1 justify-center px-2 text-xs")}
+              >
+                <FolderOpen className="size-3.5" />
+                View All Letters
+              </Link>
+            </div>
+          </div>
+        ) : null}
+        <div className={cn("overflow-x-auto", memberMobile && "max-md:hidden")}>
           <table className="w-full min-w-[900px] table-fixed text-sm">
             <ProjectOverviewTableColumns layout="letters" />
             <thead>
@@ -211,6 +252,92 @@ export function ProjectDocuments({ projectId, documents }: { projectId: string; 
             </tbody>
           </table>
         </div>
+
+        {memberMobile ? (
+          <div className={cn("divide-y divide-border md:hidden", !mobileOpen && "hidden")}>
+            {documents.length === 0 ? (
+              <p className="px-3 py-6 text-center text-xs text-muted-foreground">No project letters are available.</p>
+            ) : (
+              documents.map((document) => (
+                <article key={document.id} className="flex min-w-0 items-start gap-2.5 px-3 py-2.5">
+                  <DocumentIcon type={document.type} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <Link
+                          href={`/documents/${document.id}`}
+                          className="block truncate text-xs font-semibold text-primary hover:underline"
+                          title={document.reference}
+                        >
+                          {document.reference}
+                        </Link>
+                        <Link
+                          href={`/documents/${document.id}`}
+                          className="mt-0.5 block truncate text-sm font-semibold text-foreground hover:underline"
+                          title={document.title}
+                        >
+                          {document.title}
+                        </Link>
+                      </div>
+                      <span className={cn("inline-flex shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium", statusStyles[document.status])}>
+                        {document.status}
+                      </span>
+                    </div>
+                    <div className="mt-1.5 flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
+                      <span className={cn("inline-flex shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium", getDocumentTypeDefinition(document.type).badgeClassName)}>
+                        {getDocumentTypeDefinition(document.type).shortLabel}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">{document.uploadedBy.name} • {document.lastUpdated}</span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <button
+                              type="button"
+                              aria-label={`Actions for ${document.title}`}
+                              className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            >
+                              <MoreVertical className="size-4" />
+                            </button>
+                          }
+                        />
+                        <DropdownMenuContent align="end" className="w-44">
+                          <DropdownMenuItem
+                            render={
+                              <Link href={`/documents/${document.id}`}>
+                                <Eye className="size-4" />
+                                View letter
+                              </Link>
+                            }
+                          />
+                          {document.fileStoragePath ? (
+                            <DropdownMenuItem
+                              render={
+                                <a href={`/api/document-files?path=${encodeURIComponent(document.fileStoragePath)}&download=1&filename=${encodeURIComponent(document.originalFilename ?? document.title)}`}>
+                                  <Download className="size-4" />
+                                  Download
+                                </a>
+                              }
+                            />
+                          ) : null}
+                          {!document.fileStoragePath ? (
+                            <DropdownMenuItem
+                              render={
+                                <Link href={`/documents/${document.id}/edit`}>
+                                  <Pencil className="size-4" />
+                                  Edit letter
+                                </Link>
+                              }
+                            />
+                          ) : null}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   )

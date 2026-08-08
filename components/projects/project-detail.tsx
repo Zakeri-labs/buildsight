@@ -4,10 +4,11 @@ import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, ArrowLeft, ClipboardList, ExternalLink, FolderOpen, Images, Loader2, MapPin, Maximize2, Minimize2, Pencil } from "lucide-react"
+import { AlertTriangle, ArrowLeft, ChevronDown, ClipboardList, ExternalLink, FolderOpen, Images, Loader2, MapPin, Maximize2, Minimize2, Pencil } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { useCurrentUser } from "@/components/current-user-provider"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { useI18n } from "@/lib/i18n"
@@ -96,7 +97,19 @@ function projectDocuments(project: ProjectRecord): ProjectDocument[] {
   ]
 }
 
-function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
+function DetailField({
+  label,
+  value,
+  className,
+  compactMobile = false,
+  wrapValue = false,
+}: {
+  label: string
+  value: React.ReactNode
+  className?: string
+  compactMobile?: boolean
+  wrapValue?: boolean
+}) {
   const isNotSet =
     value === "Not set" ||
     value === "غير محدد" ||
@@ -106,13 +119,27 @@ function DetailField({ label, value }: { label: string; value: React.ReactNode }
     (typeof value === "string" && !value.trim())
 
   return (
-    <div className="flex min-w-0 items-center justify-between gap-3 border-b border-border/30 py-1.5 text-xs">
+    <div
+      className={cn(
+        "flex min-w-0 items-center justify-between gap-3 border-b border-border/30 py-1.5 text-xs",
+        compactMobile && "max-md:flex-col max-md:items-start max-md:gap-0.5 max-md:py-2",
+        className,
+      )}
+    >
       <dt className="shrink-0 font-medium text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 truncate text-end">
+      <dd className={cn(
+        "min-w-0 text-end",
+        wrapValue
+          ? compactMobile
+            ? "max-md:whitespace-normal max-md:break-words md:truncate"
+            : "whitespace-normal break-words"
+          : "truncate",
+        compactMobile && "max-md:w-full max-md:text-start",
+      )}>
         {isNotSet ? (
           <span className="font-normal text-muted-foreground/40">—</span>
         ) : typeof value === "string" || typeof value === "number" ? (
-          <span className="font-semibold text-foreground">{value}</span>
+          <span className={cn("font-semibold text-foreground", wrapValue && compactMobile && "max-md:break-words")}>{value}</span>
         ) : (
           value
         )}
@@ -173,10 +200,14 @@ export function ProjectDetail({
   canEditProject?: boolean
 }) {
   const { t, locale } = useI18n()
+  const currentUser = useCurrentUser()
   const router = useRouter()
+  const isMember = currentUser.role === "org_member"
   const [currentProject, setCurrentProject] = useState(project)
   const [currentEditProject, setCurrentEditProject] = useState(editProject)
   const [editOpen, setEditOpen] = useState(false)
+  const [financialOpen, setFinancialOpen] = useState(false)
+  const [documentsOpen, setDocumentsOpen] = useState(false)
   const mapShellRef = useRef<HTMLDivElement | null>(null)
   const [mapState, setMapState] = useState<"loading" | "ready" | "error">("loading")
   const [nativeFullscreen, setNativeFullscreen] = useState(false)
@@ -366,15 +397,36 @@ export function ProjectDetail({
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <Link href="/projects" className="inline-flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+    <div className={cn("flex flex-col", isMember ? "gap-3 md:gap-6" : "gap-6")}>
+      <Link
+        href="/projects"
+        className={cn(
+          "inline-flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground",
+          isMember && "max-md:text-xs",
+        )}
+      >
         <ArrowLeft className="size-4 rtl:rotate-180" />
         {t.projects.title}
       </Link>
 
-      <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+      {isMember ? (
+        <section className="min-w-0 md:hidden" aria-label={isArabic ? "ملخص المشروع" : "Project summary"}>
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-lg font-bold tracking-tight text-foreground">{currentProject.name}</h1>
+              <p className="mt-0.5 whitespace-normal break-words text-xs font-medium text-muted-foreground">{currentProject.code}</p>
+            </div>
+            <ProjectStatusDisplay status={currentEditProject.status} isArabic={isArabic} />
+          </div>
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {[currentProject.projectType, currentEditProject.areaDistrict?.trim()].filter(Boolean).join(" • ") || labels.notSet}
+          </p>
+        </section>
+      ) : null}
+
+      <div className={cn("grid grid-cols-1 items-stretch lg:grid-cols-[minmax(0,1fr)_280px]", isMember ? "gap-3 md:gap-6" : "gap-6")}>
         <Card className="h-full gap-0 overflow-hidden py-0">
-          <CardHeader className="flex flex-row items-center justify-between gap-3 border-b px-5 py-3.5 sm:px-6">
+          <CardHeader className={cn("flex flex-row items-center justify-between gap-3 border-b px-5 py-3.5 sm:px-6", isMember && "max-md:px-3 max-md:py-2.5")}>
             <CardTitle className="min-w-0 text-base font-semibold tracking-tight">{labels.details}</CardTitle>
             {canEditProject ? (
               <Tooltip>
@@ -394,17 +446,20 @@ export function ProjectDetail({
               </Tooltip>
             ) : null}
           </CardHeader>
-          <CardContent className="p-4 sm:p-5">
-            <div className="grid gap-4 lg:grid-cols-[288px_minmax(0,1fr)]">
+          <CardContent className={cn("p-4 sm:p-5", isMember && "max-md:p-3")}>
+            <div className={cn("grid gap-4 lg:grid-cols-[288px_minmax(0,1fr)]", isMember && "max-md:gap-3")}>
               <div className="min-w-0">
                 <div className="relative">
                   <ProjectImageDisplay
                     src={projectImage}
                     projectId={currentProject.id}
                     alt={currentProject.name}
-                    className="h-[280px] w-full rounded-lg border bg-muted/40 shadow-sm sm:h-[310px] lg:h-[288px]"
+                    className={cn(
+                      "h-[280px] w-full rounded-lg border bg-muted/40 shadow-sm sm:h-[310px] lg:h-[288px]",
+                      isMember && "max-md:h-28",
+                    )}
                     imageClassName="object-cover"
-                    iconClassName="size-10"
+                    iconClassName={cn("size-10", isMember && "max-md:size-7")}
                   />
                   {canManageImages ? (
                     <div className="absolute end-3 top-3 z-10">
@@ -423,7 +478,11 @@ export function ProjectDetail({
                 </div>
                 <Link
                   href={`/projects/${currentProject.id}/gallery`}
-                  className={cn(buttonVariants({ variant: "outline" }), "mt-3 w-full justify-center")}
+                  className={cn(
+                    buttonVariants({ variant: "outline" }),
+                    "mt-3 w-full justify-center",
+                    isMember && "max-md:mt-2 max-md:h-8 max-md:text-xs",
+                  )}
                 >
                   <Images className="size-4" />
                   {labels.viewGallery}
@@ -431,68 +490,105 @@ export function ProjectDetail({
               </div>
 
               <div className="min-w-0 py-0.5">
-                <dl className="grid min-w-0 gap-x-5 md:grid-cols-2">
-                  <DetailField label={labels.name} value={currentProject.name} />
-                  <DetailField label={labels.owner} value={currentProject.client} />
-                  <DetailField label={labels.code} value={currentProject.code} />
-                  <DetailField label={labels.role} value={currentProject.organizationRole} />
-                  <DetailField label={labels.type} value={currentProject.projectType} />
-                  <DetailField label={labels.supervisionType} value={currentProject.supervisionType} />
-                  <DetailField label={labels.plotNo} value={currentEditProject.plotNo?.trim() || labels.notSet} />
-                  <DetailField label={labels.areaDistrict} value={currentEditProject.areaDistrict?.trim() || labels.notSet} />
+                <dl className={cn("grid min-w-0 gap-x-5 md:grid-cols-2", isMember && "max-md:grid-cols-2 max-md:gap-x-3")}>
+                  <DetailField label={labels.name} value={currentProject.name} compactMobile={isMember} />
+                  <DetailField label={labels.owner} value={currentProject.client} compactMobile={isMember} />
+                  <DetailField
+                    label={labels.code}
+                    value={currentProject.code}
+                    compactMobile={isMember}
+                    wrapValue={isMember}
+                    className={isMember ? "max-md:col-span-2" : undefined}
+                  />
+                  <DetailField label={labels.role} value={currentProject.organizationRole} compactMobile={isMember} />
+                  <DetailField label={labels.type} value={currentProject.projectType} compactMobile={isMember} />
+                  <DetailField label={labels.supervisionType} value={currentProject.supervisionType} compactMobile={isMember} />
+                  <DetailField label={labels.plotNo} value={currentEditProject.plotNo?.trim() || labels.notSet} compactMobile={isMember} />
+                  <DetailField label={labels.areaDistrict} value={currentEditProject.areaDistrict?.trim() || labels.notSet} compactMobile={isMember} />
                   <DetailField
                     label={labels.status}
                     value={<ProjectStatusDisplay status={currentEditProject.status} isArabic={isArabic} />}
+                    compactMobile={isMember}
                   />
-                  <DetailField label={labels.priority} value={projectPriorityLabel(currentEditProject.priority, isArabic)} />
-                  <DetailField label={labels.start} value={currentProject.startDate} />
+                  <DetailField label={labels.priority} value={projectPriorityLabel(currentEditProject.priority, isArabic)} compactMobile={isMember} />
+                  <DetailField label={labels.start} value={currentProject.startDate} compactMobile={isMember} />
                   <DetailField
                     label={labels.supervisionStart}
                     value={displayProjectDate(currentEditProject.supervisionStartDate, locale, labels.notSet)}
+                    compactMobile={isMember}
                   />
-                  <DetailField label={labels.location} value={currentProject.location} />
-                  <DetailField label={labels.completion} value={currentProject.targetHandover} />
+                  <DetailField
+                    label={labels.location}
+                    value={currentProject.location}
+                    compactMobile={isMember}
+                    wrapValue={isMember}
+                    className={isMember ? "max-md:col-span-2" : undefined}
+                  />
+                  <DetailField label={labels.completion} value={currentProject.targetHandover} compactMobile={isMember} />
                 </dl>
 
-                <div className="mt-3 rounded-lg border border-border/40 bg-muted/20 p-3">
+                <div className={cn("mt-3 rounded-lg border border-border/40 bg-muted/20 p-3", isMember && "max-md:mt-2 max-md:p-2.5")}>
                   <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{labels.description}</p>
                   <p className="min-w-0 whitespace-pre-wrap break-words text-xs font-medium text-foreground/90">
                     {currentProject.description?.trim() || "—"}
                   </p>
                 </div>
 
-                <div className="mt-3 rounded-lg border border-border/40 bg-muted/20 p-3">
-                  <p className="mb-1 text-xs font-semibold text-foreground">{labels.financialSummary}</p>
-                  <dl className="grid min-w-0 gap-x-6 md:grid-cols-2">
+                <div className={cn("mt-3 rounded-lg border border-border/40 bg-muted/20 p-3", isMember && "max-md:mt-2 max-md:p-2.5")}>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-foreground">{labels.financialSummary}</p>
+                    {isMember ? (
+                      <button
+                        type="button"
+                        className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted md:hidden"
+                        aria-label={financialOpen ? "Collapse financial summary" : "Expand financial summary"}
+                        aria-expanded={financialOpen}
+                        onClick={() => setFinancialOpen((open) => !open)}
+                      >
+                        <ChevronDown className={cn("size-4 transition-transform", financialOpen && "rotate-180")} />
+                      </button>
+                    ) : null}
+                  </div>
+                  <dl className={cn(
+                    "mt-1 grid min-w-0 gap-x-6 md:grid-cols-2",
+                    isMember && "max-md:grid-cols-2 max-md:gap-x-3",
+                    isMember && !financialOpen && "max-md:hidden",
+                  )}>
                     <DetailField
                       label={labels.includedStructureVisits}
                       value={displayVisitCount(currentEditProject.includedStructureVisits, "—")}
+                      compactMobile={isMember}
                     />
                     <DetailField
                       label={labels.includedFinishingVisits}
                       value={displayVisitCount(currentEditProject.includedFinishingVisits, "—")}
+                      compactMobile={isMember}
                     />
                     <DetailField
                       label={labels.structureFee}
                       value={formatProjectAmountOmr(currentEditProject.structureSupervisionFee, "—")}
+                      compactMobile={isMember}
                     />
                     <DetailField
                       label={labels.finishingFee}
                       value={formatProjectAmountOmr(currentEditProject.finishingSupervisionFee, "—")}
+                      compactMobile={isMember}
                     />
                     <DetailField
                       label={labels.receivedAmount}
                       value={formatProjectAmountOmr(currentEditProject.receivedAmount, "—")}
+                      compactMobile={isMember}
                     />
                     <DetailField
                       label={labels.outstandingAmount}
                       value={formatProjectAmountOmr(currentEditProject.outstandingAmount, "—")}
+                      compactMobile={isMember}
                     />
                   </dl>
                 </div>
 
-                <div className="mt-3 flex items-center gap-3" aria-label={`${labels.progress}: ${progress}%`}>
-                  <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                <div className={cn("mt-3 flex items-center gap-3", isMember && "max-md:mt-2 max-md:gap-2")} aria-label={`${labels.progress}: ${progress}%`}>
+                  <div className={cn("h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted", isMember && "max-md:h-1.5")}>
                     <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${progress}%` }} />
                   </div>
                   <span className="shrink-0 text-xs font-semibold tabular-nums text-muted-foreground">{progress}%</span>
@@ -503,20 +599,21 @@ export function ProjectDetail({
           </CardContent>
         </Card>
 
-        <Card className="h-full min-h-[420px] w-full self-stretch gap-0 overflow-hidden py-0">
-          <CardHeader className="shrink-0 border-b px-5 py-3.5 sm:px-6">
+        <Card className={cn("h-full w-full self-stretch gap-0 overflow-hidden py-0", isMember ? "min-h-0 md:min-h-[420px]" : "min-h-[420px]")}>
+          <CardHeader className={cn("shrink-0 border-b px-5 py-3.5 sm:px-6", isMember && "max-md:px-3 max-md:py-2.5")}>
             <CardTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">
               <MapPin className="size-4 text-primary" aria-hidden="true" />
               {isArabic ? "موقع المشروع" : "Project Location"}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex min-h-[360px] flex-1 p-0 lg:min-h-0">
+          <CardContent className={cn("flex flex-1 p-0 lg:min-h-0", isMember ? "min-h-[180px] md:min-h-[360px]" : "min-h-[360px]")}>
             <div
               ref={mapShellRef}
               role="region"
               aria-label={isArabic ? "خريطة موقع المشروع" : "Project location map"}
               className={cn(
-                "relative isolate min-h-[360px] w-full flex-1 overflow-hidden bg-muted/40 lg:min-h-0",
+                "relative isolate w-full flex-1 overflow-hidden bg-muted/40 lg:min-h-0",
+                isMember ? "min-h-[180px] md:min-h-[360px]" : "min-h-[360px]",
                 isFullscreen
                   ? "fixed inset-0 z-[1200] h-screen max-h-none max-w-none rounded-none border-0 bg-background"
                   : "h-full",
@@ -643,17 +740,17 @@ export function ProjectDetail({
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-        <Card>
-          <CardContent className="flex items-center gap-4 p-5">
-            <span className="flex size-12 items-center justify-center rounded-xl bg-info/12 text-info"><ClipboardList className="size-6" /></span>
-            <div className="flex flex-col"><span className="text-2xl font-semibold tabular-nums">{currentProject.openInspections}</span><span className="text-sm text-muted-foreground">{t.projects.openInspections}</span></div>
+      <div className={cn("grid gap-6 sm:grid-cols-2", isMember && "max-md:grid-cols-2 max-md:gap-3")}>
+        <Card className={cn(isMember && "max-md:rounded-xl")}>
+          <CardContent className={cn("flex items-center gap-4 p-5", isMember && "max-md:gap-2.5 max-md:p-3")}>
+            <span className={cn("flex size-12 items-center justify-center rounded-xl bg-info/12 text-info", isMember && "max-md:size-9 max-md:rounded-lg")}><ClipboardList className={cn("size-6", isMember && "max-md:size-4")} /></span>
+            <div className="flex min-w-0 flex-col"><span className={cn("text-2xl font-semibold tabular-nums", isMember && "max-md:text-lg")}>{currentProject.openInspections}</span><span className={cn("text-sm text-muted-foreground", isMember && "max-md:text-[11px] max-md:leading-tight")}>{t.projects.openInspections}</span></div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-5">
-            <span className="flex size-12 items-center justify-center rounded-xl bg-destructive/10 text-destructive"><AlertTriangle className="size-6" /></span>
-            <div className="flex flex-col"><span className="text-2xl font-semibold tabular-nums">{currentProject.openNcrs}</span><span className="text-sm text-muted-foreground">{t.projects.openNcrs}</span></div>
+        <Card className={cn(isMember && "max-md:rounded-xl")}>
+          <CardContent className={cn("flex items-center gap-4 p-5", isMember && "max-md:gap-2.5 max-md:p-3")}>
+            <span className={cn("flex size-12 items-center justify-center rounded-xl bg-destructive/10 text-destructive", isMember && "max-md:size-9 max-md:rounded-lg")}><AlertTriangle className={cn("size-6", isMember && "max-md:size-4")} /></span>
+            <div className="flex min-w-0 flex-col"><span className={cn("text-2xl font-semibold tabular-nums", isMember && "max-md:text-lg")}>{currentProject.openNcrs}</span><span className={cn("text-sm text-muted-foreground", isMember && "max-md:text-[11px] max-md:leading-tight")}>{t.projects.openNcrs}</span></div>
           </CardContent>
         </Card>
       </div>
@@ -664,33 +761,54 @@ export function ProjectDetail({
         participantUsers={participantUsers}
         canManageParticipants={canManageImages}
         canManageAvatars={canManageImages}
+        memberMobile={isMember}
       />
       <Card className="gap-0 py-0">
-        <CardHeader className="flex flex-row items-center justify-between gap-3 border-b px-5 py-4 sm:px-6">
-          <CardTitle className="flex min-w-0 items-center gap-2 text-base font-semibold sm:text-lg">
+        <CardHeader className={cn("flex flex-row items-center justify-between gap-3 border-b px-5 py-4 sm:px-6", isMember && "max-md:px-3 max-md:py-2.5")}>
+          {isMember ? (
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center gap-2 text-start md:hidden"
+              aria-expanded={documentsOpen}
+              onClick={() => setDocumentsOpen((open) => !open)}
+            >
+              <FolderOpen className="size-4 shrink-0 text-primary" />
+              <span className="min-w-0 flex-1 text-sm font-semibold">
+                {isArabic ? `مستندات المشروع (${initialDocuments.length})` : `Project Documents (${initialDocuments.length})`}
+              </span>
+              <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", documentsOpen && "rotate-180")} />
+            </button>
+          ) : null}
+          <CardTitle className={cn("flex min-w-0 items-center gap-2 text-base font-semibold sm:text-lg", isMember && "max-md:hidden")}>
             <FolderOpen className="size-5 shrink-0 text-primary" />
             {labels.projectDocuments}
           </CardTitle>
           <Link
             href={`/initial-documents?project=${encodeURIComponent(currentProject.id)}`}
-            className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-9 shrink-0")}
+            className={cn(
+              buttonVariants({ variant: "outline", size: "lg" }),
+              "h-9 shrink-0",
+              isMember && "max-md:size-8 max-md:p-0",
+            )}
             aria-label={labels.viewAllDocuments}
+            title={labels.viewAllDocuments}
           >
             <FolderOpen className="size-4" />
             <span className="hidden sm:inline">{labels.viewAllDocuments}</span>
           </Link>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className={cn("p-0", isMember && !documentsOpen && "max-md:hidden")}>
           <InitialDocumentsList
             embedded
             documents={initialDocuments}
             selectedProjectId={currentProject.id}
             selectedProjectName={currentProject.name}
             errorMessage={initialDocumentsError}
+            compactMobile={isMember}
           />
         </CardContent>
       </Card>
-      <ProjectDocuments projectId={currentProject.id} documents={letters ?? projectDocuments(currentProject)} />
+      <ProjectDocuments projectId={currentProject.id} documents={letters ?? projectDocuments(currentProject)} memberMobile={isMember} />
 
       {editOpen ? (
         <ProjectEditDialog

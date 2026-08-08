@@ -694,13 +694,16 @@ export function ProjectParticipants({
   participantUsers = [],
   canManageParticipants = false,
   canManageAvatars = false,
+  memberMobile = false,
 }: {
   projectId: string
   participants: ProjectParticipant[]
   participantUsers?: ProjectParticipantUserOption[]
   canManageParticipants?: boolean
   canManageAvatars?: boolean
+  memberMobile?: boolean
 }) {
+  const [mobileOpen, setMobileOpen] = useState(false)
   const [avatarDialog, setAvatarDialog] = useState<AvatarDialogState | null>(null)
   const [editContractor, setEditContractor] = useState<ProjectParticipant | null>(null)
   const [removeParticipant, setRemoveParticipant] = useState<ProjectParticipant | null>(null)
@@ -726,8 +729,22 @@ export function ProjectParticipants({
   return (
     <>
       <Card className="gap-0 py-0">
-        <CardHeader className="border-b px-5 py-4 sm:px-6">
-          <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+        <CardHeader className={cn("border-b px-5 py-4 sm:px-6", memberMobile && "max-md:px-3 max-md:py-2.5")}>
+          {memberMobile ? (
+            <div className="md:hidden">
+              <button
+                type="button"
+                className="flex w-full min-w-0 items-center gap-2 text-start"
+                aria-expanded={mobileOpen}
+                onClick={() => setMobileOpen((open) => !open)}
+              >
+                <UsersRound className="size-4 shrink-0 text-primary" />
+                <span className="min-w-0 flex-1 text-sm font-semibold">Project Participants ({participants.length})</span>
+                <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", mobileOpen && "rotate-180")} />
+              </button>
+            </div>
+          ) : null}
+          <div className={cn("flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center", memberMobile && "max-md:hidden")}>
             <CardTitle className="flex items-center gap-2 text-base font-semibold sm:text-lg">
               <UsersRound className="size-5 text-primary" />
               2. Project Participants
@@ -736,7 +753,7 @@ export function ProjectParticipants({
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          <div className={cn("overflow-x-auto", memberMobile && "max-md:hidden")}>
             <table className="w-full min-w-[920px] table-fixed text-sm">
               <ProjectOverviewTableColumns layout="participants" />
               <thead>
@@ -846,6 +863,91 @@ export function ProjectParticipants({
               </tbody>
             </table>
           </div>
+
+          {memberMobile ? (
+            <div className={cn("md:hidden", !mobileOpen && "hidden")}>
+              {participants.length === 0 ? (
+                <p className="px-3 py-6 text-center text-xs text-muted-foreground">No project participants have been added.</p>
+              ) : (
+                <div className="divide-y divide-border">
+                  {groupedParticipants.map((group) => group.participants.length ? (
+                    <div key={group.key}>
+                      <div className="bg-muted/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {group.label} <span className="font-normal normal-case">({group.participants.length})</span>
+                      </div>
+                      <div className="divide-y divide-border/70">
+                        {group.participants.map((participant) => {
+                          const avatar = participantAvatar(participant)
+                          const isContractor = participantGroup(participant) === "contractors"
+                          const removable = isContractor
+                          const hasActions = canManageParticipants || canManageAvatars
+
+                          return (
+                            <article key={participant.id} className="flex min-w-0 items-start gap-2.5 px-3 py-2.5">
+                              <OrganizationMark participant={participant} />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex min-w-0 items-start justify-between gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm font-semibold text-foreground" title={participant.organization}>{participant.organization}</p>
+                                    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                                      <span className={cn(
+                                        "inline-flex max-w-full truncate rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                                        roleStyles[participant.projectRole] ?? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+                                      )}>{participant.projectRole}</span>
+                                      <span className="truncate">{participant.organizationType}</span>
+                                    </div>
+                                  </div>
+                                  <span className={cn(
+                                    "inline-flex shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                                    participant.status === "Active"
+                                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                                      : participant.status === "Contact Only"
+                                        ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                        : "bg-orange-50 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300",
+                                  )}>{participant.status}</span>
+                                </div>
+                                <div className="mt-1.5 flex min-w-0 items-center gap-2">
+                                  <ProfileAvatar name={participant.keyContact.name} email={participant.keyContact.email ?? ""} avatarUrl={avatar} size="sm" />
+                                  <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground" title={participant.keyContact.detail ?? participant.keyContact.name}>
+                                    Key contact: <span className="font-medium text-foreground/85">{participant.keyContact.name}</span>
+                                  </p>
+                                  <span className="shrink-0 text-[11px] text-muted-foreground">{participant.usersWithAccess} {participant.usersWithAccess === 1 ? "user" : "users"}</span>
+                                  {hasActions ? (
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger render={<button type="button" aria-label={`Actions for ${participant.organization}`} className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><MoreVertical className="size-4" /></button>} />
+                                      <DropdownMenuContent align="end" className="w-52">
+                                        {canManageParticipants && isContractor ? (
+                                          <DropdownMenuItem onClick={() => setEditContractor(participant)}><Pencil className="size-4" />Edit Contractor</DropdownMenuItem>
+                                        ) : null}
+                                        {canManageAvatars ? (
+                                          participant.keyContact.userId ? (
+                                            <DropdownMenuItem onClick={() => setAvatarDialog({ participant, kind: "profile", remove: false })}><ImagePlus className="size-4" />Change Avatar</DropdownMenuItem>
+                                          ) : (
+                                            <>
+                                              <DropdownMenuItem onClick={() => setAvatarDialog({ participant, kind: "participant", remove: false })}><ImagePlus className="size-4" />{avatar ? "Change Avatar" : "Upload Avatar"}</DropdownMenuItem>
+                                              {avatar ? <DropdownMenuItem variant="destructive" onClick={() => setAvatarDialog({ participant, kind: "participant", remove: true })}><Trash2 className="size-4" />Remove Avatar</DropdownMenuItem> : null}
+                                            </>
+                                          )
+                                        ) : null}
+                                        {canManageParticipants && removable ? (
+                                          <DropdownMenuItem variant="destructive" onClick={() => setRemoveParticipant(participant)}><Trash2 className="size-4" />Remove Participant</DropdownMenuItem>
+                                        ) : null}
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  ) : null}
+                                </div>
+                                {participant.contractorRoleLabel ? <p className="mt-1 truncate text-[11px] text-muted-foreground">{participant.contractorRoleLabel}</p> : null}
+                              </div>
+                            </article>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : null)}
+                </div>
+              )}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

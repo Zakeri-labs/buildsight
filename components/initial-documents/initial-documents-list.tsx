@@ -64,12 +64,14 @@ export function InitialDocumentsList({
   selectedProjectName,
   errorMessage,
   embedded = false,
+  compactMobile = false,
 }: {
   documents: InitialDocumentListItem[]
   selectedProjectId: string | null
   selectedProjectName: string | null
   errorMessage?: string | null
   embedded?: boolean
+  compactMobile?: boolean
 }) {
   const { locale } = useI18n()
   const isArabic = locale === "ar"
@@ -239,25 +241,36 @@ export function InitialDocumentsList({
                 </div>
               </div>
 
-              <div className={cn("grid gap-3 md:hidden", embedded && "p-4 sm:p-5")}>
+              <div className={cn(
+                "grid gap-3 md:hidden",
+                embedded && "p-4 sm:p-5",
+                compactMobile && "gap-2 p-2.5",
+              )}>
                 {filtered.map((item) => {
                   const Icon = fileIcon(item)
                   const categoryLabel = getDisplayCategory(item, isArabic).label
                   return (
-                    <article key={item.id} className="rounded-2xl border bg-card p-4">
-                      <div className="flex items-start gap-3">
-                        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary"><Icon className="size-5" /></span>
+                    <article key={item.id} className={cn("rounded-2xl border bg-card p-4", compactMobile && "rounded-lg p-3")}>
+                      <div className={cn("flex items-start gap-3", compactMobile && "gap-2.5")}>
+                        <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary", compactMobile && "size-8 rounded-lg")}><Icon className={cn("size-5", compactMobile && "size-4")} /></span>
                         <div className="min-w-0 flex-1">
                           <h2 className="truncate text-sm font-semibold" title={item.fileName}>{item.fileName}</h2>
                           {!selectedProjectId ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{item.projectName}</p> : null}
-                          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                            <span>{categoryLabel}</span><span>{formatDate(item.createdAt, locale)}</span><span>{formatInitialDocumentFileSize(item.fileSize)}</span>
+                          <div className={cn("mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground", compactMobile && "mt-1 gap-x-2 text-[11px]")}>
+                            <span>{categoryLabel}</span>
+                            {compactMobile ? (
+                              <span className="min-w-0 truncate" title={`${item.uploadedBy} • ${formatDate(item.createdAt, locale)} • ${formatInitialDocumentFileSize(item.fileSize)}`}>
+                                {item.uploadedBy} • {formatDate(item.createdAt, locale)} • {formatInitialDocumentFileSize(item.fileSize)}
+                              </span>
+                            ) : (
+                              <><span>{formatDate(item.createdAt, locale)}</span><span>{formatInitialDocumentFileSize(item.fileSize)}</span></>
+                            )}
                           </div>
                         </div>
                       </div>
-                      <div className="mt-3 flex justify-end gap-2 border-t pt-3">
-                        {canPreview(item) ? <button type="button" onClick={() => setPreview(item)} className="inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-medium hover:bg-muted"><Eye className="size-4" />{copy.preview}</button> : null}
-                        <a href={`/api/initial-documents?id=${encodeURIComponent(item.id)}&download=1`} className="inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-medium hover:bg-muted"><Download className="size-4" />{copy.download}</a>
+                      <div className={cn("mt-3 flex justify-end gap-2 border-t pt-3", compactMobile && "mt-2 gap-1 pt-2")}>
+                        {canPreview(item) ? <button type="button" onClick={() => setPreview(item)} title={copy.preview} aria-label={`${copy.preview} ${item.fileName}`} className={cn("inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-medium hover:bg-muted", compactMobile && "size-8 justify-center p-0")}><Eye className="size-4" />{compactMobile ? null : copy.preview}</button> : null}
+                        <a href={`/api/initial-documents?id=${encodeURIComponent(item.id)}&download=1`} title={copy.download} aria-label={`${copy.download} ${item.fileName}`} className={cn("inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-medium hover:bg-muted", compactMobile && "size-8 justify-center p-0")}><Download className="size-4" />{compactMobile ? null : copy.download}</a>
                       </div>
                     </article>
                   )
