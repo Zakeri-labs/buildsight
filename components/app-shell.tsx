@@ -39,7 +39,7 @@ export function AppShell({
   const isMemberProjectDetail = /^\/projects\/[^/]+\/?$/.test(pathname) && pathname !== "/projects/new" && isMember
   const isMemberProjectStages = /^\/projects\/[^/]+\/stages\/?$/.test(pathname) && isMember
   const isMemberStageReportsList = /^\/projects\/[^/]+\/stages\/[^/]+\/?$/.test(pathname) && isMember
-  const isMemberStageReport = /^\/projects\/[^/]+\/stages\/[^/]+\/reports\/new$/.test(pathname) && isMember
+  const isMemberStageReport = /^\/projects\/[^/]+\/stages\/[^/]+\/reports\/(?:new|[^/]+)\/?$/.test(pathname) && isMember
   const isMemberReportTranslation = /^\/projects\/[^/]+\/stages\/[^/]+\/reports\/[^/]+\/translate\/?$/.test(pathname) && isMember
   const isMemberDashboard = (pathname === "/" || pathname === "/memberhomepage") && isMember
   const isMemberMobileShell =

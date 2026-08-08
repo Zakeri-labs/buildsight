@@ -496,6 +496,9 @@ export function InspectionReportForm({
   const pendingReview = status === "submitted" || status === "under_review"
   const isEditable = canEdit && !statusLocked && !pendingReview
   const isLocked = !isEditable || !workflowActive
+  const isMemberExistingReport = isMember && Boolean(response)
+  const isMemberReadOnlyReport = isMemberExistingReport && (pendingReview || statusLocked)
+  const canRenderReviewerActions = canReview && !isMember
 
   const updateSection = useCallback((key: ReportSectionKey, value: string) => {
     setContent((current) => ({ ...current, [key]: value }))
@@ -807,7 +810,7 @@ export function InspectionReportForm({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:gap-5 md:pb-24">
+    <div className={cn("mx-auto flex w-full max-w-7xl flex-col gap-3 md:gap-5 md:pb-24", isMemberReadOnlyReport ? "pb-4" : "pb-[calc(4.75rem+env(safe-area-inset-bottom))]")}>
       <Link href={reportsHref} className="inline-flex w-fit items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground md:gap-2 md:text-sm">
         <ArrowLeft className="size-4 flip-rtl" />{copy.back}
       </Link>
@@ -819,7 +822,7 @@ export function InspectionReportForm({
 
       <Card className="overflow-hidden border-primary/20 py-0">
         <div className="bg-primary px-3 py-3 text-primary-foreground md:px-6 md:py-4">
-          <div className="flex items-start justify-between gap-2 md:items-center md:gap-3">
+          <div className={cn("flex items-start justify-between gap-2 md:items-center md:gap-3", isMemberExistingReport && "flex-col md:flex-row")}>
             <div className="flex min-w-0 items-center gap-2 md:gap-3">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/15 md:size-11 md:rounded-xl"><ClipboardCheck className="size-5 md:size-6" /></span>
               <div>
@@ -838,7 +841,7 @@ export function InspectionReportForm({
                 </div>
               </div>
             </div>
-            <div className="flex shrink-0 flex-col items-end gap-1 md:flex-row md:flex-wrap md:items-center md:gap-2">
+            <div className={cn("flex shrink-0 flex-col items-end gap-1 md:flex-row md:flex-wrap md:items-center md:gap-2", isMemberExistingReport && "w-full items-stretch md:w-auto md:items-center")}>
               {responseId ? (
                 <StageTranslationActions
                   projectId={project.id}
@@ -854,7 +857,10 @@ export function InspectionReportForm({
                   <Languages className="size-4" />{copy.translate}
                 </Button>
               )}
-              <Badge variant="outline" className={cn("w-fit border-white/30 bg-white/10 text-white", status !== "draft" && "border-white/40")}>{statusLabel(status, locale)}</Badge>
+              <div className={cn("flex items-center gap-1.5", isMemberExistingReport && "justify-between md:justify-start")}>
+                <Badge variant="outline" className={cn("w-fit border-white/30 bg-white/10 text-white", status !== "draft" && "border-white/40")}>{statusLabel(status, locale)}</Badge>
+                {isMemberExistingReport && pendingReview ? <Badge variant="outline" className="border-white/30 bg-white/10 text-[10px] text-white md:hidden">{locale === "ar" ? "بانتظار المراجعة" : "Pending Review"}</Badge> : null}
+              </div>
             </div>
           </div>
         </div>
@@ -939,12 +945,22 @@ export function InspectionReportForm({
           actionLabel={copy.uploadImages}
           onAction={() => imageInputRef.current?.click()}
           disabled={isLocked || busy !== null || evidenceImages.length + pendingImages.length >= STAGE_EVIDENCE_MAX_IMAGES}
+          hideActionOnMobile={isMemberReadOnlyReport}
         >
           <input ref={imageInputRef} type="file" accept={STAGE_EVIDENCE_ACCEPT} multiple className="hidden" onChange={(event) => { addImages(Array.from(event.target.files ?? [])); event.target.value = "" }} />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4">
             {evidenceImages.map((attachment) => <EvidenceTile key={attachment.id} src={`/api/stage-evidence?path=${encodeURIComponent(attachment.storagePath)}`} name={attachment.originalFilename} onRemove={isLocked ? undefined : () => void removeExisting(attachment)} />)}
             {pendingImages.map((item) => <EvidenceTile key={item.id} src={item.previewUrl ?? ""} name={item.file.name} progress={item.progress} onRemove={() => removePending("image", item.id)} />)}
-            {!evidenceImages.length && !pendingImages.length ? <EmptyAttachment text={copy.uploadImages} onClick={() => imageInputRef.current?.click()} /> : null}
+            {!evidenceImages.length && !pendingImages.length ? (
+              isMemberReadOnlyReport ? (
+                <>
+                  <div className="col-span-full flex min-h-12 items-center justify-center rounded-lg border border-dashed px-2 text-center text-[11px] text-muted-foreground md:hidden">
+                    {locale === "ar" ? "لا توجد صور مرفقة." : "No images attached."}
+                  </div>
+                  <div className="col-span-full hidden md:block"><EmptyAttachment text={copy.uploadImages} onClick={() => imageInputRef.current?.click()} /></div>
+                </>
+              ) : <EmptyAttachment text={copy.uploadImages} onClick={() => imageInputRef.current?.click()} />
+            ) : null}
           </div>
         </AttachmentCard>
 
@@ -955,12 +971,22 @@ export function InspectionReportForm({
           actionLabel={copy.addDocuments}
           onAction={() => documentInputRef.current?.click()}
           disabled={isLocked || busy !== null || documentAttachments.length + pendingDocuments.length >= STAGE_DOCUMENT_MAX_FILES}
+          hideActionOnMobile={isMemberReadOnlyReport}
         >
           <input ref={documentInputRef} type="file" accept={STAGE_DOCUMENT_ACCEPT} multiple className="hidden" onChange={(event) => { addDocuments(Array.from(event.target.files ?? [])); event.target.value = "" }} />
           <div className="space-y-2">
             {documentAttachments.map((attachment) => <DocumentRow key={attachment.id} name={attachment.originalFilename} href={`/api/stage-evidence?path=${encodeURIComponent(attachment.storagePath)}&download=1&filename=${encodeURIComponent(attachment.originalFilename)}`} onRemove={isLocked ? undefined : () => void removeExisting(attachment)} />)}
             {pendingDocuments.map((item) => <DocumentRow key={item.id} name={item.file.name} progress={item.progress} onRemove={() => removePending("document", item.id)} />)}
-            {!documentAttachments.length && !pendingDocuments.length ? <EmptyAttachment text={copy.addDocuments} compact onClick={() => documentInputRef.current?.click()} /> : null}
+            {!documentAttachments.length && !pendingDocuments.length ? (
+              isMemberReadOnlyReport ? (
+                <>
+                  <div className="flex min-h-12 items-center justify-center rounded-lg border border-dashed px-2 text-center text-[11px] text-muted-foreground md:hidden">
+                    {locale === "ar" ? "لا توجد مستندات مرفقة." : "No documents attached."}
+                  </div>
+                  <div className="hidden md:block"><EmptyAttachment text={copy.addDocuments} compact onClick={() => documentInputRef.current?.click()} /></div>
+                </>
+              ) : <EmptyAttachment text={copy.addDocuments} compact onClick={() => documentInputRef.current?.click()} />
+            ) : null}
           </div>
         </AttachmentCard>
       </div>
@@ -969,7 +995,7 @@ export function InspectionReportForm({
         <Card className="gap-0 py-0">
           <div className="flex items-center justify-between border-b border-blue-200/80 bg-blue-100/70 px-3 py-2.5 dark:border-blue-800/60 dark:bg-blue-900/50 md:px-6 md:py-3.5">
             <CardTitle className="text-sm font-semibold text-blue-950 dark:text-blue-100 md:text-base">{copy.checklist}</CardTitle>
-            <Button type="button" variant="outline" size="sm" disabled={isLocked} onClick={() => setContent((current) => ({ ...current, checklist: [...current.checklist, { id: crypto.randomUUID(), label: "", checked: false, result: "" }] }))}><Plus className="size-4" />{copy.addItem}</Button>
+            <Button type="button" variant="outline" size="sm" disabled={isLocked} className={cn(isMemberReadOnlyReport && "hidden md:inline-flex")} onClick={() => setContent((current) => ({ ...current, checklist: [...current.checklist, { id: crypto.randomUUID(), label: "", checked: false, result: "" }] }))}><Plus className="size-4" />{copy.addItem}</Button>
           </div>
           <CardContent className="space-y-1.5 p-2 md:space-y-3 md:p-6">
             {content.checklist.length ? (
@@ -1006,16 +1032,20 @@ export function InspectionReportForm({
                         })()}
                         <Input className="h-8 min-w-0 px-2 text-xs leading-tight" value={item.label} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))} placeholder={`Checklist item ${index + 1}`} />
                         <div className="flex items-center justify-end gap-0.5">
-                          <button type="button" disabled={isLocked} aria-label={`Edit comment for checklist item ${index + 1}`} aria-expanded={expandedChecklistCommentId === item.id} onClick={() => setExpandedChecklistCommentId((current) => current === item.id ? null : item.id)} className={cn("relative flex size-7 items-center justify-center rounded-md border text-muted-foreground transition-colors", item.notes?.trim() ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-background hover:bg-muted")}>
+                          <button type="button" disabled={isLocked && !item.notes?.trim()} aria-label={`${isLocked ? "View" : "Edit"} comment for checklist item ${index + 1}`} aria-expanded={expandedChecklistCommentId === item.id} onClick={() => setExpandedChecklistCommentId((current) => current === item.id ? null : item.id)} className={cn("relative flex size-7 items-center justify-center rounded-md border text-muted-foreground transition-colors", item.notes?.trim() ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-background hover:bg-muted", isLocked && !item.notes?.trim() && "opacity-40")}>
                             <MessageSquare className="size-3.5" />
                             {item.notes?.trim() ? <span className="absolute end-0.5 top-0.5 size-1.5 rounded-full bg-primary" aria-hidden="true" /> : null}
                           </button>
-                          <Button type="button" variant="ghost" size="icon-xs" disabled={isLocked} onClick={() => { setExpandedChecklistCommentId((current) => current === item.id ? null : current); setContent((current) => ({ ...current, checklist: current.checklist.filter((row) => row.id !== item.id) })) }} aria-label={copy.remove}><Trash2 className="size-3.5" /></Button>
+                          <Button type="button" variant="ghost" size="icon-xs" disabled={isLocked} className={cn(isMemberReadOnlyReport && "hidden md:inline-flex")} onClick={() => { setExpandedChecklistCommentId((current) => current === item.id ? null : current); setContent((current) => ({ ...current, checklist: current.checklist.filter((row) => row.id !== item.id) })) }} aria-label={copy.remove}><Trash2 className="size-3.5" /></Button>
                         </div>
                       </div>
                       {expandedChecklistCommentId === item.id ? (
                         <div className="mt-1.5 border-t pt-1.5">
-                          <Input className="h-8 px-2 text-xs" value={item.notes ?? ""} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, notes: event.target.value } : row) }))} placeholder="Comment / reference" />
+                          {isLocked ? (
+                            <p className="rounded-md bg-background px-2 py-1.5 text-xs leading-relaxed text-foreground">{item.notes?.trim() || (locale === "ar" ? "لا يوجد تعليق." : "No comment.")}</p>
+                          ) : (
+                            <Input className="h-8 px-2 text-xs" value={item.notes ?? ""} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, notes: event.target.value } : row) }))} placeholder="Comment / reference" />
+                          )}
                         </div>
                       ) : null}
                     </div>
@@ -1079,7 +1109,7 @@ export function InspectionReportForm({
 
       {!workflowActive ? <div role="status" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100"><AlertCircle className="mt-0.5 size-4 shrink-0" />This workflow item is disabled for the project. Existing review history remains available, but new employee work is blocked.</div> : null}
 
-      {((canReview && pendingReview) || (workflowActive && isEditable)) ? (
+      {((canRenderReviewerActions && pendingReview) || (workflowActive && isEditable)) ? (
         <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/95 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur md:start-64 md:z-30 md:px-8 md:py-3">
           <div className="mx-auto flex max-w-7xl flex-col-reverse gap-1.5 md:flex-row md:items-center md:justify-between md:gap-3">
             <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -1097,7 +1127,7 @@ export function InspectionReportForm({
             </div>
 
             <div className="flex w-full flex-wrap items-center justify-end gap-1.5 md:w-auto md:gap-3 shrink-0">
-              {canReview && pendingReview ? (
+              {canRenderReviewerActions && pendingReview ? (
                 <div className="flex items-center gap-2">
                   <Button
                     type="button"
@@ -1141,7 +1171,7 @@ function HeaderCell({ label, value, person }: { label: string; value: string; pe
   return <div className="min-w-0 bg-card px-2 py-2.5 md:min-h-20 md:px-5 md:py-4"><p className="text-[8px] font-semibold uppercase tracking-wide text-muted-foreground md:text-[11px] md:tracking-wider">{label}</p>{person ? <div className="mt-1 flex min-w-0 items-center gap-1.5 md:mt-2 md:gap-2"><span className="hidden md:inline-flex"><Avatar size="sm">{person.avatarUrl ? <AvatarImage src={profileAvatarDisplayUrl(person.avatarUrl)} alt="" /> : null}<AvatarFallback>{initials(person.name)}</AvatarFallback></Avatar></span><span className="min-w-0 break-words text-[11px] font-medium leading-tight md:truncate md:text-base md:leading-normal">{value}</span></div> : <p className="mt-1 break-words text-[11px] font-medium leading-tight [overflow-wrap:anywhere] md:mt-2 md:break-normal md:text-base md:leading-normal md:[overflow-wrap:normal]">{value}</p>}</div>
 }
 
-function AttachmentCard({ title, description, icon, actionLabel, onAction, disabled, children }: { title: string; description: string; icon: ReactNode; actionLabel: string; onAction: () => void; disabled: boolean; children: ReactNode }) {
+function AttachmentCard({ title, description, icon, actionLabel, onAction, disabled, hideActionOnMobile = false, children }: { title: string; description: string; icon: ReactNode; actionLabel: string; onAction: () => void; disabled: boolean; hideActionOnMobile?: boolean; children: ReactNode }) {
   return (
     <Card className="min-w-0 gap-0 py-0">
       <div className="flex items-center justify-between gap-1.5 border-b border-blue-200/80 bg-blue-100/70 px-2 py-2 dark:border-blue-800/60 dark:bg-blue-900/50 md:gap-4 md:px-6 md:py-3.5">
@@ -1159,7 +1189,7 @@ function AttachmentCard({ title, description, icon, actionLabel, onAction, disab
           disabled={disabled}
           title={actionLabel}
           aria-label={actionLabel}
-          className="size-8 shrink-0 rounded-lg p-0 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary md:size-11 md:rounded-xl"
+          className={cn("size-8 shrink-0 rounded-lg p-0 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary md:size-11 md:rounded-xl", hideActionOnMobile && "hidden md:inline-flex")}
         >
           <UploadCloud className="size-4 text-primary md:size-5" />
         </Button>
@@ -1260,7 +1290,7 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
         </button>
       </div>
       <div className={cn(!mobileExpanded && "hidden md:block")}>
-        <div className="flex flex-wrap items-center gap-0.5 border-b bg-muted/35 px-2 py-1.5 md:gap-1 md:px-3 md:py-2">
+        <div className={cn("flex flex-wrap items-center gap-0.5 border-b bg-muted/35 px-2 py-1.5 md:gap-1 md:px-3 md:py-2", disabled && "hidden md:flex")}>
           <EditorButton label="Bold" onClick={() => command("bold")} disabled={disabled}><Bold /></EditorButton>
           <EditorButton label="Italic" onClick={() => command("italic")} disabled={disabled}><Italic /></EditorButton>
           <EditorButton label="Underline" onClick={() => command("underline")} disabled={disabled}><Underline /></EditorButton>
@@ -1276,7 +1306,7 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
           <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={imageSelected} />
         </div>
         {uploadError ? <div className="border-b bg-red-50 px-4 py-2 text-xs text-red-700">{uploadError}</div> : null}
-        <div ref={editorRef} contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-multiline="true" onFocus={saveSelection} onKeyUp={saveSelection} onMouseUp={saveSelection} onInput={() => onChange(editorRef.current?.innerHTML ?? "")} className="inspection-editor min-h-36 bg-background px-3 py-3 text-sm outline-none md:min-h-56 md:px-7 md:py-5" />
+        <div ref={editorRef} contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-multiline="true" onFocus={saveSelection} onKeyUp={saveSelection} onMouseUp={saveSelection} onInput={() => onChange(editorRef.current?.innerHTML ?? "")} className={cn("inspection-editor bg-background px-3 py-3 text-sm outline-none md:min-h-56 md:px-7 md:py-5", disabled ? "min-h-0" : "min-h-36")} />
       </div>
     </Card>
   )
