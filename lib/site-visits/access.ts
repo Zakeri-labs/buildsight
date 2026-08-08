@@ -100,7 +100,7 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
     organizationIds.length
       ? admin
           .from("projects")
-          .select("id, name, supervising_organization_id, assigned_supervisor_id")
+          .select("id, name, code, supervising_organization_id, assigned_supervisor_id")
           .in("supervising_organization_id", organizationIds)
       : Promise.resolve({ data: [] as any[], error: null }),
   ])
@@ -121,7 +121,7 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
 
   const { data: projectRows, error: projectsError } = await admin
     .from("projects")
-    .select("id, name, supervising_organization_id, assigned_supervisor_id")
+    .select("id, name, code, supervising_organization_id, assigned_supervisor_id")
     .in("id", Array.from(candidateProjectIds))
     .order("name", { ascending: true })
   if (projectsError) throw projectsError
@@ -217,6 +217,7 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
       result.set(projectId, {
         id: projectId,
         name: (project as any).name as string,
+        code: typeof (project as any).code === "string" && (project as any).code.trim() ? (project as any).code.trim() : null,
         canRequest,
         canManage,
       })

@@ -7,6 +7,7 @@ export type SiteVisitPreferredTime = (typeof SITE_VISIT_PREFERRED_TIMES)[number]
 export type SiteVisitProjectAccess = {
   id: string
   name: string
+  code?: string | null
   canRequest: boolean
   canManage: boolean
 }

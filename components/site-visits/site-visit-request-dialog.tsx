@@ -12,6 +12,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
+function projectLabel(project: SiteVisitProjectAccess | null | undefined) {
+  if (!project) return "Select project"
+  const code = project.code?.trim()
+  return code ? `${project.name} — ${code}` : project.name
+}
+
 function newRequestKey() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID()
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (token) => {
@@ -97,11 +103,11 @@ export function SiteVisitRequestDialog({
           <div className="grid gap-2">
             <Label>Project</Label>
             {fixedProject ? (
-              <div className="flex h-10 items-center gap-2 rounded-lg border bg-muted/30 px-3 text-sm font-medium"><MapPinned className="size-4 text-primary" />{fixedProject.name}</div>
+              <div className="flex min-h-10 items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm font-medium"><MapPinned className="size-4 shrink-0 text-primary" /><span className="min-w-0 break-words">{projectLabel(fixedProject)}</span></div>
             ) : (
               <Select value={projectId} onValueChange={(value: unknown) => setProjectId(String(value))}>
-                <SelectTrigger className="h-10 w-full"><SelectValue>{() => requestProjects.find((project) => project.id === projectId)?.name ?? "Select project"}</SelectValue></SelectTrigger>
-                <SelectContent>{requestProjects.map((project) => <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>)}</SelectContent>
+                <SelectTrigger className="h-auto min-h-10 w-full whitespace-normal py-2 text-left"><SelectValue className="line-clamp-none! whitespace-normal! break-words leading-4">{() => projectLabel(requestProjects.find((project) => project.id === projectId))}</SelectValue></SelectTrigger>
+                <SelectContent className="max-w-[calc(100vw-3rem)]">{requestProjects.map((project) => <SelectItem key={project.id} value={project.id} className="py-2 [&>span:first-child]:min-w-0 [&>span:first-child]:shrink [&>span:first-child]:whitespace-normal [&>span:first-child]:break-words">{projectLabel(project)}</SelectItem>)}</SelectContent>
               </Select>
             )}
           </div>
