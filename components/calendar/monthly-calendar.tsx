@@ -122,6 +122,7 @@ export function MonthlyCalendar({
   onToday,
   onEmptyDayClick,
   onClientRequestClick,
+  onDayDetailsClick,
 }: {
   currentMonth: Date
   today: Date
@@ -132,6 +133,7 @@ export function MonthlyCalendar({
   onToday: () => void
   onEmptyDayClick?: (date: string) => void
   onClientRequestClick?: (requestId: string) => void
+  onDayDetailsClick?: (date: string) => void
 }) {
   const visibleDays = getVisibleDays(currentMonth)
   const monthTitle = new Intl.DateTimeFormat("en-US", {
@@ -263,9 +265,17 @@ export function MonthlyCalendar({
                         <CalendarEventChip key={event.id} event={event} onClientRequestClick={onClientRequestClick} />
                       ))}
                       {hiddenEventCount > 0 ? (
-                        <div className="px-1 text-[10px] font-medium text-muted-foreground">
+                        <button
+                          type="button"
+                          className="cursor-pointer rounded px-1 text-left text-[10px] font-semibold text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          onClick={(clickEvent) => {
+                            clickEvent.stopPropagation()
+                            onDayDetailsClick?.(key)
+                          }}
+                          aria-label={`Show all ${dayEvents.length} events for ${fullDateLabel}`}
+                        >
                           +{hiddenEventCount} more
-                        </div>
+                        </button>
                       ) : null}
                     </div>
                   </div>

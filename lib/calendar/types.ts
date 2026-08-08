@@ -12,6 +12,7 @@ export type CalendarEventViewModel = {
   date: string
   kind: CalendarEventKind
   timeLabel: string | null
+  sortMinutes: number
   secondaryLabel: string
 }
 

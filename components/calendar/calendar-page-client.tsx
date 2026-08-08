@@ -6,6 +6,7 @@ import { CalendarPlus } from "lucide-react"
 import { CalendarSummaryCards } from "@/components/calendar/calendar-summary-cards"
 import { ClientVisitRequestWorkflow } from "@/components/calendar/client-visit-request-workflow"
 import { ClientVisitRequestsPanel } from "@/components/calendar/client-visit-requests-panel"
+import { DayDetailsDialog } from "@/components/calendar/day-details-dialog"
 import { MobileWeeklyCalendar } from "@/components/calendar/mobile-weekly-calendar"
 import { MonthlyCalendar } from "@/components/calendar/monthly-calendar"
 import { ScheduleSiteVisitDialog } from "@/components/calendar/schedule-site-visit-dialog"
@@ -59,6 +60,7 @@ export function CalendarPageClient({
   const [scheduleDate, setScheduleDate] = useState(() => currentCalendarDateKey())
   const [selectedRequest, setSelectedRequest] = useState<CalendarClientRequestViewModel | null>(null)
   const [requestDetailsOpen, setRequestDetailsOpen] = useState(false)
+  const [selectedDayDetailsDate, setSelectedDayDetailsDate] = useState<string | null>(null)
   const selectedMonthKey = calendarMonthKey(currentMonth)
 
   useEffect(() => {
@@ -129,14 +131,17 @@ export function CalendarPageClient({
   }, [refreshSelectedMonth])
 
   function showPreviousMonth() {
+    setSelectedDayDetailsDate(null)
     setCurrentMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))
   }
 
   function showNextMonth() {
+    setSelectedDayDetailsDate(null)
     setCurrentMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1))
   }
 
   function showCurrentMonth() {
+    setSelectedDayDetailsDate(null)
     setCurrentMonth(monthStart(calendarDateFromKey(currentCalendarDateKey())))
   }
 
@@ -181,6 +186,11 @@ export function CalendarPageClient({
     [data.events, data.monthKey, selectedMonthKey],
   )
 
+  const selectedDayEvents = useMemo(
+    () => selectedDayDetailsDate ? visibleEvents.filter((event) => event.date === selectedDayDetailsDate) : [],
+    [selectedDayDetailsDate, visibleEvents],
+  )
+
   const calendar = (
     <MonthlyCalendar
       currentMonth={currentMonth}
@@ -192,6 +202,7 @@ export function CalendarPageClient({
       onToday={showCurrentMonth}
       onEmptyDayClick={data.scheduling.canSchedule ? openScheduleDialog : undefined}
       onClientRequestClick={openClientRequestById}
+      onDayDetailsClick={setSelectedDayDetailsDate}
     />
   )
 
@@ -296,6 +307,14 @@ export function CalendarPageClient({
           onScheduled={refreshAfterDirectSchedule}
         />
       ) : null}
+
+      <DayDetailsDialog
+        open={Boolean(selectedDayDetailsDate)}
+        onOpenChange={(open) => { if (!open) setSelectedDayDetailsDate(null) }}
+        date={selectedDayDetailsDate}
+        events={selectedDayEvents}
+        onClientRequestClick={openClientRequestById}
+      />
 
       <ClientVisitRequestWorkflow
         request={selectedRequest}

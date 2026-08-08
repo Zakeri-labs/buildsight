@@ -89,6 +89,20 @@ function clockTime(value: unknown): string | null {
   return /^\d{2}:\d{2}/.test(normalized) ? normalized.slice(0, 5) : null
 }
 
+function scheduledTimeSortMinutes(value: unknown): number {
+  const normalized = clockTime(value)
+  if (!normalized) return Number.MAX_SAFE_INTEGER
+  const [hour, minute] = normalized.split(":").map(Number)
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return Number.MAX_SAFE_INTEGER
+  return hour * 60 + minute
+}
+
+function preferredTimeSortMinutes(value: unknown): number {
+  if (value === "morning") return 8 * 60
+  if (value === "afternoon") return 13 * 60
+  return Number.MAX_SAFE_INTEGER
+}
+
 function notesPreview(value: unknown): string | null {
   if (typeof value !== "string") return null
   const normalized = value.replace(/\s+/g, " ").trim()
@@ -498,6 +512,7 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
         date: row.preferred_date,
         kind: "client_request",
         timeLabel: preferredTimeLabel(row.preferred_time),
+        sortMinutes: preferredTimeSortMinutes(row.preferred_time),
         secondaryLabel: "Client Request",
       })
     }
@@ -520,13 +535,14 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
               ? "approved_request"
               : "scheduled_visit",
         timeLabel: clockTime(row.scheduled_time),
+        sortMinutes: scheduledTimeSortMinutes(row.scheduled_time),
         secondaryLabel: isCancelled ? "Cancelled" : isCompleted ? "Completed" : "Site Visit",
       })
     }
 
     events.sort((left, right) =>
       left.date.localeCompare(right.date) ||
-      (left.timeLabel ?? "99:99").localeCompare(right.timeLabel ?? "99:99") ||
+      left.sortMinutes - right.sortMinutes ||
       left.id.localeCompare(right.id),
     )
 
