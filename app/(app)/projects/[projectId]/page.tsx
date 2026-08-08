@@ -4,6 +4,7 @@ export const revalidate = 0
 import { notFound } from "next/navigation"
 import { ProjectDetail } from "@/components/projects/project-detail"
 import type { ProjectDocument } from "@/components/projects/project-documents"
+import type { ProjectSiteVisitReport } from "@/components/projects/project-site-visit-reports"
 import { requireOnboarded } from "@/lib/auth/session"
 import { canAdministerProject } from "@/lib/auth/guards"
 import { getDashboardData, getOrgProjects } from "@/lib/db/domain"
@@ -13,6 +14,7 @@ import { normalizeDocumentType } from "@/lib/documents/document-types"
 import { getInitialDocumentsForScope } from "@/lib/initial-documents/server"
 import { toProjectRecord } from "@/lib/projects/project-record"
 import { isProjectTypeValue } from "@/lib/projects/project-options"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 type ProjectDocumentRow = {
@@ -42,6 +44,85 @@ function displayDocumentDate(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return "—"
   return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date)
+}
+
+type ProjectReportRow = {
+  id: string
+  project_stage_id: string
+  report_title: string | null
+  report_number: string | null
+  visit_number: number | null
+  created_at: string
+  created_by: string
+}
+
+type ProjectReportStageRow = {
+  id: string
+  name: string
+}
+
+type ProjectReportProfileRow = {
+  id: string
+  full_name: string | null
+  email: string | null
+}
+
+async function getProjectSiteVisitReports(projectId: string): Promise<ProjectSiteVisitReport[]> {
+  // The caller has already resolved this project through the authenticated user's canonical project scope.
+  // Use the service client only after that authorization check so the project summary can aggregate
+  // direct Stage-based reports without depending on client-side filtering.
+  const admin = createAdminClient()
+  const { data: reports, error: reportsError } = await admin
+    .from("term_responses")
+    .select("id, project_stage_id, report_title, report_number, visit_number, created_at, created_by")
+    .eq("project_id", projectId)
+    .is("project_stage_term_id", null)
+    .order("created_at", { ascending: false })
+    .limit(5)
+  if (reportsError) throw reportsError
+
+  const reportRows = (reports ?? []) as ProjectReportRow[]
+  if (!reportRows.length) return []
+
+  const stageIds = Array.from(new Set(reportRows.map((report) => report.project_stage_id)))
+  const creatorIds = Array.from(new Set(reportRows.map((report) => report.created_by)))
+  const [{ data: stages, error: stagesError }, { data: profiles, error: profilesError }] = await Promise.all([
+    admin
+      .from("project_stages")
+      .select("id, name")
+      .eq("project_id", projectId)
+      .in("id", stageIds),
+    creatorIds.length
+      ? admin.from("profiles").select("id, full_name, email").in("id", creatorIds)
+      : Promise.resolve({ data: [] as ProjectReportProfileRow[], error: null }),
+  ])
+  if (stagesError) throw stagesError
+  if (profilesError) throw profilesError
+
+  const stageMap = new Map<string, ProjectReportStageRow>(
+    ((stages ?? []) as ProjectReportStageRow[]).map((stage) => [stage.id, stage]),
+  )
+  const profileMap = new Map<string, ProjectReportProfileRow>(
+    ((profiles ?? []) as ProjectReportProfileRow[]).map((profile) => [profile.id, profile]),
+  )
+
+  return reportRows.flatMap((report) => {
+    const stage = stageMap.get(report.project_stage_id)
+    if (!stage) return []
+    const profile = profileMap.get(report.created_by)
+    const supervisorName = profile?.full_name?.trim() || profile?.email?.trim() || "Project member"
+
+    return [{
+      id: report.id,
+      stageId: report.project_stage_id,
+      reportTitle: report.report_title?.trim() || "Untitled report",
+      reportNumber: report.report_number?.trim() || "—",
+      stageName: stage.name,
+      visitNumber: Number.isInteger(report.visit_number) ? report.visit_number : null,
+      createdAt: report.created_at,
+      supervisorName,
+    }]
+  })
 }
 
 async function getProjectDocuments(
@@ -104,7 +185,7 @@ export default async function ProjectDetailPage({
   const project = projects.find((item) => item.id === projectId)
   if (!project) return notFound()
 
-  const [dashboardData, letters, initialDocumentsResult, participants, canManageImages] = await Promise.all([
+  const [dashboardData, letters, initialDocumentsResult, siteVisitReports, participants, canManageImages] = await Promise.all([
     getDashboardData(organizationId, project.id, session.userId),
     getProjectDocuments(project.id, session.userId, session.email),
     getInitialDocumentsForScope({
@@ -112,6 +193,7 @@ export default async function ProjectDetailPage({
       currentUserId: session.userId,
       currentUserEmail: session.email,
     }),
+    getProjectSiteVisitReports(project.id),
     getProjectParticipants(project.id),
     canAdministerProject(project.id),
   ])
@@ -160,6 +242,7 @@ export default async function ProjectDetailPage({
       letters={letters}
       initialDocuments={initialDocumentsResult.documents}
       initialDocumentsError={initialDocumentsResult.errorMessage}
+      siteVisitReports={siteVisitReports}
       participants={participants}
       participantUsers={participantUsers}
       supervisorOptions={supervisorOptions}

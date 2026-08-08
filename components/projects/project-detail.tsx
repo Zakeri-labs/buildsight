@@ -18,6 +18,7 @@ import type { InitialDocumentListItem } from "@/lib/initial-documents/types"
 import { ProjectParticipants, type ProjectParticipant } from "@/components/projects/project-participants"
 import type { ProjectParticipantUserOption } from "@/lib/projects/project-participant-types"
 import { ProjectDocuments, type ProjectDocument } from "@/components/projects/project-documents"
+import { ProjectSiteVisitReports, type ProjectSiteVisitReport } from "@/components/projects/project-site-visit-reports"
 import {
   ProjectEditDialog,
   type ProjectEditData,
@@ -182,6 +183,7 @@ export function ProjectDetail({
   letters,
   initialDocuments,
   initialDocumentsError,
+  siteVisitReports = [],
   participants,
   participantUsers = [],
   supervisorOptions = [],
@@ -193,6 +195,7 @@ export function ProjectDetail({
   letters?: ProjectDocument[]
   initialDocuments: InitialDocumentListItem[]
   initialDocumentsError?: string | null
+  siteVisitReports?: ProjectSiteVisitReport[]
   participants: ProjectParticipant[]
   participantUsers?: ProjectParticipantUserOption[]
   supervisorOptions?: ProjectSupervisorCandidate[]
@@ -808,6 +811,7 @@ export function ProjectDetail({
           />
         </CardContent>
       </Card>
+      <ProjectSiteVisitReports projectId={currentProject.id} reports={siteVisitReports} memberMobile={isMember} />
       <ProjectDocuments projectId={currentProject.id} documents={letters ?? projectDocuments(currentProject)} memberMobile={isMember} />
 
       {editOpen ? (
