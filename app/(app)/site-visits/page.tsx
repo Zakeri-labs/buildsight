@@ -13,6 +13,11 @@ export default async function SiteVisitsRoute({
   const session = await requireOnboarded()
   const [params, storedProjectId] = await Promise.all([searchParams, getSelectedProjectId()])
   const requestedProjectId = params.project?.trim() || storedProjectId
-  const data = await getSiteVisitPageData({ userId: session.userId, projectId: requestedProjectId })
+  const memberSupervisorOnly = session.memberships[0]?.role === "org_member"
+  const data = await getSiteVisitPageData({
+    userId: session.userId,
+    projectId: requestedProjectId,
+    memberSupervisorOnly,
+  })
   return <SiteVisitsPage data={data} />
 }

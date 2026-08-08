@@ -2,7 +2,11 @@ import "server-only"
 
 import { roleLabel } from "@/lib/db/types"
 import { preferredVisitLabel } from "@/lib/site-visits/format"
-import { getSiteVisitProjectAccess, SITE_VISIT_MANAGER_PROJECT_ROLES } from "@/lib/site-visits/access"
+import {
+  getAssignedSiteVisitSupervisorProjectIds,
+  getSiteVisitProjectAccess,
+  SITE_VISIT_MANAGER_PROJECT_ROLES,
+} from "@/lib/site-visits/access"
 import type {
   ProjectSiteVisitSummary,
   SiteVisitListItem,
@@ -192,12 +196,24 @@ const REQUEST_COLUMNS =
 export async function getSiteVisitPageData({
   userId,
   projectId,
+  memberSupervisorOnly = false,
 }: {
   userId: string
   projectId: string | null
+  memberSupervisorOnly?: boolean
 }): Promise<SiteVisitPageData> {
   const admin = createAdminClient()
-  const access = await getSiteVisitProjectAccess(userId)
+  const fullAccess = await getSiteVisitProjectAccess(userId)
+  const assignedSupervisorProjectIds = memberSupervisorOnly
+    ? await getAssignedSiteVisitSupervisorProjectIds(userId)
+    : null
+  const access = memberSupervisorOnly
+    ? new Map(
+        Array.from(fullAccess.entries()).filter(
+          ([id, projectAccess]) => assignedSupervisorProjectIds?.has(id) && projectAccess.canManage,
+        ),
+      )
+    : fullAccess
   const projects = Array.from(access.values()).sort((a, b) => a.name.localeCompare(b.name))
   const unauthorizedProject = Boolean(projectId && !access.has(projectId))
   const scopedProjectIds = unauthorizedProject
@@ -229,13 +245,25 @@ export async function getSiteVisitPageData({
   }
 }
 
-export async function getSiteVisitRequestDetail({ userId, requestId }: { userId: string; requestId: string }) {
+export async function getSiteVisitRequestDetail({
+  userId,
+  requestId,
+  memberSupervisorOnly = false,
+}: {
+  userId: string
+  requestId: string
+  memberSupervisorOnly?: boolean
+}) {
   const admin = createAdminClient()
   const access = await getSiteVisitProjectAccess(userId)
   const { data, error } = await admin.from("site_visit_requests").select(REQUEST_COLUMNS).eq("id", requestId).maybeSingle()
   if (error) throw error
   if (!data) return null
   const projectAccess = access.get((data as any).project_id)
+  if (memberSupervisorOnly) {
+    const assignedProjectIds = await getAssignedSiteVisitSupervisorProjectIds(userId)
+    if (!assignedProjectIds.has((data as any).project_id) || !projectAccess?.canManage) return null
+  }
   if (!projectAccess || (!projectAccess.canManage && (data as any).requested_by !== userId)) return null
   return (await hydrateSiteVisitRows({ rows: [data], userId, access }))[0] ?? null
 }

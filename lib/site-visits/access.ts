@@ -30,6 +30,19 @@ function normalized(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : ""
 }
 
+export async function getAssignedSiteVisitSupervisorProjectIds(userId: string): Promise<Set<string>> {
+  if (!UUID_PATTERN.test(userId)) return new Set()
+
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("projects")
+    .select("id")
+    .eq("assigned_supervisor_id", userId)
+
+  if (error) throw error
+  return new Set((data ?? []).map((row: any) => row.id as string).filter((id) => UUID_PATTERN.test(id)))
+}
+
 export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVisitAccessMap> {
   if (!UUID_PATTERN.test(userId)) return new Map()
 
@@ -228,5 +241,32 @@ export async function assertSiteVisitManager(projectId: string): Promise<string>
   const userId = await getUserIdOrThrow()
   const access = await getSiteVisitProjectAccess(userId)
   if (!access.get(projectId)?.canManage) throw new AuthzError("You do not have permission to manage site visits for this project")
+
+  // Organization Members are intentionally narrower than the broader Site
+  // Visit manager access paths: a Member may manage requests only for the
+  // Project where they are the canonical assigned Supervisor.
+  const admin = createAdminClient()
+  const { data: project, error: projectError } = await admin
+    .from("projects")
+    .select("assigned_supervisor_id, supervising_organization_id")
+    .eq("id", projectId)
+    .maybeSingle()
+  if (projectError) throw projectError
+  if (!project) throw new AuthzError("Project not found")
+
+  const { data: membership, error: membershipError } = await admin
+    .from("organization_memberships")
+    .select("role")
+    .eq("organization_id", project.supervising_organization_id)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle()
+  if (membershipError) throw membershipError
+
+  if (membership?.role === "org_member" && project.assigned_supervisor_id !== userId) {
+    throw new AuthzError("Only the assigned Project Supervisor can manage Site Visit Requests for this project")
+  }
+
   return userId
 }
