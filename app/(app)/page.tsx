@@ -2,7 +2,7 @@ import { redirect } from "next/navigation"
 import { DateRangePill } from "@/components/dashboard/date-range-pill"
 import { PortfolioKpis, type KpiCardData } from "@/components/dashboard/portfolio-kpis"
 import { StatusDonutCard } from "@/components/dashboard/status-donut-card"
-import { InspectionsBySupervisorCard } from "@/components/dashboard/inspections-by-supervisor-card"
+import { CompletedVisitsBySupervisorCard } from "@/components/dashboard/inspections-by-supervisor-card"
 import { RecentSupervisorReportsCard } from "@/components/dashboard/recent-supervisor-reports-card"
 import { ProjectsOverview } from "@/components/dashboard/projects-overview"
 import { MyTasks } from "@/components/dashboard/my-tasks"
@@ -22,7 +22,7 @@ const emptyDashboard: DashboardData = {
   kpis: { totalProjects: 0, openNcrs: 0, openInspections: 0, openRfis: 0 },
   ncrDonut: [],
   inspectionDonut: [],
-  inspectionsBySupervisor: [],
+  completedVisitsBySupervisor: [],
   recentSupervisorReports: [],
   projects: [],
   tasks: [],
@@ -106,7 +106,7 @@ export default async function DashboardPage({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <StatusDonutCard title="NCR Status" slices={data.ncrDonut} href="/ncrs" linkLabel="View all NCRs" />
-        <InspectionsBySupervisorCard supervisors={data.inspectionsBySupervisor} />
+        <CompletedVisitsBySupervisorCard supervisors={data.completedVisitsBySupervisor} />
         <RecentSupervisorReportsCard reports={data.recentSupervisorReports} />
       </div>
 

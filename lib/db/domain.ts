@@ -516,6 +516,29 @@ async function fetchScopedRowsByActivityRange(
   return data ?? []
 }
 
+async function fetchScopedCompletedSiteVisitsByActivityRange(
+  ids: string[],
+  range?: Pick<DashboardDateRange, "startUtc" | "endExclusiveUtc">,
+) {
+  const projectIds = validUuidList(ids)
+  if (projectIds.length === 0) return [] as any[]
+
+  const admin = createAdminClient()
+  let query = admin
+    .from("site_visit_requests")
+    .select("id, project_id, completed_at")
+    .in("project_id", projectIds)
+    .eq("status", "completed")
+    .not("completed_at", "is", null)
+
+  if (range?.startUtc) query = query.gte("completed_at", range.startUtc)
+  if (range?.endExclusiveUtc) query = query.lt("completed_at", range.endExclusiveUtc)
+
+  const { data, error } = await query
+  if (error) throw error
+  return data ?? []
+}
+
 export type DashboardData = {
   kpis: {
     totalProjects: number
@@ -525,10 +548,10 @@ export type DashboardData = {
   }
   ncrDonut: { label: string; value: number; color: string }[]
   inspectionDonut: { label: string; value: number; color: string }[]
-  inspectionsBySupervisor: {
+  completedVisitsBySupervisor: {
     supervisorId: string
     name: string
-    inspectionCount: number
+    completedVisitCount: number
     projectCount: number
   }[]
   recentSupervisorReports: RecentSupervisorReportRow[]
@@ -552,7 +575,7 @@ function createEmptyDashboard(): DashboardData {
     kpis: { totalProjects: 0, openNcrs: 0, openInspections: 0, openRfis: 0 },
     ncrDonut: [],
     inspectionDonut: [],
-    inspectionsBySupervisor: [],
+    completedVisitsBySupervisor: [],
     recentSupervisorReports: [],
     projects: [],
     tasks: [],
@@ -593,7 +616,7 @@ export async function getDashboardData(
     const [
       ncrs,
       inspections,
-      inspectionActivityRows,
+      completedSiteVisits,
       rfis,
       vos,
       tasks,
@@ -604,13 +627,7 @@ export async function getDashboardData(
     ] = await Promise.all([
       fetchScopedRows("ncrs", "project_id, status", ids),
       fetchScopedRows("inspections", "project_id, status", ids),
-      fetchScopedRowsByActivityRange(
-        "inspections",
-        "project_id, created_at",
-        ids,
-        "created_at",
-        activityDateRange,
-      ),
+      fetchScopedCompletedSiteVisitsByActivityRange(ids, activityDateRange),
       fetchScopedRows("rfis", "project_id, status", ids),
       fetchScopedRows("variation_orders", "project_id", ids),
       fetchScopedRows("tasks", "id, project_id, action, type, reference, due_label, due_tone, sort_order", ids),
@@ -651,9 +668,9 @@ export async function getDashboardData(
       { label: "Approved", value: inspByStatus.get("approved") ?? 0, color: "var(--success)" },
     ]
 
-    // Aggregate the canonical Inspection rows through the canonical Project
-    // Supervisor assignment. This intentionally does not use inspection
-    // creator/assignee metadata and does not count reports/checklist items.
+    // Aggregate completed Site Visits through the visit-specific assignee relationship.
+    // The request row is the canonical Site Visit record; completion is determined by
+    // status = completed and completed_at, while assignee rows determine attribution.
     const projectSupervisorById = new Map<string, string>(
       scoped
         .filter((project) => Boolean(project.assignedSupervisorId))
@@ -662,8 +679,23 @@ export async function getDashboardData(
             [project.id, project.assignedSupervisorId as string] as [string, string],
         ),
     )
-    const supervisorIds = validUuidList(Array.from(projectSupervisorById.values()))
+    const completedVisitIds = validUuidList(
+      (completedSiteVisits as any[]).map((visit) => visit.id),
+    )
     const admin = createAdminClient()
+    const { data: completedVisitAssignees, error: completedVisitAssigneesError } = completedVisitIds.length
+      ? await admin
+          .from("site_visit_request_assignees")
+          .select("request_id, user_id")
+          .in("request_id", completedVisitIds)
+      : { data: [] as any[], error: null }
+    if (completedVisitAssigneesError) throw completedVisitAssigneesError
+
+    const assignedSupervisorIds = validUuidList(
+      (completedVisitAssignees ?? []).map((row: any) => row.user_id),
+    )
+    const reportSupervisorIds = validUuidList(Array.from(projectSupervisorById.values()))
+    const supervisorIds = validUuidList([...assignedSupervisorIds, ...reportSupervisorIds])
     const { data: supervisorProfiles, error: supervisorProfilesError } = supervisorIds.length
       ? await admin.from("profiles").select("id, full_name, email").in("id", supervisorIds)
       : { data: [] as any[], error: null }
@@ -678,37 +710,47 @@ export async function getDashboardData(
           ] as [string, string],
       ),
     )
-    const supervisorInspectionAggregation = new Map<
+    const completedVisitById = new Map<string, string>(
+      (completedSiteVisits as any[])
+        .map((visit) => {
+          const visitId = asUuid(visit.id)
+          const visitProjectId = asUuid(visit.project_id)
+          return visitId && visitProjectId ? ([visitId, visitProjectId] as [string, string]) : null
+        })
+        .filter((entry): entry is [string, string] => Boolean(entry)),
+    )
+    const completedVisitAggregation = new Map<
       string,
-      { supervisorId: string; name: string; inspectionCount: number; projectIds: Set<string> }
+      { supervisorId: string; name: string; visitIds: Set<string>; projectIds: Set<string> }
     >()
 
-    for (const inspection of inspectionActivityRows as any[]) {
-      const inspectionProjectId = asUuid(inspection.project_id)
-      if (!inspectionProjectId) continue
-      const supervisorId = projectSupervisorById.get(inspectionProjectId)
-      if (!supervisorId) continue
+    for (const assignment of completedVisitAssignees ?? []) {
+      const visitId = asUuid((assignment as any).request_id)
+      const supervisorId = asUuid((assignment as any).user_id)
+      if (!visitId || !supervisorId) continue
+      const visitProjectId = completedVisitById.get(visitId)
+      if (!visitProjectId) continue
 
-      const existing = supervisorInspectionAggregation.get(supervisorId) ?? {
+      const existing = completedVisitAggregation.get(supervisorId) ?? {
         supervisorId,
         name: supervisorNameById.get(supervisorId) ?? supervisorId,
-        inspectionCount: 0,
+        visitIds: new Set<string>(),
         projectIds: new Set<string>(),
       }
-      existing.inspectionCount += 1
-      existing.projectIds.add(inspectionProjectId)
-      supervisorInspectionAggregation.set(supervisorId, existing)
+      existing.visitIds.add(visitId)
+      existing.projectIds.add(visitProjectId)
+      completedVisitAggregation.set(supervisorId, existing)
     }
 
-    const inspectionsBySupervisor = Array.from(supervisorInspectionAggregation.values())
+    const completedVisitsBySupervisor = Array.from(completedVisitAggregation.values())
       .map((item) => ({
         supervisorId: item.supervisorId,
         name: item.name,
-        inspectionCount: item.inspectionCount,
+        completedVisitCount: item.visitIds.size,
         projectCount: item.projectIds.size,
       }))
       .sort((a, b) =>
-        b.inspectionCount - a.inspectionCount ||
+        b.completedVisitCount - a.completedVisitCount ||
         a.name.localeCompare(b.name) ||
         a.supervisorId.localeCompare(b.supervisorId),
       )
@@ -866,7 +908,7 @@ export async function getDashboardData(
       },
       ncrDonut,
       inspectionDonut,
-      inspectionsBySupervisor,
+      completedVisitsBySupervisor,
       recentSupervisorReports,
       projects: projectRows,
       tasks: taskRows,
