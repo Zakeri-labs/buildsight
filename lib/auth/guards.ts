@@ -216,6 +216,9 @@ export async function assertProjectReviewer(projectId: string): Promise<string> 
   const userId = await getUserIdOrThrow()
   const access = await resolveProjectReadAccessForUser(userId, projectId)
   if (!access) throw new AuthzError("You do not have access to this project")
+  if (access.supervisingOrganizationRole === "org_member") {
+    throw new AuthzError("Members cannot approve or reject Stage Reports")
+  }
 
   const admin = createAdminClient()
   const { data: projectMembership, error: membershipError } = await admin

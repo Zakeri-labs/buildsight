@@ -148,6 +148,7 @@ export type ProjectStageExecutionData = {
   availableStages: ProjectStageSelectionOption[]
   canReview: boolean
   canManage: boolean
+  isMember: boolean
   currentUserId: string
 }
 
@@ -204,14 +205,16 @@ async function projectAccess(projectId: string, userId: string) {
   const canManage =
     !stageCreationRestricted &&
     (access.projectAccessRole === "project_admin" || access.supervisingOrganizationRole === "org_admin")
+  const isMember = access.supervisingOrganizationRole === "org_member"
   const canReview =
-    canManage ||
-    access.projectAccessRole === "project_manager" ||
-    access.projectAccessRole === "reviewer" ||
-    access.projectAccessRole === "approver" ||
-    access.supervisingOrganizationRole === "org_manager"
+    !isMember &&
+    (canManage ||
+      access.projectAccessRole === "project_manager" ||
+      access.projectAccessRole === "reviewer" ||
+      access.projectAccessRole === "approver" ||
+      access.supervisingOrganizationRole === "org_manager")
 
-  return { project: access.project, canReview, canManage }
+  return { project: access.project, canReview, canManage, isMember }
 }
 
 function derivedParentStatus(children: ProjectStageTermExecution[]): ProjectStageTermStatus {
@@ -739,6 +742,7 @@ export async function loadProjectStageExecution(
     availableStages: access.canManage ? availableStages : [],
     canReview: access.canReview,
     canManage: access.canManage,
+    isMember: access.isMember,
     currentUserId: userId,
   }
 }

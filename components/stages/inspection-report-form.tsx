@@ -348,6 +348,7 @@ export function InspectionReportForm({
   translation,
   canReview,
   canManage,
+  isMember = false,
   currentUserId,
   currentUserPerson,
   workflowActive,
@@ -388,6 +389,7 @@ export function InspectionReportForm({
   translation?: ProjectStageTranslationSummary | null
   canReview: boolean
   canManage?: boolean
+  isMember?: boolean
   currentUserId?: string
   currentUserPerson?: ProjectStagePerson | null
   workflowActive: boolean
@@ -670,6 +672,11 @@ export function InspectionReportForm({
         setVisitNumber(result.data.visitNumber)
         setStatus(result.data.status as ResponseStatus)
         setSuccess(result.data.status === "completed" ? copy.saved : copy.submitted)
+        if (isMember) {
+          router.replace(`/projects/${project.id}/stages`)
+          router.refresh()
+          return
+        }
       } else {
         setStatus(mode === "progress" ? "in_progress" : "draft")
         setSuccess(copy.saved)
@@ -1063,7 +1070,11 @@ export function InspectionReportForm({
       )}
 
       {responseId && (status === "submitted" || status === "under_review" || status === "rejected" || status === "approved") ? (
-        <ApprovalPanel canReview={canReview} status={status} comments={reviewComments} onComments={setReviewComments} onDecision={decide} busy={busy} approvals={approvalHistory} copy={copy} locale={locale} />
+        isMember
+          ? approvalHistory.length > 0
+            ? <MemberApprovalHistoryPanel approvals={approvalHistory} copy={copy} locale={locale} />
+            : null
+          : <ApprovalPanel canReview={canReview} status={status} comments={reviewComments} onComments={setReviewComments} onDecision={decide} busy={busy} approvals={approvalHistory} copy={copy} locale={locale} />
       ) : null}
 
       {!workflowActive ? <div role="status" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100"><AlertCircle className="mt-0.5 size-4 shrink-0" />This workflow item is disabled for the project. Existing review history remains available, but new employee work is blocked.</div> : null}
@@ -1277,4 +1288,36 @@ function EditorButton({ label, onClick, disabled, children }: { label: string; o
 
 function ApprovalPanel({ canReview, status, comments, onComments, onDecision, busy, approvals, copy, locale }: { canReview: boolean; status: ResponseStatus; comments: string; onComments: (value: string) => void; onDecision: (decision: "approved" | "rejected") => void; busy: string | null; approvals: ProjectStageApproval[]; copy: (typeof COPY)["en"] | (typeof COPY)["ar"]; locale: "en" | "ar" }) {
   return <Card className="gap-0 py-0"><CardHeader className="border-b border-blue-200/80 bg-blue-100/70 px-5 py-3.5 dark:border-blue-800/60 dark:bg-blue-900/50 sm:px-6"><CardTitle className="flex items-center gap-2 text-base font-semibold text-blue-950 dark:text-blue-100"><ShieldCheck className="size-5 text-primary" />{copy.review}</CardTitle></CardHeader><CardContent className="grid gap-6 p-5 sm:p-6 lg:grid-cols-2">{canReview && (status === "submitted" || status === "under_review") ? <div className="space-y-3"><Label htmlFor="review-comments">{copy.reviewComments}</Label><textarea id="review-comments" value={comments} onChange={(event) => onComments(event.target.value)} rows={5} className="w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/20" placeholder="Record acceptance notes, required corrections, or reasons for rejection." /><div className="flex flex-wrap justify-end gap-2"><Button variant="destructive" disabled={busy !== null} onClick={() => onDecision("rejected")}>{busy === "reject" ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}{copy.reject}</Button><Button disabled={busy !== null} onClick={() => onDecision("approved")}>{busy === "approve" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}{copy.approve}</Button></div></div> : <div className="rounded-xl border bg-muted/20 p-4"><p className="text-sm font-semibold">{statusLabel(status, locale)}</p><p className="mt-1 text-xs text-muted-foreground">{status === "approved" ? "This report has been approved." : "This report is awaiting an authorized reviewer."}</p></div>}<div><h3 className="mb-3 text-sm font-semibold">{copy.history}</h3>{approvals.length ? <div className="space-y-3">{approvals.map((approval) => <div key={approval.id} className="rounded-xl border p-3"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Avatar size="sm">{approval.reviewer.avatarUrl ? <AvatarImage src={profileAvatarDisplayUrl(approval.reviewer.avatarUrl)} alt="" /> : null}<AvatarFallback>{initials(approval.reviewer.name)}</AvatarFallback></Avatar><div><p className="text-sm font-medium">{approval.reviewer.name}</p><p className="text-xs text-muted-foreground">{formatDate(approval.decidedAt, locale)}</p></div></div><Badge variant="outline" className={statusTone(approval.decision)}>{statusLabel(approval.decision, locale)}</Badge></div>{approval.comments ? <p className="mt-3 rounded-lg bg-muted/35 p-2 text-xs">{approval.comments}</p> : null}</div>)}</div> : <p className="text-sm text-muted-foreground">{copy.noHistory}</p>}</div></CardContent></Card>
+}
+
+function MemberApprovalHistoryPanel({ approvals, copy, locale }: { approvals: ProjectStageApproval[]; copy: (typeof COPY)["en"] | (typeof COPY)["ar"]; locale: "en" | "ar" }) {
+  return (
+    <Card className="gap-0 py-0">
+      <CardHeader className="border-b px-5 py-3.5 sm:px-6">
+        <CardTitle className="text-base font-semibold">{copy.history}</CardTitle>
+      </CardHeader>
+      <CardContent className="p-5 sm:p-6">
+        <div className="space-y-3">
+          {approvals.map((approval) => (
+            <div key={approval.id} className="rounded-xl border p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Avatar size="sm">
+                    {approval.reviewer.avatarUrl ? <AvatarImage src={profileAvatarDisplayUrl(approval.reviewer.avatarUrl)} alt="" /> : null}
+                    <AvatarFallback>{initials(approval.reviewer.name)}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="text-sm font-medium">{approval.reviewer.name}</p>
+                    <p className="text-xs text-muted-foreground">{formatDate(approval.decidedAt, locale)}</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className={statusTone(approval.decision)}>{statusLabel(approval.decision, locale)}</Badge>
+              </div>
+              {approval.comments ? <p className="mt-3 rounded-lg bg-muted/35 p-2 text-xs">{approval.comments}</p> : null}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  )
 }

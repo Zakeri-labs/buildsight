@@ -760,15 +760,27 @@ export async function decideTermResponseAction(input: {
     const admin = createAdminClient()
     const { data: response, error: lookupError } = await admin
       .from("term_responses")
-      .select("id, project_stage_term_id, status")
+      .select("id, project_stage_id, project_stage_term_id, status")
       .eq("id", input.responseId)
       .eq("project_id", input.projectId)
       .maybeSingle()
     if (lookupError) throw lookupError
     if (!response) return { ok: false, error: "Report response not found." }
+
     // Reviewers must be able to resolve already-submitted work even when the
     // Stage, Term, or Sub-term is later disabled for new employee activity.
-    await termScope(input.projectId, response.project_stage_term_id)
+    // Direct Stage-based Reports intentionally have no legacy term id.
+    let reportStageId: string
+    if (response.project_stage_term_id) {
+      const term = await termScope(input.projectId, response.project_stage_term_id)
+      reportStageId = term.project_stage_id
+    } else if (response.project_stage_id) {
+      const stage = await stageScope(input.projectId, response.project_stage_id)
+      reportStageId = stage.id
+    } else {
+      return { ok: false, error: "Report response is not linked to a project stage." }
+    }
+
     if (response.status !== "submitted" && response.status !== "under_review") {
       return { ok: false, error: "Only submitted reports can be approved or rejected." }
     }
@@ -789,10 +801,14 @@ export async function decideTermResponseAction(input: {
       projectId: input.projectId,
       metadata: { comments },
     })
-    const term = await termScope(input.projectId, response.project_stage_term_id)
     revalidateProjectStageViews(input.projectId)
-    revalidatePath(`/projects/${input.projectId}/stages/${term.project_stage_id}/terms/${response.project_stage_term_id}`)
-    revalidatePath(`/projects/${input.projectId}/stages/${term.project_stage_id}/terms/${response.project_stage_term_id}/reports/${input.responseId}`)
+    revalidatePath(`/projects/${input.projectId}/stages/${reportStageId}`)
+    if (response.project_stage_term_id) {
+      revalidatePath(`/projects/${input.projectId}/stages/${reportStageId}/terms/${response.project_stage_term_id}`)
+      revalidatePath(`/projects/${input.projectId}/stages/${reportStageId}/terms/${response.project_stage_term_id}/reports/${input.responseId}`)
+    } else {
+      revalidatePath(`/projects/${input.projectId}/stages/${reportStageId}/reports/${input.responseId}`)
+    }
     return { ok: true }
   } catch (error) {
     return actionError(error, "Could not save the review decision.")
