@@ -35,7 +35,7 @@ function formatTime(value: string | null): { time: string; period: string } | nu
 }
 
 function MetaLine({ children }: { children: React.ReactNode }) {
-  return <p className="truncate text-[10px] leading-3.5 text-muted-foreground lg:text-xs lg:leading-4">{children}</p>
+  return <p className="truncate text-[9px] leading-[11px] text-muted-foreground lg:text-xs lg:leading-4">{children}</p>
 }
 
 function SummaryCard({ label, value, icon: Icon, prominent = false, hasError = false, reserveIconSpace = false }: {
@@ -86,14 +86,14 @@ function RequestRow({
   const date = formatDateBlock(request.requestedDate)
   return (
     <Card size="sm" className="py-0">
-      <div className="grid min-h-[4.25rem] grid-cols-[3.125rem_minmax(0,1fr)_2.625rem] items-stretch sm:grid-cols-[3.125rem_minmax(0,1fr)_2.625rem] lg:min-h-[5rem] lg:grid-cols-[3.5rem_minmax(0,1fr)_2.75rem]">
+      <div className="grid min-h-[3rem] grid-cols-[3.125rem_minmax(0,1fr)_2.625rem] items-stretch sm:grid-cols-[3.125rem_minmax(0,1fr)_2.625rem] lg:min-h-[5rem] lg:grid-cols-[3.5rem_minmax(0,1fr)_2.75rem]">
         <div className="flex flex-col items-center justify-center border-r bg-muted/30 px-1.5 text-center lg:px-2">
-          <span className={cn("font-semibold leading-none tabular-nums", date.day === "ASAP" ? "text-[11px]" : "text-lg", "lg:leading-normal", date.day !== "ASAP" && "lg:text-xl")}>{date.day}</span>
-          {date.month ? <span className="mt-0.5 text-[10px] leading-none text-muted-foreground lg:text-[11px] lg:leading-normal">{date.month}</span> : null}
+          <span className={cn("font-semibold leading-none tabular-nums", date.day === "ASAP" ? "text-[10px]" : "text-base", "lg:leading-normal", date.day !== "ASAP" && "lg:text-xl")}>{date.day}</span>
+          {date.month ? <span className="mt-px text-[9px] leading-none text-muted-foreground lg:mt-0.5 lg:text-[11px] lg:leading-normal">{date.month}</span> : null}
         </div>
-        <div className="min-w-0 self-center px-2.5 py-1.5 lg:px-3 lg:py-2.5">
-          <p className="truncate text-[13px] font-semibold leading-4 lg:text-sm lg:leading-normal">{request.projectName}</p>
-          <div className="mt-0.5 grid min-w-0 grid-cols-1 gap-x-3 gap-y-0 lg:mt-1 lg:grid-cols-2">
+        <div className="min-w-0 self-center px-2 py-0.5 lg:px-3 lg:py-2.5">
+          <p className="truncate text-[12px] font-semibold leading-3.5 lg:text-sm lg:leading-normal">{request.projectName}</p>
+          <div className="mt-px grid min-w-0 grid-cols-1 gap-x-3 gap-y-0 lg:mt-1 lg:grid-cols-2">
             {request.projectCode ? <MetaLine><span className="lg:hidden">{request.projectCode}</span><span className="hidden lg:inline">Code: {request.projectCode}</span></MetaLine> : null}
             {request.stageName ? <MetaLine>Stage: {request.stageName}</MetaLine> : null}
             {request.visitNumber ? <MetaLine>Visit {request.visitNumber}</MetaLine> : null}
@@ -107,9 +107,9 @@ function RequestRow({
             aria-busy={loading || undefined}
             disabled={loading}
             onClick={() => onAction(request.id)}
-            className="inline-flex size-9 items-center justify-center rounded-lg border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60 lg:size-10 lg:rounded-xl"
+            className="inline-flex size-8 items-center justify-center rounded-lg border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60 lg:size-10 lg:rounded-xl"
           >
-            <CalendarPlus className="size-[18px] lg:size-5" aria-hidden="true" />
+            <CalendarPlus className="size-4 lg:size-5" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -121,7 +121,7 @@ function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
   const scheduledTime = formatTime(visit.scheduledTime)
   const isCompleted = visit.status === "completed"
   const actionClass =
-    "inline-flex size-8 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-9 sm:rounded-lg"
+    "inline-flex size-[1.625rem] shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-9 sm:rounded-lg"
   const disabledActionClass = `${actionClass} cursor-not-allowed opacity-40 hover:bg-background hover:text-muted-foreground`
 
   return (
@@ -132,62 +132,62 @@ function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
         isCompleted && "bg-muted/20 opacity-80 ring-1 ring-inset ring-green-200/60 dark:ring-green-900/50",
       )}
     >
-      <div className="grid min-h-[4.15rem] grid-cols-[3.125rem_minmax(0,1.35fr)_minmax(5.3rem,1fr)_2.55rem] items-stretch sm:min-h-[4.25rem] sm:grid-cols-[3.5rem_minmax(0,1.35fr)_minmax(6.5rem,1fr)_3rem]">
+      <div className="grid min-h-[3.5rem] grid-cols-[3.125rem_minmax(0,1.35fr)_minmax(5.3rem,1fr)_2.25rem] items-stretch sm:min-h-[4.25rem] sm:grid-cols-[3.5rem_minmax(0,1.35fr)_minmax(6.5rem,1fr)_3rem]">
         <div className={cn(
           "flex min-w-0 flex-col items-center justify-center bg-sidebar px-1 text-center text-white",
           isCompleted && "bg-sidebar/80",
         )}>
           {scheduledTime ? (
             <>
-              <span className="text-[12px] font-bold leading-3.5 tabular-nums sm:text-sm sm:leading-4">{scheduledTime.time}</span>
-              <span className="mt-0.5 text-[9px] font-bold uppercase leading-3 tracking-wide text-white/85 sm:text-[10px]">{scheduledTime.period}</span>
+              <span className="text-[11px] font-bold leading-3 tabular-nums sm:text-sm sm:leading-4">{scheduledTime.time}</span>
+              <span className="mt-px text-[8px] font-bold uppercase leading-2.5 tracking-wide text-white/85 sm:mt-0.5 sm:text-[10px] sm:leading-3">{scheduledTime.period}</span>
             </>
           ) : (
             <span className="text-sm font-semibold text-white/75">—</span>
           )}
         </div>
 
-        <div className="flex min-w-0 flex-col justify-center px-1.5 py-1 sm:px-2.5 sm:py-1.5">
-          <p className="min-w-0 truncate text-[11px] font-semibold leading-3.5 sm:text-sm sm:leading-4">{visit.projectName}</p>
+        <div className="flex min-w-0 flex-col justify-center px-1.5 py-0.5 sm:px-2.5 sm:py-1.5">
+          <p className="min-w-0 truncate text-[10px] font-semibold leading-3 sm:text-sm sm:leading-4">{visit.projectName}</p>
           {visit.projectCode ? (
-            <p className="mt-0.5 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] text-[9px] leading-[10px] text-muted-foreground sm:text-[11px] sm:leading-4">
+            <p className="mt-px min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] text-[8px] leading-[9px] text-muted-foreground sm:mt-0.5 sm:text-[11px] sm:leading-4">
               {visit.projectCode}
             </p>
           ) : null}
         </div>
 
-        <div className="flex min-w-0 flex-col justify-center border-l px-1.5 py-1 sm:px-2.5 sm:py-1.5">
+        <div className="flex min-w-0 flex-col justify-center border-l px-1.5 py-0.5 sm:px-2.5 sm:py-1.5">
           {visit.stageName ? (
-            <p className="line-clamp-2 min-w-0 break-words text-[10px] font-semibold leading-3 sm:text-xs sm:leading-4">{visit.stageName}</p>
+            <p className="line-clamp-2 min-w-0 break-words text-[9px] font-semibold leading-[10px] sm:text-xs sm:leading-4">{visit.stageName}</p>
           ) : null}
           {visit.visitNumber ? (
-            <p className="mt-0.5 whitespace-nowrap text-[9px] leading-3 text-muted-foreground sm:text-[11px] sm:leading-4">Visit No. {visit.visitNumber}</p>
+            <p className="mt-px whitespace-nowrap text-[8px] leading-[9px] text-muted-foreground sm:mt-0.5 sm:text-[11px] sm:leading-4">Visit No. {visit.visitNumber}</p>
           ) : null}
           {isCompleted ? (
-            <span className="mt-0.5 inline-flex items-center gap-0.5 text-[8px] font-medium leading-3 text-green-700 dark:text-green-300 sm:text-[10px]">
-              <CheckCircle2 className="size-2.5" aria-hidden="true" />
+            <span className="mt-px inline-flex items-center gap-0.5 text-[7px] font-medium leading-[8px] text-green-700 dark:text-green-300 sm:mt-0.5 sm:text-[10px] sm:leading-3">
+              <CheckCircle2 className="size-2 sm:size-2.5" aria-hidden="true" />
               Completed
             </span>
           ) : null}
         </div>
 
-        <div className="flex flex-col items-center justify-center gap-1 border-l px-0.5 py-1">
+        <div className="flex flex-col items-center justify-center gap-0.5 border-l px-0.5 py-0.5 sm:gap-1 sm:py-1">
           {isCompleted ? (
             <button type="button" aria-label="Add report (completed visit)" aria-disabled="true" className={disabledActionClass} disabled>
-              <FilePlus2 className="size-4 sm:size-[18px]" aria-hidden="true" />
+              <FilePlus2 className="size-3.5 sm:size-[18px]" aria-hidden="true" />
             </button>
           ) : visit.stageResponseHref ? (
             <Link href={visit.stageResponseHref} aria-label="Open report entry" className={actionClass}>
-              <FilePlus2 className="size-4 sm:size-[18px]" aria-hidden="true" />
+              <FilePlus2 className="size-3.5 sm:size-[18px]" aria-hidden="true" />
             </Link>
           ) : (
             <button type="button" aria-label="Open report entry" className={disabledActionClass} disabled>
-              <FilePlus2 className="size-4 sm:size-[18px]" aria-hidden="true" />
+              <FilePlus2 className="size-3.5 sm:size-[18px]" aria-hidden="true" />
             </button>
           )}
           {isCompleted ? (
             <button type="button" aria-label="Open project location in Google Maps (completed visit)" aria-disabled="true" className={disabledActionClass} disabled>
-              <MapPinned className="size-4 sm:size-[18px]" aria-hidden="true" />
+              <MapPinned className="size-3.5 sm:size-[18px]" aria-hidden="true" />
             </button>
           ) : visit.googleMapsUrl ? (
             <a
@@ -197,11 +197,11 @@ function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
               aria-label="Open project location in Google Maps"
               className={actionClass}
             >
-              <MapPinned className="size-4 sm:size-[18px]" aria-hidden="true" />
+              <MapPinned className="size-3.5 sm:size-[18px]" aria-hidden="true" />
             </a>
           ) : (
             <button type="button" aria-label="Open project location in Google Maps" className={disabledActionClass} disabled>
-              <MapPinned className="size-4 sm:size-[18px]" aria-hidden="true" />
+              <MapPinned className="size-3.5 sm:size-[18px]" aria-hidden="true" />
             </button>
           )}
         </div>
@@ -321,7 +321,7 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
             </div>
           </div>
         ) : data.requests.length ? (
-          <div className="space-y-1.5 lg:space-y-2.5">
+          <div className="space-y-1 lg:space-y-2.5">
             {data.requests.map((request) => (
               <RequestRow
                 key={request.id}
@@ -347,7 +347,7 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
           <span className="text-xs tabular-nums text-muted-foreground">{data.visits.length}</span>
         </div>
         {data.visits.length ? (
-          <div className="space-y-2">
+          <div className="space-y-1.5 sm:space-y-2">
             {data.visits.map((visit) => <VisitRow key={visit.id} visit={visit} />)}
           </div>
         ) : (
