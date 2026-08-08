@@ -38,13 +38,14 @@ export function AppShell({
   const isMemberLetters = pathname === "/documents" && isMember
   const isMemberProjectDetail = /^\/projects\/[^/]+\/?$/.test(pathname) && pathname !== "/projects/new" && isMember
   const isMemberProjectStages = /^\/projects\/[^/]+\/stages\/?$/.test(pathname) && isMember
+  const isMemberStageReportsList = /^\/projects\/[^/]+\/stages\/[^/]+\/?$/.test(pathname) && isMember
   const isMemberStageReport = /^\/projects\/[^/]+\/stages\/[^/]+\/reports\/new$/.test(pathname) && isMember
   const isMemberReportTranslation = /^\/projects\/[^/]+\/stages\/[^/]+\/reports\/[^/]+\/translate\/?$/.test(pathname) && isMember
   const isMemberDashboard = (pathname === "/" || pathname === "/memberhomepage") && isMember
   const isMemberMobileShell =
-    isMemberDashboard || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberProjectDetail || isMemberProjectStages || isMemberStageReport || isMemberReportTranslation
+    isMemberDashboard || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberProjectDetail || isMemberProjectStages || isMemberStageReportsList || isMemberStageReport || isMemberReportTranslation
   const isCompactMemberMobileShell =
-    isMemberHomepage || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberProjectDetail || isMemberProjectStages || isMemberStageReport || isMemberReportTranslation
+    isMemberHomepage || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberProjectDetail || isMemberProjectStages || isMemberStageReportsList || isMemberStageReport || isMemberReportTranslation
   const showMemberBottomNavigation = isMemberMobileShell && !isMemberStageReport && !isMemberReportTranslation
 
   const activeProjectName =

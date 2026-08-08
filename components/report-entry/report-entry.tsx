@@ -21,6 +21,10 @@ function stageNumber(index: number) {
   return String(index + 1).padStart(2, "0")
 }
 
+function stageDisplayName(name: string) {
+  return name.replace(/^\s*\d+\.\s*/, "")
+}
+
 export function ReportEntry({
   projects,
   errorCode,
@@ -226,7 +230,7 @@ export function ReportEntry({
                             >
                               {stageNumber(index)}
                             </span>
-                            <span className="min-w-0 flex-1 text-sm font-semibold leading-snug">{stage.name}</span>
+                            <span className="min-w-0 flex-1 text-sm font-semibold leading-snug">{stageDisplayName(stage.name)}</span>
                           </button>
                         )
                       })}
