@@ -19,7 +19,7 @@ function spark(value: number): number[] {
 }
 
 const emptyDashboard: DashboardData = {
-  kpis: { totalProjects: 0, openNcrs: 0, openInspections: 0, openRfis: 0 },
+  kpis: { totalProjects: 0, openNcrs: 0, openInspections: 0, wirCount: 0 },
   ncrDonut: [],
   inspectionDonut: [],
   completedVisitsBySupervisor: [],
@@ -74,12 +74,12 @@ export default async function DashboardPage({
       spark: spark(data.kpis.openInspections),
     },
     {
-      key: "rfis",
-      label: "Open RFIs",
-      value: data.kpis.openRfis,
+      key: "wir",
+      label: "WIR",
+      value: data.kpis.wirCount,
       tone: "green",
-      icon: "rfi",
-      spark: spark(data.kpis.openRfis),
+      icon: "wir",
+      spark: spark(data.kpis.wirCount),
     },
   ]
 

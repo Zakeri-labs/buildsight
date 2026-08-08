@@ -6,6 +6,7 @@ import { getSiteVisitTaskFeed } from "@/lib/site-visits/server"
 import { getReportCcNotificationFeed } from "@/lib/report-cc/server"
 import { getViewerOwnedProjectIds, isProjectUuid } from "@/lib/auth/project-access"
 import type { DashboardDateRange } from "@/lib/dashboard/date-range"
+import { normalizeDocumentType } from "@/lib/documents/document-types"
 
 import { DEMO_STAGE_MANAGEMENT_DATA } from "@/lib/db/stages"
 import { getFallbackStageChecklist } from "@/lib/stages/execution"
@@ -544,7 +545,7 @@ export type DashboardData = {
     totalProjects: number
     openNcrs: number
     openInspections: number
-    openRfis: number
+    wirCount: number
   }
   ncrDonut: { label: string; value: number; color: string }[]
   inspectionDonut: { label: string; value: number; color: string }[]
@@ -572,7 +573,7 @@ export type DashboardData = {
 
 function createEmptyDashboard(): DashboardData {
   return {
-    kpis: { totalProjects: 0, openNcrs: 0, openInspections: 0, openRfis: 0 },
+    kpis: { totalProjects: 0, openNcrs: 0, openInspections: 0, wirCount: 0 },
     ncrDonut: [],
     inspectionDonut: [],
     completedVisitsBySupervisor: [],
@@ -618,6 +619,7 @@ export async function getDashboardData(
       inspections,
       completedSiteVisits,
       rfis,
+      documents,
       vos,
       tasks,
       reviewFeed,
@@ -629,6 +631,7 @@ export async function getDashboardData(
       fetchScopedRows("inspections", "project_id, status", ids),
       fetchScopedCompletedSiteVisitsByActivityRange(ids, activityDateRange),
       fetchScopedRows("rfis", "project_id, status", ids),
+      fetchScopedRows("documents", "id, project_id, document_type", ids),
       fetchScopedRows("variation_orders", "project_id", ids),
       fetchScopedRows("tasks", "id, project_id, action, type, reference, due_label, due_tone, sort_order", ids),
       canLoadProjectFeeds
@@ -654,7 +657,11 @@ export async function getDashboardData(
     }
     const ncrByStatus = countBy(ncrs, "status")
     const inspByStatus = countBy(inspections, "status")
-    const rfiByStatus = countBy(rfis, "status")
+    const wirCount = new Set(
+      (documents ?? [])
+        .filter((document: any) => normalizeDocumentType(document.document_type) === "wir_ir")
+        .map((document: any) => document.id),
+    ).size
 
     const ncrDonut = [
       { label: "Open", value: ncrByStatus.get("open") ?? 0, color: "var(--destructive)" },
@@ -904,7 +911,7 @@ export async function getDashboardData(
         openNcrs: ncrByStatus.get("open") ?? 0,
         openInspections:
           (inspByStatus.get("pending") ?? 0) + (inspByStatus.get("in-progress") ?? 0),
-        openRfis: rfiByStatus.get("open") ?? 0,
+        wirCount,
       },
       ncrDonut,
       inspectionDonut,

@@ -1,4 +1,4 @@
-import { FolderOpen, TriangleAlert, ClipboardCheck, CircleHelp, ArrowUp, ArrowDown } from "lucide-react"
+import { FolderOpen, TriangleAlert, ClipboardCheck, FileCheck2, ArrowUp, ArrowDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export type KpiTone = "blue" | "red" | "amber" | "green"
@@ -8,7 +8,7 @@ export type KpiCardData = {
   label: string
   value: number
   tone: KpiTone
-  icon: "projects" | "ncr" | "inspection" | "rfi"
+  icon: "projects" | "ncr" | "inspection" | "wir"
   caption?: string
   trend?: { direction: "up" | "down"; value: number; good: boolean }
   spark: number[]
@@ -18,7 +18,7 @@ const iconMap = {
   projects: FolderOpen,
   ncr: TriangleAlert,
   inspection: ClipboardCheck,
-  rfi: CircleHelp,
+  wir: FileCheck2,
 } as const
 
 const toneTile: Record<KpiTone, string> = {
