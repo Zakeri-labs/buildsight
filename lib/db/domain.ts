@@ -19,6 +19,7 @@ export type DomainProject = {
   latitude: number | null
   longitude: number | null
   status: string
+  supervisingOrganizationId: string | null
   assignedSupervisorId: string | null
   projectType: string | null
   supervisionType: string | null
@@ -405,6 +406,8 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
     latitude: p.latitude,
     longitude: p.longitude,
     status: p.status,
+    supervisingOrganizationId:
+      typeof p.supervising_organization_id === "string" ? p.supervising_organization_id : null,
     assignedSupervisorId: typeof p.assigned_supervisor_id === "string" ? p.assigned_supervisor_id : null,
     projectType: p.project_type,
     supervisionType: p.supervision_type,
@@ -569,12 +572,40 @@ export type DashboardData = {
     id: string
     name: string
     image: string | null
+    ownerClient: string | null
+    supervisor: string | null
     role: string
-    ncrs: number
     inspections: number
     rfis: number
     vos: number
     progress: number
+    canEdit: boolean
+    edit: {
+      code: string | null
+      address: string | null
+      areaDistrict: string | null
+      projectType: string | null
+      supervisionType: string | null
+      supervisionTypeOther: string | null
+      status: string
+      plotNo: string | null
+      supervisionStartDate: string | null
+      priority: string | null
+      includedStructureVisits: number | null
+      includedFinishingVisits: number | null
+      structureSupervisionFee: number | null
+      finishingSupervisionFee: number | null
+      receivedAmount: number | null
+      outstandingAmount: number | null
+      nextPaymentAmount: number | null
+      nextPaymentDueDate: string | null
+      invoiceReferencePaymentNote: string | null
+      initialRemarks: string | null
+      description: string | null
+      latitude: number | null
+      longitude: number | null
+      assignedSupervisorId: string | null
+    } | null
   }[]
   tasks: TaskRow[]
   scopeName: string | null
@@ -619,6 +650,10 @@ export async function getDashboardData(
     } = await resolveScopedProjects(validOrgId, projectId, validUserId)
     const names = nameMap(projects)
     const canLoadProjectFeeds = !requestedSpecificProject || Boolean(selectedProjectId)
+    const scopedSupervisingOrgIds = validUuidList(
+      scoped.map((project) => project.supervisingOrganizationId),
+    )
+    const admin = createAdminClient()
     const emptyReviewFeed = { canReview: false, items: [] }
     const emptySiteVisitFeed = { canManage: false, items: [] }
     const emptyReportCcFeed = { canNotify: false, items: [] }
@@ -635,6 +670,9 @@ export async function getDashboardData(
       siteVisitFeed,
       reportCcFeed,
       termResponses,
+      projectOwners,
+      dashboardOrgAdminMemberships,
+      dashboardProjectAdminMemberships,
     ] = await Promise.all([
       fetchScopedRows("ncrs", "project_id, status", ids),
       fetchScopedRows("inspections", "project_id, status", ids),
@@ -657,7 +695,56 @@ export async function getDashboardData(
         "id, project_id, project_stage_id, project_stage_term_id, site_visit_request_id, visit_number, report_title, status, submitted_at, updated_at, created_at",
         ids,
       ),
+      ids.length
+        ? admin
+            .from("project_owners")
+            .select("id, project_id, owner_order, name")
+            .in("project_id", ids)
+            .order("owner_order", { ascending: true })
+            .order("id", { ascending: true })
+            .then(({ data, error }) => {
+              if (error) throw error
+              return data ?? []
+            })
+        : Promise.resolve([] as any[]),
+      scopedSupervisingOrgIds.length
+        ? admin
+            .from("organization_memberships")
+            .select("organization_id")
+            .eq("user_id", validUserId)
+            .eq("role", "org_admin")
+            .eq("status", "active")
+            .in("organization_id", scopedSupervisingOrgIds)
+            .then(({ data, error }) => {
+              if (error) throw error
+              return data ?? []
+            })
+        : Promise.resolve([] as any[]),
+      ids.length
+        ? admin
+            .from("project_user_memberships")
+            .select("project_id")
+            .eq("user_id", validUserId)
+            .eq("access_role", "project_admin")
+            .eq("status", "active")
+            .in("project_id", ids)
+            .then(({ data, error }) => {
+              if (error) throw error
+              return data ?? []
+            })
+        : Promise.resolve([] as any[]),
     ])
+
+    const editableOrganizationIds = new Set(
+      (dashboardOrgAdminMemberships ?? [])
+        .map((membership: any) => asUuid(membership.organization_id))
+        .filter((value): value is string => Boolean(value)),
+    )
+    const editableProjectIds = new Set(
+      (dashboardProjectAdminMemberships ?? [])
+        .map((membership: any) => asUuid(membership.project_id))
+        .filter((value): value is string => Boolean(value)),
+    )
 
     const countBy = (rows: any[], field: string) => {
       const m = new Map<string, number>()
@@ -698,7 +785,6 @@ export async function getDashboardData(
     const completedVisitIds = validUuidList(
       (completedSiteVisits as any[]).map((visit) => visit.id),
     )
-    const admin = createAdminClient()
     const { data: completedVisitAssignees, error: completedVisitAssigneesError } = completedVisitIds.length
       ? await admin
           .from("site_visit_request_assignees")
@@ -897,8 +983,15 @@ export async function getDashboardData(
       })
       .slice(0, 4)
 
+    const firstOwnerByProject = new Map<string, string>()
+    for (const owner of projectOwners ?? []) {
+      const ownerProjectId = asUuid((owner as any).project_id)
+      const ownerName = typeof (owner as any).name === "string" ? (owner as any).name.trim() : ""
+      if (!ownerProjectId || !ownerName || firstOwnerByProject.has(ownerProjectId)) continue
+      firstOwnerByProject.set(ownerProjectId, ownerName)
+    }
+
     const projectRows = scoped.map((p) => {
-      const pNcrs = ncrs.filter((r) => r.project_id === p.id).length
       const pStageReportsCount = (termResponses ?? []).filter((r: any) => r.project_id === p.id).length
       let demoReportsCount = 0
       if (DEMO_STAGE_MANAGEMENT_DATA?.stages) {
@@ -913,16 +1006,53 @@ export async function getDashboardData(
       )
       const pRfis = rfis.filter((r) => r.project_id === p.id).length
       const pVos = vos.filter((r) => r.project_id === p.id).length
+      const supervisor = p.assignedSupervisorId
+        ? supervisorNameById.get(p.assignedSupervisorId) ?? null
+        : null
+      const canEdit =
+        editableProjectIds.has(p.id) ||
+        Boolean(p.supervisingOrganizationId && editableOrganizationIds.has(p.supervisingOrganizationId))
+
       return {
         id: p.id,
         name: p.name,
         image: p.image,
+        ownerClient: firstOwnerByProject.get(p.id) ?? null,
+        supervisor,
         role: p.ourRole ?? "Supervising Consultant",
-        ncrs: pNcrs,
         inspections: pInsps,
         rfis: pRfis,
         vos: pVos,
         progress: p.progressActual,
+        canEdit,
+        edit: canEdit
+          ? {
+              code: p.code,
+              address: p.location,
+              areaDistrict: p.region,
+              projectType: p.projectType,
+              supervisionType: p.supervisionType,
+              supervisionTypeOther: p.supervisionTypeOther,
+              status: p.status,
+              plotNo: p.plotNo,
+              supervisionStartDate: p.supervisionStartDate,
+              priority: p.priority,
+              includedStructureVisits: p.includedStructureVisits,
+              includedFinishingVisits: p.includedFinishingVisits,
+              structureSupervisionFee: p.structureSupervisionFee,
+              finishingSupervisionFee: p.finishingSupervisionFee,
+              receivedAmount: p.receivedAmount,
+              outstandingAmount: p.outstandingAmount,
+              nextPaymentAmount: p.nextPaymentAmount,
+              nextPaymentDueDate: p.nextPaymentDueDate,
+              invoiceReferencePaymentNote: p.invoiceReferencePaymentNote,
+              initialRemarks: p.initialRemarks,
+              description: p.description,
+              latitude: p.latitude,
+              longitude: p.longitude,
+              assignedSupervisorId: p.assignedSupervisorId,
+            }
+          : null,
       }
     })
 

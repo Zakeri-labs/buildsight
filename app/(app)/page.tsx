@@ -7,9 +7,11 @@ import { RecentSupervisorReportsCard } from "@/components/dashboard/recent-super
 import { ProjectsOverview } from "@/components/dashboard/projects-overview"
 import { MyTasks } from "@/components/dashboard/my-tasks"
 import { requireOnboarded } from "@/lib/auth/session"
+import { canAdministerOrganization } from "@/lib/auth/guards"
 import { getSelectedProjectId } from "@/lib/project-scope"
 import { getDashboardData, type DashboardData } from "@/lib/db/domain"
 import { resolveDashboardDateRange } from "@/lib/dashboard/date-range"
+import { getProjectSupervisorCandidates } from "@/lib/projects/supervisor-candidates-server"
 
 // Deterministic upward sparkline that lands on `value`.
 function spark(value: number): number[] {
@@ -54,6 +56,13 @@ export default async function DashboardPage({
   const data = orgId
     ? await getDashboardData(orgId, projectId, session.userId, dateRange)
     : emptyDashboard
+  const canManageProjectSupervisors = session.supervisingOrg
+    ? await canAdministerOrganization(session.supervisingOrg.id)
+    : false
+  const supervisorOptions =
+    orgId && canManageProjectSupervisors && data.projects.some((project) => project.canEdit)
+      ? await getProjectSupervisorCandidates(orgId)
+      : []
 
   const kpis: KpiCardData[] = [
     {
@@ -107,7 +116,11 @@ export default async function DashboardPage({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <ProjectsOverview projects={data.projects} selectedProjectId={projectId} />
+          <ProjectsOverview
+            projects={data.projects}
+            selectedProjectId={projectId}
+            supervisorOptions={supervisorOptions}
+          />
         </div>
         <MyTasks tasks={data.tasks} />
       </div>
