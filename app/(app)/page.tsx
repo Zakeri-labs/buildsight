@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation"
 import { DateRangePill } from "@/components/dashboard/date-range-pill"
 import { PortfolioKpis, type KpiCardData } from "@/components/dashboard/portfolio-kpis"
-import { StatusDonutCard } from "@/components/dashboard/status-donut-card"
 import { CompletedVisitsBySupervisorCard } from "@/components/dashboard/inspections-by-supervisor-card"
 import { RecentSupervisorReportsCard } from "@/components/dashboard/recent-supervisor-reports-card"
 import { ProjectsOverview } from "@/components/dashboard/projects-overview"
@@ -105,8 +104,7 @@ export default async function DashboardPage({
 
       <PortfolioKpis kpis={kpis} />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <StatusDonutCard title="NCR Status" slices={data.ncrDonut} href="/ncrs" linkLabel="View all NCRs" />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <CompletedVisitsBySupervisorCard
           supervisors={data.completedVisitsBySupervisor}
           dateRangeLabel={dateRange.label}
