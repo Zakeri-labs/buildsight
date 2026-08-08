@@ -33,10 +33,13 @@ export function AppShell({
   const isMemberProjects = pathname === "/projects" && isMember
   const isMemberCalendar = pathname.startsWith("/calendar") && isMember
   const isMemberReportEntry = pathname === "/report-entry" && isMember
+  const isMemberSettings = pathname.startsWith("/settings") && isMember
   const isMemberStageReport = /^\/projects\/[^/]+\/stages\/[^/]+\/reports\/new$/.test(pathname) && isMember
   const isMemberDashboard = (pathname === "/" || pathname === "/memberhomepage") && isMember
-  const isMemberMobileShell = isMemberDashboard || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberStageReport
-  const isCompactMemberMobileShell = isMemberHomepage || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberStageReport
+  const isMemberMobileShell =
+    isMemberDashboard || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberStageReport
+  const isCompactMemberMobileShell =
+    isMemberHomepage || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberStageReport
   const showMemberBottomNavigation = isMemberMobileShell && !isMemberStageReport
 
   const activeProjectName =

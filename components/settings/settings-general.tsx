@@ -9,75 +9,99 @@ import { ToggleGroupLike } from "@/components/settings/language-toggle"
 import { ProfileAvatar } from "@/components/profile/profile-avatar"
 import { AvatarManagementDialog } from "@/components/profile/avatar-management-dialog"
 import { useCurrentUser } from "@/components/current-user-provider"
+import { cn } from "@/lib/utils"
 
 export function SettingsGeneral() {
   const { t } = useI18n()
   const currentUser = useCurrentUser()
+  const isMember = currentUser.role === "org_member"
+
+  const mobileCardClass = isMember ? "[--card-spacing:--spacing(3)] md:[--card-spacing:--spacing(4)]" : undefined
+  const fieldClass = cn("flex min-w-0 flex-col gap-2", isMember && "gap-1.5 md:gap-2")
+  const labelClass = isMember ? "text-xs md:text-sm" : undefined
+  const inputClass = isMember ? "min-w-0" : undefined
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card>
+    <div className={cn("flex min-w-0 flex-col gap-6", isMember && "gap-4 md:gap-6")}>
+      <Card className={mobileCardClass}>
         <CardHeader>
           <CardTitle>{t.settings.language}</CardTitle>
           <CardDescription>{t.settings.languageDesc}</CardDescription>
         </CardHeader>
         <CardContent>
-          <ToggleGroupLike />
+          <ToggleGroupLike compactMobile={isMember} />
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={mobileCardClass}>
         <CardHeader>
           <CardTitle>{t.settings.profile}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="mb-6 flex flex-col gap-4 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
+          <div
+            className={cn(
+              "mb-6 flex flex-col gap-4 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between",
+              isMember &&
+                "mb-4 min-w-0 gap-3 p-3 min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between md:mb-6 md:gap-4 md:p-4",
+            )}
+          >
+            <div className={cn("flex items-center gap-4", isMember && "min-w-0 gap-3 md:gap-4")}>
               <ProfileAvatar
                 name={currentUser.name}
                 email={currentUser.email}
                 avatarUrl={currentUser.avatarUrl}
                 size="xl"
+                className={isMember ? "size-14 shrink-0 md:size-20" : undefined}
+                fallbackClassName={isMember ? "text-base md:text-xl" : undefined}
               />
-              <div>
-                <p className="font-semibold">{currentUser.name}</p>
-                <p className="text-sm text-muted-foreground">{currentUser.email}</p>
-                <p className="mt-1 text-xs text-muted-foreground">JPG, PNG, or WEBP. Maximum 5 MB.</p>
+              <div className="min-w-0">
+                <p className="truncate font-semibold">{currentUser.name}</p>
+                <p className="truncate text-sm text-muted-foreground">{currentUser.email}</p>
+                <p className={cn("mt-1 text-xs text-muted-foreground", isMember && "hidden min-[430px]:block md:block")}>
+                  JPG, PNG, or WEBP. Maximum 5 MB.
+                </p>
               </div>
             </div>
-            <AvatarManagementDialog
-              targetUser={{
-                id: currentUser.id,
-                name: currentUser.name,
-                email: currentUser.email,
-                avatarUrl: currentUser.avatarUrl,
-              }}
-              triggerLabel="Change profile image"
-              triggerVariant="outline"
-              onSaved={currentUser.setAvatarUrl}
-            />
+            <div className={cn(isMember && "w-full shrink-0 min-[380px]:w-auto [&_button]:w-full min-[380px]:[&_button]:w-auto")}>
+              <AvatarManagementDialog
+                targetUser={{
+                  id: currentUser.id,
+                  name: currentUser.name,
+                  email: currentUser.email,
+                  avatarUrl: currentUser.avatarUrl,
+                }}
+                triggerLabel="Change profile image"
+                triggerVariant="outline"
+                onSaved={currentUser.setAvatarUrl}
+              />
+            </div>
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="fullName">{t.settings.fullName}</Label>
-              <Input id="fullName" defaultValue={currentUser.name} />
+          <div className={cn("grid gap-5 sm:grid-cols-2", isMember && "grid-cols-1 gap-3 min-[360px]:grid-cols-2 md:gap-5")}>
+            <div className={fieldClass}>
+              <Label htmlFor="fullName" className={labelClass}>{t.settings.fullName}</Label>
+              <Input id="fullName" defaultValue={currentUser.name} className={inputClass} />
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="email">{t.settings.email}</Label>
-              <Input id="email" type="email" defaultValue={currentUser.email} readOnly />
+            <div className={fieldClass}>
+              <Label htmlFor="email" className={labelClass}>{t.settings.email}</Label>
+              <Input id="email" type="email" defaultValue={currentUser.email} readOnly className={inputClass} />
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="jobTitle">{t.settings.jobTitle}</Label>
-              <Input id="jobTitle" defaultValue="Project Manager" />
+            <div className={fieldClass}>
+              <Label htmlFor="jobTitle" className={labelClass}>{t.settings.jobTitle}</Label>
+              <Input id="jobTitle" defaultValue="Project Manager" className={inputClass} />
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="timezone">{t.settings.timezone}</Label>
-              <Input id="timezone" defaultValue="(GMT+4) Gulf Standard Time" />
+            <div className={fieldClass}>
+              <Label htmlFor="timezone" className={labelClass}>{t.settings.timezone}</Label>
+              <Input id="timezone" defaultValue="(GMT+4) Gulf Standard Time" className={inputClass} />
             </div>
           </div>
-          <div className="mt-6 flex justify-end">
-            <Button className="bg-accent text-accent-foreground hover:bg-accent/90">
+          <div className={cn("mt-6 flex justify-end", isMember && "mt-4 md:mt-6")}>
+            <Button
+              className={cn(
+                "bg-accent text-accent-foreground hover:bg-accent/90",
+                isMember && "w-full min-[420px]:w-auto",
+              )}
+            >
               {t.settings.save}
             </Button>
           </div>
