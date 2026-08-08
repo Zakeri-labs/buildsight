@@ -11,5 +11,12 @@ export default async function ReportTranslationPage({ params }: { params: Promis
     loadReportCcRecipients(projectId, reportId, "report"),
   ])
   if (!data) notFound()
-  return <StageTranslationViewer data={data} ccRecipients={ccRecipients} appendTranslatedPdfClosing />
+  return (
+    <StageTranslationViewer
+      data={data}
+      ccRecipients={ccRecipients}
+      appendTranslatedPdfClosing
+      memberMobileView={session.memberships[0]?.role === "org_member"}
+    />
+  )
 }

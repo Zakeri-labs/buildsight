@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
   Download,
   FileText,
@@ -197,10 +198,12 @@ export function StageTranslationViewer({
   data,
   ccRecipients,
   appendTranslatedPdfClosing = false,
+  memberMobileView = false,
 }: {
   data: StageTranslationPageData
   ccRecipients: ReportCcRecipient[]
   appendTranslatedPdfClosing?: boolean
+  memberMobileView?: boolean
 }) {
   const { locale } = useI18n()
   const copy = COPY[locale]
@@ -208,6 +211,7 @@ export function StageTranslationViewer({
   const [busy, setBusy] = useState<"generate" | "original" | "arabic" | "bilingual" | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [mobileLanguage, setMobileLanguage] = useState<"en" | "ar">("en")
   const labelsEn = COPY.en
   const labelsAr = COPY.ar
   const translated = translation?.translatedContent ?? null
@@ -307,14 +311,58 @@ export function StageTranslationViewer({
   const backHref = isDirectStage
     ? `/projects/${data.project.id}/stages/${data.stage.id}/reports/${data.response.id}`
     : `/projects/${data.project.id}/stages/${data.stage.id}/terms/${data.term.id}/reports/${data.response.id}`
+  const reportToRecipients = ccRecipients.slice(0, 1)
+  const ccToRecipients = ccRecipients.slice(1)
+
+  function selectMobileLanguage(language: "en" | "ar") {
+    setMobileLanguage(language)
+    requestAnimationFrame(() => {
+      document.getElementById("mobile-translation-document-start")?.scrollIntoView({ block: "start" })
+    })
+  }
 
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5">
+    <div className={cn("mx-auto flex w-full max-w-[1600px] flex-col gap-5", memberMobileView && "max-md:gap-3")}>
       <Link href={backHref} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4 flip-rtl" />{copy.back}
       </Link>
 
-      <Card className="overflow-hidden py-0">
+      {memberMobileView ? (
+        <Card className="overflow-hidden py-0 md:hidden">
+          <CardContent className="space-y-3 p-3.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-primary">
+                  <Languages className="size-3.5" />{copy.eyebrow}
+                </div>
+                <h1 className="text-lg font-semibold leading-tight tracking-tight">{copy.title}</h1>
+              </div>
+              <Badge variant="outline" className={cn("shrink-0 text-[10px]", statusTone(data.response.status as any))}>
+                {statusLabel(data.response.status as any, locale)}
+              </Badge>
+            </div>
+
+            <div className="min-w-0 space-y-1 text-sm">
+              <p className="font-semibold text-foreground">{data.project.name}</p>
+              <p className="break-words text-xs font-medium text-muted-foreground">{data.stage.name}</p>
+              <p className="break-words text-xs text-muted-foreground">{data.response.reportTitle}</p>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                <span>{locale === "ar" ? "الزيارة" : "Visit"} {String(data.response.visitNumber || 0).padStart(3, "0")}</span>
+                <span aria-hidden="true">•</span>
+                <span>{formatDate(data.response.createdAt, locale)}</span>
+              </div>
+              <p className="break-all text-xs font-medium text-foreground">{data.response.reportNumber}</p>
+            </div>
+
+            <Button size="sm" className="h-9 w-full" onClick={() => void generateTranslation()} disabled={busy !== null}>
+              {busy === "generate" ? <Loader2 className="size-4 animate-spin" /> : translation ? <RefreshCw className="size-4" /> : <Sparkles className="size-4" />}
+              {busy === "generate" ? copy.generating : translation ? copy.regenerate : copy.generate}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card className={cn("overflow-hidden py-0", memberMobileView && "hidden md:flex")}>
         <div className="border-b bg-card px-5 py-5 sm:px-6">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0">
@@ -355,11 +403,71 @@ export function StageTranslationViewer({
         </CardContent>
       </Card>
 
-      <CcRecipientsReadOnly recipients={ccRecipients} title="CC To" compact />
+      {memberMobileView ? (
+        <details className="group overflow-hidden rounded-xl border bg-card md:hidden">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3.5 py-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+            <span>{locale === "ar" ? "المستلمون" : "Recipients"} ({ccRecipients.length})</span>
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="border-t px-3.5 py-3">
+            <div className="space-y-3">
+              <MobileRecipientGroup
+                label={locale === "ar" ? "إلى" : "TO"}
+                recipients={reportToRecipients}
+                empty={locale === "ar" ? "لم يتم تحديد مستلم رئيسي." : "No primary recipient selected."}
+              />
+              <MobileRecipientGroup
+                label={locale === "ar" ? "نسخة" : "CC"}
+                recipients={ccToRecipients}
+                empty={locale === "ar" ? "لا توجد نسخ إضافية." : "No CC recipients selected."}
+              />
+            </div>
+          </div>
+        </details>
+      ) : null}
 
-      {error ? <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"><AlertCircle className="mt-0.5 size-4 shrink-0" />{error}</div> : null}
-      {translationIsStale ? <div role="status" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"><AlertCircle className="mt-0.5 size-4 shrink-0" />{copy.stale}</div> : null}
-      {success ? <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"><CheckCircle2 className="mt-0.5 size-4 shrink-0" />{success}</div> : null}
+      <div className={memberMobileView ? "hidden md:block" : undefined}>
+        <CcRecipientsReadOnly recipients={ccRecipients} title="CC To" compact />
+      </div>
+
+      {error ? <div role="alert" className={cn("flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200", memberMobileView && "max-md:px-3 max-md:py-2.5 max-md:text-xs")}><AlertCircle className="mt-0.5 size-4 shrink-0" />{error}</div> : null}
+      {translationIsStale ? <div role="status" className={cn("flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200", memberMobileView && "max-md:px-3 max-md:py-2.5 max-md:text-xs")}><AlertCircle className="mt-0.5 size-4 shrink-0" />{copy.stale}</div> : null}
+      {success ? <div className={cn("flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200", memberMobileView && "max-md:px-3 max-md:py-2.5 max-md:text-xs")}><CheckCircle2 className="mt-0.5 size-4 shrink-0" />{success}</div> : null}
+
+      {memberMobileView ? (
+        <div
+          className="sticky top-12 z-30 -mx-1 border-y bg-background/95 px-1 py-2 backdrop-blur md:hidden"
+        >
+          <div className="grid grid-cols-2 rounded-xl bg-muted p-1" role="tablist" aria-label="Document language">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobileLanguage === "en"}
+              onClick={() => selectMobileLanguage("en")}
+              className={cn(
+                "h-8 rounded-lg px-3 text-xs font-semibold transition-colors",
+                mobileLanguage === "en" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
+              )}
+            >
+              English
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobileLanguage === "ar"}
+              onClick={() => selectMobileLanguage("ar")}
+              className={cn(
+                "h-8 rounded-lg px-3 font-arabic text-xs font-semibold transition-colors",
+                mobileLanguage === "ar" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
+              )}
+            >
+              العربية
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {memberMobileView ? <div id="mobile-translation-document-start" className="scroll-mt-24 md:hidden" aria-hidden="true" /> : null}
 
       {translated ? (
         <MirroredBilingualReport
@@ -373,10 +481,11 @@ export function StageTranslationViewer({
           generatedAt={translation?.generatedAt ?? null}
           sourcePdf={sourcePdf}
           sourcePdfTitle={copy.sourcePdf}
+          mobileLanguage={memberMobileView ? mobileLanguage : undefined}
         />
       ) : (
         <div className="grid items-start gap-5 lg:grid-cols-2">
-          <div className="min-w-0 space-y-5">
+          <div className={cn("min-w-0 space-y-5", memberMobileView && mobileLanguage === "ar" && "max-md:hidden")}>
             <LanguageReport
               language="en"
               title={copy.original}
@@ -384,15 +493,16 @@ export function StageTranslationViewer({
               content={data.response.content}
               labels={labelsEn}
               generatedAt={translation?.generatedAt ?? null}
+              mobileCompact={memberMobileView}
             />
             {sourcePdf ? <SourcePdfViewer data={data} attachment={sourcePdf} title={copy.sourcePdf} /> : null}
           </div>
-          <Card className="min-h-[560px] py-0">
-            <CardContent className="flex min-h-[560px] flex-col items-center justify-center px-6 text-center">
-              <span className="mb-5 flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Languages className="size-8" /></span>
-              <h2 className="text-xl font-semibold">{copy.pendingTitle}</h2>
-              <p className="mt-2 max-w-lg text-sm text-muted-foreground">{copy.pendingHint}</p>
-              <Button className="mt-5" onClick={() => void generateTranslation()} disabled={busy !== null}>
+          <Card className={cn("min-h-[560px] py-0", memberMobileView && mobileLanguage === "en" && "max-md:hidden", memberMobileView && "max-md:min-h-0")}>
+            <CardContent className={cn("flex min-h-[560px] flex-col items-center justify-center px-6 text-center", memberMobileView && "max-md:min-h-0 max-md:px-5 max-md:py-8")}>
+              <span className={cn("mb-5 flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary", memberMobileView && "max-md:mb-3 max-md:size-12")}><Languages className={memberMobileView ? "size-6 md:size-8" : "size-8"} /></span>
+              <h2 className={cn("text-xl font-semibold", memberMobileView && "max-md:text-base")}>{copy.pendingTitle}</h2>
+              <p className={cn("mt-2 max-w-lg text-sm text-muted-foreground", memberMobileView && "max-md:text-xs")}>{copy.pendingHint}</p>
+              <Button className={cn("mt-5", memberMobileView && "max-md:mt-4 max-md:h-9")} onClick={() => void generateTranslation()} disabled={busy !== null}>
                 {busy === "generate" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}{busy === "generate" ? copy.generating : copy.generate}
               </Button>
             </CardContent>
@@ -400,6 +510,55 @@ export function StageTranslationViewer({
         </div>
       )}
 
+      {memberMobileView ? (
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-18px_rgba(0,0,0,0.45)] backdrop-blur md:hidden">
+          <div className="mx-auto grid h-14 max-w-lg grid-cols-3 gap-1.5 px-2 py-2">
+            <Button variant="outline" size="sm" className="h-10 min-w-0 px-2 text-xs" onClick={() => void downloadPdf("original")} disabled={busy !== null}>
+              {busy === "original" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+              <span>EN</span>
+            </Button>
+            <Button variant="outline" size="sm" className="h-10 min-w-0 px-2 text-xs" onClick={() => void downloadPdf("arabic")} disabled={busy !== null}>
+              {busy === "arabic" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+              <span>AR</span>
+            </Button>
+            <Button variant="outline" size="sm" className="h-10 min-w-0 px-2 text-xs" onClick={() => void downloadPdf("bilingual")} disabled={busy !== null}>
+              {busy === "bilingual" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+              <span>EN / AR</span>
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function MobileRecipientGroup({
+  label,
+  recipients,
+  empty,
+}: {
+  label: string
+  recipients: ReportCcRecipient[]
+  empty: string
+}) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+      {recipients.length ? (
+        <div className="space-y-1.5">
+          {recipients.map((recipient) => {
+            const details = [recipient.role, recipient.company].map((value) => value?.trim()).filter(Boolean).join(" · ")
+            return (
+              <div key={recipient.id} className="rounded-lg border bg-muted/10 px-2.5 py-2">
+                <p className="truncate text-xs font-semibold">{recipient.name}</p>
+                {details ? <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{details}</p> : null}
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">{empty}</p>
+      )}
     </div>
   )
 }
@@ -419,6 +578,7 @@ function MirroredBilingualReport({
   generatedAt,
   sourcePdf,
   sourcePdfTitle,
+  mobileLanguage,
 }: {
   data: StageTranslationPageData
   english: TranslationReportContent
@@ -430,6 +590,7 @@ function MirroredBilingualReport({
   generatedAt: string | null
   sourcePdf: StageTranslationPageData["response"]["attachments"][number] | null
   sourcePdfTitle: string
+  mobileLanguage?: "en" | "ar"
 }) {
   const evidence = data.response.attachments.filter((item) => item.attachmentKind === "evidence_image" || item.attachmentKind === "inline_image")
   const documents = data.response.attachments.filter((item) => item.attachmentKind === "document")
@@ -454,32 +615,35 @@ function MirroredBilingualReport({
       <div className="h-2 bg-blue-700" />
       <div className="space-y-4 p-4 sm:p-5">
         <MirroredRow
+          mobileLanguage={mobileLanguage}
           english={<ReportHeaderCell language="en" title={englishTitle} data={data} content={englishDocument} generatedAt={generatedAt} />}
           arabic={<ReportHeaderCell language="ar" title={arabicTitle} data={data} content={arabic} generatedAt={generatedAt} />}
         />
 
         <MirroredRow
+          mobileLanguage={mobileLanguage}
           english={
             <MirroredSectionCard title={labelsEn.projectInformation} icon={<FileText className="size-4" />}>
-              <ProjectInformationBody data={data} content={englishDocument} labels={labelsEn} language="en" />
+              <ProjectInformationBody data={data} content={englishDocument} labels={labelsEn} language="en" mobileCompact={Boolean(mobileLanguage)} />
             </MirroredSectionCard>
           }
           arabic={
             <MirroredSectionCard title={labelsAr.projectInformation} icon={<FileText className="size-4" />}>
-              <ProjectInformationBody data={data} content={arabic} labels={labelsAr} language="ar" />
+              <ProjectInformationBody data={data} content={arabic} labels={labelsAr} language="ar" mobileCompact={Boolean(mobileLanguage)} />
             </MirroredSectionCard>
           }
         />
 
         <MirroredRow
+          mobileLanguage={mobileLanguage}
           english={
             <MirroredSectionCard title={labelsEn.reportDetails} icon={<ClipboardCheck className="size-4" />}>
-              <ReportDetailsBody content={englishDocument} labels={labelsEn} />
+              <ReportDetailsBody content={englishDocument} labels={labelsEn} mobileCompact={Boolean(mobileLanguage)} />
             </MirroredSectionCard>
           }
           arabic={
             <MirroredSectionCard title={labelsAr.reportDetails} icon={<ClipboardCheck className="size-4" />}>
-              <ReportDetailsBody content={arabic} labels={labelsAr} />
+              <ReportDetailsBody content={arabic} labels={labelsAr} mobileCompact={Boolean(mobileLanguage)} />
             </MirroredSectionCard>
           }
         />
@@ -492,6 +656,7 @@ function MirroredBilingualReport({
         }).map((section) => (
           <MirroredRow
             key={section.key}
+            mobileLanguage={mobileLanguage}
             english={
               <MirroredSectionCard title={section.en} icon={<ClipboardCheck className="size-4" />}>
                 <RichHtml html={englishDocument.sections[section.key]} empty={labelsEn.noContent} />
@@ -517,9 +682,10 @@ function MirroredBilingualReport({
 
         {englishDocument.checklist.length > 0 || arabic.checklist.length > 0 || sourceImages.some((i) => i.sectionHint === "checklist") ? (
           <MirroredRow
+            mobileLanguage={mobileLanguage}
             english={
               <MirroredSectionCard title={labelsEn.checklist} icon={<CheckCircle2 className="size-4" />}>
-                <ChecklistBody content={englishDocument} labels={labelsEn} language="en" />
+                <ChecklistBody content={englishDocument} labels={labelsEn} language="en" mobileCompact={Boolean(mobileLanguage)} />
                 <SourcePdfImageGrid
                   images={sourceImages.filter((image) => image.sectionHint === "checklist")}
                   content={englishDocument}
@@ -529,7 +695,7 @@ function MirroredBilingualReport({
             }
             arabic={
               <MirroredSectionCard title={labelsAr.checklist} icon={<CheckCircle2 className="size-4" />}>
-                <ChecklistBody content={arabic} referenceContent={englishDocument} labels={labelsAr} language="ar" />
+                <ChecklistBody content={arabic} referenceContent={englishDocument} labels={labelsAr} language="ar" mobileCompact={Boolean(mobileLanguage)} />
                 <SourcePdfImageGrid
                   images={sourceImages.filter((image) => image.sectionHint === "checklist")}
                   content={arabic}
@@ -542,6 +708,7 @@ function MirroredBilingualReport({
 
         {englishDocument.approvals.length > 0 || arabic.approvals.length > 0 || sourceImages.some((i) => i.sectionHint === "approvals") ? (
           <MirroredRow
+            mobileLanguage={mobileLanguage}
             english={
               <MirroredSectionCard title={labelsEn.approvals} icon={<ShieldCheck className="size-4" />}>
                 <ApprovalBody content={englishDocument} labels={{ ...labelsEn, noApprovals: labelsEn.noContent }} language="en" />
@@ -566,6 +733,7 @@ function MirroredBilingualReport({
         ) : null}
 
         <MirroredRow
+          mobileLanguage={mobileLanguage}
           english={
             <MirroredSectionCard title={labelsEn.attachmentsGroup} icon={<ImageIcon className="size-4" />}>
               <AttachmentsBody documents={documents} evidence={evidence} content={englishDocument} labels={labelsEn} language="en" />
@@ -591,13 +759,14 @@ function MirroredBilingualReport({
         />
 
         <MirroredRow
+          mobileLanguage={mobileLanguage}
           english={<ReportFooter data={data} title={englishTitle} />}
           arabic={<ReportFooter data={data} title={arabicTitle} />}
         />
 
         {sourcePdf ? (
           <div className="grid items-start gap-4 lg:grid-cols-2">
-            <div lang="en" dir="ltr" className="min-w-0">
+            <div lang="en" dir="ltr" className={cn("min-w-0", mobileLanguage === "ar" && "max-md:hidden")}>
               <SourcePdfViewer data={data} attachment={sourcePdf} title={sourcePdfTitle} />
             </div>
             <div className="hidden lg:block" aria-hidden="true" />
@@ -781,11 +950,19 @@ function SourcePdfImageGrid({
   )
 }
 
-function MirroredRow({ english, arabic }: { english: ReactNode; arabic: ReactNode }) {
+function MirroredRow({
+  english,
+  arabic,
+  mobileLanguage,
+}: {
+  english: ReactNode
+  arabic: ReactNode
+  mobileLanguage?: "en" | "ar"
+}) {
   return (
     <div className="grid items-stretch gap-4 lg:grid-cols-2">
-      <div lang="en" dir="ltr" className="h-full min-w-0">{english}</div>
-      <div lang="ar" dir="rtl" className="h-full min-w-0 font-arabic">{arabic}</div>
+      <div lang="en" dir="ltr" className={cn("h-full min-w-0", mobileLanguage === "ar" && "max-md:hidden")}>{english}</div>
+      <div lang="ar" dir="rtl" className={cn("h-full min-w-0 font-arabic", mobileLanguage === "en" && "max-md:hidden")}>{arabic}</div>
     </div>
   )
 }
@@ -834,16 +1011,19 @@ function ProjectInformationBody({
   content,
   labels,
   language,
+  mobileCompact = false,
 }: {
   data: StageTranslationPageData
   content: TranslationReportContent
   labels: ReportLabels
   language: "en" | "ar"
+  mobileCompact?: boolean
 }) {
   const authorName = data.response.createdBy?.name || "—"
   return (
-    <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+    <dl className={cn("grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3", mobileCompact && "max-md:grid-cols-2 max-md:gap-2 max-md:text-xs")}>
       <ReportMeta label={labels.project} value={data.project.name} empty={labels.noContent} />
+      {mobileCompact ? <ReportMeta className="md:hidden" label={labels.projectReference} value={data.project.code || "—"} empty={labels.noContent} /> : null}
       <ReportMeta label={labels.stage} value={content.stageName || data.stage.name} empty={labels.noContent} />
       <ReportMeta label={labels.visitNumber} value={String(data.response.visitNumber || "")} empty={labels.noContent} />
       <ReportMeta label={labels.documentNumber} value={data.response.reportNumber} empty={labels.noContent} />
@@ -853,9 +1033,9 @@ function ProjectInformationBody({
   )
 }
 
-function ReportDetailsBody({ content, labels }: { content: TranslationReportContent; labels: ReportLabels }) {
+function ReportDetailsBody({ content, labels, mobileCompact = false }: { content: TranslationReportContent; labels: ReportLabels; mobileCompact?: boolean }) {
   return (
-    <dl className="grid gap-3 text-sm sm:grid-cols-2">
+    <dl className={cn("grid gap-3 text-sm sm:grid-cols-2", mobileCompact && "max-md:grid-cols-2 max-md:gap-2 max-md:text-xs")}>
       <ReportMeta label={labels.document} value={content.reportTitle} empty={labels.noContent} />
       <ReportMeta label={labels.subject} value={content.subject} empty={labels.noContent} />
       <ReportMeta label={labels.type} value={content.reportType} empty={labels.noContent} />
@@ -900,7 +1080,8 @@ const LanguageReport = forwardRef<HTMLElement, {
   labels: ReportLabels
   generatedAt: string | null
   sourcePdf?: StageTranslationPageData["response"]["attachments"][number] | null
-}>(function LanguageReport({ language, title, data, content, labels, generatedAt, sourcePdf }, ref) {
+  mobileCompact?: boolean
+}>(function LanguageReport({ language, title, data, content, labels, generatedAt, sourcePdf, mobileCompact = false }, ref) {
   const isArabic = language === "ar"
   const isDirectStage = !data.term?.id || data.term.id === data.stage.id
   const evidence = data.response.attachments.filter((item) => item.attachmentKind === "evidence_image" || item.attachmentKind === "inline_image")
@@ -923,7 +1104,7 @@ const LanguageReport = forwardRef<HTMLElement, {
 
       <div className="space-y-8 px-5 py-6 sm:px-7 sm:py-8">
         <ReportGroup title={labels.projectInformation}>
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          <dl className={cn("grid gap-3 text-sm sm:grid-cols-2", mobileCompact && "max-md:grid-cols-2 max-md:gap-2 max-md:text-xs")}>
             <ReportMeta label={labels.project} value={data.project.name} />
             <ReportMeta label={labels.projectReference} value={data.project.code || "—"} />
             <ReportMeta label={labels.stage} value={content.stageName || data.stage.name} />
@@ -936,7 +1117,7 @@ const LanguageReport = forwardRef<HTMLElement, {
         </ReportGroup>
 
         <ReportGroup title={labels.reportDetails}>
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          <dl className={cn("grid gap-3 text-sm sm:grid-cols-2", mobileCompact && "max-md:grid-cols-2 max-md:gap-2 max-md:text-xs")}>
             <ReportMeta label={labels.subject} value={content.subject || "—"} />
             <ReportMeta label={labels.type} value={content.reportType || "—"} />
           </dl>
@@ -952,7 +1133,7 @@ const LanguageReport = forwardRef<HTMLElement, {
           </ReportGroup>
         ) : null}
 
-        {content.checklist.length > 0 ? <ChecklistSection content={content} labels={labels} language={language} /> : null}
+        {content.checklist.length > 0 ? <ChecklistSection content={content} labels={labels} language={language} mobileCompact={mobileCompact} /> : null}
         {content.approvals.length > 0 ? <ApprovalSection content={content} labels={labels} language={language} /> : null}
 
         <ReportGroup title={labels.attachmentsGroup}>
@@ -1021,9 +1202,9 @@ function ReportGroup({ title, children }: { title: string; children: ReactNode }
   )
 }
 
-function ReportMeta({ label, value, empty = "—" }: { label: string; value?: string | null; empty?: string }) {
+function ReportMeta({ label, value, empty = "—", className }: { label: string; value?: string | null; empty?: string; className?: string }) {
   const displayValue = value?.trim() ? value : empty
-  return <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3"><dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-1 break-words font-semibold text-slate-900">{displayValue}</dd></div>
+  return <div className={cn("rounded-xl border border-slate-200 bg-white px-3.5 py-3", className)}><dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-1 break-words font-semibold text-slate-900">{displayValue}</dd></div>
 }
 
 function ReportSection({ title, html, empty }: { title: string; html: string; empty: string }) {
@@ -1039,8 +1220,8 @@ function RichHtml({ html, empty }: { html: string; empty: string }) {
   return <div className="stage-translation-richtext text-[14px] leading-7 text-slate-700" dangerouslySetInnerHTML={{ __html: html }} />
 }
 
-function ChecklistSection({ content, labels, language }: { content: TranslationReportContent; labels: ReportLabels; language: "en" | "ar" }) {
-  return <section><SectionHeading icon={<CheckCircle2 className="size-4" />} title={labels.checklist} /><ChecklistBody content={content} labels={labels} language={language} /></section>
+function ChecklistSection({ content, labels, language, mobileCompact = false }: { content: TranslationReportContent; labels: ReportLabels; language: "en" | "ar"; mobileCompact?: boolean }) {
+  return <section><SectionHeading icon={<CheckCircle2 className="size-4" />} title={labels.checklist} /><ChecklistBody content={content} labels={labels} language={language} mobileCompact={mobileCompact} /></section>
 }
 
 function ChecklistBody({
@@ -1048,17 +1229,19 @@ function ChecklistBody({
   referenceContent,
   labels,
   language,
+  mobileCompact = false,
 }: {
   content: TranslationReportContent
   referenceContent?: TranslationReportContent
   labels: ReportLabels
   language: "en" | "ar"
+  mobileCompact?: boolean
 }) {
   if (!content.checklist.length) return <p className="text-sm italic text-slate-500">{labels.noContent}</p>
   const refList = referenceContent?.checklist ?? content.checklist
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <table className="w-full border-collapse text-sm">
+      <table className={cn("w-full border-collapse text-sm", mobileCompact && "max-md:text-[11px]")}>
         <tbody>{content.checklist.map((item, index) => {
           const refItem = refList[index] ?? item
           const itemResult = item.result || refItem.result || (item.checked || refItem.checked ? "pass" : "pending")
@@ -1086,13 +1269,13 @@ function ChecklistBody({
 
           return (
             <tr key={item.id || `check-${index}`} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
-              <td className="w-12 bg-slate-50 px-3.5 py-3 text-center font-bold text-slate-500">{index + 1}</td>
-              <td className="px-4 py-3">
+              <td className={cn("w-12 bg-slate-50 px-3.5 py-3 text-center font-bold text-slate-500", mobileCompact && "max-md:w-9 max-md:px-1.5 max-md:py-2")}>{index + 1}</td>
+              <td className={cn("px-4 py-3", mobileCompact && "max-md:px-2.5 max-md:py-2")}>
                 <p className="font-semibold text-slate-900">{item.label}</p>
-                {item.notes ? <p className="mt-1 text-xs text-slate-500">{item.notes}</p> : null}
+                {item.notes ? <p className={cn("mt-1 text-xs text-slate-500", mobileCompact && "max-md:text-[10px]")}>{item.notes}</p> : null}
               </td>
-              <td className="w-16 px-4 py-3 text-end">
-                <span title={titleTooltip} className={cn("inline-flex size-7 items-center justify-center rounded-lg border", badgeClasses)}>
+              <td className={cn("w-16 px-4 py-3 text-end", mobileCompact && "max-md:w-11 max-md:px-1.5 max-md:py-2")}>
+                <span title={titleTooltip} className={cn("inline-flex size-7 items-center justify-center rounded-lg border", mobileCompact && "max-md:size-6 max-md:rounded-md", badgeClasses)}>
                   {icon}
                 </span>
               </td>

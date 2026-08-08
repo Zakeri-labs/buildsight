@@ -39,12 +39,13 @@ export function AppShell({
   const isMemberProjectDetail = /^\/projects\/[^/]+\/?$/.test(pathname) && pathname !== "/projects/new" && isMember
   const isMemberProjectStages = /^\/projects\/[^/]+\/stages\/?$/.test(pathname) && isMember
   const isMemberStageReport = /^\/projects\/[^/]+\/stages\/[^/]+\/reports\/new$/.test(pathname) && isMember
+  const isMemberReportTranslation = /^\/projects\/[^/]+\/stages\/[^/]+\/reports\/[^/]+\/translate\/?$/.test(pathname) && isMember
   const isMemberDashboard = (pathname === "/" || pathname === "/memberhomepage") && isMember
   const isMemberMobileShell =
-    isMemberDashboard || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberProjectDetail || isMemberProjectStages || isMemberStageReport
+    isMemberDashboard || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberProjectDetail || isMemberProjectStages || isMemberStageReport || isMemberReportTranslation
   const isCompactMemberMobileShell =
-    isMemberHomepage || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberProjectDetail || isMemberProjectStages || isMemberStageReport
-  const showMemberBottomNavigation = isMemberMobileShell && !isMemberStageReport
+    isMemberHomepage || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberProjectDetail || isMemberProjectStages || isMemberStageReport || isMemberReportTranslation
+  const showMemberBottomNavigation = isMemberMobileShell && !isMemberStageReport && !isMemberReportTranslation
 
   const activeProjectName =
     selectedProjectId === "all" ? null : projects.find((project) => project.id === selectedProjectId)?.name ?? null
@@ -82,6 +83,8 @@ export function AppShell({
           className={
             isMemberStageReport
               ? "flex-1 px-2 py-3 md:px-8 md:py-6"
+              : isMemberReportTranslation
+                ? "flex-1 px-3 py-3 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
               : showMemberBottomNavigation
                 ? isCompactMemberMobileShell
                   ? "flex-1 px-4 py-4 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
