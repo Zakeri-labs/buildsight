@@ -1,7 +1,7 @@
 import "server-only"
 
 import { createAdminClient } from "@/lib/supabase/admin"
-import { resolveProjectReadAccessForUser } from "@/lib/auth/project-access"
+import { isProjectUuid, resolveProjectReadAccessForUser } from "@/lib/auth/project-access"
 import {
   EMPTY_TERM_RESPONSE_CONTENT,
   sanitizeReportHtml,
@@ -223,6 +223,21 @@ function derivedParentStatus(children: ProjectStageTermExecution[]): ProjectStag
   if (counted.length && counted.every((child) => child.status === "approved" || child.status === "completed")) return "completed"
   if (counted.some((child) => child.status !== "not_started")) return "in_progress"
   return "not_started"
+}
+
+export async function projectExistsForStageRoute(projectId: string): Promise<boolean> {
+  if (!isProjectUuid(projectId)) return false
+
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw error
+  return Boolean(data)
 }
 
 export async function loadProjectStageExecution(
