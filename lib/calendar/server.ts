@@ -1,6 +1,6 @@
 import "server-only"
 
-import { getCalendarVisibleRange } from "@/lib/calendar/date"
+import { currentCalendarDateKey, getCalendarVisibleRange } from "@/lib/calendar/date"
 import type {
   CalendarClientRequestViewModel,
   CalendarDataViewModel,
@@ -261,7 +261,10 @@ export async function getCalendarScheduledSiteVisitRowsForDate(projectIds: strin
     .in("project_id", validProjectIds)
     .in("status", [...SCHEDULED_VISIT_STATUSES])
     .eq("scheduled_date", date)
+    .order("scheduled_date", { ascending: true })
     .order("scheduled_time", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
 }
 
 export async function getCalendarTodaySiteVisitRowsForDate(projectIds: string[], date: string) {
@@ -274,7 +277,10 @@ export async function getCalendarTodaySiteVisitRowsForDate(projectIds: string[],
     .in("project_id", validProjectIds)
     .in("status", [...TODAY_VISIT_STATUSES])
     .eq("scheduled_date", date)
+    .order("scheduled_date", { ascending: true })
     .order("scheduled_time", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
 }
 
 export async function getCalendarSchedulingProjects({ userId, projects }: {
@@ -417,7 +423,7 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
       .map((project) => ({ id: project.id, name: project.name, canRequest: true as const, canManage: false as const }))
 
     const admin = createAdminClient()
-    const today = new Date().toISOString().slice(0, 10)
+    const today = currentCalendarDateKey()
     const [pendingResult, pendingRangeResult, visitRangeResult, upcomingResult, todayResult, schedulingProjects] = await Promise.all([
       getCalendarPendingRequestRows(projectIds),
       admin.from("site_visit_requests").select(CALENDAR_REQUEST_COLUMNS).in("project_id", projectIds).eq("status", CALENDAR_PENDING_REQUEST_STATUS).gte("preferred_date", rangeStart).lte("preferred_date", rangeEnd),
@@ -520,8 +526,8 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
 
     events.sort((left, right) =>
       left.date.localeCompare(right.date) ||
-      (left.timeLabel ?? "").localeCompare(right.timeLabel ?? "") ||
-      left.projectName.localeCompare(right.projectName),
+      (left.timeLabel ?? "99:99").localeCompare(right.timeLabel ?? "99:99") ||
+      left.id.localeCompare(right.id),
     )
 
     return {

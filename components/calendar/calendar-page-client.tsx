@@ -13,7 +13,7 @@ import { SiteVisitRequestDialog } from "@/components/site-visits/site-visit-requ
 import { useCurrentUser } from "@/components/current-user-provider"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { calendarMonthKey } from "@/lib/calendar/date"
+import { calendarDateFromKey, calendarMonthKey, currentCalendarDateKey } from "@/lib/calendar/date"
 import type { CalendarClientRequestViewModel, CalendarDataViewModel } from "@/lib/calendar/types"
 
 function monthStart(date: Date) {
@@ -22,12 +22,6 @@ function monthStart(date: Date) {
 
 function addDays(date: Date, amount: number) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount)
-}
-
-function localDateKey(date: Date) {
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
-  return `${date.getFullYear()}-${month}-${day}`
 }
 
 async function requestCalendarData(monthKey: string, signal?: AbortSignal): Promise<CalendarDataViewModel> {
@@ -53,16 +47,16 @@ export function CalendarPageClient({
   const currentUser = useCurrentUser()
   const isMember = currentUser.role === "org_member"
   const isViewer = currentUser.role === "viewer"
-  const [today] = useState(() => new Date())
-  const [currentMonth, setCurrentMonth] = useState(() => monthStart(new Date()))
-  const [mobileSelectedDate, setMobileSelectedDate] = useState(() => new Date())
+  const [today] = useState(() => calendarDateFromKey(currentCalendarDateKey()))
+  const [currentMonth, setCurrentMonth] = useState(() => monthStart(calendarDateFromKey(currentCalendarDateKey())))
+  const [mobileSelectedDate, setMobileSelectedDate] = useState(() => calendarDateFromKey(currentCalendarDateKey()))
   const [data, setData] = useState(initialData)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(initialError)
   const [success, setSuccess] = useState<string | null>(null)
   const [needsInitialReload, setNeedsInitialReload] = useState(Boolean(initialError))
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
-  const [scheduleDate, setScheduleDate] = useState(() => localDateKey(new Date()))
+  const [scheduleDate, setScheduleDate] = useState(() => currentCalendarDateKey())
   const [selectedRequest, setSelectedRequest] = useState<CalendarClientRequestViewModel | null>(null)
   const [requestDetailsOpen, setRequestDetailsOpen] = useState(false)
   const selectedMonthKey = calendarMonthKey(currentMonth)
@@ -143,7 +137,7 @@ export function CalendarPageClient({
   }
 
   function showCurrentMonth() {
-    setCurrentMonth(monthStart(new Date()))
+    setCurrentMonth(monthStart(calendarDateFromKey(currentCalendarDateKey())))
   }
 
   function selectMobileDate(date: Date) {
@@ -161,7 +155,7 @@ export function CalendarPageClient({
   }
 
   function showTodayOnMobile() {
-    selectMobileDate(new Date())
+    selectMobileDate(calendarDateFromKey(currentCalendarDateKey()))
   }
 
   function openScheduleDialog(date: string) {
@@ -220,7 +214,7 @@ export function CalendarPageClient({
           size="lg"
           disabled={!data.scheduling.canSchedule}
           aria-disabled={!data.scheduling.canSchedule}
-          onClick={() => openScheduleDialog(localDateKey(new Date()))}
+          onClick={() => openScheduleDialog(currentCalendarDateKey())}
         >
           <CalendarPlus data-icon="inline-start" aria-hidden="true" />
           Schedule Visit
@@ -285,7 +279,7 @@ export function CalendarPageClient({
               onPreviousWeek={showPreviousWeek}
               onNextWeek={showNextWeek}
               onToday={showTodayOnMobile}
-              onScheduleVisit={() => openScheduleDialog(localDateKey(new Date()))}
+              onScheduleVisit={() => openScheduleDialog(currentCalendarDateKey())}
               onClientRequestClick={openClientRequestById}
             />
           </div>

@@ -7,6 +7,7 @@ import { assertSiteVisitManager, assertSiteVisitRequester } from "@/lib/site-vis
 import type { SiteVisitPreferredTime, SiteVisitStatus } from "@/lib/site-visits/types"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getCalendarSchedulingProjects, resolveCalendarProjectScope } from "@/lib/calendar/server"
+import { currentCalendarDateKey } from "@/lib/calendar/date"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -79,6 +80,7 @@ function safeScheduleError(error: unknown) {
 function revalidateSiteVisitPaths(projectId: string, requestId?: string) {
   revalidatePath("/", "layout")
   revalidatePath("/")
+  revalidatePath("/memberhomepage")
   revalidatePath("/site-visits")
   revalidatePath(`/projects/${projectId}`)
   if (requestId) revalidatePath(`/site-visits/${requestId}`)
@@ -104,7 +106,7 @@ export async function createSiteVisitRequestAction(input: {
   if (!isAsap && (!preferredDate || !DATE_PATTERN.test(preferredDate))) {
     return { ok: false, error: "Select a preferred visit date." }
   }
-  if (preferredDate && preferredDate < new Date().toISOString().slice(0, 10)) {
+  if (preferredDate && preferredDate < currentCalendarDateKey()) {
     return { ok: false, error: "Preferred visit date cannot be in the past." }
   }
   const purpose = cleanText(input.purpose, 2000)
@@ -206,7 +208,7 @@ export async function scheduleSiteVisitAction(input: {
   if (!DATE_PATTERN.test(input.scheduledDate) || !TIME_PATTERN.test(input.scheduledTime)) {
     return { ok: false, error: "Select a valid visit date and time." }
   }
-  if (input.scheduledDate < new Date().toISOString().slice(0, 10)) {
+  if (input.scheduledDate < currentCalendarDateKey()) {
     return { ok: false, error: "Visit date cannot be in the past." }
   }
   const assignedUserIds = Array.from(new Set(input.assignedUserIds ?? []))
@@ -350,7 +352,7 @@ export async function createDirectSiteVisitAction(input: {
   if (!DATE_PATTERN.test(input.scheduledDate) || !TIME_PATTERN.test(input.scheduledTime)) {
     return { ok: false, error: "Select a valid visit date and time." }
   }
-  if (input.scheduledDate < new Date().toISOString().slice(0, 10)) {
+  if (input.scheduledDate < currentCalendarDateKey()) {
     return { ok: false, error: "Visit date cannot be in the past." }
   }
 
@@ -524,7 +526,7 @@ export async function approveCalendarClientVisitRequestAction(input: {
   if (!DATE_PATTERN.test(input.scheduledDate) || !TIME_PATTERN.test(input.scheduledTime)) {
     return { ok: false, error: "Select a valid confirmed visit date and time." }
   }
-  if (input.scheduledDate < new Date().toISOString().slice(0, 10)) {
+  if (input.scheduledDate < currentCalendarDateKey()) {
     return { ok: false, error: "Visit date cannot be in the past." }
   }
 

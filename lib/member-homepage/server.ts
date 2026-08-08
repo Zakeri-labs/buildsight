@@ -7,6 +7,7 @@ import {
   resolveCalendarProjectScope,
   resolveExplicitSupervisorProjectScope,
 } from "@/lib/calendar/server"
+import { addCalendarDays, currentCalendarDateKey } from "@/lib/calendar/date"
 import type { MemberHomepageData, MemberHomepageRequest, MemberHomepageVisit } from "@/lib/member-homepage/types"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient as createServerClient } from "@/lib/supabase/server"
@@ -79,8 +80,7 @@ function clockTime(value: unknown): string | null {
  * with the same explicit-Supervisor scope and date/status semantics.
  *
  * Today's Reports derives its denominator from the same Today Site Visit rows and
- * matches completion only through the explicit Site Visit -> Stage Report relationship
- * (with the existing Project + Stage + Visit Number identity as a legacy read fallback).
+ * matches completion only through the explicit Site Visit -> Stage Report relationship.
  */
 export async function getMemberHomepageData(userId: string): Promise<MemberHomepageData> {
   if (!isValidUuid(userId)) return emptyData()
@@ -107,10 +107,8 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
     const visitProjectById = new Map(visitProjects.map((project) => [project.id, project]))
     const metadataProjectIds = Array.from(new Set([...requestProjectIds, ...visitProjectIds]))
     const admin = createAdminClient()
-    const today = new Date().toISOString().slice(0, 10)
-    const tomorrowDate = new Date(`${today}T00:00:00.000Z`)
-    tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1)
-    const tomorrow = tomorrowDate.toISOString().slice(0, 10)
+    const today = currentCalendarDateKey()
+    const tomorrow = addCalendarDays(today, 1)
 
     const [stageResult, unansweredStageResult, pendingResult, todayVisitsResult, tomorrowVisitsResult] = await Promise.all([
       metadataProjectIds.length
@@ -222,30 +220,21 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
       )
       requiredReportsToday = visitRows.length
 
-      const reportObligations = visitRows.map((row: any) => {
-        const stage = unansweredStageByProjectId.get(row.project_id) ?? null
-        const reservedVisitNumber = Number.isInteger(row.report_visit_number) && row.report_visit_number > 0
-          ? row.report_visit_number as number
-          : null
-        return {
-          siteVisitRequestId: row.id as string,
-          projectId: row.project_id as string,
-          stageId: stage?.id ?? null,
-          visitNumber: reservedVisitNumber,
-        }
-      })
+      const reportObligations = visitRows.map((row: any) => ({
+        siteVisitRequestId: row.id as string,
+        projectId: row.project_id as string,
+      }))
 
       const explicitReportByVisitId = new Map<string, any>()
-      const legacyReportByIdentity = new Map<string, any>()
-      const obligationProjectIds = Array.from(new Set(reportObligations.map((item) => item.projectId)))
+      const obligationVisitIds = reportObligations.map((item) => item.siteVisitRequestId)
 
-      if (reportObligations.length && obligationProjectIds.length) {
+      if (obligationVisitIds.length) {
         try {
           const userClient = await createServerClient()
           const { data: reportRows, error: reportError } = await userClient
             .from("term_responses")
             .select("id, project_id, project_stage_id, visit_number, status, site_visit_request_id")
-            .in("project_id", obligationProjectIds)
+            .in("site_visit_request_id", obligationVisitIds)
 
           if (reportError) {
             todaysReportsHasError = true
@@ -256,32 +245,17 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
               isValidUuid(report.id) &&
               isValidUuid(report.project_id) &&
               isValidUuid(report.project_stage_id) &&
+              isValidUuid(report.site_visit_request_id) &&
               completionStatuses.has(typeof report.status === "string" ? report.status : ""),
             )
 
             for (const report of completedRows) {
-              if (isValidUuid((report as any).site_visit_request_id)) {
-                explicitReportByVisitId.set((report as any).site_visit_request_id, report)
-              }
-              if (Number.isInteger((report as any).visit_number) && (report as any).visit_number > 0) {
-                legacyReportByIdentity.set(
-                  `${(report as any).project_id}:${(report as any).project_stage_id}:${(report as any).visit_number}`,
-                  report,
-                )
-              }
+              explicitReportByVisitId.set((report as any).site_visit_request_id, report)
             }
 
             completedReportsToday = reportObligations.reduce((count, obligation) => {
               const explicit = explicitReportByVisitId.get(obligation.siteVisitRequestId)
-              if (explicit && explicit.project_id === obligation.projectId) return count + 1
-
-              if (obligation.stageId && obligation.visitNumber) {
-                const legacy = legacyReportByIdentity.get(
-                  `${obligation.projectId}:${obligation.stageId}:${obligation.visitNumber}`,
-                )
-                if (legacy) return count + 1
-              }
-              return count
+              return explicit?.project_id === obligation.projectId ? count + 1 : count
             }, 0)
             completedReportsToday = Math.min(completedReportsToday, requiredReportsToday)
           }
@@ -332,8 +306,9 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
         }]
       })
       visits.sort((left, right) =>
+        left.scheduledDate.localeCompare(right.scheduledDate) ||
         (left.scheduledTime ?? "99:99").localeCompare(right.scheduledTime ?? "99:99") ||
-        left.projectName.localeCompare(right.projectName),
+        left.id.localeCompare(right.id),
       )
     }
 

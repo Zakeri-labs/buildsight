@@ -8,7 +8,7 @@ import { AlertTriangle, CalendarPlus, CheckCircle2, Clock3, FilePlus2, FileText,
 
 import { ClientVisitRequestWorkflow } from "@/components/calendar/client-visit-request-workflow"
 import { Card, CardContent } from "@/components/ui/card"
-import { calendarMonthKey } from "@/lib/calendar/date"
+import { currentCalendarMonthKey } from "@/lib/calendar/date"
 import type { CalendarClientRequestViewModel, CalendarDataViewModel } from "@/lib/calendar/types"
 import type { MemberHomepageData, MemberHomepageRequest, MemberHomepageVisit } from "@/lib/member-homepage/types"
 import { cn } from "@/lib/utils"
@@ -237,7 +237,7 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
     setLoadingRequestId(requestId)
     setRequestActionError(null)
     try {
-      const monthKey = calendarMonthKey(new Date())
+      const monthKey = currentCalendarMonthKey()
       const response = await fetch(`/api/calendar?month=${encodeURIComponent(monthKey)}`, {
         cache: "no-store",
         headers: { Accept: "application/json" },
