@@ -493,6 +493,12 @@ export type DashboardData = {
   }
   ncrDonut: { label: string; value: number; color: string }[]
   inspectionDonut: { label: string; value: number; color: string }[]
+  inspectionsBySupervisor: {
+    supervisorId: string
+    name: string
+    inspectionCount: number
+    projectCount: number
+  }[]
   activity: ActivityRow[]
   projects: {
     id: string
@@ -514,6 +520,7 @@ function createEmptyDashboard(): DashboardData {
     kpis: { totalProjects: 0, openNcrs: 0, openInspections: 0, openRfis: 0 },
     ncrDonut: [],
     inspectionDonut: [],
+    inspectionsBySupervisor: [],
     activity: [],
     projects: [],
     tasks: [],
@@ -585,6 +592,69 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
       { label: "In Progress", value: inspByStatus.get("in-progress") ?? 0, color: "var(--info)" },
       { label: "Approved", value: inspByStatus.get("approved") ?? 0, color: "var(--success)" },
     ]
+
+    // Aggregate the canonical Inspection rows through the canonical Project
+    // Supervisor assignment. This intentionally does not use inspection
+    // creator/assignee metadata and does not count reports/checklist items.
+    const projectSupervisorById = new Map<string, string>(
+      scoped
+        .filter((project) => Boolean(project.assignedSupervisorId))
+        .map(
+          (project) =>
+            [project.id, project.assignedSupervisorId as string] as [string, string],
+        ),
+    )
+    const supervisorIds = validUuidList(Array.from(projectSupervisorById.values()))
+    const admin = createAdminClient()
+    const { data: supervisorProfiles, error: supervisorProfilesError } = supervisorIds.length
+      ? await admin.from("profiles").select("id, full_name, email").in("id", supervisorIds)
+      : { data: [] as any[], error: null }
+    if (supervisorProfilesError) throw supervisorProfilesError
+
+    const supervisorNameById = new Map<string, string>(
+      (supervisorProfiles ?? []).map(
+        (profile: any) =>
+          [
+            profile.id,
+            profile.full_name?.trim() || profile.email?.trim() || profile.id,
+          ] as [string, string],
+      ),
+    )
+    const supervisorInspectionAggregation = new Map<
+      string,
+      { supervisorId: string; name: string; inspectionCount: number; projectIds: Set<string> }
+    >()
+
+    for (const inspection of inspections as any[]) {
+      const inspectionProjectId = asUuid(inspection.project_id)
+      if (!inspectionProjectId) continue
+      const supervisorId = projectSupervisorById.get(inspectionProjectId)
+      if (!supervisorId) continue
+
+      const existing = supervisorInspectionAggregation.get(supervisorId) ?? {
+        supervisorId,
+        name: supervisorNameById.get(supervisorId) ?? supervisorId,
+        inspectionCount: 0,
+        projectIds: new Set<string>(),
+      }
+      existing.inspectionCount += 1
+      existing.projectIds.add(inspectionProjectId)
+      supervisorInspectionAggregation.set(supervisorId, existing)
+    }
+
+    const inspectionsBySupervisor = Array.from(supervisorInspectionAggregation.values())
+      .map((item) => ({
+        supervisorId: item.supervisorId,
+        name: item.name,
+        inspectionCount: item.inspectionCount,
+        projectCount: item.projectIds.size,
+      }))
+      .sort((a, b) =>
+        b.inspectionCount - a.inspectionCount ||
+        a.name.localeCompare(b.name) ||
+        a.supervisorId.localeCompare(b.supervisorId),
+      )
+      .slice(0, 4)
 
     const activityRows: ActivityRow[] = activity.slice(0, 8).map((a: any) => ({
       id: a.id,
@@ -702,6 +772,7 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
       },
       ncrDonut,
       inspectionDonut,
+      inspectionsBySupervisor,
       activity: activityRows,
       projects: projectRows,
       tasks: taskRows,
