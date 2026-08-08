@@ -35,7 +35,7 @@ function formatTime(value: string | null): { time: string; period: string } | nu
 }
 
 function MetaLine({ children }: { children: React.ReactNode }) {
-  return <p className="truncate text-[11px] leading-4 text-muted-foreground sm:text-xs">{children}</p>
+  return <p className="truncate text-[10px] leading-3.5 text-muted-foreground lg:text-xs lg:leading-4">{children}</p>
 }
 
 function SummaryCard({ label, value, icon: Icon, prominent = false, hasError = false, reserveIconSpace = false }: {
@@ -86,30 +86,30 @@ function RequestRow({
   const date = formatDateBlock(request.requestedDate)
   return (
     <Card size="sm" className="py-0">
-      <div className="grid min-h-[5rem] grid-cols-[3.5rem_minmax(0,1fr)_2.75rem] items-stretch">
-        <div className="flex flex-col items-center justify-center border-r bg-muted/30 px-2 text-center">
-          <span className={cn("font-semibold tabular-nums", date.day === "ASAP" ? "text-xs" : "text-xl")}>{date.day}</span>
-          {date.month ? <span className="text-[11px] text-muted-foreground">{date.month}</span> : null}
+      <div className="grid min-h-[4.25rem] grid-cols-[3.125rem_minmax(0,1fr)_2.625rem] items-stretch sm:grid-cols-[3.125rem_minmax(0,1fr)_2.625rem] lg:min-h-[5rem] lg:grid-cols-[3.5rem_minmax(0,1fr)_2.75rem]">
+        <div className="flex flex-col items-center justify-center border-r bg-muted/30 px-1.5 text-center lg:px-2">
+          <span className={cn("font-semibold leading-none tabular-nums", date.day === "ASAP" ? "text-[11px]" : "text-lg", "lg:leading-normal", date.day !== "ASAP" && "lg:text-xl")}>{date.day}</span>
+          {date.month ? <span className="mt-0.5 text-[10px] leading-none text-muted-foreground lg:text-[11px] lg:leading-normal">{date.month}</span> : null}
         </div>
-        <div className="min-w-0 self-center px-3 py-2.5">
-          <p className="truncate text-sm font-semibold">{request.projectName}</p>
-          <div className="mt-1 grid min-w-0 grid-cols-1 gap-x-3 sm:grid-cols-2">
-            {request.projectCode ? <MetaLine>Code: {request.projectCode}</MetaLine> : null}
+        <div className="min-w-0 self-center px-2.5 py-1.5 lg:px-3 lg:py-2.5">
+          <p className="truncate text-[13px] font-semibold leading-4 lg:text-sm lg:leading-normal">{request.projectName}</p>
+          <div className="mt-0.5 grid min-w-0 grid-cols-1 gap-x-3 gap-y-0 lg:mt-1 lg:grid-cols-2">
+            {request.projectCode ? <MetaLine><span className="lg:hidden">{request.projectCode}</span><span className="hidden lg:inline">Code: {request.projectCode}</span></MetaLine> : null}
             {request.stageName ? <MetaLine>Stage: {request.stageName}</MetaLine> : null}
             {request.visitNumber ? <MetaLine>Visit {request.visitNumber}</MetaLine> : null}
             {request.preferredTimeLabel ? <MetaLine>{request.preferredTimeLabel}</MetaLine> : null}
           </div>
         </div>
-        <div className="flex items-center justify-center pr-2">
+        <div className="flex items-center justify-center pr-1.5 lg:pr-2">
           <button
             type="button"
             aria-label="Schedule visit request"
             aria-busy={loading || undefined}
             disabled={loading}
             onClick={() => onAction(request.id)}
-            className="inline-flex size-10 items-center justify-center rounded-xl border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60"
+            className="inline-flex size-9 items-center justify-center rounded-lg border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60 lg:size-10 lg:rounded-xl"
           >
-            <CalendarPlus className="size-5" aria-hidden="true" />
+            <CalendarPlus className="size-[18px] lg:size-5" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -132,7 +132,7 @@ function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
         isCompleted && "bg-muted/20 opacity-80 ring-1 ring-inset ring-green-200/60 dark:ring-green-900/50",
       )}
     >
-      <div className="grid min-h-[4.15rem] grid-cols-[2.65rem_minmax(0,1.35fr)_minmax(5.3rem,1fr)_2.55rem] items-stretch sm:min-h-[4.25rem] sm:grid-cols-[3.5rem_minmax(0,1.35fr)_minmax(6.5rem,1fr)_3rem]">
+      <div className="grid min-h-[4.15rem] grid-cols-[3.125rem_minmax(0,1.35fr)_minmax(5.3rem,1fr)_2.55rem] items-stretch sm:min-h-[4.25rem] sm:grid-cols-[3.5rem_minmax(0,1.35fr)_minmax(6.5rem,1fr)_3rem]">
         <div className={cn(
           "flex min-w-0 flex-col items-center justify-center bg-sidebar px-1 text-center text-white",
           isCompleted && "bg-sidebar/80",
@@ -321,7 +321,7 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
             </div>
           </div>
         ) : data.requests.length ? (
-          <div className="space-y-2.5">
+          <div className="space-y-1.5 lg:space-y-2.5">
             {data.requests.map((request) => (
               <RequestRow
                 key={request.id}
