@@ -322,18 +322,15 @@ export function ProjectsList({
   const typeOptions = Array.from(new Set(projectRows.map((project) => project.projectType).filter((type) => type !== "—")))
   const ownerOptions = Array.from(new Set(projectRows.map((project) => project.ownerClient).filter((owner) => owner !== "—")))
   const activeFilterCount = [selectedStatus, selectedType, selectedOwner].filter((value) => value !== "all").length
-  const hasSearchOrFilters = Boolean(searchQuery.trim()) || activeFilterCount > 0
+  const hasSearchOrFilters = Boolean(searchQuery.trim()) || activeFilterCount > 0 || sortBy !== "default"
   const createdProject = createdProjectId ? projectRows.find((project) => project.id === createdProjectId) : undefined
 
-  function clearFilterSelections() {
+  function clearAllProjectListFilters() {
+    setSearchQuery("")
     setSelectedStatus("all")
     setSelectedType("all")
     setSelectedOwner("all")
-  }
-
-  function clearMobileFilters() {
-    setSearchQuery("")
-    clearFilterSelections()
+    setSortBy("default")
   }
 
   function openDeleteDialog(project: ProjectRow) {
@@ -460,7 +457,7 @@ export function ProjectsList({
           <div className="flex items-center justify-between gap-3 text-[11px] font-medium text-muted-foreground">
             <span>{mobileProjects.length} {mobileProjects.length === 1 ? (locale === "ar" ? "مشروع" : "Project") : (locale === "ar" ? "مشاريع" : "Projects")}</span>
             {hasSearchOrFilters ? (
-              <button type="button" onClick={clearMobileFilters} className="font-semibold text-primary hover:underline">
+              <button type="button" onClick={clearAllProjectListFilters} className="font-semibold text-primary hover:underline">
                 {locale === "ar" ? "مسح الفلاتر" : "Clear Filters"}
               </button>
             ) : null}
@@ -478,7 +475,7 @@ export function ProjectsList({
             <div className="rounded-xl border border-slate-200/90 bg-white px-4 py-8 text-center shadow-xs dark:border-slate-800 dark:bg-slate-900">
               <Search className="mx-auto size-6 text-slate-400" />
               <h2 className="mt-3 text-sm font-semibold">{locale === "ar" ? "لا توجد مشاريع مطابقة للفلاتر" : "No projects match your filters."}</h2>
-              <button type="button" onClick={clearMobileFilters} className="mt-3 inline-flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-primary shadow-xs dark:border-slate-800 dark:bg-slate-900">
+              <button type="button" onClick={clearAllProjectListFilters} className="mt-3 inline-flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-primary shadow-xs dark:border-slate-800 dark:bg-slate-900">
                 {locale === "ar" ? "مسح الفلاتر" : "Clear Filters"}
               </button>
             </div>
@@ -545,7 +542,7 @@ export function ProjectsList({
                 </MobileFilterField>
               </div>
               <SheetFooter className="grid grid-cols-2 border-t pt-3">
-                <Button type="button" variant="outline" className="h-10" onClick={clearFilterSelections}>
+                <Button type="button" variant="outline" className="h-10" onClick={clearAllProjectListFilters}>
                   {locale === "ar" ? "مسح" : "Clear"}
                 </Button>
                 <Button type="button" className="h-10" onClick={() => setFiltersOpen(false)}>
@@ -701,6 +698,16 @@ export function ProjectsList({
             { label: "Start Date (Newest)", value: "date-desc" },
           ]}
         />
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={clearAllProjectListFilters}
+          disabled={!hasSearchOrFilters}
+          className="h-10 rounded-xl border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 shadow-2xs hover:bg-slate-50 hover:text-slate-900 disabled:cursor-default disabled:opacity-45 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+        >
+          {locale === "ar" ? "مسح الفلاتر" : "Clear Filters"}
+        </Button>
       </div>
 
       {/* Main Data Table */}

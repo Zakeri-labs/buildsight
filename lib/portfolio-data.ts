@@ -165,4 +165,3 @@ export const portfolioTasks: PortfolioTask[] = [
   },
 ]
 
-export const dashboardDateRange = "May 12 – May 18, 2024"

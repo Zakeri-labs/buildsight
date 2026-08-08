@@ -5,6 +5,7 @@ import { getReviewSubmissionFeed } from "@/lib/review-submissions/server"
 import { getSiteVisitTaskFeed } from "@/lib/site-visits/server"
 import { getReportCcNotificationFeed } from "@/lib/report-cc/server"
 import { getViewerOwnedProjectIds, isProjectUuid } from "@/lib/auth/project-access"
+import type { DashboardDateRange } from "@/lib/dashboard/date-range"
 
 import { DEMO_STAGE_MANAGEMENT_DATA } from "@/lib/db/stages"
 import { getFallbackStageChecklist } from "@/lib/stages/execution"
@@ -124,6 +125,17 @@ export type ActivityRow = {
   reference: string | null
   projectName: string
   createdAt: string
+}
+
+export type RecentSupervisorReportRow = {
+  id: string
+  projectId: string
+  stageId: string
+  reportTitle: string
+  projectName: string
+  supervisorName: string
+  submittedAt: string
+  href: string
 }
 
 export type TaskRow = {
@@ -484,6 +496,26 @@ async function fetchScopedRows(table: string, columns: string, ids: string[]) {
   return data ?? []
 }
 
+async function fetchScopedRowsByActivityRange(
+  table: string,
+  columns: string,
+  ids: string[],
+  timestampColumn: string,
+  range?: Pick<DashboardDateRange, "startUtc" | "endExclusiveUtc">,
+) {
+  const projectIds = validUuidList(ids)
+  if (projectIds.length === 0) return [] as any[]
+
+  const admin = createAdminClient()
+  let query = admin.from(table).select(columns).in("project_id", projectIds)
+  if (range?.startUtc) query = query.gte(timestampColumn, range.startUtc)
+  if (range?.endExclusiveUtc) query = query.lt(timestampColumn, range.endExclusiveUtc)
+
+  const { data, error } = await query
+  if (error) throw error
+  return data ?? []
+}
+
 export type DashboardData = {
   kpis: {
     totalProjects: number
@@ -499,7 +531,7 @@ export type DashboardData = {
     inspectionCount: number
     projectCount: number
   }[]
-  activity: ActivityRow[]
+  recentSupervisorReports: RecentSupervisorReportRow[]
   projects: {
     id: string
     name: string
@@ -521,14 +553,19 @@ function createEmptyDashboard(): DashboardData {
     ncrDonut: [],
     inspectionDonut: [],
     inspectionsBySupervisor: [],
-    activity: [],
+    recentSupervisorReports: [],
     projects: [],
     tasks: [],
     scopeName: null,
   }
 }
 
-export async function getDashboardData(orgId: string, projectId: string | null, userId: string): Promise<DashboardData> {
+export async function getDashboardData(
+  orgId: string,
+  projectId: string | null,
+  userId: string,
+  activityDateRange?: Pick<DashboardDateRange, "startUtc" | "endExclusiveUtc">,
+): Promise<DashboardData> {
   try {
     const validOrgId = asUuid(orgId)
     const validUserId = asUuid(userId)
@@ -553,12 +590,29 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
     const emptySiteVisitFeed = { canManage: false, items: [] }
     const emptyReportCcFeed = { canNotify: false, items: [] }
 
-    const [ncrs, inspections, rfis, vos, activity, tasks, reviewFeed, siteVisitFeed, reportCcFeed, termResponses] = await Promise.all([
+    const [
+      ncrs,
+      inspections,
+      inspectionActivityRows,
+      rfis,
+      vos,
+      tasks,
+      reviewFeed,
+      siteVisitFeed,
+      reportCcFeed,
+      termResponses,
+    ] = await Promise.all([
       fetchScopedRows("ncrs", "project_id, status", ids),
       fetchScopedRows("inspections", "project_id, status", ids),
+      fetchScopedRowsByActivityRange(
+        "inspections",
+        "project_id, created_at",
+        ids,
+        "created_at",
+        activityDateRange,
+      ),
       fetchScopedRows("rfis", "project_id, status", ids),
       fetchScopedRows("variation_orders", "project_id", ids),
-      fetchScopedRows("activity_log", "id, project_id, type, verb, reference, created_at", ids),
       fetchScopedRows("tasks", "id, project_id, action, type, reference, due_label, due_tone, sort_order", ids),
       canLoadProjectFeeds
         ? getReviewSubmissionFeed({ userId: validUserId, organizationId: validOrgId, projectId: selectedProjectId })
@@ -569,7 +623,11 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
       canLoadProjectFeeds
         ? getReportCcNotificationFeed({ userId: validUserId, projectId: selectedProjectId })
         : Promise.resolve(emptyReportCcFeed),
-      fetchScopedRows("term_responses", "id, project_id, project_stage_id", ids),
+      fetchScopedRows(
+        "term_responses",
+        "id, project_id, project_stage_id, project_stage_term_id, report_title, status, submitted_at, updated_at, created_at",
+        ids,
+      ),
     ])
 
     const countBy = (rows: any[], field: string) => {
@@ -625,7 +683,7 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
       { supervisorId: string; name: string; inspectionCount: number; projectIds: Set<string> }
     >()
 
-    for (const inspection of inspections as any[]) {
+    for (const inspection of inspectionActivityRows as any[]) {
       const inspectionProjectId = asUuid(inspection.project_id)
       if (!inspectionProjectId) continue
       const supervisorId = projectSupervisorById.get(inspectionProjectId)
@@ -656,14 +714,50 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
       )
       .slice(0, 4)
 
-    const activityRows: ActivityRow[] = activity.slice(0, 8).map((a: any) => ({
-      id: a.id,
-      projectName: names.get(a.project_id) ?? "Unknown",
-      type: a.type,
-      verb: a.verb,
-      reference: a.reference,
-      timestamp: a.created_at,
-    }))
+    // Recent Supervisor Reports uses the active Stage-based Report records only.
+    // Reports are attributed through the canonical Project Supervisor assignment,
+    // so a Supervisor reassignment is reflected here without a parallel mapping.
+    const submittedStageReportStatuses = new Set([
+      "submitted",
+      "under_review",
+      "approved",
+      "rejected",
+      "completed",
+    ])
+    const recentSupervisorReports: RecentSupervisorReportRow[] = (termResponses ?? [])
+      .filter((response: any) => {
+        const validProjectId = asUuid(response.project_id)
+        const validStageId = asUuid(response.project_stage_id)
+        const validReportId = asUuid(response.id)
+        return (
+          Boolean(validProjectId && validStageId && validReportId) &&
+          !response.project_stage_term_id &&
+          Boolean(response.submitted_at) &&
+          submittedStageReportStatuses.has(String(response.status ?? ""))
+        )
+      })
+      .map((response: any) => {
+        const projectId = response.project_id as string
+        const stageId = response.project_stage_id as string
+        const supervisorId = projectSupervisorById.get(projectId)
+        return {
+          id: response.id as string,
+          projectId,
+          stageId,
+          reportTitle: response.report_title?.trim() || "Inspection Report",
+          projectName: names.get(projectId) ?? "Unknown project",
+          supervisorName: supervisorId
+            ? supervisorNameById.get(supervisorId) ?? "Assigned Supervisor"
+            : "Unassigned Supervisor",
+          submittedAt: response.submitted_at as string,
+          href: `/projects/${projectId}/stages/${stageId}/reports/${response.id}`,
+        }
+      })
+      .sort((a, b) => {
+        const bySubmission = +new Date(b.submittedAt) - +new Date(a.submittedAt)
+        return bySubmission || a.id.localeCompare(b.id)
+      })
+      .slice(0, 4)
 
     const projectRows = scoped.map((p) => {
       const pNcrs = ncrs.filter((r) => r.project_id === p.id).length
@@ -773,7 +867,7 @@ export async function getDashboardData(orgId: string, projectId: string | null, 
       ncrDonut,
       inspectionDonut,
       inspectionsBySupervisor,
-      activity: activityRows,
+      recentSupervisorReports,
       projects: projectRows,
       tasks: taskRows,
       scopeName: selectedProjectId && scoped.length === 1 ? scoped[0].name : null,
