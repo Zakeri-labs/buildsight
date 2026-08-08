@@ -67,6 +67,33 @@ export async function assertProjectMember(projectId: string): Promise<string> {
 }
 
 /**
+ * Confirm the current user may create/save Stage Reports for `projectId`.
+ * Organization Members are intentionally narrower than general project read
+ * access: they must be the project's canonical assigned Supervisor. Existing
+ * authorization behavior for other roles is preserved.
+ */
+export async function assertProjectStageReportAccess(projectId: string): Promise<string> {
+  const userId = await getUserIdOrThrow()
+  const access = await resolveProjectReadAccessForUser(userId, projectId)
+  if (!access) throw new AuthzError("You do not have access to this project")
+
+  if (access.supervisingOrganizationRole === "org_member") {
+    const admin = createAdminClient()
+    const { data: supervisedProject, error } = await admin
+      .from("projects")
+      .select("id")
+      .eq("id", projectId)
+      .eq("assigned_supervisor_id", userId)
+      .limit(1)
+      .maybeSingle()
+    if (error) throw error
+    if (!supervisedProject) throw new AuthzError("Only the assigned Project Supervisor can create Stage Reports")
+  }
+
+  return userId
+}
+
+/**
  * Confirm the current user can administer `projectId`: either a project_admin
  * user membership, or an org_admin of the project's supervising organization.
  */
@@ -108,23 +135,27 @@ export async function assertProjectAdmin(projectId: string): Promise<string> {
 
 /**
  * Confirm the current user can manage organization-level stage templates.
- * Organization admins/managers and project admins/managers within the
- * supervising organization are permitted.
+ * Organization admins/managers and eligible project admins/managers within
+ * the supervising organization are permitted. Organization Members and
+ * Viewers are explicitly excluded from Stage creation/management.
  */
 export async function assertStageManager(organizationId: string): Promise<string> {
   const userId = await getUserIdOrThrow()
   const admin = createAdminClient()
 
-  const { data: orgManager, error: orgError } = await admin
+  const { data: orgMembership, error: orgError } = await admin
     .from("organization_memberships")
-    .select("id")
+    .select("role")
     .eq("organization_id", organizationId)
     .eq("user_id", userId)
     .eq("status", "active")
-    .in("role", [...ORGANIZATION_REVIEW_ROLES])
+    .limit(1)
     .maybeSingle()
   if (orgError) throw orgError
-  if (orgManager) return userId
+  if (orgMembership?.role === "org_member" || orgMembership?.role === "viewer") {
+    throw new AuthzError("Members and viewers cannot manage or create project stages")
+  }
+  if (orgMembership?.role === "org_admin" || orgMembership?.role === "org_manager") return userId
 
   const { data: projectMemberships, error: membershipError } = await admin
     .from("project_user_memberships")
@@ -136,43 +167,48 @@ export async function assertStageManager(organizationId: string): Promise<string
 
   const projectIds = (projectMemberships ?? []).map((membership: any) => membership.project_id as string)
   if (projectIds.length > 0) {
-    const { data: viewerMembership, error: viewerMembershipError } = await admin
-      .from("organization_memberships")
+    const { data: managedProject, error: projectError } = await admin
+      .from("projects")
       .select("id")
-      .eq("organization_id", organizationId)
-      .eq("user_id", userId)
-      .eq("status", "active")
-      .eq("role", "viewer")
+      .in("id", projectIds)
+      .eq("supervising_organization_id", organizationId)
       .limit(1)
       .maybeSingle()
-    if (viewerMembershipError) throw viewerMembershipError
-
-    let eligibleProjectIds = projectIds
-    if (viewerMembership) {
-      const { data: ownerRows, error: ownerError } = await admin
-        .from("project_owners")
-        .select("project_id")
-        .eq("viewer_user_id", userId)
-        .in("project_id", projectIds)
-      if (ownerError) throw ownerError
-      const ownerProjectIds = new Set((ownerRows ?? []).map((row: any) => row.project_id as string))
-      eligibleProjectIds = projectIds.filter((projectId) => ownerProjectIds.has(projectId))
-    }
-
-    if (eligibleProjectIds.length > 0) {
-      const { data: managedProject, error: projectError } = await admin
-        .from("projects")
-        .select("id")
-        .in("id", eligibleProjectIds)
-        .eq("supervising_organization_id", organizationId)
-        .limit(1)
-        .maybeSingle()
-      if (projectError) throw projectError
-      if (managedProject) return userId
-    }
+    if (projectError) throw projectError
+    if (managedProject) return userId
   }
 
   throw new AuthzError("You do not have permission to manage project stages")
+}
+
+/**
+ * Confirm the current user may create/configure Project Stage rows.
+ *
+ * Keep the existing project-admin authorization, but explicitly prevent the
+ * organization-level Member and Viewer roles from being promoted into Stage
+ * creation through a project membership. This guard is intentionally separate
+ * from assertProjectAdmin so unrelated project-admin permissions are unchanged.
+ */
+export async function assertProjectStageCreator(projectId: string): Promise<string> {
+  const userId = await getUserIdOrThrow()
+  const access = await resolveProjectReadAccessForUser(userId, projectId)
+  if (!access) throw new AuthzError("You do not have access to this project")
+
+  if (access.supervisingOrganizationRole === "org_member" || access.supervisingOrganizationRole === "viewer") {
+    throw new AuthzError("Members and viewers cannot add project stages")
+  }
+
+  return assertProjectAdmin(projectId)
+}
+
+export async function canCreateProjectStage(projectId: string): Promise<boolean> {
+  try {
+    await assertProjectStageCreator(projectId)
+    return true
+  } catch (error) {
+    if (error instanceof AuthzError) return false
+    throw error
+  }
 }
 
 /** Confirm the current user may review project stage reports. */

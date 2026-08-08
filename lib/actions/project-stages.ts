@@ -1,7 +1,16 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { assertProjectAdmin, assertProjectMember, assertProjectReviewer, audit, AuthzError } from "@/lib/auth/guards"
+import {
+  assertProjectAdmin,
+  assertProjectMember,
+  assertProjectReviewer,
+  assertProjectStageReportAccess,
+  assertProjectStageCreator,
+  canCreateProjectStage,
+  audit,
+  AuthzError,
+} from "@/lib/auth/guards"
 import { resolveCalendarProjectScope } from "@/lib/calendar/server"
 import { loadNextProjectVisitNumber } from "@/lib/db/project-stages"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -125,20 +134,22 @@ async function stageScope(projectId: string, stageId: string) {
 
     if (existingPs) return existingPs
 
-    const { data: insertedPs, error: insertErr } = await admin
-      .from("project_stages")
-      .insert({
-        project_id: projectId,
-        template_stage_id: libraryStage.id,
-        name: libraryStage.name,
-        description: libraryStage.description,
-        status: "in_progress",
-        sort_order: libraryStage.sort_order ?? 0,
-      })
-      .select("id, project_id, name, description, status")
-      .single()
+    if (await canCreateProjectStage(projectId)) {
+      const { data: insertedPs, error: insertErr } = await admin
+        .from("project_stages")
+        .insert({
+          project_id: projectId,
+          template_stage_id: libraryStage.id,
+          name: libraryStage.name,
+          description: libraryStage.description,
+          status: "in_progress",
+          sort_order: libraryStage.sort_order ?? 0,
+        })
+        .select("id, project_id, name, description, status")
+        .single()
 
-    if (!insertErr && insertedPs) return insertedPs
+      if (!insertErr && insertedPs) return insertedPs
+    }
   }
 
   // 4. Fallback: check if stageId is actually a termId
@@ -172,7 +183,7 @@ async function stageScope(projectId: string, stageId: string) {
     .limit(1)
     .maybeSingle()
 
-  if (anyStage) {
+  if (anyStage && (await canCreateProjectStage(projectId))) {
     const { data: createdDefaultPs } = await admin
       .from("project_stages")
       .insert({
@@ -362,7 +373,7 @@ async function completeLinkedSiteVisitAfterReport(input: {
 
 async function saveReportResponse(input: SaveReportResponseInput): Promise<StageActionResult<SavedReportResponse>> {
   try {
-    const actorId = await assertProjectMember(input.projectId)
+    const actorId = await assertProjectStageReportAccess(input.projectId)
     const directStage = input.stageId ? await stageScope(input.projectId, input.stageId) : null
     const term = !directStage && input.termId ? await termScope(input.projectId, input.termId) : null
     if (!directStage && !term) return { ok: false, error: "Select a valid project stage." }
@@ -847,7 +858,7 @@ export async function saveProjectStageSelectionAction(
   input: ProjectStageSelectionInput,
 ): Promise<StageActionResult> {
   try {
-    const actorId = await assertProjectAdmin(input.projectId)
+    const actorId = await assertProjectStageCreator(input.projectId)
     const project = await projectOrganization(input.projectId)
     const requestedStageIds = uniqueIds(input.selectedTemplateStageIds)
     const requestedTermIds = uniqueIds(input.selectedTemplateTermIds)
@@ -1122,7 +1133,7 @@ export async function createProjectStageAction(input: {
   description?: string
 }): Promise<StageActionResult<{ stageId: string }>> {
   try {
-    const actorId = await assertProjectAdmin(input.projectId)
+    const actorId = await assertProjectStageCreator(input.projectId)
     const name = input.name.trim()
     if (!name) return { ok: false, error: "Stage name is required." }
 

@@ -114,17 +114,21 @@ export type StageManagementData = {
 export async function canManageStageTemplates(organizationId: string, userId: string): Promise<boolean> {
   const admin = createAdminClient()
 
+  // Stage-library management is an elevated capability. A user's Member or
+  // Viewer organization role must never be promoted by an unrelated
+  // project_admin/project_manager membership.
   const { data: orgMembership, error: orgMembershipError } = await admin
     .from("organization_memberships")
-    .select("id")
+    .select("role")
     .eq("organization_id", organizationId)
     .eq("user_id", userId)
     .eq("status", "active")
-    .in("role", ["org_admin", "org_manager"])
+    .limit(1)
     .maybeSingle()
 
   if (orgMembershipError) return false
-  if (orgMembership) return true
+  if (orgMembership?.role === "org_member" || orgMembership?.role === "viewer") return false
+  if (orgMembership?.role === "org_admin" || orgMembership?.role === "org_manager") return true
 
   const { data: projectMemberships, error: membershipError } = await admin
     .from("project_user_memberships")
@@ -137,34 +141,10 @@ export async function canManageStageTemplates(organizationId: string, userId: st
   const projectIds = (projectMemberships ?? []).map((membership: any) => membership.project_id as string)
   if (projectIds.length === 0) return false
 
-  const { data: viewerMembership, error: viewerMembershipError } = await admin
-    .from("organization_memberships")
-    .select("id")
-    .eq("organization_id", organizationId)
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .eq("role", "viewer")
-    .limit(1)
-    .maybeSingle()
-  if (viewerMembershipError) return false
-
-  let eligibleProjectIds = projectIds
-  if (viewerMembership) {
-    const { data: ownerRows, error: ownerError } = await admin
-      .from("project_owners")
-      .select("project_id")
-      .eq("viewer_user_id", userId)
-      .in("project_id", projectIds)
-    if (ownerError) return false
-    const ownerProjectIds = new Set((ownerRows ?? []).map((row: any) => row.project_id as string))
-    eligibleProjectIds = projectIds.filter((projectId) => ownerProjectIds.has(projectId))
-  }
-  if (eligibleProjectIds.length === 0) return false
-
   const { data: managedProject, error: projectError } = await admin
     .from("projects")
     .select("id")
-    .in("id", eligibleProjectIds)
+    .in("id", projectIds)
     .eq("supervising_organization_id", organizationId)
     .limit(1)
     .maybeSingle()

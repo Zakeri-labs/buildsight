@@ -183,9 +183,27 @@ async function projectAccess(projectId: string, userId: string) {
   const access = await resolveProjectReadAccessForUser(userId, projectId)
   if (!access) return null
 
+  // Stage reporting for organization Members is Supervisor-scoped.
+  // Keep the existing access model for all other roles, but do not let a
+  // general organization membership expose another project's Stage workflow.
+  if (access.supervisingOrganizationRole === "org_member") {
+    const admin = createAdminClient()
+    const { data: supervisedProject, error: supervisorError } = await admin
+      .from("projects")
+      .select("id")
+      .eq("id", projectId)
+      .eq("assigned_supervisor_id", userId)
+      .limit(1)
+      .maybeSingle()
+    if (supervisorError) throw supervisorError
+    if (!supervisedProject) return null
+  }
+
+  const stageCreationRestricted =
+    access.supervisingOrganizationRole === "org_member" || access.supervisingOrganizationRole === "viewer"
   const canManage =
-    access.projectAccessRole === "project_admin" ||
-    access.supervisingOrganizationRole === "org_admin"
+    !stageCreationRestricted &&
+    (access.projectAccessRole === "project_admin" || access.supervisingOrganizationRole === "org_admin")
   const canReview =
     canManage ||
     access.projectAccessRole === "project_manager" ||
