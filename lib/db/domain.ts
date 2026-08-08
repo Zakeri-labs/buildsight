@@ -194,6 +194,20 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
         if (result.error) throw result.error
         data = result.data
       }
+    } else if (requestedOrgMembership?.role === "org_member") {
+      // Members use the canonical explicit Project Supervisor assignment only.
+      // Keeping this server-side prevents unrelated organization projects from
+      // reaching Member lists, aggregate counts, shell project options, or
+      // direct project detail lookups.
+      const result = await admin
+        .from("projects")
+        .select(projectColumns)
+        .eq("supervising_organization_id", orgId)
+        .eq("assigned_supervisor_id", userId)
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true })
+      if (result.error) throw result.error
+      data = result.data
     } else {
       const [orgMembershipResult, projectMembershipResult, participantResult] = await Promise.all([
         admin.from("organization_memberships").select("organization_id").eq("user_id", userId).eq("status", "active"),

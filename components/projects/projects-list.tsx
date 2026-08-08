@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react"
 import {
   Search,
   Plus,
@@ -21,8 +21,10 @@ import {
   Loader2,
   AlertTriangle,
   MapPin,
+  SlidersHorizontal,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { useCurrentUser } from "@/components/current-user-provider"
 import { ProjectImageDisplay } from "@/components/projects/project-image-display"
 import { ProjectLocationPreviewDialog } from "@/components/projects/project-location-preview-dialog"
 import { ProjectEditDialog } from "@/components/projects/project-edit-dialog"
@@ -42,6 +44,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Sheet,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import {
   Tooltip,
   TooltipContent,
@@ -244,6 +253,8 @@ export function ProjectsList({
   supervisorOptions?: ProjectSupervisorCandidate[]
 }) {
   const { locale } = useI18n()
+  const currentUser = useCurrentUser()
+  const isMember = currentUser.role === "org_member"
   const router = useRouter()
   const [projectRows, setProjectRows] = useState(projects)
   const [searchQuery, setSearchQuery] = useState("")
@@ -251,6 +262,7 @@ export function ProjectsList({
   const [selectedType, setSelectedType] = useState("all")
   const [selectedOwner, setSelectedOwner] = useState("all")
   const [sortBy, setSortBy] = useState("default")
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<ProjectRow | null>(null)
   const [locationTarget, setLocationTarget] = useState<ProjectRow | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ProjectRow | null>(null)
@@ -287,13 +299,42 @@ export function ProjectsList({
     })
   }, [projectRows, searchQuery, selectedStatus, selectedType, selectedOwner])
 
+  const mobileProjects = useMemo(() => {
+    const rows = [...filteredProjects]
+    if (sortBy === "name-asc") rows.sort((left, right) => left.name.localeCompare(right.name))
+    if (sortBy === "progress-desc") rows.sort((left, right) => right.progress - left.progress || left.name.localeCompare(right.name))
+    if (sortBy === "date-desc") {
+      rows.sort((left, right) => {
+        const leftTime = Date.parse(left.startDate)
+        const rightTime = Date.parse(right.startDate)
+        const leftValue = Number.isNaN(leftTime) ? Number.NEGATIVE_INFINITY : leftTime
+        const rightValue = Number.isNaN(rightTime) ? Number.NEGATIVE_INFINITY : rightTime
+        return rightValue - leftValue || left.name.localeCompare(right.name)
+      })
+    }
+    return rows
+  }, [filteredProjects, sortBy])
+
   const totalProjects = projectRows.length
   const activeProjects = projectRows.filter((project) => project.status === "active").length
   const stoppedProjects = projectRows.filter((project) => project.status === "stopped").length
   const completedProjects = projectRows.filter((project) => project.status === "completed").length
   const typeOptions = Array.from(new Set(projectRows.map((project) => project.projectType).filter((type) => type !== "—")))
   const ownerOptions = Array.from(new Set(projectRows.map((project) => project.ownerClient).filter((owner) => owner !== "—")))
+  const activeFilterCount = [selectedStatus, selectedType, selectedOwner].filter((value) => value !== "all").length
+  const hasSearchOrFilters = Boolean(searchQuery.trim()) || activeFilterCount > 0
   const createdProject = createdProjectId ? projectRows.find((project) => project.id === createdProjectId) : undefined
+
+  function clearFilterSelections() {
+    setSelectedStatus("all")
+    setSelectedType("all")
+    setSelectedOwner("all")
+  }
+
+  function clearMobileFilters() {
+    setSearchQuery("")
+    clearFilterSelections()
+  }
 
   function openDeleteDialog(project: ProjectRow) {
     setDeleteTarget(project)
@@ -344,6 +385,179 @@ export function ProjectsList({
         </div>
       )}
 
+      {isMember ? (
+        <section className="flex min-w-0 flex-col gap-3 md:hidden" aria-label="Projects under your supervision">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold tracking-tight text-slate-950 dark:text-white">
+                {locale === "ar" ? "المشاريع" : "Projects"}
+              </h1>
+              <p className="mt-0.5 text-xs leading-4 text-muted-foreground">
+                {locale === "ar" ? "المشاريع تحت إشرافك" : "Projects under your supervision"}
+              </p>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={locale === "ar" ? "إجراءات المشاريع" : "Project actions"}
+                    className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+                  >
+                    <MoreVertical className="size-4" />
+                  </button>
+                }
+              />
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem>
+                  <Upload className="size-4" />
+                  {locale === "ar" ? "تصدير" : "Export"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          <div className="grid grid-cols-4 gap-1.5">
+            <MobileProjectMetric label={locale === "ar" ? "الإجمالي" : "Total"} value={totalProjects} tone="blue" />
+            <MobileProjectMetric label={locale === "ar" ? "نشط" : "Active"} value={activeProjects} tone="green" />
+            <MobileProjectMetric label={locale === "ar" ? "متوقف" : "Stopped"} value={stoppedProjects} tone="red" />
+            <MobileProjectMetric label={locale === "ar" ? "مكتمل" : "Completed"} value={completedProjects} tone="violet" />
+          </div>
+
+          <div className="relative min-w-0">
+            <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={locale === "ar" ? "بحث في المشاريع..." : "Search projects..."}
+              className="h-10 w-full rounded-lg border-slate-200 bg-white ps-9 text-sm dark:border-slate-800 dark:bg-slate-900"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setFiltersOpen(true)}
+              className="inline-flex h-10 min-w-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+            >
+              <SlidersHorizontal className="size-4 shrink-0" />
+              <span className="truncate">{locale === "ar" ? "الفلاتر" : "Filters"}{activeFilterCount ? ` (${activeFilterCount})` : ""}</span>
+            </button>
+            <DropdownFilter
+              label={locale === "ar" ? "ترتيب" : "Sort"}
+              value={sortBy}
+              onChange={setSortBy}
+              className="w-full min-w-0 rounded-lg"
+              options={[
+                { label: locale === "ar" ? "الترتيب الافتراضي" : "Default Sort", value: "default" },
+                { label: locale === "ar" ? "الاسم (أ-ي)" : "Name (A-Z)", value: "name-asc" },
+                { label: locale === "ar" ? "التقدم (الأعلى أولاً)" : "Progress (High to Low)", value: "progress-desc" },
+                { label: locale === "ar" ? "تاريخ البدء (الأحدث)" : "Start Date (Newest)", value: "date-desc" },
+              ]}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-3 text-[11px] font-medium text-muted-foreground">
+            <span>{mobileProjects.length} {mobileProjects.length === 1 ? (locale === "ar" ? "مشروع" : "Project") : (locale === "ar" ? "مشاريع" : "Projects")}</span>
+            {hasSearchOrFilters ? (
+              <button type="button" onClick={clearMobileFilters} className="font-semibold text-primary hover:underline">
+                {locale === "ar" ? "مسح الفلاتر" : "Clear Filters"}
+              </button>
+            ) : null}
+          </div>
+
+          {totalProjects === 0 ? (
+            <div className="rounded-xl border border-slate-200/90 bg-white px-4 py-8 text-center shadow-xs dark:border-slate-800 dark:bg-slate-900">
+              <span className="mx-auto flex size-10 items-center justify-center rounded-xl bg-slate-100 text-slate-500 dark:bg-slate-800"><Folder className="size-5" /></span>
+              <h2 className="mt-3 text-sm font-semibold">{locale === "ar" ? "لا توجد مشاريع متاحة" : "No projects available"}</h2>
+              <p className="mx-auto mt-1 max-w-[17rem] text-xs leading-4 text-muted-foreground">
+                {locale === "ar" ? "لا توجد حالياً مشاريع تحت إشراف حسابك." : "No supervised projects are currently available for your account."}
+              </p>
+            </div>
+          ) : mobileProjects.length === 0 ? (
+            <div className="rounded-xl border border-slate-200/90 bg-white px-4 py-8 text-center shadow-xs dark:border-slate-800 dark:bg-slate-900">
+              <Search className="mx-auto size-6 text-slate-400" />
+              <h2 className="mt-3 text-sm font-semibold">{locale === "ar" ? "لا توجد مشاريع مطابقة للفلاتر" : "No projects match your filters."}</h2>
+              <button type="button" onClick={clearMobileFilters} className="mt-3 inline-flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-primary shadow-xs dark:border-slate-800 dark:bg-slate-900">
+                {locale === "ar" ? "مسح الفلاتر" : "Clear Filters"}
+              </button>
+            </div>
+          ) : (
+            <div className="grid min-w-0 gap-2">
+              {mobileProjects.map((row) => (
+                <MobileProjectCard
+                  key={row.id}
+                  row={row}
+                  locale={locale}
+                  canDeleteProjects={canDeleteProjects}
+                  onLocation={() => setLocationTarget(row)}
+                  onEdit={() => setEditTarget(row)}
+                  onDelete={() => openDeleteDialog(row)}
+                />
+              ))}
+            </div>
+          )}
+
+          <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <SheetContent side="bottom" className="max-h-[82dvh] rounded-t-2xl pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden">
+              <SheetHeader className="pb-2">
+                <SheetTitle>{locale === "ar" ? "الفلاتر" : "Filters"}</SheetTitle>
+              </SheetHeader>
+              <div className="grid gap-4 overflow-y-auto px-4 pb-2">
+                <MobileFilterField label={locale === "ar" ? "الحالة" : "Status"}>
+                  <DropdownFilter
+                    label={locale === "ar" ? "كل الحالات" : "All Statuses"}
+                    value={selectedStatus}
+                    onChange={setSelectedStatus}
+                    className="w-full"
+                    options={[
+                      { label: locale === "ar" ? "جميع الحالات" : "All Statuses", value: "all" },
+                      ...PROJECT_STATUS_OPTIONS.map((status) => ({
+                        label: locale === "ar" ? status.labelAr : status.label,
+                        value: status.value,
+                      })),
+                    ]}
+                  />
+                </MobileFilterField>
+                <MobileFilterField label={locale === "ar" ? "نوع المشروع" : "Project Type"}>
+                  <DropdownFilter
+                    label={locale === "ar" ? "كل الأنواع" : "All Types"}
+                    value={selectedType}
+                    onChange={setSelectedType}
+                    className="w-full"
+                    options={[
+                      { label: locale === "ar" ? "كل الأنواع" : "All Types", value: "all" },
+                      ...typeOptions.map((type) => ({ label: type, value: type })),
+                    ]}
+                  />
+                </MobileFilterField>
+                <MobileFilterField label={locale === "ar" ? "المالك / العميل" : "Owner / Client"}>
+                  <DropdownFilter
+                    label={locale === "ar" ? "كل العملاء" : "All Clients"}
+                    value={selectedOwner}
+                    onChange={setSelectedOwner}
+                    className="w-full"
+                    options={[
+                      { label: locale === "ar" ? "كل العملاء" : "All Clients", value: "all" },
+                      ...ownerOptions.map((owner) => ({ label: owner, value: owner })),
+                    ]}
+                  />
+                </MobileFilterField>
+              </div>
+              <SheetFooter className="grid grid-cols-2 border-t pt-3">
+                <Button type="button" variant="outline" className="h-10" onClick={clearFilterSelections}>
+                  {locale === "ar" ? "مسح" : "Clear"}
+                </Button>
+                <Button type="button" className="h-10" onClick={() => setFiltersOpen(false)}>
+                  {locale === "ar" ? "تطبيق" : "Apply"}
+                </Button>
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
+        </section>
+      ) : null}
+
+      <div className={isMember ? "hidden md:flex md:flex-col md:gap-6" : "flex flex-col gap-6"}>
       {/* 4 Metric Cards Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Card 1: Total Projects */}
@@ -739,6 +953,8 @@ export function ProjectsList({
         </div>
       </div>
 
+      </div>
+
       {locationTarget ? (
         <ProjectLocationPreviewDialog
           key={locationTarget.id}
@@ -865,6 +1081,169 @@ export function ProjectsList({
   )
 }
 
+function MobileProjectMetric({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: number
+  tone: "blue" | "green" | "red" | "violet"
+}) {
+  const tones = {
+    blue: "border-blue-100 bg-blue-50/70 dark:border-blue-950 dark:bg-blue-950/25",
+    green: "border-emerald-100 bg-emerald-50/70 dark:border-emerald-950 dark:bg-emerald-950/25",
+    red: "border-red-100 bg-red-50/70 dark:border-red-950 dark:bg-red-950/25",
+    violet: "border-violet-100 bg-violet-50/70 dark:border-violet-950 dark:bg-violet-950/25",
+  }
+
+  return (
+    <div className={cn("min-w-0 rounded-lg border px-1 py-2 text-center", tones[tone])}>
+      <span className="block truncate text-[9px] font-medium leading-3 text-muted-foreground">{label}</span>
+      <span className="mt-0.5 block text-base font-extrabold leading-5 tabular-nums text-slate-950 dark:text-white">{value}</span>
+    </div>
+  )
+}
+
+function MobileFilterField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="grid min-w-0 gap-1.5">
+      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{label}</span>
+      {children}
+    </div>
+  )
+}
+
+function MobileProjectCard({
+  row,
+  locale,
+  canDeleteProjects,
+  onLocation,
+  onEdit,
+  onDelete,
+}: {
+  row: ProjectRow
+  locale: string
+  canDeleteProjects: boolean
+  onLocation: () => void
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const hasAddress = row.address.trim().length > 0 && row.address.trim() !== "—"
+  const hasCoordinates =
+    Number.isFinite(row.latitude) &&
+    Number.isFinite(row.longitude) &&
+    Number(row.latitude) >= -90 &&
+    Number(row.latitude) <= 90 &&
+    Number(row.longitude) >= -180 &&
+    Number(row.longitude) <= 180
+  const hasLocation = hasAddress || hasCoordinates
+  const supervision = row.supervisionType?.trim()
+    ? supervisionTypeLabel(row.supervisionType, row.supervisionTypeOther)
+    : locale === "ar" ? "غير محدد" : "Not set"
+  const metadata = [
+    row.ownerClient !== "—" ? row.ownerClient : null,
+    supervision !== "Not set" && supervision !== "غير محدد" ? supervision : null,
+  ].filter(Boolean).join(" • ")
+  const typeAndDate = [
+    row.projectType !== "—" ? row.projectType : null,
+    row.startDate !== "—" ? row.startDate : null,
+  ].filter(Boolean).join(" • ")
+
+  return (
+    <article className="relative min-h-[5.5rem] min-w-0 overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-xs transition-colors active:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:active:bg-slate-800/50">
+      <Link
+        href={`/projects/${encodeURIComponent(row.id)}`}
+        aria-label={`${locale === "ar" ? "فتح المشروع" : "Open project"} ${row.name}`}
+        className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+      />
+
+      <div className="pointer-events-none relative z-10 flex min-w-0 gap-2.5 p-2.5 pe-11">
+        <ProjectImageDisplay
+          src={row.imageUrl}
+          projectId={row.id}
+          alt={row.name}
+          className="size-12 shrink-0 rounded-lg border border-slate-200 dark:border-slate-700"
+          iconClassName="size-4"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-[13px] font-bold leading-4 text-slate-950 dark:text-white">{row.name}</h2>
+              <p className="mt-0.5 line-clamp-2 break-all font-mono text-[10px] leading-3.5 text-slate-500 dark:text-slate-400">{row.code}</p>
+            </div>
+            <ProjectStatusBadge status={row.status} />
+          </div>
+
+          {metadata ? <p className="mt-1 truncate text-[10px] leading-4 text-slate-600 dark:text-slate-400">{metadata}</p> : null}
+          {typeAndDate ? <p className="truncate text-[10px] leading-4 text-slate-500 dark:text-slate-500">{typeAndDate}</p> : null}
+
+          <div className="mt-1 flex min-w-0 items-center gap-2">
+            <span className="shrink-0 text-[10px] font-semibold tabular-nums text-slate-700 dark:text-slate-300">{row.progress}%</span>
+            <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+              <div className="h-full rounded-full bg-blue-600" style={{ width: `${row.progress}%` }} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="absolute end-1.5 top-1.5 z-20 flex flex-col gap-1">
+        {hasLocation ? (
+          <button
+            type="button"
+            aria-label={locale === "ar" ? "عرض موقع المشروع" : "View project location"}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onLocation()
+            }}
+            className="inline-flex size-7 items-center justify-center rounded-md bg-white/95 text-slate-400 shadow-xs hover:bg-slate-100 hover:text-blue-600 dark:bg-slate-900/95 dark:hover:bg-slate-800 dark:hover:text-blue-400"
+          >
+            <MapPin className="size-3.5" />
+          </button>
+        ) : null}
+
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                aria-label={`${locale === "ar" ? "إجراءات" : "Actions for"} ${row.name}`}
+                onClick={(event) => event.stopPropagation()}
+                className="inline-flex size-7 items-center justify-center rounded-md bg-white/95 text-slate-400 shadow-xs hover:bg-slate-100 hover:text-slate-700 dark:bg-slate-900/95 dark:hover:bg-slate-800"
+              >
+                <MoreVertical className="size-4" />
+              </button>
+            }
+          />
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem
+              render={
+                <Link href={`/projects/${row.id}`}>
+                  <Eye className="size-4" />
+                  {locale === "ar" ? "عرض المشروع" : "View Project"}
+                </Link>
+              }
+            />
+            {row.canEdit ? (
+              <DropdownMenuItem onClick={onEdit}>
+                <Pencil className="size-4" />
+                {locale === "ar" ? "تعديل المشروع" : "Edit Project"}
+              </DropdownMenuItem>
+            ) : null}
+            {canDeleteProjects ? (
+              <DropdownMenuItem variant="destructive" onClick={onDelete}>
+                <Trash2 className="size-4" />
+                {locale === "ar" ? "حذف المشروع" : "Delete Project"}
+              </DropdownMenuItem>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </article>
+  )
+}
+
 function ImpactRow({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center justify-between gap-3">
@@ -879,11 +1258,13 @@ function DropdownFilter({
   value,
   onChange,
   options,
+  className,
 }: {
   label: string
   value: string
   onChange: (val: string) => void
   options: { label: string; value: string }[]
+  className?: string
 }) {
   const selectedObj = options.find((o) => o.value === value)
   const displayLabel = value === "all" ? label : selectedObj?.label ?? label
@@ -894,10 +1275,10 @@ function DropdownFilter({
         render={
           <button
             type="button"
-            className="inline-flex h-10 items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+            className={cn("inline-flex h-10 items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300", className)}
           >
-            <span>{displayLabel}</span>
-            <ChevronDown className="size-3.5 text-slate-400" />
+            <span className="min-w-0 truncate">{displayLabel}</span>
+            <ChevronDown className="size-3.5 shrink-0 text-slate-400" />
           </button>
         }
       />
