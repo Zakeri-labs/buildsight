@@ -94,7 +94,12 @@ function KpiCard({ kpi }: { kpi: KpiCardData }) {
 
 export function PortfolioKpis({ kpis }: { kpis: KpiCardData[] }) {
   return (
-    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+    <div
+      className={cn(
+        "grid grid-cols-1 gap-5 sm:grid-cols-2",
+        kpis.length === 3 ? "xl:grid-cols-3" : "xl:grid-cols-4",
+      )}
+    >
       {kpis.map((kpi) => (
         <KpiCard key={kpi.key} kpi={kpi} />
       ))}

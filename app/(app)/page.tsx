@@ -66,14 +66,6 @@ export default async function DashboardPage({
       spark: spark(data.kpis.totalProjects),
     },
     {
-      key: "ncrs",
-      label: "Open NCRs",
-      value: data.kpis.openNcrs,
-      tone: "red",
-      icon: "ncr",
-      spark: spark(data.kpis.openNcrs),
-    },
-    {
       key: "inspections",
       label: "Open Inspections",
       value: data.kpis.openInspections,
