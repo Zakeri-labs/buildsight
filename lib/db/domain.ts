@@ -527,7 +527,7 @@ async function fetchScopedCompletedSiteVisitsByActivityRange(
   const admin = createAdminClient()
   let query = admin
     .from("site_visit_requests")
-    .select("id, project_id, completed_at")
+    .select("id, project_id, report_visit_number, completed_at")
     .in("project_id", projectIds)
     .eq("status", "completed")
     .not("completed_at", "is", null)
@@ -554,6 +554,15 @@ export type DashboardData = {
     name: string
     completedVisitCount: number
     projectCount: number
+    visits: {
+      id: string
+      projectId: string
+      projectName: string
+      projectCode: string | null
+      visitNumber: number | null
+      stageName: string | null
+      completedAt: string
+    }[]
   }[]
   recentSupervisorReports: RecentSupervisorReportRow[]
   projects: {
@@ -645,7 +654,7 @@ export async function getDashboardData(
         : Promise.resolve(emptyReportCcFeed),
       fetchScopedRows(
         "term_responses",
-        "id, project_id, project_stage_id, project_stage_term_id, report_title, status, submitted_at, updated_at, created_at",
+        "id, project_id, project_stage_id, project_stage_term_id, site_visit_request_id, visit_number, report_title, status, submitted_at, updated_at, created_at",
         ids,
       ),
     ])
@@ -726,6 +735,67 @@ export async function getDashboardData(
         })
         .filter((entry): entry is [string, string] => Boolean(entry)),
     )
+
+    // Stage context is shown only when the Site Visit is explicitly linked to
+    // its Stage-based Report. Never infer it from Project, date, or Visit No.
+    const linkedReportByVisitId = new Map<
+      string,
+      { projectStageId: string; visitNumber: number | null }
+    >()
+    for (const response of termResponses ?? []) {
+      const visitId = asUuid((response as any).site_visit_request_id)
+      const projectStageId = asUuid((response as any).project_stage_id)
+      if (!visitId || !projectStageId || !completedVisitById.has(visitId)) continue
+      linkedReportByVisitId.set(visitId, {
+        projectStageId,
+        visitNumber: Number.isInteger((response as any).visit_number) ? (response as any).visit_number : null,
+      })
+    }
+
+    const linkedStageIds = validUuidList(
+      Array.from(linkedReportByVisitId.values()).map((report) => report.projectStageId),
+    )
+    const { data: linkedStages, error: linkedStagesError } = linkedStageIds.length
+      ? await admin.from("project_stages").select("id, name").in("id", linkedStageIds)
+      : { data: [] as any[], error: null }
+    if (linkedStagesError) throw linkedStagesError
+    const stageNameById = new Map<string, string>(
+      (linkedStages ?? []).map((stage: any) => [stage.id as string, stage.name as string]),
+    )
+    const scopedProjectById = new Map(scoped.map((project) => [project.id, project]))
+    const completedVisitDetailById = new Map<
+      string,
+      {
+        id: string
+        projectId: string
+        projectName: string
+        projectCode: string | null
+        visitNumber: number | null
+        stageName: string | null
+        completedAt: string
+      }
+    >()
+
+    for (const visit of completedSiteVisits as any[]) {
+      const visitId = asUuid(visit.id)
+      const visitProjectId = asUuid(visit.project_id)
+      const completedAt = typeof visit.completed_at === "string" ? visit.completed_at : null
+      if (!visitId || !visitProjectId || !completedAt) continue
+
+      const project = scopedProjectById.get(visitProjectId)
+      const linkedReport = linkedReportByVisitId.get(visitId)
+      const reservedVisitNumber = Number.isInteger(visit.report_visit_number) ? visit.report_visit_number : null
+      completedVisitDetailById.set(visitId, {
+        id: visitId,
+        projectId: visitProjectId,
+        projectName: project?.name ?? "Project",
+        projectCode: project?.code ?? null,
+        visitNumber: linkedReport?.visitNumber ?? reservedVisitNumber,
+        stageName: linkedReport ? stageNameById.get(linkedReport.projectStageId) ?? null : null,
+        completedAt,
+      })
+    }
+
     const completedVisitAggregation = new Map<
       string,
       { supervisorId: string; name: string; visitIds: Set<string>; projectIds: Set<string> }
@@ -750,12 +820,31 @@ export async function getDashboardData(
     }
 
     const completedVisitsBySupervisor = Array.from(completedVisitAggregation.values())
-      .map((item) => ({
-        supervisorId: item.supervisorId,
-        name: item.name,
-        completedVisitCount: item.visitIds.size,
-        projectCount: item.projectIds.size,
-      }))
+      .map((item) => {
+        const visits = Array.from(item.visitIds)
+          .map((visitId) => completedVisitDetailById.get(visitId))
+          .filter((visit): visit is {
+            id: string
+            projectId: string
+            projectName: string
+            projectCode: string | null
+            visitNumber: number | null
+            stageName: string | null
+            completedAt: string
+          } => Boolean(visit))
+          .sort((a, b) => {
+            const timeDifference = new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
+            return timeDifference || b.id.localeCompare(a.id)
+          })
+
+        return {
+          supervisorId: item.supervisorId,
+          name: item.name,
+          completedVisitCount: item.visitIds.size,
+          projectCount: item.projectIds.size,
+          visits,
+        }
+      })
       .sort((a, b) =>
         b.completedVisitCount - a.completedVisitCount ||
         a.name.localeCompare(b.name) ||

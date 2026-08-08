@@ -98,7 +98,10 @@ export default async function DashboardPage({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <StatusDonutCard title="NCR Status" slices={data.ncrDonut} href="/ncrs" linkLabel="View all NCRs" />
-        <CompletedVisitsBySupervisorCard supervisors={data.completedVisitsBySupervisor} />
+        <CompletedVisitsBySupervisorCard
+          supervisors={data.completedVisitsBySupervisor}
+          dateRangeLabel={dateRange.label}
+        />
         <RecentSupervisorReportsCard reports={data.recentSupervisorReports} />
       </div>
 
