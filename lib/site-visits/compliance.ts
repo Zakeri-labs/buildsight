@@ -3,6 +3,7 @@ import {
   currentCalendarDateKey,
   isCalendarDateKey,
 } from "@/lib/calendar/date"
+import { normalizeProjectStatus } from "@/lib/projects/project-status"
 
 export const VISIT_COMPLIANCE_INTERVAL_DAYS = {
   monthly_2: 15,
@@ -60,13 +61,15 @@ export function normalizeVisitComplianceSupervisionType(
 ): VisitComplianceSupervisionType | null {
   if (typeof value !== "string") return null
 
-  // Current projects persist the canonical option value (monthly_2/monthly_3/monthly_4),
-  // while older rows can still contain the visible option label. Normalize only those
-  // three active recurring options; unrelated legacy supervision modes stay ineligible.
-  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_")
-  return Object.prototype.hasOwnProperty.call(VISIT_COMPLIANCE_INTERVAL_DAYS, normalized)
-    ? (normalized as VisitComplianceSupervisionType)
-    : null
+  // Project creation/editing persist monthly_2/monthly_3/monthly_4. Some existing
+  // rows can contain the equivalent visible label ("Monthly 2") or punctuation-only
+  // variants. Normalize only exact equivalents of those three current options; other
+  // legacy supervision modes intentionally remain outside recurring compliance.
+  const token = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "")
+  if (token === "monthly2") return "monthly_2"
+  if (token === "monthly3") return "monthly_3"
+  if (token === "monthly4") return "monthly_4"
+  return null
 }
 
 export function isVisitComplianceSupervisionType(
@@ -79,7 +82,11 @@ export function isVisitComplianceEligible(
   status: string | null | undefined,
   supervisionType: string | null | undefined,
 ): boolean {
-  return status?.trim().toLowerCase() === "active" && normalizeVisitComplianceSupervisionType(supervisionType) !== null
+  // Reuse the application's canonical Project status normalization. Existing Project
+  // rows can legitimately carry legacy active equivalents such as `in_progress` /
+  // `under_construction`; the rest of the Project UI already treats those as Active.
+  const rawStatus = typeof status === "string" ? status.trim() : ""
+  return Boolean(rawStatus) && normalizeProjectStatus(rawStatus) === "active" && normalizeVisitComplianceSupervisionType(supervisionType) !== null
 }
 
 export function calculateVisitCompliance(

@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 import { getReviewSubmissionFeed } from "@/lib/review-submissions/server"
 import { getSiteVisitTaskFeed } from "@/lib/site-visits/server"
+import { loadCanonicalCompletedSiteVisits } from "@/lib/site-visits/completed-visits"
 import { getReportCcNotificationFeed } from "@/lib/report-cc/server"
 import { getViewerOwnedProjectIds, isProjectUuid } from "@/lib/auth/project-access"
 import type { DashboardDateRange } from "@/lib/dashboard/date-range"
@@ -527,53 +528,17 @@ async function fetchScopedRowsByActivityRange(
   return data ?? []
 }
 
-function isCompletedSiteVisitStatus(value: unknown): boolean {
-  return typeof value === "string" && value.trim().toLowerCase() === "completed"
-}
-
 async function fetchScopedCompletedSiteVisitsByActivityRange(
   ids: string[],
   range?: Pick<DashboardDateRange, "startUtc" | "endExclusiveUtc">,
 ) {
-  const projectIds = validUuidList(ids)
-  if (projectIds.length === 0) return [] as any[]
-
-  const admin = createAdminClient()
-  let query = admin
-    .from("site_visit_requests")
-    .select("id, project_id, report_visit_number, status, completed_at")
-    .in("project_id", projectIds)
-    .not("completed_at", "is", null)
-
-  if (range?.startUtc) query = query.gte("completed_at", range.startUtc)
-  if (range?.endExclusiveUtc) query = query.lt("completed_at", range.endExclusiveUtc)
-
-  const { data, error } = await query
-  if (error) throw error
-
-  // Completion is canonical only when BOTH the persisted completion timestamp exists
-  // and the Site Visit status normalizes to `completed`. Filtering the status after the
-  // scoped/date-limited query avoids silently losing legitimate historical rows whose
-  // status casing differs, while still excluding scheduled/pending/cancelled requests.
-  return (data ?? []).filter((visit: any) => isCompletedSiteVisitStatus(visit.status))
+  return loadCanonicalCompletedSiteVisits(validUuidList(ids), range)
 }
 
 async function fetchScopedCompletedSiteVisitsForCompliance(ids: string[]) {
-  const projectIds = validUuidList(ids)
-  if (projectIds.length === 0) return [] as any[]
-
-  const admin = createAdminClient()
-  const { data, error } = await admin
-    .from("site_visit_requests")
-    .select("id, project_id, status, completed_at")
-    .in("project_id", projectIds)
-    .not("completed_at", "is", null)
-
-  if (error) throw error
-
-  // Compliance deliberately has no Dashboard activity-range filter. It needs the latest
-  // completed Visit for each Project across the full authorized Project history.
-  return (data ?? []).filter((visit: any) => isCompletedSiteVisitStatus(visit.status))
+  // Contractual compliance intentionally ignores the Dashboard activity range and
+  // always considers the latest canonical completed Site Visit across Project history.
+  return loadCanonicalCompletedSiteVisits(validUuidList(ids))
 }
 
 export type DashboardVisitComplianceProject = {
@@ -842,9 +807,9 @@ export async function getDashboardData(
       { label: "Approved", value: inspByStatus.get("approved") ?? 0, color: "var(--success)" },
     ]
 
-    // Aggregate completed Site Visits through the visit-specific assignee relationship.
-    // The request row is the canonical Site Visit record; completion is determined by
-    // status = completed and completed_at, while assignee rows determine attribution.
+    // Aggregate canonical completed Site Visits through the visit-specific assignee
+    // relationship. Completion is resolved by the shared Site Visit loader; current
+    // assignee rows remain authoritative, with scheduling audit recovery for legacy gaps.
     const projectSupervisorById = new Map<string, string>(
       scoped
         .filter((project) => Boolean(project.assignedSupervisorId))
@@ -864,8 +829,28 @@ export async function getDashboardData(
       : { data: [] as any[], error: null }
     if (completedVisitAssigneesError) throw completedVisitAssigneesError
 
+    // Preserve the live visit-assignee relation as the source of truth. For legacy
+    // completed rows where that relation is unexpectedly empty, recover the exact
+    // assigned_user_ids persisted by the scheduling audit instead of substituting the
+    // current Project Supervisor (which could have changed since the historical Visit).
+    const explicitAssigneeVisitIds = new Set(
+      (completedVisitAssignees ?? [])
+        .map((row: any) => asUuid(row.request_id))
+        .filter((value): value is string => Boolean(value)),
+    )
+    const recoveredVisitAssignees = (completedSiteVisits as any[]).flatMap((visit) => {
+      const visitId = asUuid(visit.id)
+      if (!visitId || explicitAssigneeVisitIds.has(visitId)) return []
+      return validUuidList(Array.isArray(visit.assignmentFallbackUserIds) ? visit.assignmentFallbackUserIds : [])
+        .map((userId) => ({ request_id: visitId, user_id: userId }))
+    })
+    const canonicalCompletedVisitAssignees = [
+      ...(completedVisitAssignees ?? []),
+      ...recoveredVisitAssignees,
+    ]
+
     const assignedSupervisorIds = validUuidList(
-      (completedVisitAssignees ?? []).map((row: any) => row.user_id),
+      canonicalCompletedVisitAssignees.map((row: any) => row.user_id),
     )
     const reportSupervisorIds = validUuidList(Array.from(projectSupervisorById.values()))
     const supervisorIds = validUuidList([...assignedSupervisorIds, ...reportSupervisorIds])
@@ -887,7 +872,7 @@ export async function getDashboardData(
       (completedSiteVisits as any[])
         .map((visit) => {
           const visitId = asUuid(visit.id)
-          const visitProjectId = asUuid(visit.project_id)
+          const visitProjectId = asUuid(visit.projectId)
           return visitId && visitProjectId ? ([visitId, visitProjectId] as [string, string]) : null
         })
         .filter((entry): entry is [string, string] => Boolean(entry)),
@@ -935,13 +920,13 @@ export async function getDashboardData(
 
     for (const visit of completedSiteVisits as any[]) {
       const visitId = asUuid(visit.id)
-      const visitProjectId = asUuid(visit.project_id)
-      const completedAt = typeof visit.completed_at === "string" ? visit.completed_at : null
+      const visitProjectId = asUuid(visit.projectId)
+      const completedAt = typeof visit.completedAt === "string" ? visit.completedAt : null
       if (!visitId || !visitProjectId || !completedAt) continue
 
       const project = scopedProjectById.get(visitProjectId)
       const linkedReport = linkedReportByVisitId.get(visitId)
-      const reservedVisitNumber = Number.isInteger(visit.report_visit_number) ? visit.report_visit_number : null
+      const reservedVisitNumber = Number.isInteger(visit.reportVisitNumber) ? visit.reportVisitNumber : null
       completedVisitDetailById.set(visitId, {
         id: visitId,
         projectId: visitProjectId,
@@ -958,7 +943,7 @@ export async function getDashboardData(
       { supervisorId: string; name: string; visitIds: Set<string>; projectIds: Set<string> }
     >()
 
-    for (const assignment of completedVisitAssignees ?? []) {
+    for (const assignment of canonicalCompletedVisitAssignees) {
       const visitId = asUuid((assignment as any).request_id)
       const supervisorId = asUuid((assignment as any).user_id)
       if (!visitId || !supervisorId) continue
@@ -1015,8 +1000,8 @@ export async function getDashboardData(
     // source of truth for interval, eligibility, due date, and compliance state.
     const latestCompletedVisitAtByProject = new Map<string, string>()
     for (const visit of complianceCompletedSiteVisits as any[]) {
-      const visitProjectId = asUuid(visit.project_id)
-      const completedAt = typeof visit.completed_at === "string" ? visit.completed_at : null
+      const visitProjectId = asUuid(visit.projectId)
+      const completedAt = typeof visit.completedAt === "string" ? visit.completedAt : null
       if (!visitProjectId || !completedAt) continue
 
       const existing = latestCompletedVisitAtByProject.get(visitProjectId)
