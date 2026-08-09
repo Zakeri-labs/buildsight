@@ -152,8 +152,8 @@ export function CompletedVisitsBySupervisorCard({
 
   return (
     <div className="flex min-h-0 flex-col rounded-xl border border-border bg-card p-5">
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 md:grid-cols-[220px_minmax(0,1fr)] md:gap-6">
-        <section className="border-b border-border/70 pb-5 md:border-b-0 md:border-r md:pb-0 md:pr-6">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 md:grid-cols-[34%_minmax(0,1fr)] md:gap-5">
+        <section className="border-b border-border/70 pb-5 md:border-b-0 md:border-r md:pb-0 md:pr-5">
           <h2 className="text-base font-semibold text-foreground">Visit Completion</h2>
           <div className="mt-3 flex items-center justify-center">
             <DonutChart
@@ -223,7 +223,7 @@ export function CompletedVisitsBySupervisorCard({
                         <span className="w-[74px] shrink-0 text-xs text-muted-foreground">
                           {supervisor.projectCount} {supervisor.projectCount === 1 ? "Project" : "Projects"}
                         </span>
-                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div className="h-1.5 w-full max-w-[260px] overflow-hidden rounded-full bg-muted/80">
                           <div
                             className="h-full rounded-full bg-primary transition-[width]"
                             style={{ width: `${relativeWidth}%` }}

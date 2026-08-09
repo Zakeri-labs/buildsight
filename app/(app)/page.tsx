@@ -108,14 +108,19 @@ export default async function DashboardPage({
 
       <PortfolioKpis kpis={kpis} />
 
-      {hasAdminRole ? <VisitComplianceCard compliance={data.visitCompliance} /> : null}
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div
+        className={
+          hasAdminRole
+            ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.95fr)_minmax(0,1fr)]"
+            : "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
+        }
+      >
         <CompletedVisitsBySupervisorCard
           supervisors={data.completedVisitsBySupervisor}
           completion={data.visitCompletion}
           dateRangeLabel={dateRange.label}
         />
+        {hasAdminRole ? <VisitComplianceCard compliance={data.visitCompliance} /> : null}
         <RecentSupervisorReportsCard reports={data.recentSupervisorReports} />
       </div>
 

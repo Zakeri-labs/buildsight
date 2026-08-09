@@ -43,7 +43,8 @@ const urgencyClass = {
 
 export function VisitComplianceCard({ compliance }: { compliance: DashboardVisitCompliance }) {
   const hasEligibleProjects = compliance.eligibleProjectCount > 0
-  const hasAttention = compliance.overdueCount + compliance.dueTodayCount + compliance.dueSoonCount > 0
+  const attentionCount = compliance.overdueCount + compliance.dueTodayCount + compliance.dueSoonCount
+  const hasAttention = attentionCount > 0
 
   return (
     <Dialog>
@@ -51,47 +52,61 @@ export function VisitComplianceCard({ compliance }: { compliance: DashboardVisit
         render={
           <button
             type="button"
-            className="group w-full rounded-xl border border-border bg-card px-5 py-3 text-left transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="group flex h-full min-h-[17rem] w-full flex-col rounded-xl border border-border bg-card p-5 text-left transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:min-h-0"
           />
         }
       >
-        <div className="flex min-h-[3.5rem] flex-col justify-center gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300">
-              <CalendarCheck2 className="size-4" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground">Visit Compliance</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {hasAttention
-                  ? "Recurring visit deadlines requiring attention"
-                  : hasEligibleProjects
-                    ? "All recurring site visits are on track"
-                    : "No recurring supervision projects found"}
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300">
+            <CalendarCheck2 className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-foreground">Visit Compliance</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">Recurring site visit deadlines</p>
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-1 flex-col justify-center">
+          {hasAttention ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-4 text-sm">
+                <span className="font-medium text-red-600 dark:text-red-400">Overdue</span>
+                <strong className="tabular-nums text-red-600 dark:text-red-400">{compliance.overdueCount}</strong>
+              </div>
+              <div className="flex items-center justify-between gap-4 text-sm">
+                <span className="font-medium text-amber-600 dark:text-amber-400">Due Today</span>
+                <strong className="tabular-nums text-amber-600 dark:text-amber-400">{compliance.dueTodayCount}</strong>
+              </div>
+              <div className="flex items-center justify-between gap-4 text-sm">
+                <span className="font-medium text-yellow-700 dark:text-yellow-400">Due Soon</span>
+                <strong className="tabular-nums text-yellow-700 dark:text-yellow-400">{compliance.dueSoonCount}</strong>
+              </div>
+              <p className="pt-1 text-xs text-muted-foreground">
+                {attentionCount} {attentionCount === 1 ? "project requires" : "projects require"} attention
               </p>
             </div>
-          </div>
-
-          {hasAttention ? (
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs sm:justify-end">
-              <span className="font-medium text-red-600 dark:text-red-400">
-                <strong className="text-sm tabular-nums">{compliance.overdueCount}</strong> Overdue
-              </span>
-              <span className="font-medium text-amber-600 dark:text-amber-400">
-                <strong className="text-sm tabular-nums">{compliance.dueTodayCount}</strong> Due Today
-              </span>
-              <span className="font-medium text-yellow-700 dark:text-yellow-400">
-                <strong className="text-sm tabular-nums">{compliance.dueSoonCount}</strong> Due Soon
-              </span>
-              <span className="inline-flex items-center gap-1 font-medium text-primary group-hover:underline">
-                View Details <ChevronRight className="size-3.5" />
-              </span>
-            </div>
           ) : hasEligibleProjects ? (
-            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">On track</span>
+            <div className="py-4">
+              <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                All recurring site visits are on track
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                No recurring-supervision projects currently require attention.
+              </p>
+            </div>
           ) : (
-            <span className="text-xs font-medium text-muted-foreground">No recurring projects</span>
+            <div className="py-4">
+              <p className="text-sm font-medium text-foreground">No recurring supervision projects found</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                No active Monthly 2, Monthly 3, or Monthly 4 projects are available in the current Project scope.
+              </p>
+            </div>
           )}
+        </div>
+
+        <div className="mt-4 flex items-center justify-between border-t border-border pt-4 text-sm font-medium text-primary">
+          <span>View Details</span>
+          <ChevronRight className="size-4 transition-transform group-hover:translate-x-0.5 flip-rtl" />
         </div>
       </DialogTrigger>
 
