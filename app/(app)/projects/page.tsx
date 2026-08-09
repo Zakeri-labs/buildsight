@@ -55,7 +55,6 @@ export default async function ProjectsPage({
     projectTypeValue: isProjectTypeValue(project.projectType) ? project.projectType : null,
     supervisionType: project.supervisionType,
     supervisionTypeOther: project.supervisionTypeOther,
-    supervisionStartDate: project.supervisionStartDate,
     description: project.description ?? "",
     status: normalizeProjectStatus(project.status),
     startDate: displayDate(project.startDate),

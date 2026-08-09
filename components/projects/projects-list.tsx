@@ -98,7 +98,6 @@ export interface ProjectRow {
   projectTypeValue?: ProjectTypeValue | null
   supervisionType?: string | null
   supervisionTypeOther?: string | null
-  supervisionStartDate?: string | null
   description?: string
   status: ProjectStatus
   startDate: string
@@ -992,7 +991,6 @@ export function ProjectsList({
                     projectTypeValue: updated.projectTypeValue,
                     supervisionType: updated.supervisionType,
                     supervisionTypeOther: updated.supervisionTypeOther,
-                    supervisionStartDate: updated.supervisionStartDate,
                     status: normalizeProjectStatus(updated.status),
                     description: updated.description,
                     latitude: updated.latitude,
