@@ -747,7 +747,7 @@ export function ProjectDetail({
         <Card className={cn(isMember && "max-md:rounded-xl")}>
           <CardContent className={cn("flex items-center gap-4 p-5", isMember && "max-md:gap-2.5 max-md:p-3")}>
             <span className={cn("flex size-12 items-center justify-center rounded-xl bg-info/12 text-info", isMember && "max-md:size-9 max-md:rounded-lg")}><ClipboardList className={cn("size-6", isMember && "max-md:size-4")} /></span>
-            <div className="flex min-w-0 flex-col"><span className={cn("text-2xl font-semibold tabular-nums", isMember && "max-md:text-lg")}>{currentProject.openInspections}</span><span className={cn("text-sm text-muted-foreground", isMember && "max-md:text-[11px] max-md:leading-tight")}>{isArabic ? t.projects.openInspections : "Total Inspections"}</span></div>
+            <div className="flex min-w-0 flex-col"><span className={cn("text-2xl font-semibold tabular-nums", isMember && "max-md:text-lg")}>{currentProject.openInspections}</span><span className={cn("text-sm text-muted-foreground", isMember && "max-md:text-[11px] max-md:leading-tight")}>{t.projects.openInspections}</span></div>
           </CardContent>
         </Card>
         <Card className={cn(isMember && "max-md:rounded-xl")}>
