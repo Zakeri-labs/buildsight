@@ -165,6 +165,7 @@ export function ProjectEditDialog({
       return
     }
     setError(null)
+    const submittedSupervisionStartDate = supervisionStartDateInputRef.current?.value ?? supervisionStartDate
     startTransition(async () => {
       const result = await updateProject({
         projectId: project.id,
@@ -177,7 +178,7 @@ export function ProjectEditDialog({
           : undefined,
         status,
         plotNo,
-        supervisionStartDate,
+        supervisionStartDate: submittedSupervisionStartDate,
         priority: priority || undefined,
         includedStructureVisits: optionalWholeNumber(includedStructureVisits),
         includedFinishingVisits: optionalWholeNumber(includedFinishingVisits),
@@ -220,7 +221,7 @@ export function ProjectEditDialog({
         supervisionTypeLabel: supervisionTypeLabel(nextSupervisionType, nextSupervisionTypeOther),
         status,
         plotNo: plotNo.trim() || null,
-        supervisionStartDate: supervisionStartDate || null,
+        supervisionStartDate: (result.data?.supervisionStartDate ?? submittedSupervisionStartDate) || null,
         priority: priority || project.priority || null,
         includedStructureVisits: optionalWholeNumber(includedStructureVisits),
         includedFinishingVisits: optionalWholeNumber(includedFinishingVisits),
@@ -479,6 +480,7 @@ export function ProjectEditDialog({
                     type="date"
                     value={supervisionStartDate}
                     onChange={(event) => setSupervisionStartDate(event.target.value)}
+                    onInput={(event) => setSupervisionStartDate(event.currentTarget.value)}
                     disabled={pending}
                     className="h-10 pe-11 [&::-webkit-calendar-picker-indicator]:opacity-0"
                   />

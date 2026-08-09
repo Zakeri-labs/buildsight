@@ -356,7 +356,7 @@ export async function updateProject(input: {
   latitude?: number | null
   longitude?: number | null
   assignedSupervisorId?: string | null
-}): Promise<ActionResult> {
+}): Promise<ActionResult<{ supervisionStartDate: string | null }>> {
   try {
     const name = input.name.trim()
     if (name.length < 2) return { ok: false, error: "Project name is too short." }
@@ -506,10 +506,12 @@ export async function updateProject(input: {
     if (input.description !== undefined) updates.description = input.description.trim() || null
     if (input.region !== undefined) updates.region = input.region.trim() || null
 
-    const { error } = await admin
+    const { data: updatedProject, error } = await admin
       .from("projects")
       .update(updates)
       .eq("id", input.projectId)
+      .select("supervision_start_date")
+      .single()
     if (error) throw error
 
     if (normalizedSupervisorId !== undefined && normalizedSupervisorId !== project.assigned_supervisor_id) {
@@ -536,7 +538,13 @@ export async function updateProject(input: {
     revalidatePath("/projects")
     revalidatePath(`/projects/${input.projectId}`)
     revalidatePath("/calendar")
-    return { ok: true }
+    return {
+      ok: true,
+      data: {
+        supervisionStartDate:
+          typeof updatedProject.supervision_start_date === "string" ? updatedProject.supervision_start_date : null,
+      },
+    }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not update project." }
   }
