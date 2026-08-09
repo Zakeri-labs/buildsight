@@ -11,7 +11,6 @@ import { normalizeDocumentType } from "@/lib/documents/document-types"
 import { currentCalendarDateKey } from "@/lib/calendar/date"
 import {
   calculateVisitCompliance,
-  isVisitComplianceEligible,
   type VisitComplianceState,
   type VisitComplianceSupervisionType,
 } from "@/lib/site-visits/compliance"
@@ -528,21 +527,18 @@ async function fetchScopedRowsByActivityRange(
   return data ?? []
 }
 
-async function fetchScopedCompletedSiteVisitsForCompliance(ids: string[]) {
+async function fetchScopedProjectsForCompliance(ids: string[]) {
   const projectIds = validUuidList(ids)
   if (projectIds.length === 0) return [] as any[]
 
-  // Compliance is contractual state as of today, not Dashboard activity. Always
-  // inspect all historical completed visits for the scoped eligible Projects.
+  // Read the contractual inputs directly from the current Project rows. This keeps
+  // compliance independent from Dashboard presentation transforms/caches and makes the
+  // engine operate on the exact persisted status/type/baseline values.
   const admin = createAdminClient()
   const { data, error } = await admin
-    .from("site_visit_requests")
-    .select("id, project_id, completed_at")
-    .in("project_id", projectIds)
-    .eq("status", "completed")
-    .not("completed_at", "is", null)
-    .order("completed_at", { ascending: false })
-    .order("id", { ascending: false })
+    .from("projects")
+    .select("id, name, code, status, supervision_type, supervision_start_date, start_date, assigned_supervisor_id")
+    .in("id", projectIds)
 
   if (error) throw error
   return data ?? []
@@ -685,15 +681,6 @@ export async function getDashboardData(
     const scopedSupervisingOrgIds = validUuidList(
       scoped.map((project) => project.supervisingOrganizationId),
     )
-    const complianceProjectIds = includeVisitCompliance
-      ? validUuidList(
-          scoped
-            .filter(
-              (project) => isVisitComplianceEligible(project.status, project.supervisionType),
-            )
-            .map((project) => project.id),
-        )
-      : []
     const admin = createAdminClient()
     const emptyReviewFeed = { canReview: false, items: [] }
     const emptySiteVisitFeed = { canManage: false, items: [] }
@@ -703,6 +690,7 @@ export async function getDashboardData(
       ncrs,
       inspections,
       dashboardSiteVisits,
+      complianceProjectsRaw,
       complianceCompletedSiteVisits,
       rfis,
       documents,
@@ -720,7 +708,10 @@ export async function getDashboardData(
       fetchScopedRows("inspections", "project_id, status", ids),
       loadDashboardSiteVisitActivity(ids, activityDateRange),
       includeVisitCompliance
-        ? fetchScopedCompletedSiteVisitsForCompliance(complianceProjectIds)
+        ? fetchScopedProjectsForCompliance(ids)
+        : Promise.resolve([] as any[]),
+      includeVisitCompliance
+        ? loadDashboardSiteVisitActivity(ids, null)
         : Promise.resolve([] as any[]),
       fetchScopedRows("rfis", "project_id, status", ids),
       fetchScopedRows("documents", "id, project_id, document_type", ids),
@@ -1078,8 +1069,13 @@ export async function getDashboardData(
     // source of truth for interval, eligibility, due date, and compliance state.
     const latestCompletedVisitAtByProject = new Map<string, string>()
     for (const visit of complianceCompletedSiteVisits as any[]) {
-      const visitProjectId = asUuid(visit.project_id)
-      const completedAt = typeof visit.completed_at === "string" ? visit.completed_at : null
+      // Use the same canonical Dashboard Site Visit normalization as the working
+      // Visit Completion card, but without any Dashboard activity date range.
+      // This preserves legacy completed rows recovered from completion audit/updated_at
+      // while keeping Compliance independent from the Date Range selector.
+      if (visit?.status !== "completed") continue
+      const visitProjectId = asUuid(visit.projectId)
+      const completedAt = typeof visit.completedAt === "string" ? visit.completedAt : null
       if (!visitProjectId || !completedAt) continue
 
       const existing = latestCompletedVisitAtByProject.get(visitProjectId)
@@ -1090,14 +1086,23 @@ export async function getDashboardData(
 
     const complianceToday = currentCalendarDateKey()
     const allComplianceProjects = includeVisitCompliance
-      ? scoped.flatMap((project) => {
+      ? (complianceProjectsRaw as any[]).flatMap((project) => {
+          const projectId = asUuid(project.id)
+          if (!projectId) return []
+
+          const status = typeof project.status === "string" ? project.status : null
+          const supervisionType = typeof project.supervision_type === "string"
+            ? project.supervision_type
+            : null
           const calculation = calculateVisitCompliance(
             {
-              status: project.status,
-              supervisionType: project.supervisionType,
-              latestCompletedVisitAt: latestCompletedVisitAtByProject.get(project.id) ?? null,
-              supervisionStartDate: project.supervisionStartDate,
-              startDate: project.startDate,
+              status,
+              supervisionType,
+              latestCompletedVisitAt: latestCompletedVisitAtByProject.get(projectId) ?? null,
+              supervisionStartDate: typeof project.supervision_start_date === "string"
+                ? project.supervision_start_date
+                : null,
+              startDate: typeof project.start_date === "string" ? project.start_date : null,
               // Migration 060 persists the legacy fallback into supervision_start_date.
               // Never substitute a moving request-time today value here.
               legacyFallbackDate: null,
@@ -1106,13 +1111,18 @@ export async function getDashboardData(
           )
           if (!calculation) return []
 
+          const assignedSupervisorId = asUuid(project.assigned_supervisor_id)
           return [{
-            projectId: project.id,
-            projectName: project.name,
-            projectCode: project.code,
-            supervisorId: project.assignedSupervisorId,
-            supervisorName: project.assignedSupervisorId
-              ? supervisorNameById.get(project.assignedSupervisorId) ?? "Assigned Supervisor"
+            projectId,
+            projectName: typeof project.name === "string" && project.name.trim()
+              ? project.name.trim()
+              : "Project",
+            projectCode: typeof project.code === "string" && project.code.trim()
+              ? project.code.trim()
+              : null,
+            supervisorId: assignedSupervisorId,
+            supervisorName: assignedSupervisorId
+              ? supervisorNameById.get(assignedSupervisorId) ?? "Assigned Supervisor"
               : "Unassigned",
             ...calculation,
           }]
