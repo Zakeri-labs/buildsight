@@ -530,15 +530,35 @@ async function fetchScopedRowsByActivityRange(
 
 async function fetchScopedCompletedSiteVisitsByActivityRange(
   ids: string[],
-  range?: Pick<DashboardDateRange, "startUtc" | "endExclusiveUtc">,
+  range?: Pick<DashboardDateRange, "startUtc" | "endExclusiveUtc"> | null,
 ) {
-  return loadCanonicalCompletedSiteVisits(validUuidList(ids), range)
+  // Calendar, Member Homepage, scheduling, completion, and Report -> siteVisitId all
+  // use public.site_visit_requests as the canonical Site Visit entity. Load completed
+  // visits through the shared canonical loader so legacy completed rows are not lost
+  // merely because completed_at or the live assignee mirror is missing. The optional
+  // Dashboard range is applied to the recovered canonical completion instant; null is
+  // true All Time and therefore adds no temporal restriction.
+  return loadCanonicalCompletedSiteVisits(validUuidList(ids), range ?? undefined)
 }
 
 async function fetchScopedCompletedSiteVisitsForCompliance(ids: string[]) {
-  // Contractual compliance intentionally ignores the Dashboard activity range and
-  // always considers the latest canonical completed Site Visit across Project history.
-  return loadCanonicalCompletedSiteVisits(validUuidList(ids))
+  const projectIds = validUuidList(ids)
+  if (projectIds.length === 0) return [] as any[]
+
+  // Compliance is contractual state as of today, not Dashboard activity. Always
+  // inspect all historical completed visits for the scoped eligible Projects.
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("site_visit_requests")
+    .select("id, project_id, completed_at")
+    .in("project_id", projectIds)
+    .eq("status", "completed")
+    .not("completed_at", "is", null)
+    .order("completed_at", { ascending: false })
+    .order("id", { ascending: false })
+
+  if (error) throw error
+  return data ?? []
 }
 
 export type DashboardVisitComplianceProject = {
@@ -650,7 +670,7 @@ export async function getDashboardData(
   orgId: string,
   projectId: string | null,
   userId: string,
-  activityDateRange?: Pick<DashboardDateRange, "startUtc" | "endExclusiveUtc">,
+  activityDateRange?: Pick<DashboardDateRange, "startUtc" | "endExclusiveUtc"> | null,
   includeVisitCompliance = false,
 ): Promise<DashboardData> {
   try {
@@ -829,10 +849,10 @@ export async function getDashboardData(
       : { data: [] as any[], error: null }
     if (completedVisitAssigneesError) throw completedVisitAssigneesError
 
-    // Preserve the live visit-assignee relation as the source of truth. For legacy
-    // completed rows where that relation is unexpectedly empty, recover the exact
-    // assigned_user_ids persisted by the scheduling audit instead of substituting the
-    // current Project Supervisor (which could have changed since the historical Visit).
+    // The live visit-assignee table is authoritative. Some historical completed
+    // Site Visits can legitimately predate/lose that mirror while retaining the exact
+    // assigned_user_ids in their scheduling audit. Recover only those missing rows from
+    // that persisted scheduling metadata; never substitute the current Project Supervisor.
     const explicitAssigneeVisitIds = new Set(
       (completedVisitAssignees ?? [])
         .map((row: any) => asUuid(row.request_id))
@@ -1000,8 +1020,8 @@ export async function getDashboardData(
     // source of truth for interval, eligibility, due date, and compliance state.
     const latestCompletedVisitAtByProject = new Map<string, string>()
     for (const visit of complianceCompletedSiteVisits as any[]) {
-      const visitProjectId = asUuid(visit.projectId)
-      const completedAt = typeof visit.completedAt === "string" ? visit.completedAt : null
+      const visitProjectId = asUuid(visit.project_id)
+      const completedAt = typeof visit.completed_at === "string" ? visit.completed_at : null
       if (!visitProjectId || !completedAt) continue
 
       const existing = latestCompletedVisitAtByProject.get(visitProjectId)

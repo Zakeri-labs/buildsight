@@ -13,6 +13,11 @@ export type DashboardDateRangePreset =
   | "all"
   | "custom"
 
+export type DashboardActivityDateFilter = {
+  startUtc: string
+  endExclusiveUtc: string
+}
+
 export type DashboardDateRange = {
   preset: DashboardDateRangePreset
   startDate: string | null
@@ -145,4 +150,19 @@ export function resolveDashboardDateRange(
   }
 
   return buildRange("last30", addCalendarDays(today, -29), today, "Last 30 Days")
+}
+
+
+/**
+ * Return the temporal filter for Dashboard activity queries. `All Time` is
+ * deliberately represented by null so stale custom from/to values can never
+ * leak into an unbounded activity query. Contractual/current-state features
+ * must not consume this helper unless they intentionally use Dashboard range.
+ */
+export function dashboardActivityDateFilter(
+  range: DashboardDateRange,
+): DashboardActivityDateFilter | null {
+  if (range.preset === "all") return null
+  if (!range.startUtc || !range.endExclusiveUtc) return null
+  return { startUtc: range.startUtc, endExclusiveUtc: range.endExclusiveUtc }
 }
