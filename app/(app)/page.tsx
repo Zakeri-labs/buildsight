@@ -24,6 +24,7 @@ const emptyDashboard: DashboardData = {
   kpis: { totalProjects: 0, openNcrs: 0, openInspections: 0, wirCount: 0 },
   ncrDonut: [],
   inspectionDonut: [],
+  visitCompletion: { completed: 0, scheduled: 0 },
   completedVisitsBySupervisor: [],
   visitCompliance: { overdueCount: 0, dueTodayCount: 0, dueSoonCount: 0, projects: [] },
   recentSupervisorReports: [],
@@ -112,6 +113,7 @@ export default async function DashboardPage({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <CompletedVisitsBySupervisorCard
           supervisors={data.completedVisitsBySupervisor}
+          completion={data.visitCompletion}
           dateRangeLabel={dateRange.label}
         />
         <RecentSupervisorReportsCard reports={data.recentSupervisorReports} />

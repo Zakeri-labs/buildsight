@@ -3,10 +3,10 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 import { getReviewSubmissionFeed } from "@/lib/review-submissions/server"
 import { getSiteVisitTaskFeed } from "@/lib/site-visits/server"
-import { loadCanonicalCompletedSiteVisits } from "@/lib/site-visits/completed-visits"
+import { loadDashboardSiteVisitActivity } from "@/lib/site-visits/completed-visits"
 import { getReportCcNotificationFeed } from "@/lib/report-cc/server"
 import { getViewerOwnedProjectIds, isProjectUuid } from "@/lib/auth/project-access"
-import type { DashboardDateRange } from "@/lib/dashboard/date-range"
+import type { DashboardActivityDateFilter, DashboardDateRange } from "@/lib/dashboard/date-range"
 import { normalizeDocumentType } from "@/lib/documents/document-types"
 import { currentCalendarDateKey } from "@/lib/calendar/date"
 import {
@@ -528,19 +528,6 @@ async function fetchScopedRowsByActivityRange(
   return data ?? []
 }
 
-async function fetchScopedCompletedSiteVisitsByActivityRange(
-  ids: string[],
-  range?: Pick<DashboardDateRange, "startUtc" | "endExclusiveUtc"> | null,
-) {
-  // Calendar, Member Homepage, scheduling, completion, and Report -> siteVisitId all
-  // use public.site_visit_requests as the canonical Site Visit entity. Load completed
-  // visits through the shared canonical loader so legacy completed rows are not lost
-  // merely because completed_at or the live assignee mirror is missing. The optional
-  // Dashboard range is applied to the recovered canonical completion instant; null is
-  // true All Time and therefore adds no temporal restriction.
-  return loadCanonicalCompletedSiteVisits(validUuidList(ids), range ?? undefined)
-}
-
 async function fetchScopedCompletedSiteVisitsForCompliance(ids: string[]) {
   const projectIds = validUuidList(ids)
   if (projectIds.length === 0) return [] as any[]
@@ -592,6 +579,7 @@ export type DashboardData = {
   }
   ncrDonut: { label: string; value: number; color: string }[]
   inspectionDonut: { label: string; value: number; color: string }[]
+  visitCompletion: { completed: number; scheduled: number }
   completedVisitsBySupervisor: {
     supervisorId: string
     name: string
@@ -657,6 +645,7 @@ function createEmptyDashboard(): DashboardData {
     kpis: { totalProjects: 0, openNcrs: 0, openInspections: 0, wirCount: 0 },
     ncrDonut: [],
     inspectionDonut: [],
+    visitCompletion: { completed: 0, scheduled: 0 },
     completedVisitsBySupervisor: [],
     visitCompliance: { overdueCount: 0, dueTodayCount: 0, dueSoonCount: 0, projects: [] },
     recentSupervisorReports: [],
@@ -670,7 +659,7 @@ export async function getDashboardData(
   orgId: string,
   projectId: string | null,
   userId: string,
-  activityDateRange?: Pick<DashboardDateRange, "startUtc" | "endExclusiveUtc"> | null,
+  activityDateRange?: DashboardActivityDateFilter | null,
   includeVisitCompliance = false,
 ): Promise<DashboardData> {
   try {
@@ -713,7 +702,7 @@ export async function getDashboardData(
     const [
       ncrs,
       inspections,
-      completedSiteVisits,
+      dashboardSiteVisits,
       complianceCompletedSiteVisits,
       rfis,
       documents,
@@ -729,7 +718,7 @@ export async function getDashboardData(
     ] = await Promise.all([
       fetchScopedRows("ncrs", "project_id, status", ids),
       fetchScopedRows("inspections", "project_id, status", ids),
-      fetchScopedCompletedSiteVisitsByActivityRange(ids, activityDateRange),
+      loadDashboardSiteVisitActivity(ids, activityDateRange),
       includeVisitCompliance
         ? fetchScopedCompletedSiteVisitsForCompliance(complianceProjectIds)
         : Promise.resolve([] as any[]),
@@ -790,6 +779,18 @@ export async function getDashboardData(
             })
         : Promise.resolve([] as any[]),
     ])
+
+    const completedSiteVisits = (dashboardSiteVisits ?? []).filter(
+      (visit) => visit.status === "completed" && Boolean(visit.completedAt),
+    )
+    const visitCompletion = {
+      completed: new Set(completedSiteVisits.map((visit) => visit.id)).size,
+      scheduled: new Set(
+        (dashboardSiteVisits ?? [])
+          .filter((visit) => visit.status === "scheduled")
+          .map((visit) => visit.id),
+      ).size,
+    }
 
     const editableOrganizationIds = new Set(
       (dashboardOrgAdminMemberships ?? [])
@@ -1300,6 +1301,7 @@ export async function getDashboardData(
       },
       ncrDonut,
       inspectionDonut,
+      visitCompletion,
       completedVisitsBySupervisor,
       visitCompliance,
       recentSupervisorReports,

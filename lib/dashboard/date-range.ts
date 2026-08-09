@@ -14,6 +14,8 @@ export type DashboardDateRangePreset =
   | "custom"
 
 export type DashboardActivityDateFilter = {
+  startDate: string
+  endDate: string
   startUtc: string
   endExclusiveUtc: string
 }
@@ -164,5 +166,10 @@ export function dashboardActivityDateFilter(
 ): DashboardActivityDateFilter | null {
   if (range.preset === "all") return null
   if (!range.startUtc || !range.endExclusiveUtc) return null
-  return { startUtc: range.startUtc, endExclusiveUtc: range.endExclusiveUtc }
+  return {
+    startDate: range.startDate!,
+    endDate: range.endDate!,
+    startUtc: range.startUtc,
+    endExclusiveUtc: range.endExclusiveUtc,
+  }
 }
