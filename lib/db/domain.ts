@@ -737,7 +737,7 @@ export async function getDashboardData(
         : Promise.resolve(emptyReportCcFeed),
       fetchScopedRows(
         "term_responses",
-        "id, project_id, project_stage_id, project_stage_term_id, site_visit_request_id, visit_number, report_title, status, submitted_at, updated_at, created_at",
+        "id, project_id, project_stage_id, project_stage_term_id, site_visit_request_id, visit_number, report_title, status, responsible_user_id, submitted_at, updated_at, created_at",
         ids,
       ),
       ids.length
@@ -828,9 +828,10 @@ export async function getDashboardData(
       { label: "Approved", value: inspByStatus.get("approved") ?? 0, color: "var(--success)" },
     ]
 
-    // Aggregate canonical completed Site Visits through the visit-specific assignee
-    // relationship. Completion is resolved by the shared Site Visit loader; current
-    // assignee rows remain authoritative, with scheduling audit recovery for legacy gaps.
+    // Resolve exactly one Supervisor for each completed Site Visit from the SAME filtered
+    // completed Visit set used by the Visit Completion donut. Historical Visit assignment
+    // is preferred; visit-linked Stage Report responsibility is the legacy fallback; the
+    // current canonical Project Supervisor is used only when neither historical source exists.
     const projectSupervisorById = new Map<string, string>(
       scoped
         .filter((project) => Boolean(project.assignedSupervisorId))
@@ -850,33 +851,55 @@ export async function getDashboardData(
       : { data: [] as any[], error: null }
     if (completedVisitAssigneesError) throw completedVisitAssigneesError
 
-    // The live visit-assignee table is authoritative. Some historical completed
-    // Site Visits can legitimately predate/lose that mirror while retaining the exact
-    // assigned_user_ids in their scheduling audit. Recover only those missing rows from
-    // that persisted scheduling metadata; never substitute the current Project Supervisor.
-    const explicitAssigneeVisitIds = new Set(
-      (completedVisitAssignees ?? [])
-        .map((row: any) => asUuid(row.request_id))
-        .filter((value): value is string => Boolean(value)),
-    )
-    const recoveredVisitAssignees = (completedSiteVisits as any[]).flatMap((visit) => {
-      const visitId = asUuid(visit.id)
-      if (!visitId || explicitAssigneeVisitIds.has(visitId)) return []
-      return validUuidList(Array.isArray(visit.assignmentFallbackUserIds) ? visit.assignmentFallbackUserIds : [])
-        .map((userId) => ({ request_id: visitId, user_id: userId }))
-    })
-    const canonicalCompletedVisitAssignees = [
-      ...(completedVisitAssignees ?? []),
-      ...recoveredVisitAssignees,
-    ]
+    const explicitAssigneesByVisitId = new Map<string, Set<string>>()
+    for (const row of completedVisitAssignees ?? []) {
+      const visitId = asUuid((row as any).request_id)
+      const userId = asUuid((row as any).user_id)
+      if (!visitId || !userId) continue
+      const idsForVisit = explicitAssigneesByVisitId.get(visitId) ?? new Set<string>()
+      idsForVisit.add(userId)
+      explicitAssigneesByVisitId.set(visitId, idsForVisit)
+    }
 
-    const assignedSupervisorIds = validUuidList(
-      canonicalCompletedVisitAssignees.map((row: any) => row.user_id),
-    )
-    const reportSupervisorIds = validUuidList(Array.from(projectSupervisorById.values()))
-    const supervisorIds = validUuidList([...assignedSupervisorIds, ...reportSupervisorIds])
-    const { data: supervisorProfiles, error: supervisorProfilesError } = supervisorIds.length
-      ? await admin.from("profiles").select("id, full_name, email").in("id", supervisorIds)
+    // Scheduling audit metadata is only a recovery source for historical visits that no
+    // longer have a row in site_visit_request_assignees. It never changes the completed
+    // Visit dataset itself.
+    const recoveredAssigneesByVisitId = new Map<string, string[]>()
+    for (const visit of completedSiteVisits as any[]) {
+      const visitId = asUuid(visit.id)
+      if (!visitId || explicitAssigneesByVisitId.has(visitId)) continue
+      const recovered = validUuidList(
+        Array.isArray(visit.assignmentFallbackUserIds) ? visit.assignmentFallbackUserIds : [],
+      )
+      if (recovered.length) recoveredAssigneesByVisitId.set(visitId, recovered)
+    }
+
+    // Stage context and report responsibility are used only when the report is explicitly
+    // linked to this exact Site Visit through site_visit_request_id. Never infer a report
+    // from Project, date, Stage, or Visit Number.
+    const linkedReportByVisitId = new Map<
+      string,
+      { projectStageId: string; visitNumber: number | null; responsibleUserId: string | null }
+    >()
+    for (const response of termResponses ?? []) {
+      const visitId = asUuid((response as any).site_visit_request_id)
+      const projectStageId = asUuid((response as any).project_stage_id)
+      if (!visitId || !projectStageId || !completedVisitIds.includes(visitId)) continue
+      linkedReportByVisitId.set(visitId, {
+        projectStageId,
+        visitNumber: Number.isInteger((response as any).visit_number) ? (response as any).visit_number : null,
+        responsibleUserId: asUuid((response as any).responsible_user_id),
+      })
+    }
+
+    const allPotentialSupervisorIds = validUuidList([
+      ...Array.from(explicitAssigneesByVisitId.values()).flatMap((ids) => Array.from(ids)),
+      ...Array.from(recoveredAssigneesByVisitId.values()).flat(),
+      ...Array.from(linkedReportByVisitId.values()).map((report) => report.responsibleUserId),
+      ...Array.from(projectSupervisorById.values()),
+    ])
+    const { data: supervisorProfiles, error: supervisorProfilesError } = allPotentialSupervisorIds.length
+      ? await admin.from("profiles").select("id, full_name, email").in("id", allPotentialSupervisorIds)
       : { data: [] as any[], error: null }
     if (supervisorProfilesError) throw supervisorProfilesError
 
@@ -889,6 +912,7 @@ export async function getDashboardData(
           ] as [string, string],
       ),
     )
+
     const completedVisitById = new Map<string, string>(
       (completedSiteVisits as any[])
         .map((visit) => {
@@ -898,22 +922,6 @@ export async function getDashboardData(
         })
         .filter((entry): entry is [string, string] => Boolean(entry)),
     )
-
-    // Stage context is shown only when the Site Visit is explicitly linked to
-    // its Stage-based Report. Never infer it from Project, date, or Visit No.
-    const linkedReportByVisitId = new Map<
-      string,
-      { projectStageId: string; visitNumber: number | null }
-    >()
-    for (const response of termResponses ?? []) {
-      const visitId = asUuid((response as any).site_visit_request_id)
-      const projectStageId = asUuid((response as any).project_stage_id)
-      if (!visitId || !projectStageId || !completedVisitById.has(visitId)) continue
-      linkedReportByVisitId.set(visitId, {
-        projectStageId,
-        visitNumber: Number.isInteger((response as any).visit_number) ? (response as any).visit_number : null,
-      })
-    }
 
     const linkedStageIds = validUuidList(
       Array.from(linkedReportByVisitId.values()).map((report) => report.projectStageId),
@@ -959,21 +967,70 @@ export async function getDashboardData(
       })
     }
 
+    type SupervisorResolutionSource = "visit_assignment" | "visit_report" | "project_supervisor"
+    const resolvedSupervisorByVisitId = new Map<
+      string,
+      { supervisorId: string; source: SupervisorResolutionSource }
+    >()
+
+    for (const visit of completedSiteVisits as any[]) {
+      const visitId = asUuid(visit.id)
+      const visitProjectId = asUuid(visit.projectId)
+      if (!visitId || !visitProjectId) continue
+
+      const linkedReportSupervisorId = linkedReportByVisitId.get(visitId)?.responsibleUserId ?? null
+      const projectSupervisorId = projectSupervisorById.get(visitProjectId) ?? null
+      const directAssignees = Array.from(explicitAssigneesByVisitId.get(visitId) ?? [])
+      const auditAssignees = recoveredAssigneesByVisitId.get(visitId) ?? []
+      const historicalAssignees = validUuidList([...directAssignees, ...auditAssignees])
+
+      // If more than one participant was assigned, prefer the one independently identified
+      // as the report responsible user, then the Project Supervisor when that same user was
+      // explicitly assigned. Otherwise use a stable user-id order so a Visit is counted once.
+      let directSupervisorId: string | null = null
+      if (linkedReportSupervisorId && historicalAssignees.includes(linkedReportSupervisorId)) {
+        directSupervisorId = linkedReportSupervisorId
+      } else if (projectSupervisorId && historicalAssignees.includes(projectSupervisorId)) {
+        directSupervisorId = projectSupervisorId
+      } else if (historicalAssignees.length) {
+        directSupervisorId = [...historicalAssignees].sort((a, b) => a.localeCompare(b))[0] ?? null
+      }
+
+      if (directSupervisorId) {
+        resolvedSupervisorByVisitId.set(visitId, {
+          supervisorId: directSupervisorId,
+          source: "visit_assignment",
+        })
+      } else if (linkedReportSupervisorId) {
+        resolvedSupervisorByVisitId.set(visitId, {
+          supervisorId: linkedReportSupervisorId,
+          source: "visit_report",
+        })
+      } else if (projectSupervisorId) {
+        resolvedSupervisorByVisitId.set(visitId, {
+          supervisorId: projectSupervisorId,
+          source: "project_supervisor",
+        })
+      } else {
+        console.warn("[dashboard] completed Site Visit has no resolvable Supervisor", {
+          visitId,
+          projectId: visitProjectId,
+        })
+      }
+    }
+
     const completedVisitAggregation = new Map<
       string,
       { supervisorId: string; name: string; visitIds: Set<string>; projectIds: Set<string> }
     >()
 
-    for (const assignment of canonicalCompletedVisitAssignees) {
-      const visitId = asUuid((assignment as any).request_id)
-      const supervisorId = asUuid((assignment as any).user_id)
-      if (!visitId || !supervisorId) continue
+    for (const [visitId, resolution] of resolvedSupervisorByVisitId) {
       const visitProjectId = completedVisitById.get(visitId)
       if (!visitProjectId) continue
-
+      const supervisorId = resolution.supervisorId
       const existing = completedVisitAggregation.get(supervisorId) ?? {
         supervisorId,
-        name: supervisorNameById.get(supervisorId) ?? supervisorId,
+        name: supervisorNameById.get(supervisorId) ?? "Supervisor",
         visitIds: new Set<string>(),
         projectIds: new Set<string>(),
       }
