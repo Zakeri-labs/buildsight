@@ -4,6 +4,7 @@ import { PortfolioKpis, type KpiCardData } from "@/components/dashboard/portfoli
 import { CompletedVisitsBySupervisorCard } from "@/components/dashboard/inspections-by-supervisor-card"
 import { RecentSupervisorReportsCard } from "@/components/dashboard/recent-supervisor-reports-card"
 import { VisitComplianceCard } from "@/components/dashboard/visit-compliance-card"
+import { UpcomingSiteVisitsCard } from "@/components/dashboard/upcoming-site-visits-card"
 import { ProjectsOverview } from "@/components/dashboard/projects-overview"
 import { MyTasks } from "@/components/dashboard/my-tasks"
 import { requireOnboarded } from "@/lib/auth/session"
@@ -25,6 +26,7 @@ const emptyDashboard: DashboardData = {
   ncrDonut: [],
   inspectionDonut: [],
   visitCompletion: { completed: 0, scheduled: 0 },
+  upcomingSiteVisits: { count: 0, nextVisit: null },
   completedVisitsBySupervisor: [],
   visitCompliance: { eligibleProjectCount: 0, overdueCount: 0, dueTodayCount: 0, dueSoonCount: 0, projects: [] },
   recentSupervisorReports: [],
@@ -57,7 +59,7 @@ export default async function DashboardPage({
   const projectId = await getSelectedProjectId()
   const orgId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id ?? null
   const data = orgId
-    ? await getDashboardData(orgId, projectId, session.userId, activityDateFilter, hasAdminRole)
+    ? await getDashboardData(orgId, projectId, session.userId, activityDateFilter, hasAdminRole, true)
     : emptyDashboard
   const canManageProjectSupervisors = session.supervisingOrg
     ? await canAdministerOrganization(session.supervisingOrg.id)
@@ -111,8 +113,8 @@ export default async function DashboardPage({
       <div
         className={
           hasAdminRole
-            ? "grid grid-cols-1 gap-6 lg:grid-cols-3"
-            : "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
+            ? "grid grid-cols-1 items-stretch gap-6 lg:grid-cols-3"
+            : "grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2"
         }
       >
         <CompletedVisitsBySupervisorCard
@@ -121,18 +123,25 @@ export default async function DashboardPage({
           dateRangeLabel={dateRange.label}
         />
         {hasAdminRole ? <VisitComplianceCard compliance={data.visitCompliance} /> : null}
-        <RecentSupervisorReportsCard reports={data.recentSupervisorReports} />
+        <UpcomingSiteVisitsCard data={data.upcomingSiteVisits} />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+      <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-3">
+        <div className="min-h-0 lg:col-span-2 lg:h-full">
           <ProjectsOverview
             projects={data.projects}
             selectedProjectId={projectId}
             supervisorOptions={supervisorOptions}
           />
         </div>
-        <MyTasks tasks={data.tasks} />
+        <div className="flex min-h-0 flex-col gap-6 lg:h-full">
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <RecentSupervisorReportsCard reports={data.recentSupervisorReports} />
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <MyTasks tasks={data.tasks} />
+          </div>
+        </div>
       </div>
     </div>
   )

@@ -154,10 +154,10 @@ function StandardTask({ task }: { task: TaskRow }) {
 
 export function MyTasks({ tasks }: { tasks: TaskRow[] }) {
   return (
-    <div className="flex flex-col rounded-xl border border-border bg-card p-5">
+    <div className="flex h-full min-h-0 flex-col rounded-xl border border-border bg-card p-5">
       <h2 className="text-base font-semibold text-foreground">My Tasks</h2>
 
-      <ul className="mt-4 flex flex-1 flex-col divide-y divide-border">
+      <ul className="mt-4 flex min-h-0 flex-1 flex-col divide-y divide-border overflow-y-auto">
         {tasks.length === 0 && <li className="py-3 text-sm text-muted-foreground">No tasks for this scope.</li>}
         {tasks.map((task) => (
           <li key={task.id}>{task.type === "Review" ? <ReviewTask task={task} /> : task.type === "Site Visit" ? <SiteVisitTask task={task} /> : task.type === "CC" ? <CcTask task={task} /> : <StandardTask task={task} />}</li>

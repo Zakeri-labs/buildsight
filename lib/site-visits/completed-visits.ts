@@ -1,6 +1,7 @@
 import "server-only"
 
 import type { DashboardActivityDateFilter, DashboardDateRange } from "@/lib/dashboard/date-range"
+import { APPLICATION_TIME_ZONE, currentCalendarDateKey } from "@/lib/calendar/date"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
@@ -311,3 +312,118 @@ export async function loadDashboardSiteVisitActivity(
     }]
   })
 }
+
+export type DashboardUpcomingSiteVisit = {
+  id: string
+  projectId: string
+  scheduledDate: string
+  scheduledTime: string | null
+  preferredTime: "morning" | "afternoon" | "any_time" | null
+}
+
+function applicationClockSeconds(date: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: APPLICATION_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date)
+  const values = new Map(parts.map((part) => [part.type, part.value]))
+  const hour = Number(values.get("hour"))
+  const minute = Number(values.get("minute"))
+  const second = Number(values.get("second"))
+  if (![hour, minute, second].every(Number.isFinite)) return 0
+  return hour * 3600 + minute * 60 + second
+}
+
+function scheduledClockSeconds(value: unknown): number | null {
+  if (typeof value !== "string") return null
+  const match = /^(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(value.trim())
+  if (!match) return null
+  const hour = Number(match[1])
+  const minute = Number(match[2])
+  const second = Number(match[3] ?? 0)
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) return null
+  return hour * 3600 + minute * 60 + second
+}
+
+function normalizePreferredTime(value: unknown): DashboardUpcomingSiteVisit["preferredTime"] {
+  if (typeof value !== "string") return null
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_")
+  return normalized === "morning" || normalized === "afternoon" || normalized === "any_time" ? normalized : null
+}
+
+function fallbackPeriodSortSeconds(value: DashboardUpcomingSiteVisit["preferredTime"]): number {
+  if (value === "morning") return 8 * 3600
+  if (value === "afternoon") return 13 * 3600
+  return 23 * 3600 + 59 * 60 + 59
+}
+
+/**
+ * Load real scheduled Site Visits that are still upcoming now.
+ *
+ * This intentionally uses the same canonical public.site_visit_requests source as the
+ * Dashboard Visit Completion / Calendar flow, but it is independent from the historical
+ * Dashboard activity Date Range. Project authorization is supplied by the already-resolved
+ * scoped Project IDs from getDashboardData.
+ */
+export async function loadDashboardUpcomingSiteVisits(
+  projectIds: string[],
+  now = new Date(),
+): Promise<DashboardUpcomingSiteVisit[]> {
+  const scopedProjectIds = validUuidList(projectIds)
+  if (!scopedProjectIds.length) return []
+
+  const today = currentCalendarDateKey(now)
+  const nowSeconds = applicationClockSeconds(now)
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("site_visit_requests")
+    .select("id, project_id, status, scheduled_date, scheduled_time, preferred_time")
+    .in("project_id", scopedProjectIds)
+    .gte("scheduled_date", today)
+
+  if (error) throw error
+
+  const unique = new Map<string, DashboardUpcomingSiteVisit>()
+  for (const row of data ?? []) {
+    if (normalizedVisitStatus((row as any).status) !== "scheduled") continue
+    const id = asUuid((row as any).id)
+    const projectId = asUuid((row as any).project_id)
+    const scheduledDate = typeof (row as any).scheduled_date === "string" ? (row as any).scheduled_date : null
+    if (!id || !projectId || !scheduledDate || scheduledDate < today) continue
+
+    const rawScheduledTime = typeof (row as any).scheduled_time === "string" && (row as any).scheduled_time.trim()
+      ? (row as any).scheduled_time.trim()
+      : null
+    const exactSeconds = scheduledClockSeconds(rawScheduledTime)
+    const scheduledTime = exactSeconds !== null ? rawScheduledTime : null
+    const preferredTime = normalizePreferredTime((row as any).preferred_time) ?? normalizePreferredTime(rawScheduledTime)
+
+    // For an exact scheduled time on today's application-local calendar date, exclude a
+    // visit whose confirmed time has already passed. Legacy/broad-period visits remain
+    // upcoming for the whole current calendar date while they are still Scheduled.
+    if (scheduledDate === today && exactSeconds !== null && exactSeconds < nowSeconds) continue
+
+    unique.set(id, {
+      id,
+      projectId,
+      scheduledDate,
+      scheduledTime,
+      preferredTime,
+    })
+  }
+
+  return Array.from(unique.values()).sort((left, right) => {
+    const dateDifference = left.scheduledDate.localeCompare(right.scheduledDate)
+    if (dateDifference) return dateDifference
+
+    const leftExact = scheduledClockSeconds(left.scheduledTime)
+    const rightExact = scheduledClockSeconds(right.scheduledTime)
+    const leftSeconds = leftExact ?? fallbackPeriodSortSeconds(left.preferredTime)
+    const rightSeconds = rightExact ?? fallbackPeriodSortSeconds(right.preferredTime)
+    return leftSeconds - rightSeconds || left.id.localeCompare(right.id)
+  })
+}
+

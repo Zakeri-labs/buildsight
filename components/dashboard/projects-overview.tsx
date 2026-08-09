@@ -110,7 +110,7 @@ export function ProjectsOverview({
 
   return (
     <>
-      <div className="flex flex-col rounded-xl border border-border bg-card p-5">
+      <div className="flex h-full min-h-0 flex-col rounded-xl border border-border bg-card p-5">
         <h2 className="text-base font-semibold text-foreground">Projects Overview</h2>
 
         <div className="mt-4 flex-1 overflow-x-auto">

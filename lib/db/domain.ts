@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 import { getReviewSubmissionFeed } from "@/lib/review-submissions/server"
 import { getSiteVisitTaskFeed } from "@/lib/site-visits/server"
-import { loadDashboardSiteVisitActivity } from "@/lib/site-visits/completed-visits"
+import { loadDashboardSiteVisitActivity, loadDashboardUpcomingSiteVisits } from "@/lib/site-visits/completed-visits"
 import { getReportCcNotificationFeed } from "@/lib/report-cc/server"
 import { getViewerOwnedProjectIds, isProjectUuid } from "@/lib/auth/project-access"
 import type { DashboardActivityDateFilter, DashboardDateRange } from "@/lib/dashboard/date-range"
@@ -552,6 +552,19 @@ export type DashboardVisitCompliance = {
   projects: DashboardVisitComplianceProject[]
 }
 
+export type DashboardUpcomingSiteVisits = {
+  count: number
+  nextVisit: {
+    id: string
+    projectId: string
+    projectName: string
+    projectCode: string | null
+    scheduledDate: string
+    scheduledTime: string | null
+    preferredTime: "morning" | "afternoon" | "any_time" | null
+  } | null
+}
+
 export type DashboardData = {
   kpis: {
     totalProjects: number
@@ -562,6 +575,7 @@ export type DashboardData = {
   ncrDonut: { label: string; value: number; color: string }[]
   inspectionDonut: { label: string; value: number; color: string }[]
   visitCompletion: { completed: number; scheduled: number }
+  upcomingSiteVisits: DashboardUpcomingSiteVisits
   completedVisitsBySupervisor: {
     supervisorId: string
     name: string
@@ -628,6 +642,7 @@ function createEmptyDashboard(): DashboardData {
     ncrDonut: [],
     inspectionDonut: [],
     visitCompletion: { completed: 0, scheduled: 0 },
+    upcomingSiteVisits: { count: 0, nextVisit: null },
     completedVisitsBySupervisor: [],
     visitCompliance: { eligibleProjectCount: 0, overdueCount: 0, dueTodayCount: 0, dueSoonCount: 0, projects: [] },
     recentSupervisorReports: [],
@@ -643,6 +658,7 @@ export async function getDashboardData(
   userId: string,
   activityDateRange?: DashboardActivityDateFilter | null,
   includeVisitCompliance = false,
+  includeUpcomingSiteVisits = false,
 ): Promise<DashboardData> {
   try {
     const validOrgId = asUuid(orgId)
@@ -686,6 +702,7 @@ export async function getDashboardData(
       ncrs,
       inspections,
       dashboardSiteVisits,
+      dashboardUpcomingSiteVisits,
       complianceCompletedSiteVisits,
       rfis,
       documents,
@@ -702,6 +719,9 @@ export async function getDashboardData(
       fetchScopedRows("ncrs", "project_id, status", ids),
       fetchScopedRows("inspections", "project_id, status", ids),
       loadDashboardSiteVisitActivity(ids, activityDateRange),
+      includeUpcomingSiteVisits
+        ? loadDashboardUpcomingSiteVisits(ids)
+        : Promise.resolve([]),
       includeVisitCompliance && eligibleComplianceProjectIds.length
         ? loadDashboardSiteVisitActivity(eligibleComplianceProjectIds, null)
         : Promise.resolve([] as any[]),
@@ -773,6 +793,26 @@ export async function getDashboardData(
           .filter((visit) => visit.status === "scheduled")
           .map((visit) => visit.id),
       ).size,
+    }
+
+    const upcomingVisitProjectById = new Map(scoped.map((project) => [project.id, project]))
+    const distinctUpcomingVisits = Array.from(
+      new Map((dashboardUpcomingSiteVisits ?? []).map((visit) => [visit.id, visit])).values(),
+    )
+    const nextUpcomingVisit = distinctUpcomingVisits[0] ?? null
+    const upcomingSiteVisits: DashboardUpcomingSiteVisits = {
+      count: distinctUpcomingVisits.length,
+      nextVisit: nextUpcomingVisit
+        ? {
+            id: nextUpcomingVisit.id,
+            projectId: nextUpcomingVisit.projectId,
+            projectName: upcomingVisitProjectById.get(nextUpcomingVisit.projectId)?.name ?? "Project",
+            projectCode: upcomingVisitProjectById.get(nextUpcomingVisit.projectId)?.code ?? null,
+            scheduledDate: nextUpcomingVisit.scheduledDate,
+            scheduledTime: nextUpcomingVisit.scheduledTime,
+            preferredTime: nextUpcomingVisit.preferredTime,
+          }
+        : null,
     }
 
     const editableOrganizationIds = new Set(
@@ -1352,6 +1392,7 @@ export async function getDashboardData(
       ncrDonut,
       inspectionDonut,
       visitCompletion,
+      upcomingSiteVisits,
       completedVisitsBySupervisor,
       visitCompliance,
       recentSupervisorReports,
