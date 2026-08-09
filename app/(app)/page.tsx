@@ -111,7 +111,7 @@ export default async function DashboardPage({
       <div
         className={
           hasAdminRole
-            ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.95fr)_minmax(0,1fr)]"
+            ? "grid grid-cols-1 gap-6 lg:grid-cols-3"
             : "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
         }
       >
