@@ -55,17 +55,31 @@ function calendarDayDifference(fromDate: string, toDate: string): number {
   return Math.round((toUtc - fromUtc) / 86_400_000)
 }
 
+export function normalizeVisitComplianceSupervisionType(
+  value: string | null | undefined,
+): VisitComplianceSupervisionType | null {
+  if (typeof value !== "string") return null
+
+  // Current projects persist the canonical option value (monthly_2/monthly_3/monthly_4),
+  // while older rows can still contain the visible option label. Normalize only those
+  // three active recurring options; unrelated legacy supervision modes stay ineligible.
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_")
+  return Object.prototype.hasOwnProperty.call(VISIT_COMPLIANCE_INTERVAL_DAYS, normalized)
+    ? (normalized as VisitComplianceSupervisionType)
+    : null
+}
+
 export function isVisitComplianceSupervisionType(
   value: string | null | undefined,
-): value is VisitComplianceSupervisionType {
-  return Boolean(value && Object.prototype.hasOwnProperty.call(VISIT_COMPLIANCE_INTERVAL_DAYS, value))
+): boolean {
+  return normalizeVisitComplianceSupervisionType(value) !== null
 }
 
 export function isVisitComplianceEligible(
   status: string | null | undefined,
   supervisionType: string | null | undefined,
-): supervisionType is VisitComplianceSupervisionType {
-  return status?.trim().toLowerCase() === "active" && isVisitComplianceSupervisionType(supervisionType)
+): boolean {
+  return status?.trim().toLowerCase() === "active" && normalizeVisitComplianceSupervisionType(supervisionType) !== null
 }
 
 export function calculateVisitCompliance(
@@ -75,6 +89,9 @@ export function calculateVisitCompliance(
   if (!isVisitComplianceEligible(input.status, input.supervisionType)) return null
   if (!isCalendarDateKey(today)) throw new Error("Invalid visit compliance current date")
 
+  const normalizedSupervisionType = normalizeVisitComplianceSupervisionType(input.supervisionType)
+  if (!normalizedSupervisionType) return null
+
   const lastCompletedVisitDate = normalizedCalendarDate(input.latestCompletedVisitAt)
   const supervisionStartDate = normalizedCalendarDate(input.supervisionStartDate)
   const startDate = normalizedCalendarDate(input.startDate)
@@ -82,7 +99,7 @@ export function calculateVisitCompliance(
   const baselineDate = lastCompletedVisitDate ?? supervisionStartDate ?? startDate ?? legacyFallbackDate
   if (!baselineDate) return null
 
-  const intervalDays = VISIT_COMPLIANCE_INTERVAL_DAYS[input.supervisionType]
+  const intervalDays = VISIT_COMPLIANCE_INTERVAL_DAYS[normalizedSupervisionType]
   const nextRequiredVisitDate = addCalendarDays(baselineDate, intervalDays)
   const daysUntilDue = calendarDayDifference(today, nextRequiredVisitDate)
 
@@ -90,7 +107,7 @@ export function calculateVisitCompliance(
     return {
       state: "overdue",
       intervalDays,
-      supervisionType: input.supervisionType,
+      supervisionType: normalizedSupervisionType,
       baselineDate,
       lastCompletedVisitDate,
       nextRequiredVisitDate,
@@ -103,7 +120,7 @@ export function calculateVisitCompliance(
     return {
       state: "due_today",
       intervalDays,
-      supervisionType: input.supervisionType,
+      supervisionType: normalizedSupervisionType,
       baselineDate,
       lastCompletedVisitDate,
       nextRequiredVisitDate,
@@ -116,7 +133,7 @@ export function calculateVisitCompliance(
     return {
       state: "due_soon",
       intervalDays,
-      supervisionType: input.supervisionType,
+      supervisionType: normalizedSupervisionType,
       baselineDate,
       lastCompletedVisitDate,
       nextRequiredVisitDate,
@@ -128,7 +145,7 @@ export function calculateVisitCompliance(
   return {
     state: "on_track",
     intervalDays,
-    supervisionType: input.supervisionType,
+    supervisionType: normalizedSupervisionType,
     baselineDate,
     lastCompletedVisitDate,
     nextRequiredVisitDate,

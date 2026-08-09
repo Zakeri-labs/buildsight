@@ -527,6 +527,10 @@ async function fetchScopedRowsByActivityRange(
   return data ?? []
 }
 
+function isCompletedSiteVisitStatus(value: unknown): boolean {
+  return typeof value === "string" && value.trim().toLowerCase() === "completed"
+}
+
 async function fetchScopedCompletedSiteVisitsByActivityRange(
   ids: string[],
   range?: Pick<DashboardDateRange, "startUtc" | "endExclusiveUtc">,
@@ -537,9 +541,8 @@ async function fetchScopedCompletedSiteVisitsByActivityRange(
   const admin = createAdminClient()
   let query = admin
     .from("site_visit_requests")
-    .select("id, project_id, report_visit_number, completed_at")
+    .select("id, project_id, report_visit_number, status, completed_at")
     .in("project_id", projectIds)
-    .eq("status", "completed")
     .not("completed_at", "is", null)
 
   if (range?.startUtc) query = query.gte("completed_at", range.startUtc)
@@ -547,7 +550,12 @@ async function fetchScopedCompletedSiteVisitsByActivityRange(
 
   const { data, error } = await query
   if (error) throw error
-  return data ?? []
+
+  // Completion is canonical only when BOTH the persisted completion timestamp exists
+  // and the Site Visit status normalizes to `completed`. Filtering the status after the
+  // scoped/date-limited query avoids silently losing legitimate historical rows whose
+  // status casing differs, while still excluding scheduled/pending/cancelled requests.
+  return (data ?? []).filter((visit: any) => isCompletedSiteVisitStatus(visit.status))
 }
 
 async function fetchScopedCompletedSiteVisitsForCompliance(ids: string[]) {
@@ -557,15 +565,15 @@ async function fetchScopedCompletedSiteVisitsForCompliance(ids: string[]) {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from("site_visit_requests")
-    .select("id, project_id, completed_at")
+    .select("id, project_id, status, completed_at")
     .in("project_id", projectIds)
-    .eq("status", "completed")
     .not("completed_at", "is", null)
-    .order("completed_at", { ascending: false })
-    .order("id", { ascending: false })
 
   if (error) throw error
-  return data ?? []
+
+  // Compliance deliberately has no Dashboard activity-range filter. It needs the latest
+  // completed Visit for each Project across the full authorized Project history.
+  return (data ?? []).filter((visit: any) => isCompletedSiteVisitStatus(visit.status))
 }
 
 export type DashboardVisitComplianceProject = {
@@ -1009,8 +1017,12 @@ export async function getDashboardData(
     for (const visit of complianceCompletedSiteVisits as any[]) {
       const visitProjectId = asUuid(visit.project_id)
       const completedAt = typeof visit.completed_at === "string" ? visit.completed_at : null
-      if (!visitProjectId || !completedAt || latestCompletedVisitAtByProject.has(visitProjectId)) continue
-      latestCompletedVisitAtByProject.set(visitProjectId, completedAt)
+      if (!visitProjectId || !completedAt) continue
+
+      const existing = latestCompletedVisitAtByProject.get(visitProjectId)
+      if (!existing || new Date(completedAt).getTime() > new Date(existing).getTime()) {
+        latestCompletedVisitAtByProject.set(visitProjectId, completedAt)
+      }
     }
 
     const complianceToday = currentCalendarDateKey()
