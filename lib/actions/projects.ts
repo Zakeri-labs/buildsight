@@ -510,9 +510,13 @@ export async function updateProject(input: {
       .from("projects")
       .update(updates)
       .eq("id", input.projectId)
-      .select("supervision_start_date")
+      .select("id, supervision_start_date")
       .single()
     if (error) throw error
+
+    if (input.supervisionStartDate !== undefined && updatedProject.supervision_start_date !== supervisionStartDate.date) {
+      return { ok: false, error: "Supervision Start Date was not saved. Please try again." }
+    }
 
     if (normalizedSupervisorId !== undefined && normalizedSupervisorId !== project.assigned_supervisor_id) {
       await setProjectSupervisorAssignment({
@@ -520,6 +524,17 @@ export async function updateProject(input: {
         supervisorId: normalizedSupervisorId,
         actorId,
       })
+    }
+
+    const { data: persistedProject, error: persistedProjectError } = await admin
+      .from("projects")
+      .select("id, supervision_start_date")
+      .eq("id", input.projectId)
+      .single()
+    if (persistedProjectError) throw persistedProjectError
+
+    if (input.supervisionStartDate !== undefined && persistedProject.supervision_start_date !== supervisionStartDate.date) {
+      return { ok: false, error: "Supervision Start Date was not saved. Please try again." }
     }
 
     await audit({
@@ -542,7 +557,7 @@ export async function updateProject(input: {
       ok: true,
       data: {
         supervisionStartDate:
-          typeof updatedProject.supervision_start_date === "string" ? updatedProject.supervision_start_date : null,
+          typeof persistedProject.supervision_start_date === "string" ? persistedProject.supervision_start_date : null,
       },
     }
   } catch (err) {

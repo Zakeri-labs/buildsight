@@ -10,7 +10,7 @@ import { requireOnboarded } from "@/lib/auth/session"
 import { canAdministerOrganization } from "@/lib/auth/guards"
 import { getSelectedProjectId } from "@/lib/project-scope"
 import { getDashboardData, type DashboardData } from "@/lib/db/domain"
-import { dashboardActivityDateFilter, resolveDashboardDateRange } from "@/lib/dashboard/date-range"
+import { resolveDashboardDateRange } from "@/lib/dashboard/date-range"
 import { getProjectSupervisorCandidates } from "@/lib/projects/supervisor-candidates-server"
 
 // Deterministic upward sparkline that lands on `value`.
@@ -43,7 +43,6 @@ export default async function DashboardPage({
 }) {
   const [session, query] = await Promise.all([requireOnboarded(), searchParams])
   const dateRange = resolveDashboardDateRange(query)
-  const activityDateFilter = dashboardActivityDateFilter(dateRange)
 
   // Keep Admin precedence identical to the default landing resolver while
   // making the authenticated Member landing deterministic if middleware is bypassed.
@@ -56,7 +55,7 @@ export default async function DashboardPage({
   const projectId = await getSelectedProjectId()
   const orgId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id ?? null
   const data = orgId
-    ? await getDashboardData(orgId, projectId, session.userId, activityDateFilter, hasAdminRole)
+    ? await getDashboardData(orgId, projectId, session.userId, dateRange, hasAdminRole)
     : emptyDashboard
   const canManageProjectSupervisors = session.supervisingOrg
     ? await canAdministerOrganization(session.supervisingOrg.id)
