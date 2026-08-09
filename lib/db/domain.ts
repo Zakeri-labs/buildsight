@@ -11,6 +11,7 @@ import { normalizeDocumentType } from "@/lib/documents/document-types"
 import { currentCalendarDateKey } from "@/lib/calendar/date"
 import {
   calculateVisitCompliance,
+  isVisitComplianceEligible,
   type VisitComplianceState,
   type VisitComplianceSupervisionType,
 } from "@/lib/site-visits/compliance"
@@ -527,22 +528,6 @@ async function fetchScopedRowsByActivityRange(
   return data ?? []
 }
 
-async function fetchScopedProjectsForCompliance(ids: string[]) {
-  const projectIds = validUuidList(ids)
-  if (projectIds.length === 0) return [] as any[]
-
-  // Read the contractual inputs directly from the current Project rows. This keeps
-  // compliance independent from Dashboard presentation transforms/caches and makes the
-  // engine operate on the exact persisted status/type/baseline values.
-  const admin = createAdminClient()
-  const { data, error } = await admin
-    .from("projects")
-    .select("id, name, code, status, supervision_type, supervision_start_date, start_date, assigned_supervisor_id")
-    .in("id", projectIds)
-
-  if (error) throw error
-  return data ?? []
-}
 
 export type DashboardVisitComplianceProject = {
   projectId: string
@@ -560,6 +545,7 @@ export type DashboardVisitComplianceProject = {
 }
 
 export type DashboardVisitCompliance = {
+  eligibleProjectCount: number
   overdueCount: number
   dueTodayCount: number
   dueSoonCount: number
@@ -643,7 +629,7 @@ function createEmptyDashboard(): DashboardData {
     inspectionDonut: [],
     visitCompletion: { completed: 0, scheduled: 0 },
     completedVisitsBySupervisor: [],
-    visitCompliance: { overdueCount: 0, dueTodayCount: 0, dueSoonCount: 0, projects: [] },
+    visitCompliance: { eligibleProjectCount: 0, overdueCount: 0, dueTodayCount: 0, dueSoonCount: 0, projects: [] },
     recentSupervisorReports: [],
     projects: [],
     tasks: [],
@@ -681,6 +667,16 @@ export async function getDashboardData(
     const scopedSupervisingOrgIds = validUuidList(
       scoped.map((project) => project.supervisingOrganizationId),
     )
+    // Compliance begins from the authorized Project scope itself, not from Site Visit rows.
+    // This is essential for recurring Projects that have never had a Site Visit.
+    const eligibleComplianceProjects = includeVisitCompliance
+      ? scoped.filter((project) =>
+          isVisitComplianceEligible(project.status, project.supervisionType),
+        )
+      : []
+    const eligibleComplianceProjectIds = validUuidList(
+      eligibleComplianceProjects.map((project) => project.id),
+    )
     const admin = createAdminClient()
     const emptyReviewFeed = { canReview: false, items: [] }
     const emptySiteVisitFeed = { canManage: false, items: [] }
@@ -690,7 +686,6 @@ export async function getDashboardData(
       ncrs,
       inspections,
       dashboardSiteVisits,
-      complianceProjectsRaw,
       complianceCompletedSiteVisits,
       rfis,
       documents,
@@ -707,11 +702,8 @@ export async function getDashboardData(
       fetchScopedRows("ncrs", "project_id, status", ids),
       fetchScopedRows("inspections", "project_id, status", ids),
       loadDashboardSiteVisitActivity(ids, activityDateRange),
-      includeVisitCompliance
-        ? fetchScopedProjectsForCompliance(ids)
-        : Promise.resolve([] as any[]),
-      includeVisitCompliance
-        ? loadDashboardSiteVisitActivity(ids, null)
+      includeVisitCompliance && eligibleComplianceProjectIds.length
+        ? loadDashboardSiteVisitActivity(eligibleComplianceProjectIds, null)
         : Promise.resolve([] as any[]),
       fetchScopedRows("rfis", "project_id, status", ids),
       fetchScopedRows("documents", "id, project_id, document_type", ids),
@@ -1086,23 +1078,17 @@ export async function getDashboardData(
 
     const complianceToday = currentCalendarDateKey()
     const allComplianceProjects = includeVisitCompliance
-      ? (complianceProjectsRaw as any[]).flatMap((project) => {
+      ? eligibleComplianceProjects.flatMap((project) => {
           const projectId = asUuid(project.id)
           if (!projectId) return []
 
-          const status = typeof project.status === "string" ? project.status : null
-          const supervisionType = typeof project.supervision_type === "string"
-            ? project.supervision_type
-            : null
           const calculation = calculateVisitCompliance(
             {
-              status,
-              supervisionType,
+              status: project.status,
+              supervisionType: project.supervisionType,
               latestCompletedVisitAt: latestCompletedVisitAtByProject.get(projectId) ?? null,
-              supervisionStartDate: typeof project.supervision_start_date === "string"
-                ? project.supervision_start_date
-                : null,
-              startDate: typeof project.start_date === "string" ? project.start_date : null,
+              supervisionStartDate: project.supervisionStartDate,
+              startDate: project.startDate,
               // Migration 060 persists the legacy fallback into supervision_start_date.
               // Never substitute a moving request-time today value here.
               legacyFallbackDate: null,
@@ -1111,15 +1097,11 @@ export async function getDashboardData(
           )
           if (!calculation) return []
 
-          const assignedSupervisorId = asUuid(project.assigned_supervisor_id)
+          const assignedSupervisorId = asUuid(project.assignedSupervisorId)
           return [{
             projectId,
-            projectName: typeof project.name === "string" && project.name.trim()
-              ? project.name.trim()
-              : "Project",
-            projectCode: typeof project.code === "string" && project.code.trim()
-              ? project.code.trim()
-              : null,
+            projectName: project.name?.trim() || "Project",
+            projectCode: project.code?.trim() || null,
             supervisorId: assignedSupervisorId,
             supervisorName: assignedSupervisorId
               ? supervisorNameById.get(assignedSupervisorId) ?? "Assigned Supervisor"
@@ -1153,6 +1135,7 @@ export async function getDashboardData(
       })
 
     const visitCompliance: DashboardVisitCompliance = {
+      eligibleProjectCount: eligibleComplianceProjects.length,
       overdueCount: allComplianceProjects.filter((project) => project.state === "overdue").length,
       dueTodayCount: allComplianceProjects.filter((project) => project.state === "due_today").length,
       dueSoonCount: allComplianceProjects.filter((project) => project.state === "due_soon").length,

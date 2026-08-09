@@ -42,6 +42,7 @@ const urgencyClass = {
 } as const
 
 export function VisitComplianceCard({ compliance }: { compliance: DashboardVisitCompliance }) {
+  const hasEligibleProjects = compliance.eligibleProjectCount > 0
   const hasAttention = compliance.overdueCount + compliance.dueTodayCount + compliance.dueSoonCount > 0
 
   return (
@@ -62,7 +63,11 @@ export function VisitComplianceCard({ compliance }: { compliance: DashboardVisit
             <div className="min-w-0">
               <p className="text-sm font-semibold text-foreground">Visit Compliance</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {hasAttention ? "Recurring visit deadlines requiring attention" : "All recurring site visits are on track"}
+                {hasAttention
+                  ? "Recurring visit deadlines requiring attention"
+                  : hasEligibleProjects
+                    ? "All recurring site visits are on track"
+                    : "No recurring supervision projects found"}
               </p>
             </div>
           </div>
@@ -82,8 +87,10 @@ export function VisitComplianceCard({ compliance }: { compliance: DashboardVisit
                 View Details <ChevronRight className="size-3.5" />
               </span>
             </div>
-          ) : (
+          ) : hasEligibleProjects ? (
             <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">On track</span>
+          ) : (
+            <span className="text-xs font-medium text-muted-foreground">No recurring projects</span>
           )}
         </div>
       </DialogTrigger>
@@ -121,8 +128,17 @@ export function VisitComplianceCard({ compliance }: { compliance: DashboardVisit
             </ul>
           ) : (
             <div className="py-8 text-sm">
-              <p className="font-medium text-emerald-600 dark:text-emerald-400">All recurring site visits are on track</p>
-              <p className="mt-1 text-muted-foreground">No active recurring-supervision projects currently require attention.</p>
+              {hasEligibleProjects ? (
+                <>
+                  <p className="font-medium text-emerald-600 dark:text-emerald-400">All recurring site visits are on track</p>
+                  <p className="mt-1 text-muted-foreground">No active recurring-supervision projects currently require attention.</p>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium text-foreground">No recurring supervision projects found</p>
+                  <p className="mt-1 text-muted-foreground">No active Monthly 2, Monthly 3, or Monthly 4 projects are available in the current Project scope.</p>
+                </>
+              )}
             </div>
           )}
         </div>

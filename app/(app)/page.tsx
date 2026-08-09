@@ -26,7 +26,7 @@ const emptyDashboard: DashboardData = {
   inspectionDonut: [],
   visitCompletion: { completed: 0, scheduled: 0 },
   completedVisitsBySupervisor: [],
-  visitCompliance: { overdueCount: 0, dueTodayCount: 0, dueSoonCount: 0, projects: [] },
+  visitCompliance: { eligibleProjectCount: 0, overdueCount: 0, dueTodayCount: 0, dueSoonCount: 0, projects: [] },
   recentSupervisorReports: [],
   projects: [],
   tasks: [],
