@@ -27,6 +27,10 @@ export default function MemberHomepageLoading() {
         <PlaceholderSummaryCard label="Tomorrow's Visits" />
         <PlaceholderSummaryCard label="Visit Requests" />
       </div>
+      <div className="space-y-2.5">
+        <span className="text-base font-semibold tracking-tight sm:text-lg">Visit Compliance</span>
+        <Skeleton className="h-16 w-full" />
+      </div>
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <span className="text-lg font-semibold tracking-tight">Visit Requests</span>

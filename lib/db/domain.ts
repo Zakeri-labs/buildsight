@@ -7,6 +7,13 @@ import { getReportCcNotificationFeed } from "@/lib/report-cc/server"
 import { getViewerOwnedProjectIds, isProjectUuid } from "@/lib/auth/project-access"
 import type { DashboardDateRange } from "@/lib/dashboard/date-range"
 import { normalizeDocumentType } from "@/lib/documents/document-types"
+import { currentCalendarDateKey } from "@/lib/calendar/date"
+import {
+  calculateVisitCompliance,
+  isVisitComplianceEligible,
+  type VisitComplianceState,
+  type VisitComplianceSupervisionType,
+} from "@/lib/site-visits/compliance"
 
 import { DEMO_STAGE_MANAGEMENT_DATA } from "@/lib/db/stages"
 import { getFallbackStageChecklist } from "@/lib/stages/execution"
@@ -543,6 +550,46 @@ async function fetchScopedCompletedSiteVisitsByActivityRange(
   return data ?? []
 }
 
+async function fetchScopedCompletedSiteVisitsForCompliance(ids: string[]) {
+  const projectIds = validUuidList(ids)
+  if (projectIds.length === 0) return [] as any[]
+
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("site_visit_requests")
+    .select("id, project_id, completed_at")
+    .in("project_id", projectIds)
+    .eq("status", "completed")
+    .not("completed_at", "is", null)
+    .order("completed_at", { ascending: false })
+    .order("id", { ascending: false })
+
+  if (error) throw error
+  return data ?? []
+}
+
+export type DashboardVisitComplianceProject = {
+  projectId: string
+  projectName: string
+  projectCode: string | null
+  supervisionType: VisitComplianceSupervisionType
+  supervisorId: string | null
+  supervisorName: string
+  state: Exclude<VisitComplianceState, "on_track">
+  intervalDays: number
+  lastCompletedVisitDate: string | null
+  nextRequiredVisitDate: string
+  daysRemaining: number | null
+  daysOverdue: number | null
+}
+
+export type DashboardVisitCompliance = {
+  overdueCount: number
+  dueTodayCount: number
+  dueSoonCount: number
+  projects: DashboardVisitComplianceProject[]
+}
+
 export type DashboardData = {
   kpis: {
     totalProjects: number
@@ -567,6 +614,7 @@ export type DashboardData = {
       completedAt: string
     }[]
   }[]
+  visitCompliance: DashboardVisitCompliance
   recentSupervisorReports: RecentSupervisorReportRow[]
   projects: {
     id: string
@@ -617,6 +665,7 @@ function createEmptyDashboard(): DashboardData {
     ncrDonut: [],
     inspectionDonut: [],
     completedVisitsBySupervisor: [],
+    visitCompliance: { overdueCount: 0, dueTodayCount: 0, dueSoonCount: 0, projects: [] },
     recentSupervisorReports: [],
     projects: [],
     tasks: [],
@@ -629,6 +678,7 @@ export async function getDashboardData(
   projectId: string | null,
   userId: string,
   activityDateRange?: Pick<DashboardDateRange, "startUtc" | "endExclusiveUtc">,
+  includeVisitCompliance = false,
 ): Promise<DashboardData> {
   try {
     const validOrgId = asUuid(orgId)
@@ -653,6 +703,15 @@ export async function getDashboardData(
     const scopedSupervisingOrgIds = validUuidList(
       scoped.map((project) => project.supervisingOrganizationId),
     )
+    const complianceProjectIds = includeVisitCompliance
+      ? validUuidList(
+          scoped
+            .filter(
+              (project) => isVisitComplianceEligible(project.status, project.supervisionType),
+            )
+            .map((project) => project.id),
+        )
+      : []
     const admin = createAdminClient()
     const emptyReviewFeed = { canReview: false, items: [] }
     const emptySiteVisitFeed = { canManage: false, items: [] }
@@ -662,6 +721,7 @@ export async function getDashboardData(
       ncrs,
       inspections,
       completedSiteVisits,
+      complianceCompletedSiteVisits,
       rfis,
       documents,
       vos,
@@ -677,6 +737,9 @@ export async function getDashboardData(
       fetchScopedRows("ncrs", "project_id, status", ids),
       fetchScopedRows("inspections", "project_id, status", ids),
       fetchScopedCompletedSiteVisitsByActivityRange(ids, activityDateRange),
+      includeVisitCompliance
+        ? fetchScopedCompletedSiteVisitsForCompliance(complianceProjectIds)
+        : Promise.resolve([] as any[]),
       fetchScopedRows("rfis", "project_id, status", ids),
       fetchScopedRows("documents", "id, project_id, document_type", ids),
       fetchScopedRows("variation_orders", "project_id", ids),
@@ -938,6 +1001,92 @@ export async function getDashboardData(
       )
       .slice(0, 4)
 
+    // Visit Compliance is independent of the Dashboard activity range. Its recurring
+    // baseline is the latest completed Site Visit for the Project, then the persisted
+    // Project supervision/start date. The reusable calculation helper is the single
+    // source of truth for interval, eligibility, due date, and compliance state.
+    const latestCompletedVisitAtByProject = new Map<string, string>()
+    for (const visit of complianceCompletedSiteVisits as any[]) {
+      const visitProjectId = asUuid(visit.project_id)
+      const completedAt = typeof visit.completed_at === "string" ? visit.completed_at : null
+      if (!visitProjectId || !completedAt || latestCompletedVisitAtByProject.has(visitProjectId)) continue
+      latestCompletedVisitAtByProject.set(visitProjectId, completedAt)
+    }
+
+    const complianceToday = currentCalendarDateKey()
+    const allComplianceProjects = includeVisitCompliance
+      ? scoped.flatMap((project) => {
+          const calculation = calculateVisitCompliance(
+            {
+              status: project.status,
+              supervisionType: project.supervisionType,
+              latestCompletedVisitAt: latestCompletedVisitAtByProject.get(project.id) ?? null,
+              supervisionStartDate: project.supervisionStartDate,
+              startDate: project.startDate,
+              // Migration 060 persists the legacy fallback into supervision_start_date.
+              // Never substitute a moving request-time today value here.
+              legacyFallbackDate: null,
+            },
+            complianceToday,
+          )
+          if (!calculation) return []
+
+          return [{
+            projectId: project.id,
+            projectName: project.name,
+            projectCode: project.code,
+            supervisorId: project.assignedSupervisorId,
+            supervisorName: project.assignedSupervisorId
+              ? supervisorNameById.get(project.assignedSupervisorId) ?? "Assigned Supervisor"
+              : "Unassigned",
+            ...calculation,
+          }]
+        })
+      : []
+
+    const attentionProjects = allComplianceProjects
+      .filter((project) => project.state !== "on_track")
+      .sort((a, b) => {
+        const urgencyRank = { overdue: 0, due_today: 1, due_soon: 2 } as const
+        const aRank = urgencyRank[a.state as Exclude<VisitComplianceState, "on_track">]
+        const bRank = urgencyRank[b.state as Exclude<VisitComplianceState, "on_track">]
+        const urgencyDifference = aRank - bRank
+        if (urgencyDifference) return urgencyDifference
+        if (a.state === "overdue" && b.state === "overdue") {
+          const overdueDifference = (b.daysOverdue ?? 0) - (a.daysOverdue ?? 0)
+          if (overdueDifference) return overdueDifference
+        }
+        if (a.state === "due_soon" && b.state === "due_soon") {
+          const remainingDifference = (a.daysRemaining ?? 0) - (b.daysRemaining ?? 0)
+          if (remainingDifference) return remainingDifference
+        }
+        return (
+          a.projectName.localeCompare(b.projectName) ||
+          (a.projectCode ?? "").localeCompare(b.projectCode ?? "") ||
+          a.projectId.localeCompare(b.projectId)
+        )
+      })
+
+    const visitCompliance: DashboardVisitCompliance = {
+      overdueCount: allComplianceProjects.filter((project) => project.state === "overdue").length,
+      dueTodayCount: allComplianceProjects.filter((project) => project.state === "due_today").length,
+      dueSoonCount: allComplianceProjects.filter((project) => project.state === "due_soon").length,
+      projects: attentionProjects.map((project) => ({
+        projectId: project.projectId,
+        projectName: project.projectName,
+        projectCode: project.projectCode,
+        supervisionType: project.supervisionType,
+        supervisorId: project.supervisorId,
+        supervisorName: project.supervisorName,
+        state: project.state as Exclude<VisitComplianceState, "on_track">,
+        intervalDays: project.intervalDays,
+        lastCompletedVisitDate: project.lastCompletedVisitDate,
+        nextRequiredVisitDate: project.nextRequiredVisitDate,
+        daysRemaining: project.daysRemaining,
+        daysOverdue: project.daysOverdue,
+      })),
+    }
+
     // Recent Supervisor Reports uses the active Stage-based Report records only.
     // Reports are attributed through the canonical Project Supervisor assignment,
     // so a Supervisor reassignment is reflected here without a parallel mapping.
@@ -1135,6 +1284,7 @@ export async function getDashboardData(
       ncrDonut,
       inspectionDonut,
       completedVisitsBySupervisor,
+      visitCompliance,
       recentSupervisorReports,
       projects: projectRows,
       tasks: taskRows,

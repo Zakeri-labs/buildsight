@@ -214,6 +214,7 @@ function CreateProjectDialog({
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [code, setCode] = useState("")
+  const [supervisionStartDate, setSupervisionStartDate] = useState("")
   const [location, setLocation] = useState<ProjectLocationValue>(EMPTY_PROJECT_LOCATION)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -221,6 +222,7 @@ function CreateProjectDialog({
   function reset() {
     setName("")
     setCode("")
+    setSupervisionStartDate("")
     setLocation(EMPTY_PROJECT_LOCATION)
     setError(null)
   }
@@ -232,6 +234,7 @@ function CreateProjectDialog({
         supervisingOrgId: supervisingOrg.id,
         name,
         code,
+        supervisionStartDate,
         location: location.address,
         latitude: location.latitude,
         longitude: location.longitude,
@@ -299,6 +302,19 @@ function CreateProjectDialog({
                   disabled={pending}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="project-supervision-start-date">
+                  Supervision Start Date <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="project-supervision-start-date"
+                  type="date"
+                  value={supervisionStartDate}
+                  onChange={(e) => setSupervisionStartDate(e.target.value)}
+                  required
+                  disabled={pending}
+                />
+              </div>
             </div>
           </ProjectLocationField>
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -307,7 +323,7 @@ function CreateProjectDialog({
           <Button variant="outline" onClick={() => setOpen(false)} className="bg-transparent">
             Cancel
           </Button>
-          <Button onClick={submit} disabled={pending || name.trim().length < 2}>
+          <Button onClick={submit} disabled={pending || name.trim().length < 2 || !supervisionStartDate}>
             {pending && <Loader2 className="size-4 animate-spin" data-icon="inline-start" />}
             Create project
           </Button>

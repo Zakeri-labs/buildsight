@@ -801,7 +801,7 @@ export async function createProject(input: {
   supervisionTypeOther?: string
   plotNo?: string
   phase?: string
-  supervisionStartDate?: string
+  supervisionStartDate: string
   priority?: ProjectPriorityValue
   includedStructureVisits?: number | null
   includedFinishingVisits?: number | null
@@ -861,6 +861,7 @@ export async function createProject(input: {
     if (!projectStartDate.ok) return { ok: false, error: projectStartDate.error }
     const supervisionStartDate = normalizeOptionalProjectDate(input.supervisionStartDate, "supervision start date")
     if (!supervisionStartDate.ok) return { ok: false, error: supervisionStartDate.error }
+    if (!supervisionStartDate.date) return { ok: false, error: "Supervision Start Date is required." }
     const priority = input.priority ?? "medium"
     if (!isProjectPriorityValue(priority)) return { ok: false, error: "Select a valid project priority." }
     const includedStructureVisits = normalizeOptionalVisitCount(input.includedStructureVisits, "Included structure visits")

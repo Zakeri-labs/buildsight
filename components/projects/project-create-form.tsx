@@ -306,6 +306,7 @@ export function ProjectCreateForm({
         projectStartDate: "تاريخ بدء المشروع",
         openProjectStartDateCalendar: "فتح تقويم تاريخ بدء المشروع",
         supervisionStartDate: "تاريخ بدء الإشراف",
+        requiredSupervisionStartDate: "تاريخ بدء الإشراف مطلوب.",
         openSupervisionStartDateCalendar: "فتح تقويم تاريخ بدء الإشراف",
         priority: "الأولوية",
         includedVisits: "نطاق الإشراف",
@@ -410,6 +411,7 @@ export function ProjectCreateForm({
         projectStartDate: "Project Start Date",
         openProjectStartDateCalendar: "Open project start date calendar",
         supervisionStartDate: "Supervision Start Date",
+        requiredSupervisionStartDate: "Supervision Start Date is required.",
         openSupervisionStartDateCalendar: "Open supervision start date calendar",
         priority: "Priority",
         includedVisits: "Supervision Scope",
@@ -540,6 +542,7 @@ export function ProjectCreateForm({
       ) {
         return copy.requiredProject
       }
+      if (!supervisionStartDate) return copy.requiredSupervisionStartDate
       if (supervisionType === "other" && !supervisionTypeOther.trim()) {
         return copy.requiredSupervisionTypeOther
       }
@@ -1154,7 +1157,7 @@ export function ProjectCreateForm({
                             </Button>
                           </div>
                         </Field>
-                        <Field label={`${copy.supervisionStartDate} (${copy.optional})`} htmlFor="new-project-supervision-start-date">
+                        <Field label={copy.supervisionStartDate} htmlFor="new-project-supervision-start-date" required>
                           <div className="relative">
                             <Input
                               ref={supervisionStartDateInputRef}
@@ -1162,6 +1165,7 @@ export function ProjectCreateForm({
                               type="date"
                               value={supervisionStartDate}
                               onChange={(event) => setSupervisionStartDate(event.target.value)}
+                              required
                               disabled={pending}
                               className="h-10 pe-11 [&::-webkit-calendar-picker-indicator]:opacity-0"
                             />

@@ -7,6 +7,7 @@ import { useState } from "react"
 import { AlertTriangle, CalendarPlus, CheckCircle2, Clock3, FilePlus2, FileText, MapPinned, MessageSquare } from "lucide-react"
 
 import { ClientVisitRequestWorkflow } from "@/components/calendar/client-visit-request-workflow"
+import { MemberVisitCompliance } from "@/components/member-homepage/member-visit-compliance"
 import { Card, CardContent } from "@/components/ui/card"
 import { currentCalendarMonthKey } from "@/lib/calendar/date"
 import type { CalendarClientRequestViewModel, CalendarDataViewModel } from "@/lib/calendar/types"
@@ -306,6 +307,11 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
         />
         <SummaryCard label="Visit Requests" value={data.summary.pendingVisitRequests} icon={MessageSquare} prominent />
       </div>
+
+      <MemberVisitCompliance
+        compliance={data.visitCompliance}
+        hasError={data.visitComplianceHasError}
+      />
 
       <section className="space-y-3" aria-labelledby="member-visit-requests-title">
         <div className="flex items-center justify-between gap-3">

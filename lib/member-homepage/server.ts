@@ -8,7 +8,13 @@ import {
   resolveExplicitSupervisorProjectScope,
 } from "@/lib/calendar/server"
 import { addCalendarDays, currentCalendarDateKey } from "@/lib/calendar/date"
-import type { MemberHomepageData, MemberHomepageRequest, MemberHomepageVisit } from "@/lib/member-homepage/types"
+import type {
+  MemberHomepageData,
+  MemberHomepageRequest,
+  MemberHomepageVisit,
+  MemberHomepageVisitComplianceProject,
+} from "@/lib/member-homepage/types"
+import { calculateVisitCompliance, isVisitComplianceEligible } from "@/lib/site-visits/compliance"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 
@@ -24,11 +30,14 @@ function emptyData(
   visitRequestsHasError = false,
   tomorrowsVisitsHasError = false,
   todaysReportsHasError = false,
+  visitComplianceHasError = false,
 ): MemberHomepageData {
   return {
     summary: { completedReportsToday: 0, requiredReportsToday: 0, tomorrowsVisits: 0, pendingVisitRequests: 0 },
+    visitCompliance: { eligibleProjectCount: 0, projects: [] },
     requests: [],
     visits: [],
+    visitComplianceHasError,
     visitRequestsHasError,
     tomorrowsVisitsHasError,
     todaysReportsHasError,
@@ -110,7 +119,15 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
     const today = currentCalendarDateKey()
     const tomorrow = addCalendarDays(today, 1)
 
-    const [stageResult, unansweredStageResult, pendingResult, todayVisitsResult, tomorrowVisitsResult] = await Promise.all([
+    const [
+      stageResult,
+      unansweredStageResult,
+      pendingResult,
+      todayVisitsResult,
+      tomorrowVisitsResult,
+      complianceProjectsResult,
+      complianceCompletedVisitsResult,
+    ] = await Promise.all([
       metadataProjectIds.length
         ? admin
             .from("project_stages")
@@ -134,6 +151,23 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
         : Promise.resolve({ data: [] as any[], error: null }),
       visitProjectIds.length
         ? getCalendarScheduledSiteVisitRowsForDate(visitProjectIds, tomorrow)
+        : Promise.resolve({ data: [] as any[], error: null }),
+      visitProjectIds.length
+        ? admin
+            .from("projects")
+            .select("id, name, code, status, supervision_type, supervision_start_date, start_date, assigned_supervisor_id")
+            .in("id", visitProjectIds)
+            .eq("assigned_supervisor_id", userId)
+        : Promise.resolve({ data: [] as any[], error: null }),
+      visitProjectIds.length
+        ? admin
+            .from("site_visit_requests")
+            .select("id, project_id, status, completed_at")
+            .in("project_id", visitProjectIds)
+            .eq("status", "completed")
+            .not("completed_at", "is", null)
+            .order("completed_at", { ascending: false })
+            .order("id", { ascending: false })
         : Promise.resolve({ data: [] as any[], error: null }),
     ])
 
@@ -178,6 +212,96 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
         unansweredStageByProjectId.has(projectId)
       ) continue
       unansweredStageByProjectId.set(projectId, { id: stageId, name })
+    }
+
+    let visitComplianceHasError = false
+    let eligibleComplianceProjectCount = 0
+    let complianceProjects: MemberHomepageVisitComplianceProject[] = []
+
+    if (complianceProjectsResult.error || complianceCompletedVisitsResult.error) {
+      visitComplianceHasError = true
+      if (complianceProjectsResult.error) {
+        logLoadError("Visit Compliance projects", userId, visitProjects.length, complianceProjectsResult.error)
+      }
+      if (complianceCompletedVisitsResult.error) {
+        logLoadError("Visit Compliance completed Site Visits", userId, visitProjects.length, complianceCompletedVisitsResult.error)
+      }
+    } else {
+      const latestCompletedVisitAtByProject = new Map<string, string>()
+      for (const visit of complianceCompletedVisitsResult.data ?? []) {
+        const projectId = (visit as any).project_id
+        const completedAt = typeof (visit as any).completed_at === "string" ? (visit as any).completed_at : null
+        if (!isValidUuid(projectId) || !completedAt) continue
+
+        const existing = latestCompletedVisitAtByProject.get(projectId)
+        if (!existing || new Date(completedAt).getTime() > new Date(existing).getTime()) {
+          latestCompletedVisitAtByProject.set(projectId, completedAt)
+        }
+      }
+
+      const attentionProjects: MemberHomepageVisitComplianceProject[] = []
+      for (const project of complianceProjectsResult.data ?? []) {
+        const projectId = (project as any).id
+        const assignedSupervisorId = (project as any).assigned_supervisor_id
+        const status = typeof (project as any).status === "string" ? (project as any).status : null
+        const supervisionType = typeof (project as any).supervision_type === "string" ? (project as any).supervision_type : null
+
+        // The explicit-Supervisor project scope is resolved server-side first, and the
+        // detail query independently keeps the current canonical assignment pinned to
+        // this authenticated Member. Never broaden compliance merely because role=Member.
+        if (!isValidUuid(projectId) || assignedSupervisorId !== userId) continue
+        if (!isVisitComplianceEligible(status, supervisionType)) continue
+        eligibleComplianceProjectCount += 1
+
+        const calculation = calculateVisitCompliance({
+          status,
+          supervisionType,
+          latestCompletedVisitAt: latestCompletedVisitAtByProject.get(projectId) ?? null,
+          supervisionStartDate: typeof (project as any).supervision_start_date === "string"
+            ? (project as any).supervision_start_date
+            : null,
+          startDate: typeof (project as any).start_date === "string" ? (project as any).start_date : null,
+          // Phase 1 persists any legacy fallback into supervision_start_date. Do not
+          // introduce a moving request-time fallback in the Member surface.
+          legacyFallbackDate: null,
+        }, today)
+
+        if (!calculation || calculation.state === "on_track") continue
+        attentionProjects.push({
+          projectId,
+          projectName: typeof (project as any).name === "string" && (project as any).name.trim()
+            ? (project as any).name.trim()
+            : "Project",
+          projectCode: typeof (project as any).code === "string" && (project as any).code.trim()
+            ? (project as any).code.trim()
+            : null,
+          supervisionType: calculation.supervisionType,
+          state: calculation.state,
+          lastCompletedVisitDate: calculation.lastCompletedVisitDate,
+          nextRequiredVisitDate: calculation.nextRequiredVisitDate,
+          daysRemaining: calculation.daysRemaining,
+          daysOverdue: calculation.daysOverdue,
+        })
+      }
+
+      const urgencyRank = { overdue: 0, due_today: 1, due_soon: 2 } as const
+      complianceProjects = attentionProjects.sort((left, right) => {
+        const rankDifference = urgencyRank[left.state] - urgencyRank[right.state]
+        if (rankDifference) return rankDifference
+        if (left.state === "overdue" && right.state === "overdue") {
+          const overdueDifference = (right.daysOverdue ?? 0) - (left.daysOverdue ?? 0)
+          if (overdueDifference) return overdueDifference
+        }
+        if (left.state === "due_soon" && right.state === "due_soon") {
+          const remainingDifference = (left.daysRemaining ?? 0) - (right.daysRemaining ?? 0)
+          if (remainingDifference) return remainingDifference
+        }
+        return (
+          left.projectName.localeCompare(right.projectName) ||
+          (left.projectCode ?? "").localeCompare(right.projectCode ?? "") ||
+          left.projectId.localeCompare(right.projectId)
+        )
+      })
     }
 
     let visitRequestsHasError = false
@@ -333,14 +457,19 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
         tomorrowsVisits,
         pendingVisitRequests: requests.length,
       },
+      visitCompliance: {
+        eligibleProjectCount: eligibleComplianceProjectCount,
+        projects: complianceProjects,
+      },
       requests,
       visits,
+      visitComplianceHasError,
       visitRequestsHasError,
       tomorrowsVisitsHasError,
       todaysReportsHasError,
     }
   } catch (error) {
     logLoadError("member homepage Calendar request scope", userId, calendarProjectCount, error)
-    return emptyData(true, true, true)
+    return emptyData(true, true, true, true)
   }
 }

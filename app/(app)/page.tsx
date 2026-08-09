@@ -3,6 +3,7 @@ import { DateRangePill } from "@/components/dashboard/date-range-pill"
 import { PortfolioKpis, type KpiCardData } from "@/components/dashboard/portfolio-kpis"
 import { CompletedVisitsBySupervisorCard } from "@/components/dashboard/inspections-by-supervisor-card"
 import { RecentSupervisorReportsCard } from "@/components/dashboard/recent-supervisor-reports-card"
+import { VisitComplianceCard } from "@/components/dashboard/visit-compliance-card"
 import { ProjectsOverview } from "@/components/dashboard/projects-overview"
 import { MyTasks } from "@/components/dashboard/my-tasks"
 import { requireOnboarded } from "@/lib/auth/session"
@@ -24,6 +25,7 @@ const emptyDashboard: DashboardData = {
   ncrDonut: [],
   inspectionDonut: [],
   completedVisitsBySupervisor: [],
+  visitCompliance: { overdueCount: 0, dueTodayCount: 0, dueSoonCount: 0, projects: [] },
   recentSupervisorReports: [],
   projects: [],
   tasks: [],
@@ -53,7 +55,7 @@ export default async function DashboardPage({
   const projectId = await getSelectedProjectId()
   const orgId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id ?? null
   const data = orgId
-    ? await getDashboardData(orgId, projectId, session.userId, dateRange)
+    ? await getDashboardData(orgId, projectId, session.userId, dateRange, hasAdminRole)
     : emptyDashboard
   const canManageProjectSupervisors = session.supervisingOrg
     ? await canAdministerOrganization(session.supervisingOrg.id)
@@ -103,6 +105,8 @@ export default async function DashboardPage({
       </div>
 
       <PortfolioKpis kpis={kpis} />
+
+      {hasAdminRole ? <VisitComplianceCard compliance={data.visitCompliance} /> : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <CompletedVisitsBySupervisorCard
