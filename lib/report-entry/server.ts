@@ -6,18 +6,22 @@ import { createAdminClient } from "@/lib/supabase/admin"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 
-export type ReportEntryStage = {
-  id: string
-  name: string
-  sortOrder: number
-}
-
 export type ReportEntryLatestReport = {
   id: string
   stageId: string
   stageName: string
+  reportNumber: string | null
+  reportTitle: string
+  subject: string | null
   visitNumber: number
   createdAt: string
+}
+
+export type ReportEntryStage = {
+  id: string
+  name: string
+  sortOrder: number
+  latestReport: ReportEntryLatestReport | null
 }
 
 export type ReportEntryProject = {
@@ -71,11 +75,11 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
       .order("sort_order", { ascending: true }),
     admin
       .from("term_responses")
-      .select("id, project_id, project_stage_id, visit_number, created_at")
+      .select("id, project_id, project_stage_id, report_number, report_title, subject, visit_number, created_at")
       .in("project_id", projectIds)
       .is("project_stage_term_id", null)
-      .order("visit_number", { ascending: false })
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false }),
     admin
       .from("project_images")
       .select("project_id, storage_path, order_index")
@@ -106,6 +110,7 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
       id: stageId,
       name,
       sortOrder: Number.isFinite(Number((row as any).sort_order)) ? Number((row as any).sort_order) : items.length,
+      latestReport: null,
     })
     stagesByProject.set(projectId, items)
   }
@@ -115,30 +120,48 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
   }
 
   const latestReportByProject = new Map<string, ReportEntryLatestReport>()
+  const latestReportByStage = new Map<string, ReportEntryLatestReport>()
   for (const row of reportResult.data ?? []) {
     const projectId = (row as any).project_id
     const stageId = (row as any).project_stage_id
     const reportId = (row as any).id
     const visitNumber = Number((row as any).visit_number)
     const createdAt = typeof (row as any).created_at === "string" ? (row as any).created_at : ""
+    const reportTitle = typeof (row as any).report_title === "string" ? (row as any).report_title.trim() : ""
+    const reportNumber = typeof (row as any).report_number === "string" && (row as any).report_number.trim()
+      ? (row as any).report_number.trim()
+      : null
+    const subject = typeof (row as any).subject === "string" && (row as any).subject.trim()
+      ? (row as any).subject.trim()
+      : null
     if (
       !isUuid(projectId) ||
       !projectIdSet.has(projectId) ||
-      latestReportByProject.has(projectId) ||
       !isUuid(stageId) ||
       !isUuid(reportId) ||
       !Number.isInteger(visitNumber) ||
       visitNumber <= 0 ||
-      !createdAt
+      !createdAt ||
+      !reportTitle
     ) continue
 
-    latestReportByProject.set(projectId, {
+    const report: ReportEntryLatestReport = {
       id: reportId,
       stageId,
       stageName: allStageNameById.get(stageId) ?? "Stage",
+      reportNumber,
+      reportTitle,
+      subject,
       visitNumber,
       createdAt,
-    })
+    }
+
+    if (!latestReportByProject.has(projectId)) latestReportByProject.set(projectId, report)
+    if (!latestReportByStage.has(stageId)) latestReportByStage.set(stageId, report)
+  }
+
+  for (const stages of stagesByProject.values()) {
+    for (const stage of stages) stage.latestReport = latestReportByStage.get(stage.id) ?? null
   }
 
   const coverPathByProject = new Map<string, string>()
