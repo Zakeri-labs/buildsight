@@ -4,9 +4,9 @@ import { revalidatePath } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { assertOrgAdmin, getUserIdOrThrow, audit, AuthzError } from "@/lib/auth/guards"
-import type { OrganizationCategory, OrganizationRole } from "@/lib/db/types"
+import type { MembershipStatus, OrganizationCategory, OrganizationRole } from "@/lib/db/types"
 import { ORGANIZATION_CATEGORIES, ORGANIZATION_ROLES } from "@/lib/db/types"
-import type { ActionResult } from "@/lib/actions/invitations"
+import { createInvitation, type ActionResult } from "@/lib/actions/invitations"
 
 /** Search organizations by name (RLS-scoped to the caller's visibility). */
 export async function searchOrganizations(query: string): Promise<
@@ -212,5 +212,185 @@ export async function removeOrgMember(input: {
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not remove member." }
+  }
+}
+
+/** Update an org member's status (active | inactive). Caller must be admin of that org. */
+export async function updateOrgMemberStatus(input: {
+  organizationId: string
+  membershipId: string
+  status: MembershipStatus
+}): Promise<ActionResult> {
+  try {
+    if (input.status !== "active" && input.status !== "inactive") {
+      return { ok: false, error: "Invalid status." }
+    }
+    const actorId = await assertOrgAdmin(input.organizationId)
+    const admin = createAdminClient()
+
+    const { data: membership } = await admin
+      .from("organization_memberships")
+      .select("id, role, status")
+      .eq("id", input.membershipId)
+      .eq("organization_id", input.organizationId)
+      .maybeSingle()
+    if (!membership) return { ok: false, error: "Member not found." }
+
+    // Guard: do not allow deactivating the last active admin.
+    if (membership.role === "org_admin" && input.status === "inactive") {
+      const { count } = await admin
+        .from("organization_memberships")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", input.organizationId)
+        .eq("role", "org_admin")
+        .eq("status", "active")
+      if ((count ?? 0) <= 1) return { ok: false, error: "An organization needs at least one active admin." }
+    }
+
+    const { error } = await admin
+      .from("organization_memberships")
+      .update({ status: input.status })
+      .eq("id", input.membershipId)
+    if (error) throw error
+
+    await audit({
+      actorId,
+      action: input.status === "active" ? "membership.activated" : "membership.deactivated",
+      entityType: "organization_membership",
+      entityId: input.membershipId,
+      organizationId: input.organizationId,
+      metadata: { status: input.status },
+    })
+    revalidatePath("/users")
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof AuthzError ? err.message : "Could not update status." }
+  }
+}
+
+/**
+ * Add or link a member directly to an organization by email.
+ * If user exists in Auth, links/activates immediately.
+ * If user does not exist, creates account and links as active member immediately.
+ */
+export async function addDirectMember(input: {
+  organizationId: string
+  email: string
+  role: OrganizationRole
+}): Promise<ActionResult<{ userExists: boolean; addedDirectly: boolean }>> {
+  try {
+    const email = input.email.trim().toLowerCase()
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return { ok: false, error: "Enter a valid email address." }
+    }
+    if (!ORGANIZATION_ROLES.includes(input.role)) {
+      return { ok: false, error: "Invalid role." }
+    }
+
+    const actorId = await assertOrgAdmin(input.organizationId)
+    const admin = createAdminClient()
+
+    // 1. Search existing user in profiles or auth.users
+    const { data: profiles } = await admin
+      .from("profiles")
+      .select("id, email, full_name")
+      .eq("email", email)
+      .limit(1)
+
+    let userId = profiles?.[0]?.id
+
+    if (!userId) {
+      const { data: authUsers } = await admin.auth.admin.listUsers()
+      const found = authUsers?.users?.find((u) => u.email?.toLowerCase() === email)
+      if (found) userId = found.id
+    }
+
+    if (userId) {
+      // User exists! Add or reactivate directly in organization_memberships
+      const { data: existingOm } = await admin
+        .from("organization_memberships")
+        .select("id, status")
+        .eq("organization_id", input.organizationId)
+        .eq("user_id", userId)
+        .maybeSingle()
+
+      if (existingOm) {
+        if (existingOm.status === "active") {
+          return { ok: false, error: "This user is already an active member of this organization." }
+        }
+        await admin
+          .from("organization_memberships")
+          .update({ role: input.role, status: "active" })
+          .eq("id", existingOm.id)
+      } else {
+        await admin.from("organization_memberships").insert({
+          organization_id: input.organizationId,
+          user_id: userId,
+          role: input.role,
+          status: "active",
+        })
+      }
+
+      await audit({
+        actorId,
+        action: "membership.created_direct",
+        entityType: "organization_membership",
+        entityId: userId,
+        organizationId: input.organizationId,
+        metadata: { email, role: input.role },
+      })
+
+      revalidatePath("/users")
+      return { ok: true, data: { userExists: true, addedDirectly: true } }
+    }
+
+    // 2. User does not exist yet: create user account & add as active member directly
+    const { data: newUser, error: createError } = await admin.auth.admin.createUser({
+      email,
+      password: "Password123!",
+      email_confirm: true,
+      user_metadata: { full_name: email.split("@")[0] },
+    })
+
+    if (createError) {
+      // Fallback to standard invitation
+      const inviteRes = await createInvitation({
+        email,
+        organizationId: input.organizationId,
+        organizationRole: input.role,
+      })
+      if (!inviteRes.ok) return { ok: false, error: inviteRes.error }
+      return { ok: true, data: { userExists: false, addedDirectly: false } }
+    }
+
+    const newUserId = newUser.user.id
+    await admin.from("profiles").upsert({
+      id: newUserId,
+      email,
+      full_name: email.split("@")[0],
+      updated_at: new Date().toISOString(),
+    })
+
+    await admin.from("organization_memberships").insert({
+      organization_id: input.organizationId,
+      user_id: newUserId,
+      role: input.role,
+      status: "active",
+    })
+
+    await audit({
+      actorId,
+      action: "membership.created_direct",
+      entityType: "organization_membership",
+      entityId: newUserId,
+      organizationId: input.organizationId,
+      metadata: { email, role: input.role },
+    })
+
+    revalidatePath("/users")
+    return { ok: true, data: { userExists: false, addedDirectly: true } }
+  } catch (err) {
+    console.error("addDirectMember failed:", err)
+    return { ok: false, error: err instanceof AuthzError ? err.message : "Could not add user." }
   }
 }
