@@ -54,6 +54,7 @@ export function ScheduleSiteVisitDialog({
   const [assignedUserIds, setAssignedUserIds] = useState<string[]>([])
   const [error, setError] = useState("")
   const [pending, startTransition] = useTransition()
+  const [isMobileProjectSelect, setIsMobileProjectSelect] = useState(false)
 
   const selectedProject = useMemo(
     () => requestProject ?? projects.find((project) => project.id === projectId) ?? projects[0] ?? null,
@@ -71,6 +72,15 @@ export function ScheduleSiteVisitDialog({
     setAssignedUserIds([])
     setError("")
   }, [open, initialDate, projects, request])
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 639px)")
+    const syncViewport = () => setIsMobileProjectSelect(mediaQuery.matches)
+
+    syncViewport()
+    mediaQuery.addEventListener("change", syncViewport)
+    return () => mediaQuery.removeEventListener("change", syncViewport)
+  }, [])
 
   function changeProject(value: unknown) {
     if (request) return
@@ -168,11 +178,23 @@ export function ScheduleSiteVisitDialog({
               </div>
             ) : (
               <Select value={projectId || null} onValueChange={changeProject} disabled={pending}>
-                <SelectTrigger className="h-10 w-full">
+                <SelectTrigger className="h-10 w-full min-w-0 overflow-hidden">
                   <SelectValue placeholder="Select project">{() => selectedProject?.name ?? "Select project"}</SelectValue>
                 </SelectTrigger>
-                <SelectContent>
-                  {projects.map((project) => <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>)}
+                <SelectContent
+                  align={isMobileProjectSelect ? "start" : "center"}
+                  alignItemWithTrigger={!isMobileProjectSelect}
+                  className="max-sm:!w-[var(--anchor-width)] max-sm:!min-w-0 max-sm:max-w-[calc(100vw-2rem)] max-sm:max-h-[min(18rem,var(--available-height))]"
+                >
+                  {projects.map((project) => (
+                    <SelectItem
+                      key={project.id}
+                      value={project.id}
+                      className="max-sm:items-start max-sm:py-2 max-sm:[&>span:first-child]:min-w-0 max-sm:[&>span:first-child]:shrink max-sm:[&>span:first-child]:whitespace-normal max-sm:[&>span:first-child]:break-words max-sm:[&>span:first-child]:leading-5"
+                    >
+                      {project.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             )}

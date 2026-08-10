@@ -1,13 +1,14 @@
 "use client"
 
-import { ArrowRight, Building2, ClipboardList, FileText, ImageIcon, MapPin } from "lucide-react"
+import Link from "next/link"
+import { ArrowRight, Building2, ChevronRight, ClipboardList, FileText, ImageIcon, MapPin } from "lucide-react"
 import { useMemo, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import type { ReportEntryProject, ReportEntrySiteVisitContext } from "@/lib/report-entry/server"
+import type { ReportEntryLatestReport, ReportEntryProject, ReportEntrySiteVisitContext } from "@/lib/report-entry/server"
 import { startReportEntryAction } from "@/lib/report-entry/actions"
 import { cn } from "@/lib/utils"
 
@@ -40,6 +41,7 @@ export function ReportEntry({
   const [linkedSiteVisitId, setLinkedSiteVisitId] = useState<string | null>(linkedSiteVisit?.id ?? null)
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null)
   const [changeProjectOpen, setChangeProjectOpen] = useState(false)
+  const [previewReport, setPreviewReport] = useState<ReportEntryLatestReport | null>(null)
   const stageListRef = useRef<HTMLDivElement>(null)
 
   const selectedProject = useMemo(
@@ -47,9 +49,20 @@ export function ReportEntry({
     [projects, selectedProjectId],
   )
 
+  const selectedStage = useMemo(
+    () => selectedProject?.stages.find((stage) => stage.id === selectedStageId) ?? null,
+    [selectedProject, selectedStageId],
+  )
+
+  const contextualLatestReport = selectedStage ? selectedStage.latestReport : selectedProject?.latestReport ?? null
+  const latestReportContextLabel = selectedStage
+    ? `Last Report of ${stageDisplayName(selectedStage.name)} Stage`
+    : "Latest Project Report"
+
   const applyProjectChange = (projectId: string) => {
     setSelectedProjectId(projectId)
     setSelectedStageId("")
+    setPreviewReport(null)
     if (stageListRef.current) stageListRef.current.scrollTop = 0
   }
 
@@ -170,19 +183,31 @@ export function ReportEntry({
                     </div>
 
                     <div className="border-t pt-3">
-                      <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                        <FileText className="size-3.5 text-primary" aria-hidden="true" />
-                        Last Report
+                      <div className="mb-1.5 flex min-w-0 items-center gap-1.5 text-[11px] font-semibold leading-tight text-foreground">
+                        <FileText className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+                        <span className="min-w-0 truncate" title={latestReportContextLabel}>{latestReportContextLabel}</span>
                       </div>
-                      {selectedProject.latestReport ? (
-                        <div className="min-w-0">
-                          <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{selectedProject.latestReport.stageName}</p>
-                          <p className="mt-1 text-[11px] leading-tight text-muted-foreground">
-                            Visit No. {selectedProject.latestReport.visitNumber} · {reportDate(selectedProject.latestReport.createdAt)}
-                          </p>
-                        </div>
+                      {contextualLatestReport ? (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewReport(contextualLatestReport)}
+                          className="group -mx-1 flex w-[calc(100%+0.5rem)] min-w-0 items-start gap-2 rounded-lg px-1 py-0.5 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/40"
+                          aria-label={`Preview ${contextualLatestReport.reportTitle}`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[13px] font-semibold leading-snug text-foreground" title={contextualLatestReport.reportTitle}>
+                              {contextualLatestReport.reportTitle}
+                            </p>
+                            <p className="mt-0.5 line-clamp-2 text-[11px] leading-[1.05rem] text-muted-foreground">
+                              {contextualLatestReport.subject || "No subject provided"}
+                            </p>
+                          </div>
+                          <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                        </button>
                       ) : (
-                        <p className="text-xs text-muted-foreground">No reports yet</p>
+                        <p className="text-xs leading-5 text-muted-foreground">
+                          {selectedStage ? "No reports yet for this stage" : "No reports yet for this project"}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -266,6 +291,54 @@ export function ReportEntry({
           )}
         </>
       )}
+
+      <Dialog open={Boolean(previewReport)} onOpenChange={(open) => { if (!open) setPreviewReport(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Last Report</DialogTitle>
+            <DialogDescription>Recent report details for the current Report Entry context.</DialogDescription>
+          </DialogHeader>
+
+          {previewReport && selectedProject ? (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Report Title</p>
+                <p className="break-words text-sm font-semibold leading-5 text-foreground">{previewReport.reportTitle}</p>
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Subject</p>
+                <p className="whitespace-pre-wrap break-words text-sm leading-5 text-foreground">{previewReport.subject || "—"}</p>
+              </div>
+              <div className="grid grid-cols-1 gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Report Number</p>
+                  <p className="mt-1 break-words font-mono text-xs font-medium text-foreground [overflow-wrap:anywhere]">{previewReport.reportNumber || "—"}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Stage</p>
+                  <p className="mt-1 break-words text-xs font-medium text-foreground">{stageDisplayName(previewReport.stageName)}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Report Date</p>
+                  <p className="mt-1 text-xs font-medium text-foreground">{reportDate(previewReport.createdAt)}</p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            {previewReport && selectedProject ? (
+              <Button
+                render={<Link href={`/projects/${selectedProject.id}/stages/${previewReport.stageId}/reports/${previewReport.id}`} />}
+                className="w-full sm:w-auto"
+              >
+                View Report
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </Button>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={changeProjectOpen} onOpenChange={handleProjectDialogOpenChange}>
         <DialogContent className="sm:max-w-md">
