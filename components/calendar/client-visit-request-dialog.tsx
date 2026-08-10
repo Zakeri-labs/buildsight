@@ -75,7 +75,7 @@ export function ClientVisitRequestDialog({
       onOpenChange(nextOpen)
       if (!nextOpen) setError("")
     }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl max-sm:flex max-sm:h-[min(90dvh,46rem)] max-sm:w-[calc(100vw-1rem)] max-sm:max-w-none max-sm:flex-col max-sm:gap-0 max-sm:overflow-hidden max-sm:p-0">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl max-sm:flex max-sm:max-h-[min(90dvh,46rem)] max-sm:w-[calc(100vw-1rem)] max-sm:max-w-none max-sm:flex-col max-sm:gap-0 max-sm:overflow-hidden max-sm:p-0">
         <DialogHeader className="max-sm:shrink-0 max-sm:border-b max-sm:px-4 max-sm:pb-3 max-sm:pt-4">
           <div className="flex min-w-0 items-start justify-between gap-3 pr-8">
             <div className="min-w-0">
@@ -91,7 +91,7 @@ export function ClientVisitRequestDialog({
           </div>
         </DialogHeader>
 
-        <div className="max-sm:min-h-0 max-sm:flex-1 max-sm:space-y-3 max-sm:overflow-y-auto max-sm:px-4 max-sm:py-3 sm:contents">
+        <div className="max-sm:min-h-0 max-sm:flex-[0_1_auto] max-sm:space-y-3 max-sm:overflow-y-auto max-sm:overscroll-contain max-sm:px-4 max-sm:py-3 sm:contents">
           {/* Desktop presentation stays unchanged. */}
           <div className="grid min-w-0 gap-2.5 max-sm:hidden sm:grid-cols-2 sm:gap-3">
             <DetailField label="Project" value={request.projectName} />
@@ -150,7 +150,7 @@ export function ClientVisitRequestDialog({
           ) : null}
         </div>
 
-        <DialogFooter className="max-sm:z-10 max-sm:grid max-sm:shrink-0 max-sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] max-sm:gap-2 max-sm:border-t max-sm:bg-background/95 max-sm:px-4 max-sm:py-3 max-sm:backdrop-blur-sm max-sm:[&>button:only-child]:col-span-2">
+        <DialogFooter className="max-sm:z-10 max-sm:mx-0 max-sm:mb-0 max-sm:grid max-sm:shrink-0 max-sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] max-sm:gap-2 max-sm:border-t max-sm:bg-background/95 max-sm:px-4 max-sm:pt-3 max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] max-sm:backdrop-blur-sm max-sm:[&>button:only-child]:col-span-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
           {request.canManage ? (
             <Button
