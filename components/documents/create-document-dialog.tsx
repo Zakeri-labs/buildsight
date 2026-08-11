@@ -1,20 +1,15 @@
 "use client"
 
-import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
 import {
   AlertCircle,
   File as FileIcon,
-  FilePlus2,
   Image as ImageIcon,
-  ImagePlus,
   Loader2,
   Paperclip,
   Plus,
-  RotateCcw,
-  Save,
   Trash2,
-  UploadCloud,
   X,
 } from "lucide-react"
 import {
@@ -24,22 +19,23 @@ import {
 } from "@/lib/actions/documents"
 import {
   CONSTRUCTION_DOCUMENT_TYPES,
-  getConstructionDocumentType,
   getConstructionDocumentTypeLabel,
   getDocumentDetailsTemplate,
   isConstructionDocumentType,
   type ConstructionDocumentTypeValue,
 } from "@/lib/documents/construction-document-types"
 import { uploadDocumentAsset } from "@/lib/documents/storage-upload"
-import { formatFileSize } from "@/lib/documents/simple-upload"
+import {
+  SIMPLE_UPLOAD_ACCEPT,
+  formatFileSize,
+  validateSimpleUploadFile,
+} from "@/lib/documents/simple-upload"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -68,6 +64,27 @@ type UploadProgress = {
   progress: number
 }
 
+type ProjectOption = {
+  id: string
+  name: string
+  code: string | null
+}
+
+type RecipientOption = {
+  id: string
+  label: string
+  secondary: string | null
+}
+
+type SaveMode = "draft" | "published"
+
+function humanize(value: string | null | undefined) {
+  if (!value) return ""
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase())
+}
+
 export function CreateDocumentDialog({
   projectId,
   triggerLabel = "Create Letter",
@@ -80,23 +97,29 @@ export function CreateDocumentDialog({
   triggerClassName?: string
 }) {
   const router = useRouter()
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const imageInputRef = useRef<HTMLInputElement | null>(null)
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null)
   const pendingAttachmentsRef = useRef<PendingAttachment[]>([])
+  const submissionRef = useRef(false)
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState("")
   const [documentType, setDocumentType] = useState<ConstructionDocumentTypeValue | "">("")
-  const [description, setDescription] = useState("")
   const [documentDetails, setDocumentDetails] = useState("")
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
+  const [submittingMode, setSubmittingMode] = useState<SaveMode | null>(null)
   const [uploading, setUploading] = useState<UploadProgress | null>(null)
   const [createdDocumentId, setCreatedDocumentId] = useState<string | null>(null)
+  const [createdDocumentMode, setCreatedDocumentMode] = useState<SaveMode | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState(projectId ?? "")
-  const [projectOptions, setProjectOptions] = useState<Array<{ id: string; name: string; code: string | null }>>([])
+  const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([])
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [projectsLoaded, setProjectsLoaded] = useState(false)
+  const [recipientOptions, setRecipientOptions] = useState<RecipientOption[]>([])
+  const [letterToRecipientIds, setLetterToRecipientIds] = useState<string[]>([])
+  const [ccRecipientIds, setCcRecipientIds] = useState<string[]>([])
+  const [loadingRecipients, setLoadingRecipients] = useState(false)
+
+  const submitting = submittingMode !== null
 
   useEffect(() => {
     pendingAttachmentsRef.current = pendingAttachments
@@ -146,9 +169,57 @@ export function CreateDocumentDialog({
     }
   }, [open, projectsLoaded])
 
-  const files = pendingAttachments.filter((attachment) => attachment.attachmentType === "file")
-  const images = pendingAttachments.filter((attachment) => attachment.attachmentType === "image")
-  const selectedType = documentType ? getConstructionDocumentType(documentType) : null
+  useEffect(() => {
+    if (!open) return
+
+    setLetterToRecipientIds([])
+    setCcRecipientIds([])
+    setRecipientOptions([])
+
+    if (!selectedProjectId) {
+      setLoadingRecipients(false)
+      return
+    }
+
+    let cancelled = false
+    const loadRecipients = async () => {
+      setLoadingRecipients(true)
+      const supabase = createClient()
+      const { data, error: recipientsError } = await supabase
+        .from("project_participants")
+        .select("id, organization_name, participant_type, project_role, key_contact_name, status, sort_order")
+        .eq("project_id", selectedProjectId)
+        .eq("status", "active")
+        .order("sort_order", { ascending: true })
+        .order("organization_name", { ascending: true })
+
+      if (cancelled) return
+      setLoadingRecipients(false)
+
+      if (recipientsError) {
+        setError("Unable to load recipient options for the selected Project.")
+        return
+      }
+
+      setRecipientOptions((data ?? []).map((participant) => {
+        const organizationName = participant.organization_name?.trim() || participant.key_contact_name?.trim() || "Project participant"
+        const contactName = participant.key_contact_name?.trim()
+        const role = humanize(participant.project_role || participant.participant_type)
+        const details = [contactName && contactName !== organizationName ? contactName : null, role || null].filter(Boolean)
+        return {
+          id: participant.id,
+          label: organizationName,
+          secondary: details.length ? details.join(" · ") : null,
+        }
+      }))
+    }
+
+    void loadRecipients()
+    return () => {
+      cancelled = true
+    }
+  }, [open, selectedProjectId])
+
   const currentProject = projectId ? projectOptions.find((project) => project.id === projectId) ?? null : null
   const selectedProject = selectedProjectId ? projectOptions.find((project) => project.id === selectedProjectId) ?? null : null
   const projectMismatch = Boolean(projectId && selectedProjectId && projectId !== selectedProjectId && currentProject && selectedProject)
@@ -160,16 +231,21 @@ export function CreateDocumentDialog({
     for (const attachment of pendingAttachmentsRef.current) {
       if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl)
     }
+    submissionRef.current = false
     setTitle("")
     setDocumentType("")
-    setDescription("")
     setDocumentDetails("")
     setPendingAttachments([])
     setError(null)
-    setSubmitting(false)
+    setSubmittingMode(null)
     setUploading(null)
     setCreatedDocumentId(null)
+    setCreatedDocumentMode(null)
     setSelectedProjectId(projectId ?? "")
+    setRecipientOptions([])
+    setLetterToRecipientIds([])
+    setCcRecipientIds([])
+    setLoadingRecipients(false)
   }
 
   const closeDialog = () => {
@@ -187,39 +263,32 @@ export function CreateDocumentDialog({
 
     setDocumentType(value)
     setDocumentDetails(getDocumentDetailsTemplate(value))
+    setError(null)
   }
 
-  const addAttachments = (event: ChangeEvent<HTMLInputElement>, attachmentType: "file" | "image") => {
+  const addAttachments = (event: ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(event.target.files ?? [])
     event.target.value = ""
     if (!selected.length) return
 
-    const invalid = selected.find((file) => {
-      if (file.size <= 0 || file.size > 50 * 1024 * 1024) return true
-      if (attachmentType === "image") return !file.type.startsWith("image/")
-      return file.type.startsWith("image/")
-    })
-
-    if (invalid) {
-      setError(
-        attachmentType === "image"
-          ? "Images must be valid image files and no larger than 50 MB each."
-          : invalid.type.startsWith("image/")
-            ? "Add image files in the Images section."
-            : "Files must be larger than 0 bytes and no larger than 50 MB each.",
-      )
+    const validationError = selected.map((file) => validateSimpleUploadFile(file)).find(Boolean)
+    if (validationError) {
+      setError(validationError)
       return
     }
 
     setError(null)
     setPendingAttachments((current) => [
       ...current,
-      ...selected.map((file) => ({
-        id: crypto.randomUUID(),
-        file,
-        attachmentType,
-        previewUrl: attachmentType === "image" ? URL.createObjectURL(file) : null,
-      })),
+      ...selected.map((file) => {
+        const attachmentType: PendingAttachment["attachmentType"] = file.type.startsWith("image/") ? "image" : "file"
+        return {
+          id: crypto.randomUUID(),
+          file,
+          attachmentType,
+          previewUrl: attachmentType === "image" ? URL.createObjectURL(file) : null,
+        }
+      }),
     ])
   }
 
@@ -231,24 +300,31 @@ export function CreateDocumentDialog({
     })
   }
 
-  const saveDocument = async () => {
+  const saveDocument = async (mode: SaveMode) => {
+    if (submissionRef.current) return
     setError(null)
     if (!selectedProjectId) {
       setError("Project is required.")
       return
     }
-    if (!title.trim()) {
-      setError("Letter title is required.")
+    if (!isConstructionDocumentType(documentType)) {
+      setError("Letter Type is required.")
       return
     }
-    if (!isConstructionDocumentType(documentType)) {
-      setError("Letter type is required.")
+    if (!title.trim()) {
+      setError("Subject is required.")
+      return
+    }
+    if (letterToRecipientIds.length === 0) {
+      setError("Letter To is required.")
       return
     }
 
-    setSubmitting(true)
+    submissionRef.current = true
+    setSubmittingMode(mode)
     let documentId = createdDocumentId
     let documentWasPersisted = Boolean(createdDocumentId)
+    const effectiveMode = createdDocumentMode ?? mode
 
     try {
       if (!documentId) {
@@ -256,13 +332,17 @@ export function CreateDocumentDialog({
           projectId: selectedProjectId,
           title,
           documentType,
-          shortDescription: description,
           documentDetails,
+          status: mode,
+          letterToParticipantIds: letterToRecipientIds,
+          ccParticipantIds: ccRecipientIds,
+          requireRecipients: true,
         })
         if (!result.ok) throw new Error(result.error)
         documentId = result.documentId
         documentWasPersisted = true
         setCreatedDocumentId(documentId)
+        setCreatedDocumentMode(mode)
       }
 
       if (pendingAttachments.length) {
@@ -306,7 +386,8 @@ export function CreateDocumentDialog({
       }
 
       setUploading(null)
-      setSubmitting(false)
+      submissionRef.current = false
+      setSubmittingMode(null)
       setOpen(false)
       reset()
       router.refresh()
@@ -314,12 +395,13 @@ export function CreateDocumentDialog({
       setError(
         createError instanceof Error
           ? documentWasPersisted
-            ? `The letter was saved, but attachments could not be completed: ${createError.message}`
+            ? `The ${effectiveMode === "published" ? "sent letter" : "draft"} was saved, but attachments could not be completed: ${createError.message}`
             : createError.message
           : "Unable to save the letter.",
       )
       setUploading(null)
-      setSubmitting(false)
+      submissionRef.current = false
+      setSubmittingMode(null)
     }
   }
 
@@ -346,214 +428,184 @@ export function CreateDocumentDialog({
           else closeDialog()
         }}
       >
-        <DialogContent className="max-w-5xl gap-0 overflow-hidden p-0 sm:max-w-5xl">
-          <DialogHeader className="border-b bg-slate-50 px-6 py-5 dark:bg-slate-900/70">
-            <div className="flex items-start gap-3 pe-8">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                <FilePlus2 className="size-5" />
-              </span>
-              <div className="space-y-1">
-                <DialogTitle className="text-lg font-semibold">Letter Information</DialogTitle>
-                <DialogDescription>Complete the construction letter details and add supporting files before saving.</DialogDescription>
-              </div>
-            </div>
+        <DialogContent className="max-w-4xl gap-0 overflow-hidden p-0 sm:max-w-4xl">
+          <DialogHeader className="border-b px-5 py-4 pe-12 sm:px-6">
+            <DialogTitle className="text-lg font-semibold">Create Letter</DialogTitle>
           </DialogHeader>
 
-          <div className="max-h-[calc(100vh-11rem)] overflow-y-auto bg-slate-50/40 px-5 py-5 dark:bg-slate-950/20 sm:px-6">
-            <div className="grid gap-5">
-              <Card className="gap-0 py-0 shadow-xs">
-                <CardHeader className="border-b px-5 py-4 sm:px-6">
-                  <CardTitle className="text-base">Letter Information</CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-5 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:px-6">
-                  <div className="min-w-0 space-y-2 sm:col-span-2">
-                    <Label htmlFor="construction-document-project">Project <span className="text-destructive">*</span></Label>
-                    <Select
-                      value={selectedProjectId || null}
-                      onValueChange={(value) => {
-                        setSelectedProjectId(value ?? "")
-                        setError(null)
+          <div className="max-h-[calc(100dvh-10rem)] overflow-y-auto px-5 py-4 sm:px-6 sm:py-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="min-w-0 space-y-2 sm:col-span-2">
+                <Label htmlFor="construction-document-project">Project <span className="text-destructive">*</span></Label>
+                <Select
+                  value={selectedProjectId || null}
+                  onValueChange={(value) => {
+                    setSelectedProjectId(value ?? "")
+                    setError(null)
+                  }}
+                  disabled={submitting || Boolean(createdDocumentId) || loadingProjects}
+                >
+                  <SelectTrigger id="construction-document-project" className="h-11 w-full min-w-0 rounded-lg px-3">
+                    <SelectValue placeholder={loadingProjects ? "Loading projects..." : "Select project"}>
+                      {(value) => {
+                        const option = projectOptions.find((project) => project.id === value)
+                        return option ? formatProjectLabel(option) : "Select project"
                       }}
-                      disabled={submitting || Boolean(createdDocumentId) || loadingProjects}
-                    >
-                      <SelectTrigger id="construction-document-project" className="h-11 w-full min-w-0 rounded-lg px-3">
-                        <SelectValue placeholder={loadingProjects ? "Loading projects..." : "Select project"}>
-                          {(value) => {
-                            const option = projectOptions.find((project) => project.id === value)
-                            return option ? formatProjectLabel(option) : "Select project"
-                          }}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent align="start" className="max-w-[calc(100vw-2rem)]">
-                        {projectOptions.map((project) => (
-                          <SelectItem
-                            key={project.id}
-                            value={project.id}
-                            className="[&>span:first-child]:min-w-0 [&>span:first-child]:shrink [&>span:first-child]:whitespace-normal"
-                          >
-                            <span className="min-w-0 break-words">{formatProjectLabel(project)}</span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {projectMismatch ? (
-                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                        You are currently in {currentProject?.name}, but this letter will be created for {selectedProject?.name}. Are you sure?
-                      </div>
-                    ) : null}
-                    {projectsLoaded && projectOptions.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">No authorized Projects are available.</p>
-                    ) : null}
-                  </div>
-
-                  <div className="min-w-0 space-y-2">
-                    <Label htmlFor="construction-document-title">Letter Title <span className="text-destructive">*</span></Label>
-                    <Input
-                      id="construction-document-title"
-                      value={title}
-                      maxLength={180}
-                      autoFocus
-                      disabled={submitting || Boolean(createdDocumentId)}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) => setTitle(event.target.value)}
-                      placeholder="Enter letter title"
-                      className="h-11 w-full"
-                    />
-                  </div>
-
-                  <div className="min-w-0 space-y-2">
-                    <Label htmlFor="construction-document-type">Letter Type <span className="text-destructive">*</span></Label>
-                    <Select value={documentType || null} onValueChange={handleDocumentTypeChange} disabled={submitting || Boolean(createdDocumentId)}>
-                      <SelectTrigger id="construction-document-type" className="h-11 w-full rounded-lg px-3">
-                        <SelectValue placeholder="Select letter type">
-                          {(value) => getConstructionDocumentTypeLabel(value) ?? "Select letter type"}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent align="start">
-                        {CONSTRUCTION_DOCUMENT_TYPES.map((type) => (
-                          <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {selectedType ? <p className="text-xs font-medium text-blue-600 dark:text-blue-400">{selectedType.shortLabel}</p> : null}
-                  </div>
-
-                  <div className="space-y-2 sm:col-span-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <Label htmlFor="construction-document-description">Short Description</Label>
-                      <span className="text-xs tabular-nums text-muted-foreground">{description.length}/2000</span>
-                    </div>
-                    <textarea
-                      id="construction-document-description"
-                      value={description}
-                      maxLength={2000}
-                      disabled={submitting || Boolean(createdDocumentId)}
-                      onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDescription(event.target.value)}
-                      placeholder="Optional summary or context"
-                      className="min-h-28 w-full resize-y rounded-lg border border-input bg-transparent px-3 py-2.5 text-sm outline-none transition-shadow placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
-                    />
-                  </div>
-
-                  <div className="space-y-2 sm:col-span-2">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <Label htmlFor="construction-document-details">Letter Details</Label>
-                        <p className="mt-1 text-xs text-muted-foreground">Selecting a letter type loads its editable English template immediately.</p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={submitting || Boolean(createdDocumentId) || !documentDetails}
-                        onClick={() => setDocumentDetails("")}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent align="start" className="max-w-[calc(100vw-2rem)]">
+                    {projectOptions.map((project) => (
+                      <SelectItem
+                        key={project.id}
+                        value={project.id}
+                        className="[&>span:first-child]:min-w-0 [&>span:first-child]:shrink [&>span:first-child]:whitespace-normal"
                       >
-                        <RotateCcw className="size-4" />
-                        Clear Template
-                      </Button>
-                    </div>
-                    <textarea
-                      id="construction-document-details"
-                      value={documentDetails}
-                      maxLength={100000}
-                      disabled={submitting || Boolean(createdDocumentId) || !documentType}
-                      onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDocumentDetails(event.target.value)}
-                      placeholder={documentType ? "Add letter-specific information" : "Select a letter type to load its template"}
-                      className="min-h-72 w-full resize-y rounded-xl border border-input bg-white px-4 py-3 font-mono text-sm leading-6 outline-none transition-shadow placeholder:font-sans placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-muted/30 disabled:opacity-70 dark:bg-slate-950"
-                    />
+                        <span className="min-w-0 break-words">{formatProjectLabel(project)}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {projectMismatch ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                    You are currently in {currentProject?.name}, but this letter will be created for {selectedProject?.name}. Are you sure?
                   </div>
-                </CardContent>
-              </Card>
+                ) : null}
+                {projectsLoaded && projectOptions.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No authorized Projects are available.</p>
+                ) : null}
+              </div>
 
-              <div className="grid gap-5 xl:grid-cols-2">
-                <AttachmentCard
-                  title="Files"
-                  description="Reports, specifications, drawings and other supporting files."
-                  icon={<Paperclip className="size-5" />}
-                  actionLabel="Upload Files"
-                  actionIcon={<UploadCloud className="size-4" />}
-                  disabled={submitting}
-                  onAction={() => fileInputRef.current?.click()}
-                >
-                  <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(event) => addAttachments(event, "file")} />
-                  {files.length ? (
-                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {files.map((attachment) => (
-                        <div key={attachment.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300"><FileIcon className="size-5" /></span>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium" title={attachment.file.name}>{attachment.file.name}</p>
-                            <p className="mt-0.5 text-xs text-muted-foreground">{formatFileSize(attachment.file.size)}</p>
-                          </div>
-                          <button
-                            type="button"
-                            disabled={submitting}
-                            onClick={() => removePendingAttachment(attachment.id)}
-                            className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950/40"
-                            title="Remove file"
-                          ><Trash2 className="size-4" /></button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : <EmptyAttachmentState icon={<FileIcon className="size-6" />} text="No files selected yet." />}
-                </AttachmentCard>
+              <div className="min-w-0 space-y-2">
+                <Label htmlFor="construction-document-type">Letter Type <span className="text-destructive">*</span></Label>
+                <Select value={documentType || null} onValueChange={handleDocumentTypeChange} disabled={submitting || Boolean(createdDocumentId)}>
+                  <SelectTrigger id="construction-document-type" className="h-11 w-full rounded-lg px-3">
+                    <SelectValue placeholder="Select letter type">
+                      {(value) => getConstructionDocumentTypeLabel(value) ?? "Select letter type"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent align="start">
+                    {CONSTRUCTION_DOCUMENT_TYPES.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <AttachmentCard
-                  title="Images"
-                  description="Site photos and visual inspection evidence."
-                  icon={<ImageIcon className="size-5" />}
-                  actionLabel="Upload Images"
-                  actionIcon={<ImagePlus className="size-4" />}
+              <div className="min-w-0 space-y-2">
+                <Label htmlFor="construction-document-title">Subject <span className="text-destructive">*</span></Label>
+                <Input
+                  id="construction-document-title"
+                  value={title}
+                  maxLength={180}
+                  disabled={submitting || Boolean(createdDocumentId)}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => setTitle(event.target.value)}
+                  placeholder="Enter subject"
+                  className="h-11 w-full"
+                />
+              </div>
+
+              <RecipientPicker
+                id="construction-document-letter-to"
+                label="Letter To"
+                required
+                placeholder="Select recipient(s)"
+                options={recipientOptions}
+                selectedIds={letterToRecipientIds}
+                excludedIds={ccRecipientIds}
+                loading={loadingRecipients}
+                disabled={submitting || Boolean(createdDocumentId) || !selectedProjectId}
+                onAdd={(id) => {
+                  setLetterToRecipientIds((current) => current.includes(id) ? current : [...current, id])
+                  setCcRecipientIds((current) => current.filter((item) => item !== id))
+                  setError(null)
+                }}
+                onRemove={(id) => setLetterToRecipientIds((current) => current.filter((item) => item !== id))}
+              />
+
+              <RecipientPicker
+                id="construction-document-cc"
+                label="CC"
+                placeholder="Select CC"
+                options={recipientOptions}
+                selectedIds={ccRecipientIds}
+                excludedIds={letterToRecipientIds}
+                loading={loadingRecipients}
+                disabled={submitting || Boolean(createdDocumentId) || !selectedProjectId}
+                onAdd={(id) => {
+                  setCcRecipientIds((current) => current.includes(id) ? current : [...current, id])
+                  setLetterToRecipientIds((current) => current.filter((item) => item !== id))
+                  setError(null)
+                }}
+                onRemove={(id) => setCcRecipientIds((current) => current.filter((item) => item !== id))}
+              />
+
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="construction-document-details">Text</Label>
+                <textarea
+                  id="construction-document-details"
+                  value={documentDetails}
+                  maxLength={100000}
+                  disabled={submitting || Boolean(createdDocumentId) || !documentType}
+                  onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDocumentDetails(event.target.value)}
+                  placeholder={documentType ? "Enter letter content" : "Select a letter type to load its template"}
+                  className="h-52 min-h-44 max-h-80 w-full resize-y overflow-y-auto rounded-xl border border-input bg-white px-4 py-3 font-mono text-sm leading-6 outline-none transition-shadow placeholder:font-sans placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-muted/30 disabled:opacity-70 dark:bg-slate-950 sm:h-56"
+                />
+              </div>
+
+              <div className="space-y-3 sm:col-span-2">
+                <input
+                  ref={attachmentInputRef}
+                  type="file"
+                  multiple
+                  accept={SIMPLE_UPLOAD_ACCEPT}
+                  className="hidden"
+                  onChange={addAttachments}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
                   disabled={submitting}
-                  onAction={() => imageInputRef.current?.click()}
+                  onClick={() => attachmentInputRef.current?.click()}
                 >
-                  <input ref={imageInputRef} type="file" multiple accept="image/*" className="hidden" onChange={(event) => addAttachments(event, "image")} />
-                  {images.length ? (
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      {images.map((attachment) => (
-                        <div key={attachment.id} className="group relative overflow-hidden rounded-xl border bg-muted/30">
-                          <div className="aspect-square overflow-hidden bg-slate-100 dark:bg-slate-900">
+                  <Paperclip className="size-4" />
+                  Add Attachments
+                </Button>
+
+                {pendingAttachments.length ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {pendingAttachments.map((attachment) => (
+                      <div key={attachment.id} className="flex min-w-0 items-center gap-3 rounded-lg border bg-muted/15 px-3 py-2">
+                        {attachment.previewUrl ? (
+                          <span className="size-10 shrink-0 overflow-hidden rounded-lg bg-muted">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={attachment.previewUrl ?? ""} alt={attachment.file.name} className="size-full object-cover" />
-                          </div>
-                          <div className="p-2.5">
-                            <p className="truncate text-xs font-medium" title={attachment.file.name}>{attachment.file.name}</p>
-                            <p className="mt-0.5 text-[11px] text-muted-foreground">{formatFileSize(attachment.file.size)}</p>
-                          </div>
-                          <button
-                            type="button"
-                            disabled={submitting}
-                            onClick={() => removePendingAttachment(attachment.id)}
-                            className="absolute right-2 top-2 inline-flex size-8 items-center justify-center rounded-lg bg-black/65 text-white opacity-0 backdrop-blur transition-opacity hover:bg-red-600 group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
-                            title="Remove image"
-                          ><X className="size-4" /></button>
+                            <img src={attachment.previewUrl} alt="" className="size-full object-cover" />
+                          </span>
+                        ) : (
+                          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300">
+                            {attachment.attachmentType === "image" ? <ImageIcon className="size-5" /> : <FileIcon className="size-5" />}
+                          </span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium" title={attachment.file.name}>{attachment.file.name}</p>
+                          <p className="text-xs text-muted-foreground">{formatFileSize(attachment.file.size)}</p>
                         </div>
-                      ))}
-                    </div>
-                  ) : <EmptyAttachmentState icon={<ImageIcon className="size-6" />} text="No images selected yet." />}
-                </AttachmentCard>
+                        <button
+                          type="button"
+                          disabled={submitting}
+                          onClick={() => removePendingAttachment(attachment.id)}
+                          className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950/40"
+                          title="Remove attachment"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
               {uploading ? (
-                <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900 dark:bg-blue-950/40">
+                <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 sm:col-span-2 dark:border-blue-900 dark:bg-blue-950/40">
                   <div className="mb-2 flex items-center justify-between gap-4 text-xs font-medium text-blue-800 dark:text-blue-200">
                     <span className="min-w-0 truncate">Uploading {uploading.current} of {uploading.total}: {uploading.filename}</span>
                     <span className="shrink-0 tabular-nums">{uploading.progress}%</span>
@@ -565,7 +617,7 @@ export function CreateDocumentDialog({
               ) : null}
 
               {error ? (
-                <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+                <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:col-span-2 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
                   <AlertCircle className="mt-0.5 size-4 shrink-0" />
                   <span>{error}</span>
                 </div>
@@ -573,11 +625,15 @@ export function CreateDocumentDialog({
             </div>
           </div>
 
-          <DialogFooter className="mx-0 mb-0 rounded-none border-t bg-white px-6 py-4 dark:bg-slate-950">
-            <Button variant="outline" size="lg" disabled={submitting} onClick={closeDialog}>Cancel</Button>
-            <Button size="lg" disabled={submitting} onClick={() => void saveDocument()}>
-              {submitting ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-              Save Letter
+          <DialogFooter className="m-0 flex-row justify-end gap-2 rounded-none border-t bg-white px-5 py-3 sm:px-6 dark:bg-slate-950">
+            <Button variant="outline" disabled={submitting} onClick={closeDialog}>Cancel</Button>
+            <Button variant="outline" disabled={submitting} onClick={() => void saveDocument("draft")}>
+              {submittingMode === "draft" ? <Loader2 className="size-4 animate-spin" /> : null}
+              Save Draft
+            </Button>
+            <Button disabled={submitting} onClick={() => void saveDocument("published")}>
+              {submittingMode === "published" ? <Loader2 className="size-4 animate-spin" /> : null}
+              Send
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -586,47 +642,80 @@ export function CreateDocumentDialog({
   )
 }
 
-function AttachmentCard({
-  title,
-  description,
-  icon,
-  actionLabel,
-  actionIcon,
+function RecipientPicker({
+  id,
+  label,
+  required = false,
+  placeholder,
+  options,
+  selectedIds,
+  excludedIds,
+  loading,
   disabled,
-  onAction,
-  children,
+  onAdd,
+  onRemove,
 }: {
-  title: string
-  description: string
-  icon: ReactNode
-  actionLabel: string
-  actionIcon: ReactNode
+  id: string
+  label: string
+  required?: boolean
+  placeholder: string
+  options: RecipientOption[]
+  selectedIds: string[]
+  excludedIds: string[]
+  loading: boolean
   disabled: boolean
-  onAction: () => void
-  children: ReactNode
+  onAdd: (id: string) => void
+  onRemove: (id: string) => void
 }) {
-  return (
-    <Card className="gap-0 py-0 shadow-xs">
-      <CardHeader className="flex-row items-center justify-between gap-4 border-b px-5 py-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300">{icon}</span>
-          <div className="min-w-0">
-            <CardTitle className="text-base">{title}</CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-          </div>
-        </div>
-        <Button type="button" variant="outline" disabled={disabled} onClick={onAction}>{actionIcon}{actionLabel}</Button>
-      </CardHeader>
-      <CardContent className="px-5 py-5">{children}</CardContent>
-    </Card>
-  )
-}
+  const selectedOptions = selectedIds
+    .map((selectedId) => options.find((option) => option.id === selectedId))
+    .filter((option): option is RecipientOption => Boolean(option))
+  const unavailable = new Set([...selectedIds, ...excludedIds])
+  const availableOptions = options.filter((option) => !unavailable.has(option.id))
+  const emptyPlaceholder = !options.length && !loading ? "No recipients available" : placeholder
 
-function EmptyAttachmentState({ icon, text }: { icon: ReactNode; text: string }) {
   return (
-    <div className="flex min-h-36 flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-muted/20 px-5 text-center text-muted-foreground">
-      <span className="flex size-11 items-center justify-center rounded-xl bg-muted">{icon}</span>
-      <p className="text-sm">{text}</p>
+    <div className="min-w-0 space-y-2">
+      <Label htmlFor={id}>{label}{required ? <span className="text-destructive"> *</span> : null}</Label>
+      {selectedOptions.length ? (
+        <div className="flex flex-wrap gap-1.5">
+          {selectedOptions.map((option) => (
+            <span key={option.id} className="inline-flex max-w-full items-center gap-1 rounded-full border bg-muted/35 px-2.5 py-1 text-xs font-medium">
+              <span className="max-w-[220px] truncate">{option.label}</span>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onRemove(option.id)}
+                className="rounded-full text-muted-foreground hover:text-foreground disabled:opacity-50"
+                aria-label={`Remove ${option.label}`}
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <Select
+        value={null}
+        onValueChange={(value) => {
+          if (value) onAdd(value)
+        }}
+        disabled={disabled || loading || availableOptions.length === 0}
+      >
+        <SelectTrigger id={id} className="h-11 w-full min-w-0 rounded-lg px-3">
+          <SelectValue placeholder={loading ? "Loading recipients..." : emptyPlaceholder} />
+        </SelectTrigger>
+        <SelectContent align="start" className="max-w-[calc(100vw-2rem)]">
+          {availableOptions.map((option) => (
+            <SelectItem key={option.id} value={option.id} className="py-2">
+              <span className="min-w-0">
+                <span className="block truncate font-medium">{option.label}</span>
+                {option.secondary ? <span className="block truncate text-xs text-muted-foreground">{option.secondary}</span> : null}
+              </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }

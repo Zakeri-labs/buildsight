@@ -261,12 +261,35 @@ export async function createUploadedDocumentsAction(input: {
   return { ok: true, documentIds: data.map((document: any) => document.id), count: data.length }
 }
 
+export type ConstructionLetterRecipientSnapshot = {
+  participantId: string
+  name: string
+  contactName: string | null
+  email: string | null
+  phone: string | null
+  role: string | null
+  participantType: string | null
+}
+
+function normalizeRecipientIds(value: unknown): string[] | null {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) return null
+  const ids = value.map((item) => typeof item === "string" ? item.trim() : "")
+  if (ids.some((id) => !isUuid(id))) return null
+  const distinct = Array.from(new Set(ids))
+  return distinct.length === ids.length ? distinct : null
+}
+
 export async function createConstructionDocumentAction(input: {
   projectId: string
   title: string
   documentType: string
   shortDescription?: string
   documentDetails?: string
+  status?: "draft" | "published"
+  letterToParticipantIds?: string[]
+  ccParticipantIds?: string[]
+  requireRecipients?: boolean
 }): Promise<SaveDocumentResult> {
   const session = await requireOnboarded()
   if (!isUuid(input.projectId)) {
@@ -276,19 +299,72 @@ export async function createConstructionDocumentAction(input: {
   const title = input.title.trim()
   const shortDescription = input.shortDescription?.trim() ?? ""
   const documentDetails = input.documentDetails?.trimEnd()
-  if (!title) return { ok: false, error: "Letter title is required." }
-  if (title.length > 180) return { ok: false, error: "Letter title must be 180 characters or fewer." }
+  const status = input.status ?? "draft"
+  const letterToParticipantIds = normalizeRecipientIds(input.letterToParticipantIds)
+  const ccParticipantIds = normalizeRecipientIds(input.ccParticipantIds)
+
+  if (!title) return { ok: false, error: "Subject is required." }
+  if (title.length > 180) return { ok: false, error: "Subject must be 180 characters or fewer." }
   if (shortDescription.length > 2_000) return { ok: false, error: "Short description must be 2,000 characters or fewer." }
   if (documentDetails !== undefined && documentDetails.length > 100_000) {
-    return { ok: false, error: "Letter details must be 100,000 characters or fewer." }
+    return { ok: false, error: "Letter text must be 100,000 characters or fewer." }
   }
   if (!isConstructionDocumentType(input.documentType)) {
     return { ok: false, error: "Select a valid letter type." }
+  }
+  if (status !== "draft" && status !== "published") {
+    return { ok: false, error: "The requested letter status is invalid." }
+  }
+  if (!letterToParticipantIds || !ccParticipantIds) {
+    return { ok: false, error: "One or more selected recipients are invalid." }
+  }
+  if (letterToParticipantIds.length > 50 || ccParticipantIds.length > 50) {
+    return { ok: false, error: "Too many recipients were selected." }
+  }
+  if (input.requireRecipients && letterToParticipantIds.length === 0) {
+    return { ok: false, error: "Letter To is required." }
+  }
+  const duplicateRecipientId = letterToParticipantIds.find((id) => ccParticipantIds.includes(id))
+  if (duplicateRecipientId) {
+    return { ok: false, error: "A recipient cannot be selected in both Letter To and CC." }
   }
 
   const supabase = await createClient()
   const { data: project } = await supabase.from("projects").select("id").eq("id", projectId).maybeSingle()
   if (!project) return { ok: false, error: "You do not have access to the selected project." }
+
+  const allRecipientIds = [...letterToParticipantIds, ...ccParticipantIds]
+  const recipientSnapshots = new Map<string, ConstructionLetterRecipientSnapshot>()
+  if (allRecipientIds.length > 0) {
+    const { data: participants, error: participantsError } = await supabase
+      .from("project_participants")
+      .select("id, organization_name, participant_type, project_role, key_contact_name, key_contact_email, key_contact_phone, status")
+      .eq("project_id", projectId)
+      .eq("status", "active")
+      .in("id", allRecipientIds)
+
+    if (participantsError) {
+      return { ok: false, error: "Unable to validate the selected Letter recipients." }
+    }
+    if ((participants ?? []).length !== allRecipientIds.length) {
+      return { ok: false, error: "One or more selected recipients are not valid for this Project." }
+    }
+
+    for (const participant of participants ?? []) {
+      recipientSnapshots.set(participant.id, {
+        participantId: participant.id,
+        name: participant.organization_name,
+        contactName: participant.key_contact_name ?? null,
+        email: participant.key_contact_email ?? null,
+        phone: participant.key_contact_phone ?? null,
+        role: participant.project_role ?? null,
+        participantType: participant.participant_type ?? null,
+      })
+    }
+  }
+
+  const letterToRecipients = letterToParticipantIds.map((id) => recipientSnapshots.get(id)!)
+  const ccRecipients = ccParticipantIds.map((id) => recipientSnapshots.get(id)!)
 
   const documentType: ConstructionDocumentTypeValue = input.documentType
   const { data, error } = await supabase
@@ -298,13 +374,16 @@ export async function createConstructionDocumentAction(input: {
       reference: null,
       title,
       document_type: documentType,
-      status: "draft",
+      status,
       workflow_status: "open",
       short_description: shortDescription || null,
       document_details: documentDetails ?? getDocumentDetailsTemplate(documentType),
+      letter_to_recipients: letterToRecipients,
+      cc_recipients: ccRecipients,
       content: EMPTY_RICH_TEXT_DOCUMENT,
       created_by: session.userId,
       creation_mode: "advanced",
+      published_at: status === "published" ? new Date().toISOString() : null,
     })
     .select("id, reference")
     .single()
@@ -317,7 +396,14 @@ export async function createConstructionDocumentAction(input: {
     entity_type: "document",
     entity_id: data.id,
     project_id: projectId,
-    metadata: { reference: data.reference, title, document_type: documentType },
+    metadata: {
+      reference: data.reference,
+      title,
+      document_type: documentType,
+      status,
+      letter_to_count: letterToRecipients.length,
+      cc_count: ccRecipients.length,
+    },
   })
 
   revalidateDocumentPaths(data.id, projectId)
