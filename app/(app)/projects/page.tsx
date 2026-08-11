@@ -9,6 +9,7 @@ import { PROJECT_TYPES, isProjectTypeValue } from "@/lib/projects/project-option
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 import { normalizeProjectStatus } from "@/lib/projects/project-status"
 import { getProjectSupervisorCandidates } from "@/lib/projects/supervisor-candidates-server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 function projectTypeLabel(value: string | null) {
   return PROJECT_TYPES.find((type) => type.value === value)?.label ?? "—"
@@ -25,6 +26,25 @@ function displayDate(value: string | null) {
   }).format(date)
 }
 
+async function getAssignedSupervisorNames(supervisorIds: string[]) {
+  const ids = Array.from(new Set(supervisorIds.filter(Boolean)))
+  if (!ids.length) return new Map<string, string>()
+
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("profiles")
+    .select("id, full_name, email")
+    .in("id", ids)
+  if (error) throw error
+
+  return new Map(
+    (data ?? []).map((profile) => [
+      profile.id,
+      profile.full_name?.trim() || profile.email?.trim() || "Assigned Supervisor",
+    ] as const),
+  )
+}
+
 export default async function ProjectsPage({
   searchParams,
 }: {
@@ -39,9 +59,13 @@ export default async function ProjectsPage({
     ? await canAdministerOrganization(session.supervisingOrg.id)
     : false
   const canDeleteProjects = canCreateProjects
-  const [editPermissions, supervisorOptions] = await Promise.all([
+  const assignedSupervisorIds = projects
+    .map((project) => project.assignedSupervisorId)
+    .filter((id): id is string => Boolean(id))
+  const [editPermissions, supervisorOptions, supervisorNameById] = await Promise.all([
     Promise.all(projects.map((project) => canAdministerProject(project.id))),
     organizationId && canCreateProjects ? getProjectSupervisorCandidates(organizationId) : Promise.resolve([]),
+    getAssignedSupervisorNames(assignedSupervisorIds),
   ])
 
   const rows: ProjectRow[] = projects.map((project, index) => ({
@@ -49,6 +73,7 @@ export default async function ProjectsPage({
     code: project.code ?? "—",
     name: project.name,
     ownerClient: project.client?.trim() || "—",
+    supervisorName: project.assignedSupervisorId ? supervisorNameById.get(project.assignedSupervisorId) ?? "Assigned Supervisor" : null,
     address: project.location?.trim() || "—",
     areaDistrict: project.region?.trim() || null,
     projectType: projectTypeLabel(project.projectType),

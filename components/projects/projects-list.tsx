@@ -77,15 +77,16 @@ export type ProjectStatus = ProjectStatusValue
 export type ProjectType = "Residential" | "Commercial" | "Hospitality" | "Infrastructure" | "Industrial"
 
 const PROJECT_TABLE_COLUMN_WIDTHS = [
-  "19%",
-  "13%",
-  "12.5%",
-  "5.5%",
+  "18%",
   "10.5%",
-  "10%",
-  "10%",
-  "13.5%",
-  "6%",
+  "10.5%",
+  "10.5%",
+  "11.5%",
+  "9.5%",
+  "7.5%",
+  "8.5%",
+  "9.5%",
+  "3.5%",
 ] as const
 
 export interface ProjectRow {
@@ -93,7 +94,9 @@ export interface ProjectRow {
   code: string
   name: string
   ownerClient: string
+  supervisorName?: string | null
   address: string
+  areaDistrict?: string | null
   projectType: ProjectType | "—"
   projectTypeValue?: ProjectTypeValue | null
   supervisionType?: string | null
@@ -261,8 +264,12 @@ export function ProjectsList({
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [selectedType, setSelectedType] = useState("all")
+  const [selectedSupervisor, setSelectedSupervisor] = useState("all")
+  const [selectedAreaDistrict, setSelectedAreaDistrict] = useState("all")
   const [selectedOwner, setSelectedOwner] = useState("all")
   const [sortBy, setSortBy] = useState("default")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<ProjectRow | null>(null)
   const [locationTarget, setLocationTarget] = useState<ProjectRow | null>(null)
@@ -300,6 +307,27 @@ export function ProjectsList({
     })
   }, [projectRows, searchQuery, selectedStatus, selectedType, selectedOwner])
 
+  const desktopFilteredProjects = useMemo(() => {
+    return filteredProjects.filter((project) => {
+      const supervisorName = project.assignedSupervisorId ? (project.supervisorName?.trim() || "Assigned Supervisor") : ""
+      const areaDistrict = project.areaDistrict?.trim() || ""
+
+      if (selectedSupervisor === "__unassigned__" && project.assignedSupervisorId) return false
+      if (
+        selectedSupervisor !== "all" &&
+        selectedSupervisor !== "__unassigned__" &&
+        supervisorName.toLocaleLowerCase() !== selectedSupervisor.toLocaleLowerCase()
+      ) return false
+      if (selectedAreaDistrict === "__unspecified__" && areaDistrict) return false
+      if (
+        selectedAreaDistrict !== "all" &&
+        selectedAreaDistrict !== "__unspecified__" &&
+        areaDistrict.toLocaleLowerCase() !== selectedAreaDistrict.toLocaleLowerCase()
+      ) return false
+      return true
+    })
+  }, [filteredProjects, selectedSupervisor, selectedAreaDistrict])
+
   const mobileProjects = useMemo(() => {
     const rows = [...filteredProjects]
     if (sortBy === "name-asc") rows.sort((left, right) => left.name.localeCompare(right.name))
@@ -316,22 +344,86 @@ export function ProjectsList({
     return rows
   }, [filteredProjects, sortBy])
 
+  const desktopProjects = useMemo(() => {
+    const rows = [...desktopFilteredProjects]
+    const compareNullableText = (leftValue: string | null | undefined, rightValue: string | null | undefined, direction: "asc" | "desc") => {
+      const left = leftValue?.trim() || ""
+      const right = rightValue?.trim() || ""
+      if (!left && !right) return 0
+      if (!left) return 1
+      if (!right) return -1
+      return direction === "asc" ? left.localeCompare(right) : right.localeCompare(left)
+    }
+
+    if (sortBy === "name-asc") rows.sort((left, right) => left.name.localeCompare(right.name))
+    if (sortBy === "progress-desc") rows.sort((left, right) => right.progress - left.progress || left.name.localeCompare(right.name))
+    if (sortBy === "date-desc") {
+      rows.sort((left, right) => {
+        const leftTime = Date.parse(left.startDate)
+        const rightTime = Date.parse(right.startDate)
+        const leftValue = Number.isNaN(leftTime) ? Number.NEGATIVE_INFINITY : leftTime
+        const rightValue = Number.isNaN(rightTime) ? Number.NEGATIVE_INFINITY : rightTime
+        return rightValue - leftValue || left.name.localeCompare(right.name)
+      })
+    }
+    if (sortBy === "supervisor-asc") rows.sort((left, right) => compareNullableText(left.supervisorName, right.supervisorName, "asc") || left.name.localeCompare(right.name))
+    if (sortBy === "supervisor-desc") rows.sort((left, right) => compareNullableText(left.supervisorName, right.supervisorName, "desc") || left.name.localeCompare(right.name))
+    if (sortBy === "area-asc") rows.sort((left, right) => compareNullableText(left.areaDistrict, right.areaDistrict, "asc") || left.name.localeCompare(right.name))
+    if (sortBy === "area-desc") rows.sort((left, right) => compareNullableText(left.areaDistrict, right.areaDistrict, "desc") || left.name.localeCompare(right.name))
+    return rows
+  }, [desktopFilteredProjects, sortBy])
+
   const totalProjects = projectRows.length
   const activeProjects = projectRows.filter((project) => project.status === "active").length
   const stoppedProjects = projectRows.filter((project) => project.status === "stopped").length
   const completedProjects = projectRows.filter((project) => project.status === "completed").length
   const typeOptions = Array.from(new Set(projectRows.map((project) => project.projectType).filter((type) => type !== "—")))
   const ownerOptions = Array.from(new Set(projectRows.map((project) => project.ownerClient).filter((owner) => owner !== "—")))
+  const supervisorOptionsForFilter = Array.from(
+    new Map(
+      projectRows
+        .filter((project) => Boolean(project.assignedSupervisorId))
+        .map((project) => project.supervisorName?.trim() || "Assigned Supervisor")
+        .map((name) => [name.toLocaleLowerCase(), name] as const),
+    ).values(),
+  ).sort((left, right) => left.localeCompare(right))
+  const areaDistrictOptions = Array.from(
+    new Map(
+      projectRows
+        .map((project) => project.areaDistrict?.trim())
+        .filter((area): area is string => Boolean(area))
+        .map((area) => [area.toLocaleLowerCase(), area] as const),
+    ).values(),
+  ).sort((left, right) => left.localeCompare(right))
+  const hasUnassignedSupervisor = projectRows.some((project) => !project.assignedSupervisorId)
+  const hasUnspecifiedArea = projectRows.some((project) => !project.areaDistrict?.trim())
   const activeFilterCount = [selectedStatus, selectedType, selectedOwner].filter((value) => value !== "all").length
-  const hasSearchOrFilters = Boolean(searchQuery.trim()) || activeFilterCount > 0 || sortBy !== "default"
+  const desktopActiveFilterCount = activeFilterCount + [selectedSupervisor, selectedAreaDistrict].filter((value) => value !== "all").length
+  const hasSearchOrFilters = Boolean(searchQuery.trim()) || desktopActiveFilterCount > 0 || sortBy !== "default"
+  const desktopPageCount = Math.max(1, Math.ceil(desktopProjects.length / pageSize))
+  const safeCurrentPage = Math.min(currentPage, desktopPageCount)
+  const desktopPageStart = (safeCurrentPage - 1) * pageSize
+  const paginatedDesktopProjects = desktopProjects.slice(desktopPageStart, desktopPageStart + pageSize)
+  const desktopPageWindowStart = Math.max(1, Math.min(safeCurrentPage - 2, Math.max(1, desktopPageCount - 4)))
+  const desktopPageNumbers = Array.from(
+    { length: Math.min(5, desktopPageCount - desktopPageWindowStart + 1) },
+    (_, index) => desktopPageWindowStart + index,
+  )
   const createdProject = createdProjectId ? projectRows.find((project) => project.id === createdProjectId) : undefined
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, selectedStatus, selectedType, selectedSupervisor, selectedAreaDistrict, selectedOwner, sortBy, pageSize])
 
   function clearAllProjectListFilters() {
     setSearchQuery("")
     setSelectedStatus("all")
     setSelectedType("all")
+    setSelectedSupervisor("all")
+    setSelectedAreaDistrict("all")
     setSelectedOwner("all")
     setSortBy("default")
+    setCurrentPage(1)
   }
 
   function openDeleteDialog(project: ProjectRow) {
@@ -676,7 +768,31 @@ export function ProjectsList({
           ]}
         />
 
-        {/* Dropdown 3: Owner / Client */}
+        {/* Dropdown 3: Supervisor */}
+        <DropdownFilter
+          label="Supervisor"
+          value={selectedSupervisor}
+          onChange={setSelectedSupervisor}
+          options={[
+            { label: "All Supervisors", value: "all" },
+            ...supervisorOptionsForFilter.map((supervisor) => ({ label: supervisor, value: supervisor })),
+            ...(hasUnassignedSupervisor ? [{ label: "Unassigned", value: "__unassigned__" }] : []),
+          ]}
+        />
+
+        {/* Dropdown 4: Area / District */}
+        <DropdownFilter
+          label="Area / District"
+          value={selectedAreaDistrict}
+          onChange={setSelectedAreaDistrict}
+          options={[
+            { label: "All Areas", value: "all" },
+            ...areaDistrictOptions.map((area) => ({ label: area, value: area })),
+            ...(hasUnspecifiedArea ? [{ label: "Unspecified", value: "__unspecified__" }] : []),
+          ]}
+        />
+
+        {/* Dropdown 5: Owner / Client */}
         <DropdownFilter
           label="Owner / Client"
           value={selectedOwner}
@@ -687,7 +803,7 @@ export function ProjectsList({
           ]}
         />
 
-        {/* Dropdown 4: Sort By */}
+        {/* Dropdown 6: Sort By */}
         <DropdownFilter
           label="Sort By"
           value={sortBy}
@@ -697,6 +813,10 @@ export function ProjectsList({
             { label: "Name (A-Z)", value: "name-asc" },
             { label: "Progress (High to Low)", value: "progress-desc" },
             { label: "Start Date (Newest)", value: "date-desc" },
+            { label: "Supervisor A–Z", value: "supervisor-asc" },
+            { label: "Supervisor Z–A", value: "supervisor-desc" },
+            { label: "Area / District A–Z", value: "area-asc" },
+            { label: "Area / District Z–A", value: "area-desc" },
           ]}
         />
 
@@ -714,7 +834,7 @@ export function ProjectsList({
       {/* Main Data Table */}
       <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900">
         <div className="w-full overflow-x-auto">
-          <table className="w-full min-w-[960px] table-fixed text-start text-sm">
+          <table className="w-full min-w-[1040px] table-fixed text-start text-sm">
             <colgroup>
               {PROJECT_TABLE_COLUMN_WIDTHS.map((width, index) => (
                 <col key={`${width}-${index}`} style={{ width }} />
@@ -723,25 +843,26 @@ export function ProjectsList({
             <thead>
               <tr className="border-b border-slate-200/80 bg-slate-50/80 text-xs font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-400">
                 <th className="truncate px-3 py-3.5 text-start align-middle font-semibold">Project</th>
-                <th className="truncate px-2 py-3.5 text-start align-middle font-semibold">Owner / Client</th>
-                <th className="truncate px-2 py-3.5 text-start align-middle font-semibold" title="Supervision Type">Supervision Type</th>
-                <th className="truncate px-1 py-3.5 text-center align-middle font-semibold">Location</th>
-                <th className="truncate px-2 py-3.5 text-start align-middle font-semibold">Project Type</th>
-                <th className="truncate px-1.5 py-3.5 text-center align-middle font-semibold">Status</th>
-                <th className="truncate px-1.5 py-3.5 text-center align-middle font-semibold">Start Date</th>
-                <th className="truncate px-2 py-3.5 text-start align-middle font-semibold">Progress</th>
-                <th className="truncate px-2 py-3.5 text-end align-middle font-semibold">Actions</th>
+                <th className="truncate px-2.5 py-3.5 text-start align-middle font-semibold">Owner / Client</th>
+                <th className="truncate px-2.5 py-3.5 text-start align-middle font-semibold">Supervisor</th>
+                <th className="truncate px-2.5 py-3.5 text-start align-middle font-semibold" title="Supervision Type">Supervision Type</th>
+                <th className="truncate px-2.5 py-3.5 text-start align-middle font-semibold">Area / District</th>
+                <th className="truncate px-2.5 py-3.5 text-start align-middle font-semibold">Project Type</th>
+                <th className="truncate px-2 py-3.5 text-center align-middle font-semibold">Status</th>
+                <th className="truncate px-2 py-3.5 text-center align-middle font-semibold">Start Date</th>
+                <th className="truncate px-2.5 py-3.5 text-start align-middle font-semibold">Progress</th>
+                <th className="truncate px-1.5 py-3.5 text-end align-middle font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-              {filteredProjects.length === 0 && (
+              {desktopProjects.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-5 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+                  <td colSpan={10} className="px-5 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
                     {locale === "ar" ? "لا توجد مشاريع مطابقة." : "No matching projects found."}
                   </td>
                 </tr>
               )}
-              {filteredProjects.map((row) => (
+              {paginatedDesktopProjects.map((row) => (
                 <tr key={row.id} className="transition-colors hover:bg-slate-50/60 dark:hover:bg-slate-800/30">
                   {/* Project info with thumbnail */}
                   <td className="min-w-0 overflow-hidden px-3 py-4 align-middle">
@@ -768,12 +889,19 @@ export function ProjectsList({
                   </td>
 
                   {/* Owner / Client */}
-                  <td className="min-w-0 overflow-hidden px-2 py-4 align-middle text-xs font-medium text-slate-700 dark:text-slate-300">
+                  <td className="min-w-0 overflow-hidden px-2.5 py-4 align-middle text-xs font-medium text-slate-700 dark:text-slate-300">
                     <TruncatedText>{row.ownerClient}</TruncatedText>
                   </td>
 
+                  {/* Supervisor */}
+                  <td className="min-w-0 overflow-hidden px-2.5 py-4 align-middle text-xs font-medium text-slate-700 dark:text-slate-300">
+                    <TruncatedText className={row.assignedSupervisorId ? undefined : "text-slate-400 dark:text-slate-500"}>
+                      {row.assignedSupervisorId ? (row.supervisorName?.trim() || "Assigned Supervisor") : "Unassigned"}
+                    </TruncatedText>
+                  </td>
+
                   {/* Supervision Type */}
-                  <td className="min-w-0 overflow-hidden px-2 py-4 align-middle text-xs font-medium text-slate-700 dark:text-slate-300">
+                  <td className="min-w-0 overflow-hidden px-2.5 py-4 align-middle text-xs font-medium text-slate-700 dark:text-slate-300">
                     <TruncatedText>
                       {row.supervisionType?.trim()
                         ? supervisionTypeLabel(row.supervisionType, row.supervisionTypeOther)
@@ -781,9 +909,12 @@ export function ProjectsList({
                     </TruncatedText>
                   </td>
 
-                  {/* Location */}
-                  <td className="min-w-0 overflow-hidden px-1 py-4 text-center align-middle">
-                    <div className="flex w-full items-center justify-center">
+                  {/* Area / District + Location */}
+                  <td className="min-w-0 overflow-hidden px-2.5 py-4 align-middle">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <TruncatedText className={cn("flex-1 text-xs font-medium text-slate-700 dark:text-slate-300", !row.areaDistrict?.trim() && "text-slate-400 dark:text-slate-500")}>
+                        {row.areaDistrict?.trim() || "—"}
+                      </TruncatedText>
                       {(() => {
                         const hasAddress = row.address.trim().length > 0 && row.address.trim() !== "—"
                         const hasCoordinates =
@@ -798,9 +929,7 @@ export function ProjectsList({
 
                         return (
                           <Tooltip>
-                            <TooltipTrigger
-                              render={<span className="inline-flex rounded-lg" />}
-                            >
+                            <TooltipTrigger render={<span className="inline-flex shrink-0 rounded-lg" />}>
                               <Button
                                 type="button"
                                 size="icon-sm"
@@ -808,7 +937,7 @@ export function ProjectsList({
                                 disabled={!hasLocation}
                                 onClick={() => hasLocation && setLocationTarget(row)}
                                 aria-label={locationLabel}
-                                className="size-7 rounded-lg border-slate-200 text-slate-500 shadow-2xs hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-blue-800 dark:hover:bg-blue-950/40 dark:hover:text-blue-400"
+                                className="size-7 shrink-0 rounded-lg border-slate-200 text-slate-500 shadow-2xs hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-blue-800 dark:hover:bg-blue-950/40 dark:hover:text-blue-400"
                               >
                                 <MapPin className="size-3.5" aria-hidden="true" />
                               </Button>
@@ -827,24 +956,24 @@ export function ProjectsList({
                   </td>
 
                   {/* Project Type */}
-                  <td className="min-w-0 overflow-hidden px-2 py-4 align-middle text-xs text-slate-600 dark:text-slate-400">
+                  <td className="min-w-0 overflow-hidden px-2.5 py-4 align-middle text-xs text-slate-600 dark:text-slate-400">
                     <TruncatedText>{row.projectType}</TruncatedText>
                   </td>
 
                   {/* Status Badge */}
-                  <td className="min-w-0 overflow-hidden px-1.5 py-4 text-center align-middle">
+                  <td className="min-w-0 overflow-hidden px-2 py-4 text-center align-middle">
                     <div className="flex min-w-0 items-center justify-center overflow-hidden">
                       <ProjectStatusBadge status={row.status} />
                     </div>
                   </td>
 
                   {/* Start Date */}
-                  <td className="min-w-0 overflow-hidden px-1.5 py-4 text-center align-middle text-xs text-slate-600 dark:text-slate-400">
+                  <td className="min-w-0 overflow-hidden px-2 py-4 text-center align-middle text-xs text-slate-600 dark:text-slate-400">
                     <TruncatedText className="text-center">{row.startDate}</TruncatedText>
                   </td>
 
                   {/* Progress bar */}
-                  <td className="min-w-0 overflow-hidden px-2 py-4 align-middle">
+                  <td className="min-w-0 overflow-hidden px-2.5 py-4 align-middle">
                     <div className="flex min-w-0 flex-col gap-1.5">
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                         {row.progress}%
@@ -905,35 +1034,44 @@ export function ProjectsList({
         {/* Footer / Pagination */}
         <div className="flex flex-col gap-3 border-t border-slate-200/80 px-5 py-3.5 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            Showing {filteredProjects.length === 0 ? 0 : 1} to {filteredProjects.length} of {totalProjects} projects
+            Showing {desktopProjects.length === 0 ? 0 : desktopPageStart + 1} to {Math.min(desktopPageStart + pageSize, desktopProjects.length)} of {desktopProjects.length} projects
           </span>
 
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                className="inline-flex size-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-700 dark:border-slate-800 dark:hover:bg-slate-800"
+                disabled={safeCurrentPage <= 1}
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                className="inline-flex size-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-700 disabled:cursor-default disabled:opacity-40 dark:border-slate-800 dark:hover:bg-slate-800"
+                aria-label="Previous page"
               >
                 <ChevronLeft className="size-4" />
               </button>
 
-              <button
-                type="button"
-                className="inline-flex size-8 items-center justify-center rounded-lg bg-blue-950 text-xs font-bold text-white dark:bg-blue-600"
-              >
-                1
-              </button>
+              {desktopPageNumbers.map((page) => (
+                <button
+                  key={page}
+                  type="button"
+                  onClick={() => setCurrentPage(page)}
+                  aria-current={safeCurrentPage === page ? "page" : undefined}
+                  className={cn(
+                    "inline-flex size-8 items-center justify-center rounded-lg text-xs font-medium",
+                    safeCurrentPage === page
+                      ? "bg-blue-950 font-bold text-white dark:bg-blue-600"
+                      : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800",
+                  )}
+                >
+                  {page}
+                </button>
+              ))}
 
               <button
                 type="button"
-                className="inline-flex size-8 items-center justify-center rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-              >
-                2
-              </button>
-
-              <button
-                type="button"
-                className="inline-flex size-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-700 dark:border-slate-800 dark:hover:bg-slate-800"
+                disabled={safeCurrentPage >= desktopPageCount}
+                onClick={() => setCurrentPage((page) => Math.min(desktopPageCount, page + 1))}
+                className="inline-flex size-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-700 disabled:cursor-default disabled:opacity-40 dark:border-slate-800 dark:hover:bg-slate-800"
+                aria-label="Next page"
               >
                 <ChevronRight className="size-4" />
               </button>
@@ -946,15 +1084,15 @@ export function ProjectsList({
                     type="button"
                     className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
                   >
-                    <span>10 / page</span>
+                    <span>{pageSize} / page</span>
                     <ChevronDown className="size-3 text-slate-400" />
                   </button>
                 }
               />
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>10 / page</DropdownMenuItem>
-                <DropdownMenuItem>20 / page</DropdownMenuItem>
-                <DropdownMenuItem>50 / page</DropdownMenuItem>
+                {[10, 20, 50].map((size) => (
+                  <DropdownMenuItem key={size} onClick={() => setPageSize(size)}>{size} / page</DropdownMenuItem>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -988,6 +1126,7 @@ export function ProjectsList({
                     name: updated.name,
                     code: updated.code,
                     address: updated.address,
+                    areaDistrict: updated.areaDistrict,
                     projectType: updated.projectTypeLabel as ProjectType | "—",
                     projectTypeValue: updated.projectTypeValue,
                     supervisionType: updated.supervisionType,
@@ -998,6 +1137,9 @@ export function ProjectsList({
                     latitude: updated.latitude,
                     longitude: updated.longitude,
                     assignedSupervisorId: updated.assignedSupervisorId,
+                    supervisorName: updated.assignedSupervisorId
+                      ? supervisorOptions.find((candidate) => candidate.id === updated.assignedSupervisorId)?.name ?? "Assigned Supervisor"
+                      : null,
                   }
                 : project
             )))
