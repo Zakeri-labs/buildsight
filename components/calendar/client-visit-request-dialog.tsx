@@ -159,7 +159,8 @@ export function ClientVisitRequestDialog({
               disabled={!request.canApprove}
               title={request.canApprove ? undefined : "Assign a Project Supervisor before scheduling this request."}
             >
-              Approve and Schedule
+              <span className="sm:hidden">Schedule</span>
+              <span className="max-sm:hidden">Approve and Schedule</span>
             </Button>
           ) : null}
         </DialogFooter>

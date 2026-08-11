@@ -166,7 +166,10 @@ export function ScheduleSiteVisitDialog({
         ? "max-h-[90vh] overflow-y-auto sm:max-w-lg max-sm:w-[calc(100vw-1rem)] max-sm:max-w-none max-sm:max-h-[calc(100dvh-1rem)] max-sm:gap-3 max-sm:p-4"
         : "max-h-[90vh] overflow-y-auto sm:max-w-lg max-sm:w-[calc(100vw-1rem)] max-sm:max-w-none max-sm:max-h-[calc(100dvh-1rem)] max-sm:gap-2.5 max-sm:p-4"
       }>
-        <DialogHeader className={isRequestApproval ? "max-sm:gap-1.5" : "max-sm:gap-0.5"}>
+        <DialogHeader className={isRequestApproval
+          ? "max-sm:gap-1.5"
+          : "max-sm:-mx-4 max-sm:gap-0.5 max-sm:border-b max-sm:border-border/70 max-sm:px-4 max-sm:pb-3"
+        }>
           <DialogTitle>Schedule Site Visit</DialogTitle>
           <DialogDescription className={isRequestApproval ? undefined : "max-sm:hidden"}>
             {isRequestApproval
@@ -175,7 +178,7 @@ export function ScheduleSiteVisitDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className={isRequestApproval ? "grid min-w-0 gap-4 max-sm:gap-3" : "grid min-w-0 gap-4 max-sm:gap-2.5"}>
+        <div className={isRequestApproval ? "grid min-w-0 gap-4 max-sm:gap-3" : "grid min-w-0 gap-4 max-sm:gap-3.5"}>
           <div className="grid gap-2">
             <Label>Project</Label>
             {projectIsFixed && selectedProject ? (
@@ -185,7 +188,7 @@ export function ScheduleSiteVisitDialog({
               </div>
             ) : (
               <Select value={projectId || null} onValueChange={changeProject} disabled={pending}>
-                <SelectTrigger className="h-10 w-full min-w-0 overflow-hidden">
+                <SelectTrigger className="h-10 w-full min-w-0 overflow-hidden max-sm:min-h-10">
                   <SelectValue placeholder="Select project">{() => selectedProject?.name ?? "Select project"}</SelectValue>
                 </SelectTrigger>
                 <SelectContent
@@ -213,7 +216,10 @@ export function ScheduleSiteVisitDialog({
             </div>
           ) : null}
 
-          <div className="grid min-w-0 gap-3 sm:grid-cols-2 sm:gap-4">
+          <div className={isRequestApproval
+            ? "grid min-w-0 gap-3 sm:grid-cols-2 sm:gap-4"
+            : "grid min-w-0 gap-3 sm:grid-cols-2 sm:gap-4 max-sm:gap-3.5"
+          }>
             <div className="grid gap-2">
               <Label htmlFor="calendar-visit-date">Visit Date</Label>
               <Input id="calendar-visit-date" type="date" min={localDateInputValue()} value={date} onChange={(event: ChangeEvent<HTMLInputElement>) => setDate(event.target.value)} disabled={pending} className="h-10" />
@@ -224,25 +230,12 @@ export function ScheduleSiteVisitDialog({
             </div>
           </div>
 
-          <div className={isRequestApproval ? "grid gap-2" : "grid gap-2 max-sm:gap-1.5"}>
+          <div className="grid gap-2">
             <Label>Supervisor</Label>
-            {isRequestApproval ? (
-              <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
-                <p className="truncate text-sm font-medium text-foreground">{selectedProject?.supervisor.name ?? "Assigned Project Supervisor"}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">Project Supervisor</p>
-              </div>
-            ) : (
-              <>
-                <div className="rounded-lg border bg-muted/30 px-3 py-2.5 max-sm:hidden">
-                  <p className="truncate text-sm font-medium text-foreground">{selectedProject?.supervisor.name ?? "Assigned Project Supervisor"}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">Project Supervisor</p>
-                </div>
-                <p className="min-w-0 truncate px-0.5 text-sm font-medium text-foreground sm:hidden">
-                  {selectedProject?.supervisor.name ?? "Assigned Project Supervisor"}
-                  <span className="font-normal text-muted-foreground"> · Project Supervisor</span>
-                </p>
-              </>
-            )}
+            <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+              <p className="truncate text-sm font-medium text-foreground">{selectedProject?.supervisor.name ?? "Assigned Project Supervisor"}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Project Supervisor</p>
+            </div>
           </div>
 
           <div className={isRequestApproval ? "grid gap-2" : "grid gap-2 max-sm:hidden"}>
