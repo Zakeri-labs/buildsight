@@ -51,8 +51,8 @@ function SummaryCard({ label, value, icon: Icon, prominent = false, hasError = f
     <Card
       size="sm"
       className={cn(
-        "min-w-0 gap-0 py-3",
-        prominent && "bg-primary/[0.06] ring-primary/25 dark:bg-primary/10",
+        "relative min-w-0 gap-0 overflow-hidden rounded-xl border border-border bg-card py-3 ring-0 lg:border-0 lg:ring-1 lg:ring-foreground/10",
+        prominent && "border-primary/30 bg-primary/[0.06] dark:border-primary/35 dark:bg-primary/10 lg:border-0 lg:ring-primary/25",
       )}
     >
       <CardContent className="flex min-h-[5.5rem] flex-col justify-between gap-2 px-3">
@@ -135,8 +135,8 @@ function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
     >
       <div className="grid min-h-[3.5rem] grid-cols-[3.125rem_minmax(0,1.35fr)_minmax(5.3rem,1fr)_2.25rem] items-stretch sm:min-h-[4.25rem] sm:grid-cols-[3.5rem_minmax(0,1.35fr)_minmax(6.5rem,1fr)_3rem]">
         <div className={cn(
-          "flex min-w-0 flex-col items-center justify-center bg-sidebar px-1 text-center text-white",
-          isCompleted && "bg-sidebar/80",
+          "flex min-w-0 flex-col items-center justify-center bg-[#16294a] px-1 text-center text-white lg:bg-sidebar",
+          isCompleted && "bg-[#16294a]/80 lg:bg-sidebar/80",
         )}>
           {scheduledTime ? (
             <>

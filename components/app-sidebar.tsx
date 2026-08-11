@@ -167,7 +167,7 @@ export function AppSidebar({
 
   const stageNavigationItem = contextProjectId
     ? {
-        label: locale === "ar" ? "المراحل" : "Stages",
+        label: locale === "ar" ? "المراحل" : "Reports",
         href: `/projects/${contextProjectId}/stages`,
         icon: ListTree,
       }
@@ -211,7 +211,7 @@ export function AppSidebar({
     },
     ...(canAccessSiteVisits
       ? [{
-          label: t.nav.siteVisits,
+          label: embedded && locale === "en" ? "Site Visit Requests" : t.nav.siteVisits,
           href: contextProjectId
             ? `/site-visits?project=${encodeURIComponent(contextProjectId)}`
             : "/site-visits",

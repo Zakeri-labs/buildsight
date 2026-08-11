@@ -286,9 +286,9 @@ export function ScheduleSiteVisitDialog({
           </div>
           <div className="sm:hidden">
             {mobileNotesExpanded ? (
-              <div className="grid gap-1.5">
+              <div className="grid gap-1.5 pb-1">
                 <Label htmlFor="calendar-mobile-visit-notes">Notes</Label>
-                <textarea id="calendar-mobile-visit-notes" value={notes} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setNotes(event.target.value)} maxLength={4000} rows={3} disabled={pending} placeholder="Optional notes..." className="w-full resize-none rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50" />
+                <textarea id="calendar-mobile-visit-notes" value={notes} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setNotes(event.target.value)} maxLength={4000} rows={2} disabled={pending} placeholder="Optional notes..." className="h-16 min-h-16 max-h-16 w-full resize-none overflow-y-auto rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50" />
               </div>
             ) : (
               <button type="button" onClick={() => setMobileNotesExpanded(true)} disabled={pending} className="inline-flex min-h-8 w-fit items-center rounded-md px-0.5 text-sm font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50">

@@ -6,7 +6,7 @@ function Skeleton({ className }: { className: string }) {
 
 function PlaceholderSummaryCard({ label, value }: { label: string; value?: number }) {
   return (
-    <Card size="sm" className="min-w-0 gap-0 py-3">
+    <Card size="sm" className="relative min-w-0 gap-0 overflow-hidden rounded-xl border border-border bg-card py-3 ring-0 lg:border-0 lg:ring-1 lg:ring-foreground/10">
       <CardContent className="flex min-h-[5.5rem] flex-col justify-between gap-2 px-3">
         <p className="min-w-0 text-[11px] font-medium leading-4 text-muted-foreground sm:text-xs">{label}</p>
         {typeof value === "number" ? (
