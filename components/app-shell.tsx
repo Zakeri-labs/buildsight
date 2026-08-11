@@ -36,6 +36,7 @@ export function AppShell({
   const isMemberSettings = pathname.startsWith("/settings") && isMember
   const isMemberSiteVisits = pathname.startsWith("/site-visits") && isMember
   const isMemberLetters = pathname === "/documents" && isMember
+  const isMemberInitialDocuments = pathname.startsWith("/initial-documents") && isMember
   const isMemberProjectDetail = /^\/projects\/[^/]+\/?$/.test(pathname) && pathname !== "/projects/new" && isMember
   const isMemberProjectStages = /^\/projects\/[^/]+\/stages\/?$/.test(pathname) && isMember
   const isMemberStageReportsList = /^\/projects\/[^/]+\/stages\/[^/]+\/?$/.test(pathname) && isMember
@@ -43,9 +44,9 @@ export function AppShell({
   const isMemberReportTranslation = /^\/projects\/[^/]+\/stages\/[^/]+\/reports\/[^/]+\/translate\/?$/.test(pathname) && isMember
   const isMemberDashboard = (pathname === "/" || pathname === "/memberhomepage") && isMember
   const isMemberMobileShell =
-    isMemberDashboard || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberProjectDetail || isMemberProjectStages || isMemberStageReportsList || isMemberStageReport || isMemberReportTranslation
+    isMemberDashboard || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberInitialDocuments || isMemberProjectDetail || isMemberProjectStages || isMemberStageReportsList || isMemberStageReport || isMemberReportTranslation
   const isCompactMemberMobileShell =
-    isMemberHomepage || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberProjectDetail || isMemberProjectStages || isMemberStageReportsList || isMemberStageReport || isMemberReportTranslation
+    isMemberHomepage || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberInitialDocuments || isMemberProjectDetail || isMemberProjectStages || isMemberStageReportsList || isMemberStageReport || isMemberReportTranslation
   const showMemberBottomNavigation = isMemberMobileShell && !isMemberStageReport && !isMemberReportTranslation
 
   const activeProjectName =

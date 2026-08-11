@@ -159,19 +159,6 @@ export function InitialDocumentsList({
 
   return (
     <div className={cn("flex flex-col", embedded ? "gap-0" : "gap-5")}>
-      {!embedded ? (
-        <div className="flex items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300">
-            <FolderOpen className="size-5" />
-          </span>
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight">{copy.title}</h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">{copy.subtitle}</p>
-            {selectedProjectName ? <p className="mt-1 text-sm font-medium text-foreground">{selectedProjectName}</p> : null}
-          </div>
-        </div>
-      ) : null}
-
       {errorMessage ? (
         <div role="alert" className={cn("rounded-xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive", embedded && "m-4 sm:m-5")}>
           {copy.error} {errorMessage}
@@ -180,39 +167,41 @@ export function InitialDocumentsList({
         <>
           {!embedded ? (
             <>
-          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <span className="rounded-full border bg-card px-3 py-1.5 font-medium">{documents.length} {copy.total}</span>
-            <span className="rounded-full border bg-card px-3 py-1.5">{drawingCount} {isArabic ? "مخططات" : "Drawings"}</span>
-            <span className="rounded-full border bg-card px-3 py-1.5">{contractCount} {isArabic ? "عقود" : "Contracts"}</span>
-            <span className="rounded-full border bg-card px-3 py-1.5">{otherCount} {isArabic ? "أخرى" : "Other"}</span>
+          <div className="-mx-1 flex flex-nowrap gap-2 overflow-x-auto px-1 pb-1 text-xs text-muted-foreground md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
+            <span className="shrink-0 rounded-full border bg-card px-3 py-1.5 font-medium">{documents.length} {copy.total}</span>
+            <span className="shrink-0 rounded-full border bg-card px-3 py-1.5">{drawingCount} {isArabic ? "مخططات" : "Drawings"}</span>
+            <span className="shrink-0 rounded-full border bg-card px-3 py-1.5">{contractCount} {isArabic ? "عقود" : "Contracts"}</span>
+            <span className="shrink-0 rounded-full border bg-card px-3 py-1.5">{otherCount} {isArabic ? "أخرى" : "Other"}</span>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative min-w-0 flex-1 sm:max-w-md">
+          <div className="flex flex-col gap-2.5 md:flex-row md:items-center md:gap-3">
+            <div className="relative min-w-0 flex-1 md:max-w-md">
               <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input value={search} onChange={(event: ChangeEvent<HTMLInputElement>) => setSearch(event.target.value)} placeholder={copy.search} className="h-10 rounded-xl ps-9" />
             </div>
-            <Select value={category} onValueChange={(value: unknown) => setCategory(typeof value === "string" ? value : "all")}>
-              <SelectTrigger className="h-10 w-full rounded-xl px-3 sm:w-56">
-                <SelectValue>{(value: unknown) => value === "all" ? copy.allCategories : categoryOptions.find((item) => item.value === value)?.label ?? copy.allCategories}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{copy.allCategories}</SelectItem>
-                {categoryOptions.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={sort} onValueChange={(value: unknown) => setSort(value as SortValue)}>
-              <SelectTrigger className="h-10 w-full rounded-xl px-3 sm:w-44">
-                <SelectValue>{(value: unknown) => ({ newest: copy.newest, oldest: copy.oldest, file_name: copy.fileName, project_name: copy.projectName, file_size: copy.fileSize }[value as SortValue])}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="newest">{copy.newest}</SelectItem>
-                <SelectItem value="oldest">{copy.oldest}</SelectItem>
-                <SelectItem value="file_name">{copy.fileName}</SelectItem>
-                <SelectItem value="project_name">{copy.projectName}</SelectItem>
-                <SelectItem value="file_size">{copy.fileSize}</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="grid min-w-0 grid-cols-2 gap-2 md:contents">
+              <Select value={category} onValueChange={(value: unknown) => setCategory(typeof value === "string" ? value : "all")}>
+                <SelectTrigger className="h-10 min-w-0 w-full rounded-xl px-3 md:w-56">
+                  <SelectValue>{(value: unknown) => value === "all" ? copy.allCategories : categoryOptions.find((item) => item.value === value)?.label ?? copy.allCategories}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{copy.allCategories}</SelectItem>
+                  {categoryOptions.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={sort} onValueChange={(value: unknown) => setSort(value as SortValue)}>
+                <SelectTrigger className="h-10 min-w-0 w-full rounded-xl px-3 md:w-44">
+                  <SelectValue>{(value: unknown) => ({ newest: copy.newest, oldest: copy.oldest, file_name: copy.fileName, project_name: copy.projectName, file_size: copy.fileSize }[value as SortValue])}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">{copy.newest}</SelectItem>
+                  <SelectItem value="oldest">{copy.oldest}</SelectItem>
+                  <SelectItem value="file_name">{copy.fileName}</SelectItem>
+                  <SelectItem value="project_name">{copy.projectName}</SelectItem>
+                  <SelectItem value="file_size">{copy.fileSize}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
             </>
           ) : null}
@@ -250,27 +239,25 @@ export function InitialDocumentsList({
                   const Icon = fileIcon(item)
                   const categoryLabel = getDisplayCategory(item, isArabic).label
                   return (
-                    <article key={item.id} className={cn("rounded-2xl border bg-card p-4", compactMobile && "rounded-lg p-3")}>
+                    <article key={item.id} className={cn("rounded-xl border bg-card p-3.5", compactMobile && "rounded-lg p-3")}>
                       <div className={cn("flex items-start gap-3", compactMobile && "gap-2.5")}>
-                        <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary", compactMobile && "size-8 rounded-lg")}><Icon className={cn("size-5", compactMobile && "size-4")} /></span>
+                        <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary", compactMobile && "size-8")}><Icon className={cn("size-4.5", compactMobile && "size-4")} /></span>
                         <div className="min-w-0 flex-1">
-                          <h2 className="truncate text-sm font-semibold" title={item.fileName}>{item.fileName}</h2>
-                          {!selectedProjectId ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{item.projectName}</p> : null}
-                          <div className={cn("mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground", compactMobile && "mt-1 gap-x-2 text-[11px]")}>
-                            <span>{categoryLabel}</span>
-                            {compactMobile ? (
-                              <span className="min-w-0 truncate" title={`${item.uploadedBy} • ${formatDate(item.createdAt, locale)} • ${formatInitialDocumentFileSize(item.fileSize)}`}>
-                                {item.uploadedBy} • {formatDate(item.createdAt, locale)} • {formatInitialDocumentFileSize(item.fileSize)}
-                              </span>
-                            ) : (
-                              <><span>{formatDate(item.createdAt, locale)}</span><span>{formatInitialDocumentFileSize(item.fileSize)}</span></>
-                            )}
-                          </div>
+                          <h2 className="break-words text-sm font-semibold leading-5 [overflow-wrap:anywhere]" title={item.fileName}>{item.fileName}</h2>
+                          {!embedded ? (
+                            <p className="mt-0.5 min-w-0 truncate text-xs text-muted-foreground" title={`${item.projectName} · ${categoryLabel}`}>
+                              <span className="font-medium text-foreground/80">{item.projectName}</span> · {categoryLabel}
+                            </p>
+                          ) : (
+                            <p className="mt-0.5 truncate text-xs text-muted-foreground">{categoryLabel}</p>
+                          )}
+                          <p className="mt-1 truncate text-[11px] text-muted-foreground" title={item.uploadedBy}>{isArabic ? "رُفع بواسطة" : "Uploaded by"} {item.uploadedBy}</p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">{formatDate(item.createdAt, locale)} · {formatInitialDocumentFileSize(item.fileSize)}</p>
                         </div>
                       </div>
-                      <div className={cn("mt-3 flex justify-end gap-2 border-t pt-3", compactMobile && "mt-2 gap-1 pt-2")}>
-                        {canPreview(item) ? <button type="button" onClick={() => setPreview(item)} title={copy.preview} aria-label={`${copy.preview} ${item.fileName}`} className={cn("inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-medium hover:bg-muted", compactMobile && "size-8 justify-center p-0")}><Eye className="size-4" />{compactMobile ? null : copy.preview}</button> : null}
-                        <a href={`/api/initial-documents?id=${encodeURIComponent(item.id)}&download=1`} title={copy.download} aria-label={`${copy.download} ${item.fileName}`} className={cn("inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-xs font-medium hover:bg-muted", compactMobile && "size-8 justify-center p-0")}><Download className="size-4" />{compactMobile ? null : copy.download}</a>
+                      <div className={cn("mt-2.5 flex justify-end gap-1.5 border-t pt-2.5", compactMobile && "mt-2 gap-1 pt-2")}>
+                        {canPreview(item) ? <button type="button" onClick={() => setPreview(item)} title={copy.preview} aria-label={`${copy.preview} ${item.fileName}`} className="inline-flex size-9 items-center justify-center rounded-lg border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><Eye className="size-4" /></button> : null}
+                        <a href={`/api/initial-documents?id=${encodeURIComponent(item.id)}&download=1`} title={copy.download} aria-label={`${copy.download} ${item.fileName}`} className="inline-flex size-9 items-center justify-center rounded-lg border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><Download className="size-4" /></a>
                       </div>
                     </article>
                   )
@@ -278,7 +265,7 @@ export function InitialDocumentsList({
               </div>
             </>
           ) : (
-            <div className={cn("flex flex-col items-center rounded-2xl border bg-card px-6 py-16 text-center", embedded && "m-4 sm:m-5")}>
+            <div className={cn("flex flex-col items-center rounded-2xl border bg-card px-5 py-8 text-center md:px-6 md:py-16", embedded && "m-4 sm:m-5")}>
               <span className="flex size-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground"><FolderOpen className="size-6" /></span>
               <h2 className="mt-4 font-semibold">{selectedProjectId ? copy.scopedEmpty : copy.globalEmpty}</h2>
               <p className="mt-1 text-sm text-muted-foreground">{copy.helper}</p>
