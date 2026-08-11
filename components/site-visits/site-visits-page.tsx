@@ -49,7 +49,6 @@ export function SiteVisitsPage({ data }: { data: SiteVisitPageData }) {
     })
   }, [data.requests, search, status])
 
-  const title = data.canManageAny ? "Site Visit Requests" : "My Site Visit Requests"
   const hasActiveFilters = Boolean(search.trim()) || status !== "all"
   const emptyTitle = hasActiveFilters
     ? "No site visit requests match these filters."
@@ -61,12 +60,7 @@ export function SiteVisitsPage({ data }: { data: SiteVisitPageData }) {
     <div className={isMember ? "flex flex-col gap-4 md:gap-5" : "flex flex-col gap-5"}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold">
-            {isMember ? <><span className="md:hidden">Site Visits</span><span className="hidden md:inline">{title}</span></> : title}
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {isMember ? <><span className="md:hidden">Review and track site visit requests.</span><span className="hidden md:inline">Request, review, schedule, and track project site visits.</span></> : "Request, review, schedule, and track project site visits."}
-          </p>
+          <h2 className="text-xl font-semibold">Site Visit Request</h2>
           {data.selectedProjectName ? <p className="mt-1 text-sm font-medium">{data.selectedProjectName}</p> : null}
         </div>
         {data.canRequestAny ? <SiteVisitRequestDialog projects={data.projects} fixedProjectId={fixedRequestProjectId} triggerLabel="Request New Visit" /> : null}

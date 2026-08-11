@@ -21,7 +21,6 @@ import {
   MessageSquareText,
   MoreVertical,
   Pencil,
-  Plus,
   Search,
   Send,
   ShieldAlert,
@@ -228,13 +227,11 @@ export function DocumentsList({
                 <p className="mt-1 truncate text-xs font-semibold text-foreground/80">{projects[0]}</p>
               ) : null}
             </div>
-            {selectedProjectId ? (
-              <CreateDocumentDialog
-                projectId={selectedProjectId}
-                triggerLabel="Create"
-                triggerClassName="h-9 shrink-0 rounded-lg px-3 text-xs"
-              />
-            ) : null}
+            <CreateDocumentDialog
+              projectId={selectedProjectId}
+              triggerLabel="Create"
+              triggerClassName="h-9 shrink-0 rounded-lg px-3 text-xs"
+            />
           </div>
 
           <div className="grid grid-cols-4 gap-1.5">
@@ -272,12 +269,6 @@ export function DocumentsList({
               })}
             </div>
           </div>
-
-          {!selectedProjectId ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-4 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-              Select a project from the menu to create a letter.
-            </div>
-          ) : null}
 
           {uploadedCount > 0 ? (
             <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
@@ -422,14 +413,7 @@ export function DocumentsList({
             </div>
           </div>
         </div>
-        {selectedProjectId ? (
-          <CreateDocumentDialog projectId={selectedProjectId} />
-        ) : (
-          <button type="button" disabled title="Select a project first" className="inline-flex h-10 cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-slate-300 px-4 text-sm font-semibold text-white dark:bg-slate-700">
-            <Plus className="size-4" />
-            Create Letter
-          </button>
-        )}
+        <CreateDocumentDialog projectId={selectedProjectId} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -464,12 +448,6 @@ export function DocumentsList({
           })}
         </div>
       </div>
-
-      {!selectedProjectId ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          Select a specific project from the Projects menu to create a letter. The list can still show letters across your accessible projects.
-        </div>
-      ) : null}
 
       {uploadedCount > 0 ? (
         <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">

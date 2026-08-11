@@ -28,6 +28,11 @@ export type SaveDocumentResult =
   | { ok: true; documentId: string; reference: string }
   | { ok: false; error: string }
 
+function isUuid(value: unknown): value is string {
+  return typeof value === "string"
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.trim())
+}
+
 type DocumentWriteInput = {
   projectId: string
   title: string
@@ -264,6 +269,10 @@ export async function createConstructionDocumentAction(input: {
   documentDetails?: string
 }): Promise<SaveDocumentResult> {
   const session = await requireOnboarded()
+  if (!isUuid(input.projectId)) {
+    return { ok: false, error: "Select a valid Project." }
+  }
+  const projectId = input.projectId.trim()
   const title = input.title.trim()
   const shortDescription = input.shortDescription?.trim() ?? ""
   const documentDetails = input.documentDetails?.trimEnd()
@@ -278,14 +287,14 @@ export async function createConstructionDocumentAction(input: {
   }
 
   const supabase = await createClient()
-  const { data: project } = await supabase.from("projects").select("id").eq("id", input.projectId).maybeSingle()
+  const { data: project } = await supabase.from("projects").select("id").eq("id", projectId).maybeSingle()
   if (!project) return { ok: false, error: "You do not have access to the selected project." }
 
   const documentType: ConstructionDocumentTypeValue = input.documentType
   const { data, error } = await supabase
     .from("documents")
     .insert({
-      project_id: input.projectId,
+      project_id: projectId,
       reference: null,
       title,
       document_type: documentType,
@@ -307,11 +316,11 @@ export async function createConstructionDocumentAction(input: {
     action: "document.construction_created",
     entity_type: "document",
     entity_id: data.id,
-    project_id: input.projectId,
+    project_id: projectId,
     metadata: { reference: data.reference, title, document_type: documentType },
   })
 
-  revalidateDocumentPaths(data.id, input.projectId)
+  revalidateDocumentPaths(data.id, projectId)
   return { ok: true, documentId: data.id, reference: data.reference }
 }
 

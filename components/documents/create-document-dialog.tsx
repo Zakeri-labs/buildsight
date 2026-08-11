@@ -74,7 +74,7 @@ export function CreateDocumentDialog({
   triggerVariant = "default",
   triggerClassName,
 }: {
-  projectId: string
+  projectId?: string | null
   triggerLabel?: string
   triggerVariant?: "default" | "outline"
   triggerClassName?: string
@@ -93,10 +93,18 @@ export function CreateDocumentDialog({
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState<UploadProgress | null>(null)
   const [createdDocumentId, setCreatedDocumentId] = useState<string | null>(null)
+  const [selectedProjectId, setSelectedProjectId] = useState(projectId ?? "")
+  const [projectOptions, setProjectOptions] = useState<Array<{ id: string; name: string; code: string | null }>>([])
+  const [loadingProjects, setLoadingProjects] = useState(false)
+  const [projectsLoaded, setProjectsLoaded] = useState(false)
 
   useEffect(() => {
     pendingAttachmentsRef.current = pendingAttachments
   }, [pendingAttachments])
+
+  useEffect(() => {
+    if (!open) setSelectedProjectId(projectId ?? "")
+  }, [open, projectId])
 
   useEffect(() => () => {
     for (const attachment of pendingAttachmentsRef.current) {
@@ -104,9 +112,49 @@ export function CreateDocumentDialog({
     }
   }, [])
 
+  useEffect(() => {
+    if (!open || projectsLoaded) return
+
+    let cancelled = false
+    const loadProjects = async () => {
+      setLoadingProjects(true)
+      const supabase = createClient()
+      const { data, error: projectsError } = await supabase
+        .from("projects")
+        .select("id, name, code")
+        .order("name", { ascending: true })
+
+      if (cancelled) return
+      setLoadingProjects(false)
+      setProjectsLoaded(true)
+
+      if (projectsError) {
+        setError("Unable to load the Projects available to you.")
+        return
+      }
+
+      setProjectOptions((data ?? []).map((project) => ({
+        id: project.id,
+        name: project.name,
+        code: project.code ?? null,
+      })))
+    }
+
+    void loadProjects()
+    return () => {
+      cancelled = true
+    }
+  }, [open, projectsLoaded])
+
   const files = pendingAttachments.filter((attachment) => attachment.attachmentType === "file")
   const images = pendingAttachments.filter((attachment) => attachment.attachmentType === "image")
   const selectedType = documentType ? getConstructionDocumentType(documentType) : null
+  const currentProject = projectId ? projectOptions.find((project) => project.id === projectId) ?? null : null
+  const selectedProject = selectedProjectId ? projectOptions.find((project) => project.id === selectedProjectId) ?? null : null
+  const projectMismatch = Boolean(projectId && selectedProjectId && projectId !== selectedProjectId && currentProject && selectedProject)
+
+  const formatProjectLabel = (project: { name: string; code: string | null }) =>
+    project.code?.trim() ? `${project.name} — ${project.code}` : project.name
 
   const reset = () => {
     for (const attachment of pendingAttachmentsRef.current) {
@@ -121,6 +169,7 @@ export function CreateDocumentDialog({
     setSubmitting(false)
     setUploading(null)
     setCreatedDocumentId(null)
+    setSelectedProjectId(projectId ?? "")
   }
 
   const closeDialog = () => {
@@ -184,6 +233,10 @@ export function CreateDocumentDialog({
 
   const saveDocument = async () => {
     setError(null)
+    if (!selectedProjectId) {
+      setError("Project is required.")
+      return
+    }
     if (!title.trim()) {
       setError("Letter title is required.")
       return
@@ -200,7 +253,7 @@ export function CreateDocumentDialog({
     try {
       if (!documentId) {
         const result = await createConstructionDocumentAction({
-          projectId,
+          projectId: selectedProjectId,
           title,
           documentType,
           shortDescription: description,
@@ -223,7 +276,7 @@ export function CreateDocumentDialog({
           const pending = attachmentsToUpload[index]
           const folder = pending.attachmentType === "image" ? "images" : "files"
           const safeName = pending.file.name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "attachment"
-          const storagePath = `${projectId}/${session.user.id}/documents/${documentId}/${folder}/${crypto.randomUUID()}-${safeName}`
+          const storagePath = `${selectedProjectId}/${session.user.id}/documents/${documentId}/${folder}/${crypto.randomUUID()}-${safeName}`
 
           setUploading({ filename: pending.file.name, current: index + 1, total, progress: 0 })
           await uploadDocumentAsset(pending.file, storagePath, session.access_token, (progress) => {
@@ -239,7 +292,7 @@ export function CreateDocumentDialog({
           }
           const attachmentResult = await addDocumentAttachmentsAction({
             documentId,
-            projectId,
+            projectId: selectedProjectId,
             attachments: [record],
           })
           if (!attachmentResult.ok) {
@@ -313,6 +366,46 @@ export function CreateDocumentDialog({
                   <CardTitle className="text-base">Letter Information</CardTitle>
                 </CardHeader>
                 <CardContent className="grid gap-5 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:px-6">
+                  <div className="min-w-0 space-y-2 sm:col-span-2">
+                    <Label htmlFor="construction-document-project">Project <span className="text-destructive">*</span></Label>
+                    <Select
+                      value={selectedProjectId || null}
+                      onValueChange={(value) => {
+                        setSelectedProjectId(value ?? "")
+                        setError(null)
+                      }}
+                      disabled={submitting || Boolean(createdDocumentId) || loadingProjects}
+                    >
+                      <SelectTrigger id="construction-document-project" className="h-11 w-full min-w-0 rounded-lg px-3">
+                        <SelectValue placeholder={loadingProjects ? "Loading projects..." : "Select project"}>
+                          {(value) => {
+                            const option = projectOptions.find((project) => project.id === value)
+                            return option ? formatProjectLabel(option) : "Select project"
+                          }}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent align="start" className="max-w-[calc(100vw-2rem)]">
+                        {projectOptions.map((project) => (
+                          <SelectItem
+                            key={project.id}
+                            value={project.id}
+                            className="[&>span:first-child]:min-w-0 [&>span:first-child]:shrink [&>span:first-child]:whitespace-normal"
+                          >
+                            <span className="min-w-0 break-words">{formatProjectLabel(project)}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {projectMismatch ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                        You are currently in {currentProject?.name}, but this letter will be created for {selectedProject?.name}. Are you sure?
+                      </div>
+                    ) : null}
+                    {projectsLoaded && projectOptions.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No authorized Projects are available.</p>
+                    ) : null}
+                  </div>
+
                   <div className="min-w-0 space-y-2">
                     <Label htmlFor="construction-document-title">Letter Title <span className="text-destructive">*</span></Label>
                     <Input

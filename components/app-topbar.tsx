@@ -72,14 +72,17 @@ export function AppTopbar({
   }
 
   const { title, subtitle } = resolveTitle(pathname)
+  const isSiteVisitRequestList = pathname === "/site-visits"
 
   return (
-    <header className="sticky top-0 z-30 flex h-20 items-center gap-4 bg-background/95 px-4 backdrop-blur md:px-8">
+    <header className={`sticky top-0 z-30 flex items-center gap-4 bg-background/95 px-4 backdrop-blur md:px-8 ${isSiteVisitRequestList ? "h-14 justify-end" : "h-20"}`}>
       {/* Page title */}
-      <div className="min-w-0 flex-1">
-        <h1 className="truncate text-2xl font-bold tracking-tight text-foreground">{title}</h1>
-        {subtitle && <p className="truncate text-sm text-muted-foreground">{subtitle}</p>}
-      </div>
+      {!isSiteVisitRequestList ? (
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-2xl font-bold tracking-tight text-foreground">{title}</h1>
+          {subtitle && <p className="truncate text-sm text-muted-foreground">{subtitle}</p>}
+        </div>
+      ) : null}
 
       {/* Right-side actions */}
       <div className="flex items-center gap-1.5">
