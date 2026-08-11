@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { ImagePlus, Loader2, MoreVertical, Trash2, UserCheck, UserPlus, UserRoundCog, UserX } from "lucide-react"
+import { ImagePlus, Loader2, MoreVertical, Trash2, UserPlus, UserRoundCog } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -28,9 +28,9 @@ import {
 import { RoleSelect } from "@/components/users/role-select"
 import { OrgRoleBadge } from "@/components/users/role-badges"
 import { InviteLinkDialog, type InviteResult } from "@/components/users/invite-link-dialog"
-import { ORGANIZATION_ROLES, roleLabel, type OrganizationRole, type MembershipStatus } from "@/lib/db/types"
+import { ORGANIZATION_ROLES, roleLabel, type OrganizationRole } from "@/lib/db/types"
 import { createInvitation } from "@/lib/actions/invitations"
-import { updateOrgMemberRole, removeOrgMember, updateOrgMemberStatus, addDirectMember } from "@/lib/actions/organizations"
+import { updateOrgMemberRole, removeOrgMember } from "@/lib/actions/organizations"
 import type { MemberRow } from "@/lib/db/admin-console"
 
 export function MembersTab({
@@ -47,14 +47,13 @@ export function MembersTab({
   const [inviteResult, setInviteResult] = useState<InviteResult | null>(null)
   const [pending, startTransition] = useTransition()
 
-  function submitAddMember() {
+  function submitInvite() {
     setError(null)
     startTransition(async () => {
-      // First try adding directly as active member
-      const res = await addDirectMember({
+      const res = await createInvitation({
         email,
         organizationId: supervisingOrg.id,
-        role,
+        organizationRole: role,
       })
       if (!res.ok) {
         setError(res.error)
@@ -63,20 +62,11 @@ export function MembersTab({
       setInviteOpen(false)
       setEmail("")
       setRole("org_member")
-
-      if (res.data && !res.data.addedDirectly) {
-        // If not added directly, generate invite link result
-        const inviteRes = await createInvitation({
-          email,
-          organizationId: supervisingOrg.id,
-          organizationRole: role,
+      if (res.data) {
+        setInviteResult({
+          ...res.data,
+          email: email.trim().toLowerCase(),
         })
-        if (inviteRes.ok && inviteRes.data) {
-          setInviteResult({
-            ...inviteRes.data,
-            email: email.trim().toLowerCase(),
-          })
-        }
       }
     })
   }
@@ -93,15 +83,16 @@ export function MembersTab({
             render={
               <Button className="shrink-0">
                 <UserPlus data-icon="inline-start" />
-                Add member
+                Invite member
               </Button>
             }
           />
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Add a member</DialogTitle>
+              <DialogTitle>Invite a member</DialogTitle>
               <DialogDescription className="text-pretty">
-                Add or invite a new member to join {supervisingOrg.name}.
+                Send an invitation to join {supervisingOrg.name}. They&apos;ll receive a secure link to register or
+                accept.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -130,9 +121,9 @@ export function MembersTab({
               <Button variant="outline" onClick={() => setInviteOpen(false)} className="bg-transparent">
                 Cancel
               </Button>
-              <Button onClick={submitAddMember} disabled={pending || !email}>
+              <Button onClick={submitInvite} disabled={pending || !email}>
                 {pending && <Loader2 className="size-4 animate-spin" data-icon="inline-start" />}
-                Add member
+                Send invitation
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -144,11 +135,10 @@ export function MembersTab({
           <Table className="table-fixed">
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[45%] px-3 sm:w-[35%] lg:w-[26%]">Member</TableHead>
-                <TableHead className="hidden w-[26%] px-3 md:table-cell lg:w-[24%]">Email</TableHead>
-                <TableHead className="w-[30%] px-3 sm:w-[24%] md:w-[18%] lg:w-[16%]">Role</TableHead>
-                <TableHead className="w-[20%] px-3 sm:w-[18%] md:w-[15%] lg:w-[14%]">Status</TableHead>
-                <TableHead className="hidden w-[20%] px-3 lg:table-cell">Organization</TableHead>
+                <TableHead className="w-[52%] px-3 sm:w-[40%] lg:w-[28%]">Member</TableHead>
+                <TableHead className="hidden w-[30%] px-3 md:table-cell lg:w-[27%]">Email</TableHead>
+                <TableHead className="w-[36%] px-3 sm:w-[28%] md:w-[20%] lg:w-[18%]">Role</TableHead>
+                <TableHead className="hidden w-[23%] px-3 lg:table-cell">Organization</TableHead>
                 <TableHead className="w-12 px-2 text-end">
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -157,8 +147,8 @@ export function MembersTab({
             <TableBody>
               {members.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
-                    No members yet. Add your first teammate.
+                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                    No members yet. Invite your first teammate.
                   </TableCell>
                 </TableRow>
               )}
@@ -183,7 +173,6 @@ function MemberRowItem({ member, organizationId }: { member: MemberRow; organiza
   const currentUser = useCurrentUser()
   const [pending, startTransition] = useTransition()
   const [role, setRole] = useState<OrganizationRole>(member.role)
-  const [status, setStatus] = useState<MembershipStatus>(member.status)
   const [draftRole, setDraftRole] = useState<OrganizationRole>(member.role)
   const [roleDialogOpen, setRoleDialogOpen] = useState(false)
   const [avatarDialogOpen, setAvatarDialogOpen] = useState(false)
@@ -203,37 +192,16 @@ function MemberRowItem({ member, organizationId }: { member: MemberRow; organiza
     })
   }
 
-  function toggleStatus() {
-    setError(null)
-    const nextStatus: MembershipStatus = status === "active" ? "inactive" : "active"
-    startTransition(async () => {
-      const res = await updateOrgMemberStatus({
-        organizationId,
-        membershipId: member.id,
-        status: nextStatus,
-      })
-      if (!res.ok) {
-        setError(res.error)
-        return
-      }
-      setStatus(nextStatus)
-    })
-  }
-
   function remove() {
     setError(null)
     startTransition(async () => {
       const res = await removeOrgMember({ organizationId, membershipId: member.id })
-      if (!res.ok) {
-        setError(res.error)
-        return
-      }
-      setStatus("inactive")
+      if (!res.ok) setError(res.error)
     })
   }
 
   return (
-    <TableRow className={`h-12 ${status === "inactive" ? "opacity-60 bg-muted/30" : ""}`}>
+    <TableRow className="h-12">
       <TableCell className="px-3 py-2">
         <div className="flex min-w-0 items-center gap-2.5">
           <ProfileAvatar
@@ -258,17 +226,6 @@ function MemberRowItem({ member, organizationId }: { member: MemberRow; organiza
         <span className="hidden sm:inline-flex">
           <OrgRoleBadge role={role} />
         </span>
-      </TableCell>
-      <TableCell className="px-3 py-2">
-        {status === "active" ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-            <span className="size-1.5 rounded-full bg-emerald-500" /> Active
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground border border-border">
-            <span className="size-1.5 rounded-full bg-muted-foreground/50" /> Inactive
-          </span>
-        )}
         {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
       </TableCell>
       <TableCell className="hidden truncate px-3 py-2 text-muted-foreground lg:table-cell">
@@ -288,7 +245,7 @@ function MemberRowItem({ member, organizationId }: { member: MemberRow; organiza
               </button>
             }
           />
-          <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem onClick={() => setAvatarDialogOpen(true)}>
               <ImagePlus className="size-4" />
               Edit Profile Image
@@ -302,23 +259,10 @@ function MemberRowItem({ member, organizationId }: { member: MemberRow; organiza
               <UserRoundCog className="size-4" />
               Change Role
             </DropdownMenuItem>
-            {status === "active" ? (
-              <DropdownMenuItem variant="destructive" onClick={toggleStatus} disabled={pending}>
-                <UserX className="size-4" />
-                Deactivate Member
-              </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem onClick={toggleStatus} disabled={pending} className="text-emerald-600 dark:text-emerald-400">
-                <UserCheck className="size-4" />
-                Activate Member
-              </DropdownMenuItem>
-            )}
-            {status === "active" && (
-              <DropdownMenuItem variant="destructive" onClick={remove}>
-                <Trash2 className="size-4" />
-                Remove Member
-              </DropdownMenuItem>
-            )}
+            <DropdownMenuItem variant="destructive" onClick={remove}>
+              <Trash2 className="size-4" />
+              Remove Member
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
