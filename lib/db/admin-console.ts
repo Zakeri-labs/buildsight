@@ -165,7 +165,6 @@ export async function loadAdminConsole(supervisingOrgId: string): Promise<AdminC
   }))
 
   const members: MemberRow[] = (orgMembers ?? [])
-    .filter((m) => m.status === "active")
     .map((m) => ({
       id: m.id,
       organizationId: m.organization_id,
@@ -177,6 +176,10 @@ export async function loadAdminConsole(supervisingOrgId: string): Promise<AdminC
       role: m.role,
       status: m.status,
     }))
+    .sort((a, b) => {
+      if (a.status === b.status) return a.userName.localeCompare(b.userName)
+      return a.status === "active" ? -1 : 1
+    })
 
   const projectOrgs: ProjectOrgRow[] = (pom ?? [])
     .filter((r) => r.status === "active")
