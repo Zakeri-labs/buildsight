@@ -77,16 +77,16 @@ export type ProjectStatus = ProjectStatusValue
 export type ProjectType = "Residential" | "Commercial" | "Hospitality" | "Infrastructure" | "Industrial"
 
 const PROJECT_TABLE_COLUMN_WIDTHS = [
-  "18%",
+  "16%",
+  "11%",
   "10.5%",
   "10.5%",
-  "10.5%",
-  "11.5%",
+  "13%",
   "9.5%",
   "7.5%",
   "8.5%",
   "9.5%",
-  "3.5%",
+  "4%",
 ] as const
 
 export interface ProjectRow {
@@ -911,10 +911,12 @@ export function ProjectsList({
 
                   {/* Area / District + Location */}
                   <td className="min-w-0 overflow-hidden px-2.5 py-4 align-middle">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <TruncatedText className={cn("flex-1 text-xs font-medium text-slate-700 dark:text-slate-300", !row.areaDistrict?.trim() && "text-slate-400 dark:text-slate-500")}>
-                        {row.areaDistrict?.trim() || "—"}
-                      </TruncatedText>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <div className="min-w-0 shrink">
+                        <TruncatedText className={cn("text-xs font-medium text-slate-700 dark:text-slate-300", !row.areaDistrict?.trim() && "text-slate-400 dark:text-slate-500")}>
+                          {row.areaDistrict?.trim() || "—"}
+                        </TruncatedText>
+                      </div>
                       {(() => {
                         const hasAddress = row.address.trim().length > 0 && row.address.trim() !== "—"
                         const hasCoordinates =

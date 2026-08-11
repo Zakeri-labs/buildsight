@@ -211,7 +211,7 @@ export function AppSidebar({
     },
     ...(canAccessSiteVisits
       ? [{
-          label: embedded && locale === "en" ? "Site Visit Requests" : t.nav.siteVisits,
+          label: locale === "en" ? "Site Visit Requests" : t.nav.siteVisits,
           href: contextProjectId
             ? `/site-visits?project=${encodeURIComponent(contextProjectId)}`
             : "/site-visits",
