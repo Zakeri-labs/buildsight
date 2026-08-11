@@ -500,7 +500,7 @@ export function CreateDocumentDialog({
                   disabled={submitting || Boolean(createdDocumentId)}
                   onChange={(event: ChangeEvent<HTMLInputElement>) => setTitle(event.target.value)}
                   placeholder="Enter subject"
-                  className="h-11 w-full"
+                  className="h-8 w-full"
                 />
               </div>
 

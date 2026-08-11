@@ -247,6 +247,164 @@ export async function addProjectParticipantAction(input: AddParticipantInput): P
     if (projectOrganizationsError) throw projectOrganizationsError
     if (!memberships?.length) return { ok: false, error: "Only registered users with an active platform role can be added." }
 
+    if (input.participantType === "client") {
+      // Client / Owner access is canonicalized through project_owners.viewer_user_id.
+      // A project_participants row is only the display/contact projection and must
+      // never be the authorization-bearing relationship for a Viewer.
+      const viewerMembership = memberships.find(
+        (membership) =>
+          membership.organization_id === project.supervising_organization_id &&
+          membership.role === "viewer",
+      )
+      if (!viewerMembership) {
+        return {
+          ok: false,
+          error: "Select an active Viewer from the supervising organization as the Project Owner / Client.",
+        }
+      }
+
+      const contactName = profile.full_name?.trim() || profile.email?.trim() || "Project Owner"
+      const contactEmail = profile.email?.trim() || null
+      const { data: ownerRows, error: ownerRowsError } = await admin
+        .from("project_owners")
+        .select("id, owner_order, name, contact_name, contact_email, contact_phone, viewer_user_id")
+        .eq("project_id", input.projectId)
+        .order("owner_order", { ascending: true })
+        .order("created_at", { ascending: true })
+      if (ownerRowsError) throw ownerRowsError
+
+      const existingOwner = (ownerRows ?? []).find((owner) => owner.viewer_user_id === profile.id) ?? null
+      let ownerId = existingOwner?.id ?? null
+      let ownerOrder = Number(existingOwner?.owner_order ?? 0)
+      let ownerWasCreated = false
+
+      if (!ownerId) {
+        if ((ownerRows ?? []).length >= 10) {
+          return { ok: false, error: "A project can have up to 10 owners." }
+        }
+
+        const usedOwnerOrders = new Set((ownerRows ?? []).map((owner) => Number(owner.owner_order)))
+        ownerOrder = Array.from({ length: 10 }, (_, index) => index + 1).find((order) => !usedOwnerOrders.has(order)) ?? 0
+        if (!ownerOrder) return { ok: false, error: "A project can have up to 10 owners." }
+
+        const { data: createdOwner, error: ownerInsertError } = await admin
+          .from("project_owners")
+          .insert({
+            project_id: input.projectId,
+            owner_order: ownerOrder,
+            name: contactName,
+            contact_name: contactName,
+            contact_email: contactEmail,
+            contact_phone: null,
+            viewer_user_id: profile.id,
+            viewer_invitation_id: null,
+          })
+          .select("id")
+          .single()
+        if (ownerInsertError) {
+          if (ownerInsertError.code === "23505") {
+            return { ok: false, error: "This Viewer is already assigned as a Project Owner / Client." }
+          }
+          throw ownerInsertError
+        }
+        ownerId = createdOwner.id
+        ownerWasCreated = true
+      }
+
+      const ownerName = existingOwner?.name?.trim() || contactName
+      const ownerContactName = existingOwner?.contact_name?.trim() || contactName
+      const ownerContactEmail = existingOwner?.contact_email?.trim() || contactEmail
+      const ownerContactPhone = existingOwner?.contact_phone?.trim() || null
+      const ownerSourceKey = `owner:${ownerId}`
+      const canonicalParticipantPayload = {
+        organization_id: null,
+        organization_name: ownerName,
+        participant_type: "client",
+        project_role: "client",
+        participant_role_label: "Client / Owner",
+        contractor_role: null,
+        contractor_role_other: null,
+        access_membership_id: null,
+        key_contact_user_id: profile.id,
+        key_contact_name: ownerContactName,
+        key_contact_email: ownerContactEmail,
+        key_contact_phone: ownerContactPhone,
+        status: "active",
+        sort_order: 20 + ownerOrder,
+        updated_at: new Date().toISOString(),
+      }
+
+      try {
+        const { data: canonicalParticipant, error: canonicalParticipantError } = await admin
+          .from("project_participants")
+          .select("id")
+          .eq("project_id", input.projectId)
+          .eq("source_key", ownerSourceKey)
+          .maybeSingle()
+        if (canonicalParticipantError) throw canonicalParticipantError
+
+        if (canonicalParticipant) {
+          const { error: participantUpdateError } = await admin
+            .from("project_participants")
+            .update(canonicalParticipantPayload)
+            .eq("id", canonicalParticipant.id)
+            .eq("project_id", input.projectId)
+          if (participantUpdateError) throw participantUpdateError
+        } else {
+          // Repair the exact legacy/broken direct-add shape when present: the
+          // user was stored as a generic client participant but no Owner row
+          // carried the immutable Viewer identity used by authorization.
+          const { data: legacyClientParticipant, error: legacyParticipantError } = await admin
+            .from("project_participants")
+            .select("id")
+            .eq("project_id", input.projectId)
+            .eq("participant_type", "client")
+            .eq("key_contact_user_id", profile.id)
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle()
+          if (legacyParticipantError) throw legacyParticipantError
+
+          const participantWrite = legacyClientParticipant
+            ? admin
+                .from("project_participants")
+                .update({ ...canonicalParticipantPayload, source_key: ownerSourceKey })
+                .eq("id", legacyClientParticipant.id)
+                .eq("project_id", input.projectId)
+            : admin.from("project_participants").insert({
+                project_id: input.projectId,
+                ...canonicalParticipantPayload,
+                source_key: ownerSourceKey,
+                created_by: actorId,
+              })
+          const { error: participantWriteError } = await participantWrite
+          if (participantWriteError) throw participantWriteError
+        }
+      } catch (participantError) {
+        if (ownerWasCreated && ownerId) {
+          await admin.from("project_owners").delete().eq("id", ownerId).eq("project_id", input.projectId)
+        }
+        throw participantError
+      }
+
+      await audit({
+        actorId,
+        action: ownerWasCreated ? "project_owner.added" : "project_owner.synced",
+        entityType: "project_owner",
+        entityId: ownerId,
+        organizationId: project.supervising_organization_id,
+        projectId: input.projectId,
+        metadata: {
+          viewerUserId: profile.id,
+          ownerOrder,
+          source: "direct_client_assignment",
+        },
+      })
+
+      revalidateParticipantViews(input.projectId)
+      return { ok: true }
+    }
+
     if (input.participantType === "supervisor" && mappedRole.label === "Supervisor") {
       const supervisorMembership = memberships.find(
         (membership) =>
