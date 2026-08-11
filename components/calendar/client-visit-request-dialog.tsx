@@ -76,16 +76,13 @@ export function ClientVisitRequestDialog({
       if (!nextOpen) setError("")
     }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl max-sm:flex max-sm:max-h-[min(90dvh,46rem)] max-sm:w-[calc(100vw-1rem)] max-sm:max-w-none max-sm:flex-col max-sm:gap-0 max-sm:overflow-hidden max-sm:p-0">
-        <DialogHeader className="max-sm:shrink-0 max-sm:border-b max-sm:px-4 max-sm:pb-3 max-sm:pt-4">
+        <DialogHeader className="max-sm:shrink-0 max-sm:border-b max-sm:px-4 max-sm:py-3">
           <div className="flex min-w-0 items-start justify-between gap-3 pr-8">
             <div className="min-w-0">
               <DialogTitle>Client Visit Request</DialogTitle>
-              <DialogDescription className="mt-1.5 max-sm:text-xs max-sm:leading-5">
+              <DialogDescription className="mt-1.5 max-sm:hidden">
                 Review the client&apos;s requested visit details before taking action.
               </DialogDescription>
-              <p className="mt-1.5 hidden text-[11px] leading-4 text-muted-foreground max-sm:block">
-                Created {displayCreatedAt(request.createdAt)}
-              </p>
             </div>
             <Badge variant="outline" className="shrink-0 text-muted-foreground">Pending</Badge>
           </div>

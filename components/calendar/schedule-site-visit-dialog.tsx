@@ -52,6 +52,7 @@ export function ScheduleSiteVisitDialog({
   const [time, setTime] = useState("")
   const [notes, setNotes] = useState(request?.notes ?? "")
   const [assignedUserIds, setAssignedUserIds] = useState<string[]>([])
+  const [mobileNotesExpanded, setMobileNotesExpanded] = useState(false)
   const [error, setError] = useState("")
   const [pending, startTransition] = useTransition()
   const [isMobileProjectSelect, setIsMobileProjectSelect] = useState(false)
@@ -70,6 +71,7 @@ export function ScheduleSiteVisitDialog({
     setTime("")
     setNotes(request?.notes ?? "")
     setAssignedUserIds([])
+    setMobileNotesExpanded(false)
     setError("")
   }, [open, initialDate, projects, request])
 
@@ -113,8 +115,10 @@ export function ScheduleSiteVisitDialog({
       setError("Visit date cannot be in the past.")
       return
     }
+    const isMobileDirectScheduling = !request && window.matchMedia("(max-width: 639px)").matches
+    const submittedAssignedUserIds = isMobileDirectScheduling ? [] : assignedUserIds
     const validParticipantIds = new Set(selectedProject.participants.map((participant) => participant.id))
-    if (assignedUserIds.some((id) => !UUID_PATTERN.test(id) || !validParticipantIds.has(id))) {
+    if (submittedAssignedUserIds.some((id) => !UUID_PATTERN.test(id) || !validParticipantIds.has(id))) {
       setError("One or more selected participants are invalid.")
       return
     }
@@ -127,14 +131,14 @@ export function ScheduleSiteVisitDialog({
             scheduledDate: date,
             scheduledTime: time,
             notes,
-            assignedUserIds,
+            assignedUserIds: submittedAssignedUserIds,
           })
         : await createDirectSiteVisitAction({
             projectId,
             scheduledDate: date,
             scheduledTime: time,
             notes,
-            assignedUserIds,
+            assignedUserIds: submittedAssignedUserIds,
           })
 
       if (result.ok === false) {
@@ -158,17 +162,20 @@ export function ScheduleSiteVisitDialog({
       onOpenChange(nextOpen)
       if (!nextOpen) setError("")
     }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg max-sm:w-[calc(100vw-1rem)] max-sm:max-w-none max-sm:max-h-[calc(100dvh-1rem)] max-sm:gap-3 max-sm:p-4">
-        <DialogHeader className="max-sm:gap-1.5">
+      <DialogContent className={isRequestApproval
+        ? "max-h-[90vh] overflow-y-auto sm:max-w-lg max-sm:w-[calc(100vw-1rem)] max-sm:max-w-none max-sm:max-h-[calc(100dvh-1rem)] max-sm:gap-3 max-sm:p-4"
+        : "max-h-[90vh] overflow-y-auto sm:max-w-lg max-sm:w-[calc(100vw-1rem)] max-sm:max-w-none max-sm:max-h-[calc(100dvh-1rem)] max-sm:gap-2.5 max-sm:p-4"
+      }>
+        <DialogHeader className={isRequestApproval ? "max-sm:gap-1.5" : "max-sm:gap-0.5"}>
           <DialogTitle>Schedule Site Visit</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className={isRequestApproval ? undefined : "max-sm:hidden"}>
             {isRequestApproval
               ? "Confirm the schedule for this Client Visit Request. The client's requested values remain unchanged."
               : "Schedule a direct Site Visit for an authorized project."}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid min-w-0 gap-4 max-sm:gap-3">
+        <div className={isRequestApproval ? "grid min-w-0 gap-4 max-sm:gap-3" : "grid min-w-0 gap-4 max-sm:gap-2.5"}>
           <div className="grid gap-2">
             <Label>Project</Label>
             {projectIsFixed && selectedProject ? (
@@ -217,15 +224,28 @@ export function ScheduleSiteVisitDialog({
             </div>
           </div>
 
-          <div className="grid gap-2">
+          <div className={isRequestApproval ? "grid gap-2" : "grid gap-2 max-sm:gap-1.5"}>
             <Label>Supervisor</Label>
-            <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
-              <p className="truncate text-sm font-medium text-foreground">{selectedProject?.supervisor.name ?? "Assigned Project Supervisor"}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">Project Supervisor</p>
-            </div>
+            {isRequestApproval ? (
+              <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+                <p className="truncate text-sm font-medium text-foreground">{selectedProject?.supervisor.name ?? "Assigned Project Supervisor"}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">Project Supervisor</p>
+              </div>
+            ) : (
+              <>
+                <div className="rounded-lg border bg-muted/30 px-3 py-2.5 max-sm:hidden">
+                  <p className="truncate text-sm font-medium text-foreground">{selectedProject?.supervisor.name ?? "Assigned Project Supervisor"}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Project Supervisor</p>
+                </div>
+                <p className="min-w-0 truncate px-0.5 text-sm font-medium text-foreground sm:hidden">
+                  {selectedProject?.supervisor.name ?? "Assigned Project Supervisor"}
+                  <span className="font-normal text-muted-foreground"> · Project Supervisor</span>
+                </p>
+              </>
+            )}
           </div>
 
-          <div className="grid gap-2">
+          <div className={isRequestApproval ? "grid gap-2" : "grid gap-2 max-sm:hidden"}>
             <Label>Participants</Label>
             <div className="grid max-h-48 min-w-0 gap-1 overflow-y-auto rounded-xl border p-2 max-sm:max-h-40">
               {selectedProject?.participants.length ? selectedProject.participants.map((person) => (
@@ -240,15 +260,39 @@ export function ScheduleSiteVisitDialog({
             </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="calendar-visit-notes">Notes</Label>
-            <textarea id="calendar-visit-notes" value={notes} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setNotes(event.target.value)} maxLength={4000} rows={3} disabled={pending} placeholder="Optional notes" className="w-full resize-y rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50" />
-          </div>
+          {isRequestApproval ? (
+            <div className="grid gap-2">
+              <Label htmlFor="calendar-visit-notes">Notes</Label>
+              <textarea id="calendar-visit-notes" value={notes} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setNotes(event.target.value)} maxLength={4000} rows={3} disabled={pending} placeholder="Optional notes" className="w-full resize-y rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50" />
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-2 max-sm:hidden">
+                <Label htmlFor="calendar-visit-notes">Notes</Label>
+                <textarea id="calendar-visit-notes" value={notes} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setNotes(event.target.value)} maxLength={4000} rows={3} disabled={pending} placeholder="Optional notes" className="w-full resize-y rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50" />
+              </div>
+              <div className="sm:hidden">
+                {mobileNotesExpanded ? (
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="calendar-mobile-visit-notes">Notes</Label>
+                    <textarea id="calendar-mobile-visit-notes" value={notes} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setNotes(event.target.value)} maxLength={4000} rows={3} disabled={pending} placeholder="Optional notes..." className="w-full resize-none rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50" />
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setMobileNotesExpanded(true)} disabled={pending} className="inline-flex min-h-8 w-fit items-center rounded-md px-0.5 text-sm font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50">
+                    + Add note
+                  </button>
+                )}
+              </div>
+            </>
+          )}
 
           {error ? <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p> : null}
         </div>
 
-        <DialogFooter className="max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:grid max-sm:grid-cols-2 max-sm:bg-background/95 max-sm:backdrop-blur-sm">
+        <DialogFooter className={isRequestApproval
+          ? "max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:grid max-sm:grid-cols-2 max-sm:bg-background/95 max-sm:backdrop-blur-sm"
+          : "max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:grid max-sm:grid-cols-2 max-sm:gap-2 max-sm:bg-background/95 max-sm:pt-3 max-sm:pb-[calc(0.5rem+env(safe-area-inset-bottom))] max-sm:backdrop-blur-sm"
+        }>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>Cancel</Button>
           <Button type="button" onClick={submit} disabled={pending || !projectId || !date || !time}>
             {pending ? "Scheduling..." : isRequestApproval ? "Approve and Schedule" : "Schedule Visit"}
