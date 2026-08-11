@@ -211,20 +211,6 @@ function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
   )
 }
 
-function EmptyState({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) {
-  return (
-    <div className="flex min-h-24 items-center gap-3 rounded-xl border border-dashed bg-muted/15 px-4 py-4">
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-        <Icon className="size-5" aria-hidden="true" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-sm font-medium">{title}</p>
-        <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{description}</p>
-      </div>
-    </div>
-  )
-}
-
 export function MemberHomepage({ data }: { data: MemberHomepageData }) {
   const router = useRouter()
   const [selectedRequest, setSelectedRequest] = useState<CalendarClientRequestViewModel | null>(null)
@@ -313,53 +299,51 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
         hasError={data.visitComplianceHasError}
       />
 
-      <section className="space-y-3" aria-labelledby="member-visit-requests-title">
-        <div className="flex items-center justify-between gap-3">
-          <h1 id="member-visit-requests-title" className="text-lg font-semibold tracking-tight">Visit Requests</h1>
-          <span className="text-xs tabular-nums text-muted-foreground">{data.requests.length}</span>
-        </div>
-        {data.visitRequestsHasError ? (
-          <div className="flex min-h-20 items-center gap-3 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-destructive">
-            <AlertTriangle className="size-5 shrink-0" aria-hidden="true" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium">Unable to load visit requests</p>
-              <p className="mt-0.5 text-xs leading-5 text-destructive/80">Please refresh and try again.</p>
+      {data.requests.length > 0 ? (
+        <section className="space-y-3" aria-labelledby="member-visit-requests-title">
+          <div className="flex items-center justify-between gap-3">
+            <h1 id="member-visit-requests-title" className="text-lg font-semibold tracking-tight">Visit Requests</h1>
+            <span className="text-xs tabular-nums text-muted-foreground">{data.requests.length}</span>
+          </div>
+          {data.visitRequestsHasError ? (
+            <div className="flex min-h-20 items-center gap-3 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-destructive">
+              <AlertTriangle className="size-5 shrink-0" aria-hidden="true" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Unable to load visit requests</p>
+                <p className="mt-0.5 text-xs leading-5 text-destructive/80">Please refresh and try again.</p>
+              </div>
             </div>
-          </div>
-        ) : data.requests.length ? (
-          <div className="space-y-1 lg:space-y-2.5">
-            {data.requests.map((request) => (
-              <RequestRow
-                key={request.id}
-                request={request}
-                onAction={openRequestWorkflow}
-                loading={loadingRequestId === request.id}
-              />
-            ))}
-          </div>
-        ) : (
-          <EmptyState icon={CalendarPlus} title="No pending visit requests" description="New client visit requests for your supervised projects will appear here." />
-        )}
-        {requestActionError ? (
-          <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs leading-5 text-destructive">
-            {requestActionError}
-          </p>
-        ) : null}
-      </section>
+          ) : (
+            <div className="space-y-1 lg:space-y-2.5">
+              {data.requests.map((request) => (
+                <RequestRow
+                  key={request.id}
+                  request={request}
+                  onAction={openRequestWorkflow}
+                  loading={loadingRequestId === request.id}
+                />
+              ))}
+            </div>
+          )}
+          {requestActionError ? (
+            <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs leading-5 text-destructive">
+              {requestActionError}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
-      <section className="space-y-3" aria-labelledby="member-today-visits-title">
-        <div className="flex items-center justify-between gap-3">
-          <h2 id="member-today-visits-title" className="text-lg font-semibold tracking-tight">Today's Visits</h2>
-          <span className="text-xs tabular-nums text-muted-foreground">{data.visits.length}</span>
-        </div>
-        {data.visits.length ? (
+      {data.visits.length > 0 ? (
+        <section className="space-y-3" aria-labelledby="member-today-visits-title">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="member-today-visits-title" className="text-lg font-semibold tracking-tight">Today's Visits</h2>
+            <span className="text-xs tabular-nums text-muted-foreground">{data.visits.length}</span>
+          </div>
           <div className="space-y-1.5 sm:space-y-2">
             {data.visits.map((visit) => <VisitRow key={visit.id} visit={visit} />)}
           </div>
-        ) : (
-          <EmptyState icon={MapPinned} title="No visits scheduled today" description="Today's scheduled Site Visits for your supervised projects will appear here." />
-        )}
-      </section>
+        </section>
+      ) : null}
 
       <ClientVisitRequestWorkflow
         request={selectedRequest}

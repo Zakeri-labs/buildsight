@@ -92,7 +92,7 @@ export function MemberVisitCompliance({
   compliance: MemberHomepageVisitCompliance
   hasError?: boolean
 }) {
-  if (!hasError && compliance.eligibleProjectCount === 0) return null
+  if (compliance.projects.length === 0) return null
 
   const visibleProjects = compliance.projects.slice(0, 3)
   const hiddenCount = Math.max(0, compliance.projects.length - visibleProjects.length)
@@ -142,18 +142,13 @@ export function MemberVisitCompliance({
             <p className="text-[10px] leading-4 text-destructive/80 sm:text-xs">Please refresh and try again.</p>
           </div>
         </div>
-      ) : compliance.projects.length ? (
+      ) : (
         <div className="overflow-hidden rounded-xl border bg-card shadow-xs">
           <div className="divide-y divide-border/70">
             {visibleProjects.map((project) => (
               <ComplianceRow key={project.projectId} project={project} />
             ))}
           </div>
-        </div>
-      ) : (
-        <div className="flex min-h-12 items-center gap-2.5 rounded-xl border border-emerald-200/70 bg-emerald-50/50 px-3 py-2.5 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-300">
-          <CalendarCheck2 className="size-4 shrink-0" aria-hidden="true" />
-          <p className="text-xs font-medium sm:text-sm">All recurring site visits are on track</p>
         </div>
       )}
     </section>
