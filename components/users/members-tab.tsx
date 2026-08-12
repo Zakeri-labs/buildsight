@@ -30,7 +30,7 @@ import { OrgRoleBadge } from "@/components/users/role-badges"
 import { InviteLinkDialog, type InviteResult } from "@/components/users/invite-link-dialog"
 import { ORGANIZATION_ROLES, roleLabel, type OrganizationRole } from "@/lib/db/types"
 import { createInvitation } from "@/lib/actions/invitations"
-import { useI18n } from "@/lib/i18n"
+import { updateOrgMemberRole, removeOrgMember } from "@/lib/actions/organizations"
 import type { MemberRow } from "@/lib/db/admin-console"
 
 export function MembersTab({
@@ -40,7 +40,6 @@ export function MembersTab({
   supervisingOrg: { id: string; name: string }
   members: MemberRow[]
 }) {
-  const { t } = useI18n()
   const [inviteOpen, setInviteOpen] = useState(false)
   const [email, setEmail] = useState("")
   const [role, setRole] = useState<OrganizationRole>("org_member")
@@ -136,11 +135,10 @@ export function MembersTab({
           <Table className="table-fixed">
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[36%] px-3 sm:w-[28%] lg:w-[22%]">Member</TableHead>
-                <TableHead className="hidden w-[25%] px-3 md:table-cell lg:w-[20%]">Email</TableHead>
-                <TableHead className="w-[28%] px-3 sm:w-[22%] md:w-[16%] lg:w-[14%]">Role</TableHead>
-                <TableHead className="hidden w-[20%] px-3 lg:table-cell">Organization</TableHead>
-                <TableHead className="hidden w-[22%] px-3 sm:table-cell lg:w-[18%]">{t.team.lastLogin}</TableHead>
+                <TableHead className="w-[52%] px-3 sm:w-[40%] lg:w-[28%]">Member</TableHead>
+                <TableHead className="hidden w-[30%] px-3 md:table-cell lg:w-[27%]">Email</TableHead>
+                <TableHead className="w-[36%] px-3 sm:w-[28%] md:w-[20%] lg:w-[18%]">Role</TableHead>
+                <TableHead className="hidden w-[23%] px-3 lg:table-cell">Organization</TableHead>
                 <TableHead className="w-12 px-2 text-end">
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -149,7 +147,7 @@ export function MembersTab({
             <TableBody>
               {members.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
                     No members yet. Invite your first teammate.
                   </TableCell>
                 </TableRow>
@@ -171,56 +169,7 @@ export function MembersTab({
   )
 }
 
-function formatLastSignIn(dateString: string | null | undefined, locale: string): string {
-  if (!dateString) return locale === "ar" ? "لم يطأ التطبيق بعد" : "Never"
-  const date = new Date(dateString)
-  if (isNaN(date.getTime())) return locale === "ar" ? "لم يطأ التطبيق بعد" : "Never"
-
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / (1000 * 60))
-
-  if (diffMins < 1) return locale === "ar" ? "الآن" : "Just now"
-  if (diffMins < 60) return locale === "ar" ? `منذ ${diffMins} دقيقة` : `${diffMins}m ago`
-
-  const isToday =
-    date.getDate() === now.getDate() &&
-    date.getMonth() === now.getMonth() &&
-    date.getFullYear() === now.getFullYear()
-
-  if (isToday) {
-    const timeStr = new Intl.DateTimeFormat(locale === "ar" ? "ar-AE" : "en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(date)
-    return locale === "ar" ? `اليوم ${timeStr}` : `Today, ${timeStr}`
-  }
-
-  const yesterday = new Date(now.getTime() - 86400000)
-  const isYesterday =
-    date.getDate() === yesterday.getDate() &&
-    date.getMonth() === yesterday.getMonth() &&
-    date.getFullYear() === yesterday.getFullYear()
-
-  if (isYesterday) {
-    const timeStr = new Intl.DateTimeFormat(locale === "ar" ? "ar-AE" : "en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(date)
-    return locale === "ar" ? `أمس ${timeStr}` : `Yesterday, ${timeStr}`
-  }
-
-  return new Intl.DateTimeFormat(locale === "ar" ? "ar-AE" : "en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date)
-}
-
 function MemberRowItem({ member, organizationId }: { member: MemberRow; organizationId: string }) {
-  const { locale } = useI18n()
   const currentUser = useCurrentUser()
   const [pending, startTransition] = useTransition()
   const [role, setRole] = useState<OrganizationRole>(member.role)
@@ -281,9 +230,6 @@ function MemberRowItem({ member, organizationId }: { member: MemberRow; organiza
       </TableCell>
       <TableCell className="hidden truncate px-3 py-2 text-muted-foreground lg:table-cell">
         {member.organizationName}
-      </TableCell>
-      <TableCell className="hidden px-3 py-2 text-xs text-muted-foreground whitespace-nowrap sm:table-cell">
-        {formatLastSignIn(member.lastSignInAt, locale)}
       </TableCell>
       <TableCell className="px-2 py-2 text-end">
         <DropdownMenu>

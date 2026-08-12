@@ -15,4 +15,3 @@ node_modules
 .DS_Store
 .vercel
 .env*
-public/Docs

@@ -5,6 +5,8 @@ import { loadNextProjectVisitNumber, loadProjectStage, loadSiteVisitReportContex
 import { loadProjectParticipantsOnly } from "@/lib/report-cc/server"
 import { resolveCalendarProjectScope } from "@/lib/calendar/server"
 
+export const maxDuration = 300
+
 export default async function NewStageReportPage({
   params,
   searchParams,

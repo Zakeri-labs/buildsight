@@ -361,13 +361,220 @@ async function createSignedUrl(path: string) {
   return data.signedUrl
 }
 
+
+const PENDING_GENERATION_STALE_MS = 5 * 60 * 1000
+const SUBMITTED_REPORT_STATUSES = new Set(["submitted", "under_review", "rejected", "approved", "completed"])
+
+type PreparedStageTranslation = {
+  translationId: string
+  status: "pending" | "completed" | "failed"
+  shouldRun: boolean
+  translatedContentReady: boolean
+}
+
+function validDateMs(value: unknown) {
+  if (typeof value !== "string" || !value) return 0
+  const parsed = new Date(value).getTime()
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+/**
+ * Create/claim the durable translation row for a direct Stage Report.
+ * This is intentionally request-auth agnostic so it can be called from a
+ * Next.js after() task with the actor id that was already authorized by the
+ * report submit action. Client callers must never supply actorId directly.
+ */
+export async function prepareStageTranslationGeneration(input: {
+  projectId: string
+  stageId: string
+  responseId: string
+  actorId: string
+  retry?: boolean
+}): Promise<PreparedStageTranslation> {
+  const pageData = await loadStageTranslationPageData(input.projectId, input.stageId, input.actorId, input.responseId)
+  if (!pageData) throw new Error("The submitted Stage Report could not be loaded for translation.")
+  if (!SUBMITTED_REPORT_STATUSES.has(pageData.response.status)) {
+    throw new Error("Submit the Stage Report before preparing its translation.")
+  }
+
+  const admin = createAdminClient()
+  const original = pageData.response.content
+  const responseUpdatedAt = validDateMs(pageData.response.updatedAt)
+  const now = new Date().toISOString()
+
+  const { data: existing, error: existingError } = await admin
+    .from("translation_documents")
+    .select("id, translation_status, translated_content, generated_at, original_pdf_url, arabic_pdf_url, bilingual_pdf_url, updated_at")
+    .eq("response_id", input.responseId)
+    .eq("project_id", input.projectId)
+    .eq("project_stage_id", input.stageId)
+    .maybeSingle()
+  if (existingError) throw existingError
+
+  if (!existing) {
+    const { data: inserted, error: insertError } = await admin
+      .from("translation_documents")
+      .insert({
+        project_id: input.projectId,
+        project_stage_id: input.stageId,
+        project_stage_term_id: null,
+        response_id: input.responseId,
+        original_content: original,
+        translated_content: null,
+        translation_status: "pending",
+        created_by: input.actorId,
+      })
+      .select("id")
+      .single()
+
+    if (!insertError && inserted?.id) {
+      return { translationId: inserted.id, status: "pending", shouldRun: true, translatedContentReady: false }
+    }
+
+    // A concurrent caller may have won the unique response_id insert. Do not
+    // start a duplicate job; let that caller own the generation run.
+    if (insertError?.code === "23505") {
+      const { data: concurrent, error: concurrentError } = await admin
+        .from("translation_documents")
+        .select("id, translation_status, translated_content")
+        .eq("response_id", input.responseId)
+        .eq("project_id", input.projectId)
+        .eq("project_stage_id", input.stageId)
+        .maybeSingle()
+      if (concurrentError) throw concurrentError
+      if (!concurrent) throw insertError
+      const status = concurrent.translation_status === "completed" || concurrent.translation_status === "failed" ? concurrent.translation_status : "pending"
+      return {
+        translationId: concurrent.id,
+        status,
+        shouldRun: false,
+        translatedContentReady: Boolean(concurrent.translated_content),
+      }
+    }
+    throw insertError
+  }
+
+  const status = existing.translation_status === "completed" || existing.translation_status === "failed" ? existing.translation_status : "pending"
+  const generatedAt = validDateMs(existing.generated_at)
+  const translationFresh = Boolean(existing.translated_content && generatedAt && generatedAt >= responseUpdatedAt)
+
+  if (status === "completed" && translationFresh) {
+    return {
+      translationId: existing.id,
+      status: "completed",
+      shouldRun: false,
+      translatedContentReady: true,
+    }
+  }
+
+  // A PDF-only failure keeps the translated content. Retry should resume PDF
+  // preparation without paying for or duplicating the translation itself.
+  if (status === "failed" && input.retry && translationFresh) {
+    const { data: resumed, error: resumeError } = await admin
+      .from("translation_documents")
+      .update({ translation_status: "completed", original_content: original, updated_at: now })
+      .eq("id", existing.id)
+      .eq("translation_status", "failed")
+      .select("id")
+      .maybeSingle()
+    if (resumeError) throw resumeError
+    return {
+      translationId: existing.id,
+      status: resumed ? "completed" : "failed",
+      shouldRun: false,
+      translatedContentReady: true,
+    }
+  }
+
+  if (status === "failed" && !input.retry) {
+    return {
+      translationId: existing.id,
+      status: "failed",
+      shouldRun: false,
+      translatedContentReady: Boolean(existing.translated_content),
+    }
+  }
+
+  if (status === "pending") {
+    const updatedAt = validDateMs(existing.updated_at)
+    if (updatedAt && Date.now() - updatedAt < PENDING_GENERATION_STALE_MS) {
+      return {
+        translationId: existing.id,
+        status: "pending",
+        shouldRun: false,
+        translatedContentReady: Boolean(existing.translated_content),
+      }
+    }
+  }
+
+  // Claim a stale/failed/stale-completed row atomically using its updated_at.
+  // Only the caller that successfully updates that exact version runs OpenAI.
+  let claim = admin
+    .from("translation_documents")
+    .update({
+      translation_status: "pending",
+      original_content: original,
+      created_by: input.actorId,
+      updated_at: now,
+    })
+    .eq("id", existing.id)
+  if (existing.updated_at) claim = claim.eq("updated_at", existing.updated_at)
+  const { data: claimed, error: claimError } = await claim.select("id").maybeSingle()
+  if (claimError) throw claimError
+
+  return {
+    translationId: existing.id,
+    status: claimed ? "pending" : status,
+    shouldRun: Boolean(claimed),
+    translatedContentReady: Boolean(existing.translated_content),
+  }
+}
+
+export async function markStageTranslationGenerationFailure(input: {
+  projectId: string
+  stageId: string
+  responseId: string
+}) {
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from("translation_documents")
+    .update({ translation_status: "failed", updated_at: new Date().toISOString() })
+    .eq("project_id", input.projectId)
+    .eq("project_stage_id", input.stageId)
+    .eq("response_id", input.responseId)
+    .eq("translation_status", "pending")
+  if (error) throw error
+}
+
+export async function markStageTranslationPdfFailure(input: {
+  projectId: string
+  stageId: string
+  responseId: string
+  actorId: string
+}) {
+  const pageData = await loadStageTranslationPageData(input.projectId, input.stageId, input.actorId, input.responseId)
+  if (!pageData?.translation?.id || !pageData.translation.translatedContent) return
+  if (pageData.translation.originalPdfPath && pageData.translation.arabicPdfPath && pageData.translation.bilingualPdfPath) return
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from("translation_documents")
+    .update({ translation_status: "failed", updated_at: new Date().toISOString() })
+    .eq("id", pageData.translation.id)
+    .eq("project_id", input.projectId)
+    .eq("project_stage_id", input.stageId)
+    .eq("response_id", input.responseId)
+    .eq("translation_status", "completed")
+  if (error) throw error
+}
+
 export async function generateStageTranslation(input: {
   projectId: string
   stageId: string
   termId?: string | null
   responseId: string
+  actorId?: string
 }) {
-  const userId = await assertProjectMember(input.projectId)
+  const userId = input.actorId ?? await assertProjectMember(input.projectId)
   const pageData = await loadStageTranslationPageData(input.projectId, input.stageId, userId, input.responseId, input.termId)
   if (!pageData) throw new Error("Save the inspection report before generating a translation.")
 

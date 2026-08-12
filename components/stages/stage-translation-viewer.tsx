@@ -15,9 +15,7 @@ import {
   ImageIcon,
   Languages,
   Loader2,
-  RefreshCw,
   ShieldCheck,
-  Sparkles,
   X,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -26,9 +24,9 @@ import { Card, CardContent } from "@/components/ui/card"
 import { SourcePdfViewer } from "@/components/stages/source-pdf-viewer"
 import { CcRecipientsReadOnly } from "@/components/reports/cc-recipients-read-only"
 import { extractSourcePdf } from "@/lib/stage-translations/client-source-pdf"
-import { downloadPdfBlob, exportTranslationPdf, storeTranslationPdf } from "@/lib/stage-translations/client-pdf"
 import type { ExtractedPdfImage, SourceImageSectionHint } from "@/lib/stage-translations/pdf-templates"
 import { getSourcePdfAttachment } from "@/lib/stage-translations/source-document"
+import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto-generation"
 import type {
   StageTranslationPageData,
   StageTranslationRecord,
@@ -51,19 +49,19 @@ const COPY = {
     eyebrow: "AI Document Translation",
     title: "Construction Document Translation",
     subtitle: "Review the original English inspection document and its professional Arabic translation side by side.",
-    generate: "Generate Translation",
-    regenerate: "Regenerate Translation",
-    generating: "Translating complete document...",
+    processingTitle: "Preparing Translation",
+    processingTranslation: "Translating report content…",
+    processingDocuments: "Preparing translated documents…",
+    processingHint: "Translation and PDF generation are in progress. This may take a few moments.",
+    failedTitle: "Translation could not be completed.",
+    failedHint: "The submitted Report is safe. Retry preparation for this same Report.",
+    retry: "Retry",
     downloadOriginal: "EN",
     downloadArabic: "AR",
     downloadBilingual: "EN / AR",
     original: "English Original Document",
     sourcePdf: "Original Uploaded PDF",
     arabic: "Arabic Translation",
-    pendingTitle: "Arabic translation has not been generated yet",
-    pendingHint: "Generate a complete English-to-Arabic translation. The original report remains unchanged.",
-    generated: "Translation generated",
-    stored: "PDF downloaded and stored with this translation.",
     projectInformation: "Project Information",
     reportDetails: "Report Details",
     inspectionContent: "Inspection Content",
@@ -98,19 +96,19 @@ const COPY = {
     eyebrow: "ترجمة المستند بالذكاء الاصطناعي",
     title: "ترجمة مستندات الإنشاء",
     subtitle: "مراجعة مستند التفتيش الإنجليزي الأصلي وترجمته العربية المهنية جنباً إلى جنب.",
-    generate: "إنشاء الترجمة",
-    regenerate: "إعادة إنشاء الترجمة",
-    generating: "جارٍ ترجمة المستند بالكامل...",
+    processingTitle: "جارٍ إعداد الترجمة",
+    processingTranslation: "جارٍ ترجمة محتوى التقرير…",
+    processingDocuments: "جارٍ إعداد المستندات المترجمة…",
+    processingHint: "الترجمة وإنشاء ملفات PDF قيد التنفيذ وقد يستغرق ذلك بضع لحظات.",
+    failedTitle: "تعذر إكمال الترجمة.",
+    failedHint: "تم حفظ التقرير بنجاح. يمكنك إعادة محاولة إعداد الترجمة لنفس التقرير.",
+    retry: "إعادة المحاولة",
     downloadOriginal: "EN",
     downloadArabic: "AR",
     downloadBilingual: "EN / AR",
     original: "المستند الإنجليزي الأصلي",
     sourcePdf: "ملف PDF الإنجليزي الأصلي",
     arabic: "الترجمة العربية",
-    pendingTitle: "لم يتم إنشاء الترجمة العربية بعد",
-    pendingHint: "أنشئ ترجمة كاملة من الإنجليزية إلى العربية مع بقاء التقرير الأصلي دون تغيير.",
-    generated: "تم إنشاء الترجمة",
-    stored: "تم تنزيل ملف PDF وحفظه مع هذه الترجمة.",
     projectInformation: "معلومات المشروع",
     reportDetails: "تفاصيل التقرير",
     inspectionContent: "محتوى التفتيش",
@@ -208,106 +206,102 @@ export function StageTranslationViewer({
   const { locale } = useI18n()
   const copy = COPY[locale]
   const [translation, setTranslation] = useState<TranslationRecordState>(data.translation)
-  const [busy, setBusy] = useState<"generate" | "original" | "arabic" | "bilingual" | null>(null)
+  const [busy, setBusy] = useState<"original" | "arabic" | "bilingual" | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
   const [mobileLanguage, setMobileLanguage] = useState<"en" | "ar">("en")
   const labelsEn = COPY.en
   const labelsAr = COPY.ar
   const translated = translation?.translatedContent ?? null
   const original = data.response.content
   const sourcePdf = getSourcePdfAttachment(data)
+  const isDirectStage = !data.term?.id || data.term.id === data.stage.id
   const translationIsStale = Boolean(
     translation?.generatedAt && new Date(data.response.updatedAt).getTime() > new Date(translation.generatedAt).getTime(),
   )
 
-  async function generateTranslation() {
-    setBusy("generate")
-    setError(null)
-    setSuccess(null)
-    try {
-      const response = await fetch("/api/stage-translations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: data.project.id, stageId: data.stage.id, termId: data.term.id, responseId: data.response.id }),
-      })
-      const payload = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(payload?.error || "Unable to generate the document translation.")
-      const now = new Date().toISOString()
-      const next = payload.translation as Partial<StageTranslationRecord>
-      const newRec: StageTranslationRecord = {
-        id: String(next.id),
-        status: "completed",
-        originalContent: next.originalContent ?? data.response.content,
-        translatedContent: next.translatedContent ?? null,
-        generatedAt: next.generatedAt ?? now,
-        createdAt: next.createdAt ?? translation?.createdAt ?? now,
-        updatedAt: next.updatedAt ?? now,
-        originalPdfPath: null,
-        arabicPdfPath: null,
-        bilingualPdfPath: null,
-      }
-      setTranslation(newRec)
-      setSuccess(copy.generated)
-      return newRec
-    } catch (generationError) {
-      setError(generationError instanceof Error ? generationError.message : "Unable to generate the document translation.")
-      return null
-    } finally {
-      setBusy(null)
-    }
-  }
+  const allGeneratedPdfsReady = Boolean(
+    translation?.originalPdfPath && translation?.arabicPdfPath && translation?.bilingualPdfPath,
+  )
+  const generationComplete = Boolean(
+    translation?.status === "completed" && translation?.translatedContent && allGeneratedPdfsReady && !translationIsStale,
+  )
+  const generationFailed = translation?.status === "failed"
 
-  async function storePdf(blob: Blob, filename: string, kind: "original" | "arabic" | "bilingual") {
-    if (!translation) return null
-    const path = await storeTranslationPdf({
+  useEffect(() => {
+    if (!isDirectStage || generationComplete || generationFailed) return
+    enqueueStageTranslationJob({
       projectId: data.project.id,
-      translationId: translation.id,
-      kind,
-      blob,
-      filename,
+      stageId: data.stage.id,
+      responseId: data.response.id,
     })
-    setTranslation((current) => current ? {
-      ...current,
-      originalPdfPath: kind === "original" ? path : current.originalPdfPath,
-      arabicPdfPath: kind === "arabic" ? path : current.arabicPdfPath,
-      bilingualPdfPath: kind === "bilingual" ? path : current.bilingualPdfPath,
-    } : current)
-    return path
+  }, [data.project.id, data.stage.id, data.response.id, isDirectStage, generationComplete, generationFailed])
+
+  useEffect(() => {
+    if (!isDirectStage || generationComplete || generationFailed) return
+    let cancelled = false
+    let timer: number | null = null
+
+    const refreshStatus = async () => {
+      try {
+        const params = new URLSearchParams({
+          projectId: data.project.id,
+          stageId: data.stage.id,
+          responseId: data.response.id,
+          statusOnly: "1",
+        })
+        const response = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
+        const payload = await response.json().catch(() => null)
+        if (!response.ok) throw new Error(payload?.error || "Unable to refresh translation status.")
+        if (!cancelled) {
+          setTranslation(payload?.data?.translation ?? null)
+          setError(null)
+        }
+      } catch (statusError) {
+        if (!cancelled) setError(statusError instanceof Error ? statusError.message : "Unable to refresh translation status.")
+      } finally {
+        if (!cancelled) timer = window.setTimeout(refreshStatus, 4_000)
+      }
+    }
+
+    timer = window.setTimeout(refreshStatus, 1_000)
+    return () => {
+      cancelled = true
+      if (timer !== null) window.clearTimeout(timer)
+    }
+  }, [data.project.id, data.stage.id, data.response.id, isDirectStage, generationComplete, generationFailed])
+
+  function retryGeneration() {
+    setError(null)
+    setTranslation((current) => current ? { ...current, status: "pending" } : current)
+    enqueueStageTranslationJob({
+      projectId: data.project.id,
+      stageId: data.stage.id,
+      responseId: data.response.id,
+      retry: true,
+    })
   }
 
   async function downloadPdf(kind: "original" | "arabic" | "bilingual") {
+    if (!translation?.id) return
+    const storagePath = kind === "original"
+      ? translation.originalPdfPath
+      : kind === "arabic"
+        ? translation.arabicPdfPath
+        : translation.bilingualPdfPath
+    if (!storagePath) {
+      setError(copy.pdfError)
+      return
+    }
     setBusy(kind)
     setError(null)
-    setSuccess(null)
     try {
-      let activeTranslation = translation
-      if (kind !== "original" && (!activeTranslation?.translatedContent || translationIsStale)) {
-        activeTranslation = await generateTranslation()
-      }
-      const exported = await exportTranslationPdf({
-        data,
-        translation: activeTranslation,
-        kind,
-        ccRecipients,
-        appendClosingBlock: appendTranslatedPdfClosing,
-      })
-      if (activeTranslation) {
-        await storePdf(exported.blob, exported.filename, kind)
-        downloadPdfBlob(exported.blob, exported.filename)
-        setSuccess(copy.stored)
-      } else {
-        downloadPdfBlob(exported.blob, exported.filename)
-        setSuccess(kind === "original" ? copy.downloadOriginal : copy.stored)
-      }
-    } catch (exportError) {
-      setError(exportError instanceof Error ? exportError.message : copy.pdfError)
+      const params = new URLSearchParams({ projectId: data.project.id, translationId: translation.id, kind })
+      window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
     } finally {
-      setBusy(null)
+      window.setTimeout(() => setBusy(null), 500)
     }
   }
 
-  const isDirectStage = !data.term?.id || data.term.id === data.stage.id
   const backHref = isDirectStage
     ? `/projects/${data.project.id}/stages/${data.stage.id}/reports/${data.response.id}`
     : `/projects/${data.project.id}/stages/${data.stage.id}/terms/${data.term.id}/reports/${data.response.id}`
@@ -319,6 +313,55 @@ export function StageTranslationViewer({
     requestAnimationFrame(() => {
       document.getElementById("mobile-translation-document-start")?.scrollIntoView({ block: "start" })
     })
+  }
+
+  if (isDirectStage && !generationComplete) {
+    const preparingDocuments = Boolean(translation?.status === "completed" && translation.translatedContent)
+    return (
+      <div className={cn("mx-auto flex w-full max-w-[980px] flex-col gap-4", memberMobileView && "max-md:gap-3")}>
+        <Link href={backHref} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="size-4 flip-rtl" />{copy.back}
+        </Link>
+        <Card className="overflow-hidden py-0">
+          <CardContent className={cn("p-6 sm:p-8", memberMobileView && "max-md:p-4")}>
+            <div className="flex items-start gap-4">
+              <span className={cn("flex size-11 shrink-0 items-center justify-center rounded-xl", generationFailed ? "bg-red-50 text-red-600" : "bg-primary/10 text-primary")}>
+                {generationFailed ? <AlertCircle className="size-5" /> : <Loader2 className="size-5 animate-spin" />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h1 className={cn("text-xl font-semibold tracking-tight", memberMobileView && "max-md:text-lg")}>
+                      {generationFailed ? copy.failedTitle : copy.processingTitle}
+                    </h1>
+                    <p className="mt-1 text-xs font-medium text-muted-foreground">{data.project.name} · {data.stage.name}</p>
+                  </div>
+                  <Badge variant="outline" className={statusTone(data.response.status as any)}>{statusLabel(data.response.status as any, locale)}</Badge>
+                </div>
+
+                {generationFailed ? (
+                  <>
+                    <p className="mt-4 text-sm leading-6 text-muted-foreground">{copy.failedHint}</p>
+                    <Button className="mt-4" onClick={retryGeneration}>
+                      <Loader2 className="hidden size-4" />{copy.retry}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-primary/10">
+                      <div className="h-full w-2/5 animate-pulse rounded-full bg-primary" />
+                    </div>
+                    <p className="mt-3 text-sm font-medium">{preparingDocuments ? copy.processingDocuments : copy.processingTranslation}</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{copy.processingHint}</p>
+                    {error ? <p role="alert" className="mt-3 text-xs text-amber-700">{error}</p> : null}
+                  </>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -354,10 +397,6 @@ export function StageTranslationViewer({
               <p className="break-all text-xs font-medium text-foreground">{data.response.reportNumber}</p>
             </div>
 
-            <Button size="sm" className="h-9 w-full" onClick={() => void generateTranslation()} disabled={busy !== null}>
-              {busy === "generate" ? <Loader2 className="size-4 animate-spin" /> : translation ? <RefreshCw className="size-4" /> : <Sparkles className="size-4" />}
-              {busy === "generate" ? copy.generating : translation ? copy.regenerate : copy.generate}
-            </Button>
           </CardContent>
         </Card>
       ) : null}
@@ -377,10 +416,6 @@ export function StageTranslationViewer({
               </div>
             </div>
             <div className="flex max-w-full flex-wrap gap-2 xl:max-w-[650px] xl:justify-end">
-              <Button onClick={() => void generateTranslation()} disabled={busy !== null}>
-                {busy === "generate" ? <Loader2 className="size-4 animate-spin" /> : translation ? <RefreshCw className="size-4" /> : <Sparkles className="size-4" />}
-                {busy === "generate" ? copy.generating : translation ? copy.regenerate : copy.generate}
-              </Button>
               <Button variant="outline" onClick={() => void downloadPdf("original")} disabled={busy !== null}>
                 {busy === "original" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.downloadOriginal}
               </Button>
@@ -432,7 +467,6 @@ export function StageTranslationViewer({
 
       {error ? <div role="alert" className={cn("flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200", memberMobileView && "max-md:px-3 max-md:py-2.5 max-md:text-xs")}><AlertCircle className="mt-0.5 size-4 shrink-0" />{error}</div> : null}
       {translationIsStale ? <div role="status" className={cn("flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200", memberMobileView && "max-md:px-3 max-md:py-2.5 max-md:text-xs")}><AlertCircle className="mt-0.5 size-4 shrink-0" />{copy.stale}</div> : null}
-      {success ? <div className={cn("flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200", memberMobileView && "max-md:px-3 max-md:py-2.5 max-md:text-xs")}><CheckCircle2 className="mt-0.5 size-4 shrink-0" />{success}</div> : null}
 
       {memberMobileView ? (
         <div
@@ -483,32 +517,7 @@ export function StageTranslationViewer({
           sourcePdfTitle={copy.sourcePdf}
           mobileLanguage={memberMobileView ? mobileLanguage : undefined}
         />
-      ) : (
-        <div className="grid items-start gap-5 lg:grid-cols-2">
-          <div className={cn("min-w-0 space-y-5", memberMobileView && mobileLanguage === "ar" && "max-md:hidden")}>
-            <LanguageReport
-              language="en"
-              title={copy.original}
-              data={data}
-              content={data.response.content}
-              labels={labelsEn}
-              generatedAt={translation?.generatedAt ?? null}
-              mobileCompact={memberMobileView}
-            />
-            {sourcePdf ? <SourcePdfViewer data={data} attachment={sourcePdf} title={copy.sourcePdf} /> : null}
-          </div>
-          <Card className={cn("min-h-[560px] py-0", memberMobileView && mobileLanguage === "en" && "max-md:hidden", memberMobileView && "max-md:min-h-0")}>
-            <CardContent className={cn("flex min-h-[560px] flex-col items-center justify-center px-6 text-center", memberMobileView && "max-md:min-h-0 max-md:px-5 max-md:py-8")}>
-              <span className={cn("mb-5 flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary", memberMobileView && "max-md:mb-3 max-md:size-12")}><Languages className={memberMobileView ? "size-6 md:size-8" : "size-8"} /></span>
-              <h2 className={cn("text-xl font-semibold", memberMobileView && "max-md:text-base")}>{copy.pendingTitle}</h2>
-              <p className={cn("mt-2 max-w-lg text-sm text-muted-foreground", memberMobileView && "max-md:text-xs")}>{copy.pendingHint}</p>
-              <Button className={cn("mt-5", memberMobileView && "max-md:mt-4 max-md:h-9")} onClick={() => void generateTranslation()} disabled={busy !== null}>
-                {busy === "generate" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}{busy === "generate" ? copy.generating : copy.generate}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      ) : null}
 
       {memberMobileView ? (
         <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-18px_rgba(0,0,0,0.45)] backdrop-blur md:hidden">

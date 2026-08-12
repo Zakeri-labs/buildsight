@@ -43,6 +43,7 @@ import {
   type AttachmentRegistration,
 } from "@/lib/actions/project-stages"
 import { saveReportCcRecipientsAction } from "@/lib/actions/report-cc"
+import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto-generation"
 import { StageTranslationActions } from "@/components/stages/stage-translation-actions"
 import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
 import type { ProjectStageAttachment, ProjectStageApproval, ProjectStagePerson, ProjectStageTranslationSummary } from "@/lib/db/project-stages"
@@ -129,7 +130,7 @@ const COPY = {
     saveDraft: "Save Draft",
     saveProgress: "Save In Progress",
     submit: "Submit for Review",
-    submitted: "Report submitted for review.",
+    submitted: "Report submitted. Translation and PDFs are being prepared.",
     saved: "Report saved successfully.",
     review: "Approval Review",
     reviewComments: "Review comments",
@@ -140,7 +141,7 @@ const COPY = {
     remove: "Remove",
     selected: "selected",
     translate: "Translate",
-    translateHint: "Save the report before translating it.",
+    translateHint: "Submit the report to prepare its translation.",
   },
   ar: {
     back: "العودة إلى التقارير",
@@ -171,7 +172,7 @@ const COPY = {
     saveDraft: "حفظ المسودة",
     saveProgress: "حفظ قيد التنفيذ",
     submit: "إرسال للمراجعة",
-    submitted: "تم إرسال التقرير للمراجعة.",
+    submitted: "تم إرسال التقرير. جارٍ إعداد الترجمة وملفات PDF.",
     saved: "تم حفظ التقرير بنجاح.",
     review: "مراجعة الاعتماد",
     reviewComments: "تعليقات المراجعة",
@@ -182,7 +183,7 @@ const COPY = {
     remove: "حذف",
     selected: "محدد",
     translate: "ترجمة",
-    translateHint: "احفظ التقرير قبل ترجمته.",
+    translateHint: "أرسل التقرير لبدء إعداد الترجمة.",
   },
 } as const
 
@@ -499,6 +500,7 @@ export function InspectionReportForm({
   const isMemberExistingReport = isMember && Boolean(response)
   const isMemberReadOnlyReport = isMemberExistingReport && (pendingReview || statusLocked)
   const canRenderReviewerActions = canReview && !isMember
+  const directTranslationAvailable = !isDirectStageReport || ["submitted", "under_review", "rejected", "approved", "completed"].includes(status)
 
   const updateSection = useCallback((key: ReportSectionKey, value: string) => {
     setContent((current) => ({ ...current, [key]: value }))
@@ -674,7 +676,14 @@ export function InspectionReportForm({
         setResolvedStageId(result.data.projectStageId)
         setVisitNumber(result.data.visitNumber)
         setStatus(result.data.status as ResponseStatus)
-        setSuccess(result.data.status === "completed" ? copy.saved : copy.submitted)
+        setSuccess(copy.submitted)
+        if (isDirectStageReport) {
+          enqueueStageTranslationJob({
+            projectId: project.id,
+            stageId: result.data.projectStageId,
+            responseId: id,
+          })
+        }
         if (isMember) {
           router.replace(`/projects/${project.id}/stages`)
           router.refresh()
@@ -842,7 +851,7 @@ export function InspectionReportForm({
               </div>
             </div>
             <div className={cn("flex shrink-0 flex-col items-end gap-1 md:flex-row md:flex-wrap md:items-center md:gap-2", isMemberExistingReport && "w-full items-stretch md:w-auto md:items-center")}>
-              {responseId ? (
+              {responseId && directTranslationAvailable ? (
                 <StageTranslationActions
                   projectId={project.id}
                   stageId={resolvedStageId}

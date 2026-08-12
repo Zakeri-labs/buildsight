@@ -8,6 +8,7 @@ import { Suspense } from "react"
 import { AppTopbar } from "@/components/app-topbar"
 import { NavigationProgress } from "@/components/loading/navigation-progress"
 import type { AppNotificationFeed } from "@/lib/notifications/types"
+import { StageTranslationBackgroundWorker } from "@/components/stages/stage-translation-background-worker"
 
 export type ProjectOption = { id: string; name: string }
 
@@ -55,6 +56,7 @@ export function AppShell({
   return (
     <div className="flex min-h-dvh bg-background">
       <Suspense fallback={null}><NavigationProgress /></Suspense>
+      <StageTranslationBackgroundWorker />
       <div className={isMemberMobileShell ? "hidden md:flex" : "flex"}>
         <AppSidebar
           projects={projects}

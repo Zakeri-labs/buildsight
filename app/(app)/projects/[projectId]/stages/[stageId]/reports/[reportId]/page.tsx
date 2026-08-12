@@ -4,6 +4,8 @@ import { requireOnboarded } from "@/lib/auth/session"
 import { loadDirectProjectStageReport } from "@/lib/db/project-stages"
 import { loadProjectParticipantsOnly, loadReportCcRecipients } from "@/lib/report-cc/server"
 
+export const maxDuration = 300
+
 export default async function StageReportPage({ params }: { params: Promise<{ projectId: string; stageId: string; reportId: string }> }) {
   const [{ projectId, stageId, reportId }, session] = await Promise.all([params, requireOnboarded()])
   const data = await loadDirectProjectStageReport(projectId, stageId, reportId, session.userId)

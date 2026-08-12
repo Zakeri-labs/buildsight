@@ -18,6 +18,7 @@ const COPY = {
     bilingual: "EN / AR",
     stale: "The report changed after translation. Regenerate the translation before downloading Arabic or bilingual PDFs.",
     failed: "Unable to generate or download the PDF.",
+    preparing: "Translation and PDFs are still being prepared.",
   },
   ar: {
     translate: "ترجمة",
@@ -26,6 +27,7 @@ const COPY = {
     bilingual: "EN / AR",
     stale: "تم تعديل التقرير بعد الترجمة. أعد إنشاء الترجمة قبل تنزيل ملف PDF العربي أو ثنائي اللغة.",
     failed: "تعذر إنشاء ملف PDF أو تنزيله.",
+    preparing: "لا تزال الترجمة وملفات PDF قيد الإعداد.",
   },
 } as const
 
@@ -74,6 +76,8 @@ export function StageTranslationActions({
     translation.generatedAt && new Date(responseUpdatedAt).getTime() > new Date(translation.generatedAt).getTime(),
   )
 
+  const isDirectStage = !termId || termId === stageId
+
   async function generateAndStore(kind: PdfKind) {
     const params = new URLSearchParams({ projectId, stageId, termId, responseId })
     const response = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
@@ -114,6 +118,15 @@ export function StageTranslationActions({
     if (busy || (kind !== "original" && stale)) return
     setError(null)
     const storedPath = pdfPath(translation, kind)
+    if (isDirectStage) {
+      if (!storedPath || !translation.id) {
+        setError(copy.preparing)
+        return
+      }
+      const params = new URLSearchParams({ projectId, translationId: translation.id, kind })
+      window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
+      return
+    }
     if (storedPath && kind !== "original") {
       const params = new URLSearchParams({ projectId, translationId: translation.id, kind })
       window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
@@ -137,10 +150,13 @@ export function StageTranslationActions({
     : ""
 
   const isTranslated = Boolean(
-    translation?.status === "completed" && translation?.generatedAt && translation?.translatedContent
+    translation?.status === "completed" && translation?.generatedAt && (isDirectStage || translation?.translatedContent)
   )
 
   const untranslatedHint = locale === "ar" ? "ترجم التقرير أولاً لتفعيل التنزيل" : "Translate report first to enable PDF download"
+  const directOriginalReady = !isDirectStage || Boolean(translation.originalPdfPath && translation.id && !stale)
+  const directArabicReady = !isDirectStage || Boolean(translation.arabicPdfPath && translation.id && !stale)
+  const directBilingualReady = !isDirectStage || Boolean(translation.bilingualPdfPath && translation.id && !stale)
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-1.5", inHeader ? "items-start sm:items-end" : "items-end")} onClick={(event) => event.stopPropagation()}>
@@ -155,15 +171,15 @@ export function StageTranslationActions({
         >
           <Languages className="size-4" />{copy.translate}
         </Link>
-        <Button size={btnSize} variant="outline" className={downloadBtnClass} disabled={busy !== null} title={copy.english} onClick={() => void download("original")}>
+        <Button size={btnSize} variant="outline" className={downloadBtnClass} disabled={busy !== null || !directOriginalReady} title={!directOriginalReady ? copy.preparing : copy.english} onClick={() => void download("original")}>
           {busy === "original" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.english}
         </Button>
         <Button
           size={btnSize}
           variant="outline"
-          className={cn(downloadBtnClass, !isTranslated && "opacity-50 cursor-not-allowed")}
-          disabled={busy !== null || !isTranslated || stale}
-          title={!isTranslated ? untranslatedHint : stale ? copy.stale : copy.arabic}
+          className={cn(downloadBtnClass, (!isTranslated || !directArabicReady) && "opacity-50 cursor-not-allowed")}
+          disabled={busy !== null || !isTranslated || stale || !directArabicReady}
+          title={!directArabicReady ? copy.preparing : !isTranslated ? untranslatedHint : stale ? copy.stale : copy.arabic}
           onClick={() => void download("arabic")}
         >
           {busy === "arabic" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.arabic}
@@ -171,9 +187,9 @@ export function StageTranslationActions({
         <Button
           size={btnSize}
           variant="outline"
-          className={cn(downloadBtnClass, !isTranslated && "opacity-50 cursor-not-allowed")}
-          disabled={busy !== null || !isTranslated || stale}
-          title={!isTranslated ? untranslatedHint : stale ? copy.stale : copy.bilingual}
+          className={cn(downloadBtnClass, (!isTranslated || !directBilingualReady) && "opacity-50 cursor-not-allowed")}
+          disabled={busy !== null || !isTranslated || stale || !directBilingualReady}
+          title={!directBilingualReady ? copy.preparing : !isTranslated ? untranslatedHint : stale ? copy.stale : copy.bilingual}
           onClick={() => void download("bilingual")}
         >
           {busy === "bilingual" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.bilingual}

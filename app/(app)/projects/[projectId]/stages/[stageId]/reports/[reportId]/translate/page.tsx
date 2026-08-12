@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { StageTranslationViewer } from "@/components/stages/stage-translation-viewer"
 import { requireOnboarded } from "@/lib/auth/session"
 import { loadStageTranslationPageData } from "@/lib/stage-translations/data"
@@ -11,6 +11,9 @@ export default async function ReportTranslationPage({ params }: { params: Promis
     loadReportCcRecipients(projectId, reportId, "report"),
   ])
   if (!data) notFound()
+  if (!["submitted", "under_review", "rejected", "approved", "completed"].includes(data.response.status)) {
+    redirect(`/projects/${projectId}/stages/${stageId}/reports/${reportId}`)
+  }
   return (
     <StageTranslationViewer
       data={data}

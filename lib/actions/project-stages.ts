@@ -1,6 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { after } from "next/server"
 import {
   assertProjectAdmin,
   assertProjectMember,
@@ -15,6 +16,11 @@ import { resolveCalendarProjectScope } from "@/lib/calendar/server"
 import { loadNextProjectVisitNumber } from "@/lib/db/project-stages"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient as createServerClient } from "@/lib/supabase/server"
+import {
+  generateStageTranslation,
+  markStageTranslationGenerationFailure,
+  prepareStageTranslationGeneration,
+} from "@/lib/stage-translations/generate"
 import {
   EMPTY_TERM_RESPONSE_CONTENT,
   STAGE_DOCUMENT_ACCEPTED_MIME_TYPES,
@@ -606,6 +612,54 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         ? `/projects/${input.projectId}/stages/${projectStageId}/reports/${input.responseId}`
         : `/projects/${input.projectId}/stages/${projectStageId}/terms/${legacyTermId}/reports/${input.responseId}`,
     )
+
+    // Translation is secondary to the canonical report save. Prepare the
+    // durable translation row synchronously so its Processing state is visible
+    // immediately, then let Next.js keep the generation promise alive after
+    // this action responds. Any translation failure remains isolated from the
+    // already-persisted Stage Report.
+    if (input.submit && directStage) {
+      try {
+        const prepared = await prepareStageTranslationGeneration({
+          projectId: input.projectId,
+          stageId: projectStageId,
+          responseId: input.responseId,
+          actorId,
+        })
+        if (prepared.shouldRun) {
+          after(async () => {
+            try {
+              await generateStageTranslation({
+                projectId: input.projectId,
+                stageId: projectStageId,
+                responseId: input.responseId,
+                actorId,
+              })
+            } catch (translationError) {
+              await markStageTranslationGenerationFailure({
+                projectId: input.projectId,
+                stageId: projectStageId,
+                responseId: input.responseId,
+              }).catch(() => undefined)
+              console.error("[stage-translation] submit-triggered generation failed", {
+                projectId: input.projectId,
+                stageId: projectStageId,
+                responseId: input.responseId,
+                message: translationError instanceof Error ? translationError.message : String(translationError),
+              })
+            }
+          })
+        }
+      } catch (translationStartError) {
+        console.error("[stage-translation] unable to prepare automatic generation", {
+          projectId: input.projectId,
+          stageId: projectStageId,
+          responseId: input.responseId,
+          message: translationStartError instanceof Error ? translationStartError.message : String(translationStartError),
+        })
+      }
+    }
+
     return { ok: true, data: { responseId: input.responseId, projectStageId, reportNumber, visitNumber: assignedVisitNumber, status: nextStatus } }
   } catch (error) {
     return actionError(error, "Could not save the inspection report.")
