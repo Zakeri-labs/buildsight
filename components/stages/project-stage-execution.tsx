@@ -16,7 +16,7 @@ import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ManageProjectStagesButton } from "@/components/stages/project-stage-admin-controls"
 import type { ProjectStageExecutionData } from "@/lib/db/project-stages"
-import { getFallbackStageChecklist, statusLabel, statusTone } from "@/lib/stages/execution"
+import { calculateStageStats, getFallbackStageChecklist, statusLabel, statusTone } from "@/lib/stages/execution"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
 
@@ -56,6 +56,7 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
 
   const stageStats = useMemo(() => {
     return data.stages.map((stage) => {
+      const stats = calculateStageStats(stage)
       const stageReportsMap = new Map<string, any>()
       for (const term of stage.terms ?? []) {
         const responses = term.responses ?? (term.response ? [term.response] : [])
@@ -72,38 +73,12 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
       }
       const stageReports = Array.from(stageReportsMap.values())
 
-      let reportChecklistTotal = 0
-      let stageCheckedCheckboxes = 0
-
-      for (const report of stageReports) {
-        const checklist = report.content?.checklist ?? []
-        for (const item of checklist) {
-          reportChecklistTotal++
-          if (item.checked || item.result === "pass") {
-            stageCheckedCheckboxes++
-          }
-        }
-      }
-
-      let stageTermsCount = 0
-      for (const term of stage.terms ?? []) {
-        if (term.subterms && term.subterms.length > 0) {
-          stageTermsCount += term.subterms.filter((s) => s.active !== false).length
-        } else if (term.active !== false) {
-          stageTermsCount += 1
-        }
-      }
-
-      const fallbackChecklistCount = getFallbackStageChecklist(stage.name).length
-      const stageTotalCheckboxes = Math.max(reportChecklistTotal, stageTermsCount, fallbackChecklistCount)
-      const stageCheckboxPercentage = stageTotalCheckboxes > 0 ? Math.round((stageCheckedCheckboxes / stageTotalCheckboxes) * 100) : 0
-
       return {
         stage,
         stageReports,
-        stageTotalCheckboxes,
-        stageCheckedCheckboxes,
-        stageCheckboxPercentage,
+        stageTotalCheckboxes: stats.totalChecklistItems,
+        stageCheckedCheckboxes: stats.checkedChecklistItems,
+        stageCheckboxPercentage: stats.progressPercentage,
       }
     })
   }, [data.stages])

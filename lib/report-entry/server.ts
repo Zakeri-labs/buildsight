@@ -4,6 +4,8 @@ import { resolveExplicitSupervisorProjectScope } from "@/lib/calendar/server"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 import { createAdminClient } from "@/lib/supabase/admin"
 
+import { calculateStageStats } from "@/lib/stages/execution"
+
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 
 export type ReportEntryLatestReport = {
@@ -22,6 +24,10 @@ export type ReportEntryStage = {
   name: string
   sortOrder: number
   latestReport: ReportEntryLatestReport | null
+  reportsCount: number
+  checkedChecklistItems: number
+  totalChecklistItems: number
+  progressPercentage: number
 }
 
 export type ReportEntryProject = {
@@ -75,9 +81,8 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
       .order("sort_order", { ascending: true }),
     admin
       .from("term_responses")
-      .select("id, project_id, project_stage_id, report_number, report_title, subject, visit_number, created_at")
+      .select("id, project_id, project_stage_id, report_number, report_title, subject, visit_number, created_at, response_content")
       .in("project_id", projectIds)
-      .is("project_stage_term_id", null)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false }),
     admin
@@ -111,6 +116,10 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
       name,
       sortOrder: Number.isFinite(Number((row as any).sort_order)) ? Number((row as any).sort_order) : items.length,
       latestReport: null,
+      reportsCount: 0,
+      checkedChecklistItems: 0,
+      totalChecklistItems: 0,
+      progressPercentage: 0,
     })
     stagesByProject.set(projectId, items)
   }
@@ -121,6 +130,8 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
 
   const latestReportByProject = new Map<string, ReportEntryLatestReport>()
   const latestReportByStage = new Map<string, ReportEntryLatestReport>()
+  const reportsByStage = new Map<string, Array<{ id: string; content?: any }>>()
+
   for (const row of reportResult.data ?? []) {
     const projectId = (row as any).project_id
     const stageId = (row as any).project_stage_id
@@ -158,10 +169,22 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
 
     if (!latestReportByProject.has(projectId)) latestReportByProject.set(projectId, report)
     if (!latestReportByStage.has(stageId)) latestReportByStage.set(stageId, report)
+
+    const stageReports = reportsByStage.get(stageId) ?? []
+    stageReports.push({ id: reportId, content: (row as any).response_content })
+    reportsByStage.set(stageId, stageReports)
   }
 
   for (const stages of stagesByProject.values()) {
-    for (const stage of stages) stage.latestReport = latestReportByStage.get(stage.id) ?? null
+    for (const stage of stages) {
+      stage.latestReport = latestReportByStage.get(stage.id) ?? null
+      const stageReports = reportsByStage.get(stage.id) ?? []
+      const stats = calculateStageStats({ name: stage.name, reports: stageReports })
+      stage.reportsCount = stats.reportsCount
+      stage.checkedChecklistItems = stats.checkedChecklistItems
+      stage.totalChecklistItems = stats.totalChecklistItems
+      stage.progressPercentage = stats.progressPercentage
+    }
   }
 
   const coverPathByProject = new Map<string, string>()

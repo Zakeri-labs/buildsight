@@ -273,3 +273,82 @@ export function getFallbackStageChecklist(stageName: string): Array<{ id: string
   }))
 }
 
+export type StageStatsInput = {
+  name: string
+  terms?: Array<{
+    active?: boolean
+    subterms?: Array<{ active?: boolean }>
+    response?: { id?: string; content?: any; response_content?: any }
+    responses?: Array<{ id?: string; content?: any; response_content?: any }>
+  }>
+  reports?: Array<{ id?: string; content?: any; response_content?: any }>
+}
+
+export type StageStatsResult = {
+  reportsCount: number
+  totalChecklistItems: number
+  checkedChecklistItems: number
+  progressPercentage: number
+}
+
+function parseJsonContent(raw: string) {
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+export function calculateStageStats(stage: StageStatsInput): StageStatsResult {
+  const stageReportsMap = new Map<string, any>()
+  for (const term of stage.terms ?? []) {
+    const responses = term.responses ?? (term.response ? [term.response] : [])
+    for (const resp of responses) {
+      if (resp && resp.id && !stageReportsMap.has(resp.id)) {
+        stageReportsMap.set(resp.id, resp)
+      }
+    }
+  }
+  for (const report of stage.reports ?? []) {
+    if (report && report.id && !stageReportsMap.has(report.id)) {
+      stageReportsMap.set(report.id, report)
+    }
+  }
+  const stageReports = Array.from(stageReportsMap.values())
+
+  let reportChecklistTotal = 0
+  let stageCheckedCheckboxes = 0
+
+  for (const report of stageReports) {
+    const rawContent = report.content ?? report.response_content
+    const content = typeof rawContent === "string" ? parseJsonContent(rawContent) : rawContent
+    const checklist = Array.isArray(content?.checklist) ? content.checklist : []
+    for (const item of checklist) {
+      reportChecklistTotal++
+      if (item.checked || item.result === "pass") {
+        stageCheckedCheckboxes++
+      }
+    }
+  }
+
+  let stageTermsCount = 0
+  for (const term of stage.terms ?? []) {
+    if (term.subterms && term.subterms.length > 0) {
+      stageTermsCount += term.subterms.filter((s) => s.active !== false).length
+    } else if (term.active !== false) {
+      stageTermsCount += 1
+    }
+  }
+
+  const fallbackChecklistCount = getFallbackStageChecklist(stage.name).length
+  const stageTotalCheckboxes = Math.max(reportChecklistTotal, stageTermsCount, fallbackChecklistCount)
+  const stageCheckboxPercentage = stageTotalCheckboxes > 0 ? Math.round((stageCheckedCheckboxes / stageTotalCheckboxes) * 100) : 0
+
+  return {
+    reportsCount: stageReports.length,
+    totalChecklistItems: stageTotalCheckboxes,
+    checkedChecklistItems: stageCheckedCheckboxes,
+    progressPercentage: stageCheckboxPercentage,
+  }
+}
+
