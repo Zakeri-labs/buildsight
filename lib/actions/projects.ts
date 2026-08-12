@@ -339,6 +339,8 @@ export async function updateProject(input: {
   supervisionTypeOther?: string | null
   status?: "active" | "inactive" | "completed" | "stopped" | "final_visit" | "not_started"
   plotNo?: string
+  phase?: string
+  startDate?: string | null
   supervisionStartDate?: string | null
   priority?: ProjectPriorityValue | null
   includedStructureVisits?: number | null
@@ -355,7 +357,22 @@ export async function updateProject(input: {
   location?: string
   latitude?: number | null
   longitude?: number | null
+  assignedUserId?: string | null
   assignedSupervisorId?: string | null
+  owners?: Array<{
+    name: string
+    contactName?: string | null
+    contactEmail?: string | null
+    contactPhone?: string | null
+  }>
+  contractor?: {
+    organizationId?: string | null
+    companyName?: string
+    registrationNumber?: string
+    address?: string
+    postalCode?: string
+    phone?: string
+  }
 }): Promise<ActionResult<{ supervisionStartDate: string | null }>> {
   try {
     const name = input.name.trim()
@@ -369,6 +386,8 @@ export async function updateProject(input: {
     if (input.priority !== undefined && input.priority !== null && !isProjectPriorityValue(input.priority)) {
       return { ok: false, error: "Select a valid project priority." }
     }
+    const startDateResult = input.startDate !== undefined ? normalizeOptionalProjectDate(input.startDate, "project start date") : { ok: true as const, date: undefined }
+    if (!startDateResult.ok) return { ok: false, error: startDateResult.error }
     const supervisionStartDate = normalizeOptionalProjectDate(input.supervisionStartDate, "supervision start date")
     if (!supervisionStartDate.ok) return { ok: false, error: supervisionStartDate.error }
     const includedStructureVisits = normalizeOptionalVisitCount(input.includedStructureVisits, "Included structure visits")
@@ -484,6 +503,8 @@ export async function updateProject(input: {
     }
     if (input.status !== undefined) updates.status = input.status
     if (input.plotNo !== undefined) updates.plot_no = input.plotNo.trim() || null
+    if (input.phase !== undefined) updates.phase = input.phase.trim() || null
+    if (startDateResult.date !== undefined) updates.start_date = startDateResult.date
     if (input.supervisionStartDate !== undefined) updates.supervision_start_date = supervisionStartDate.date
     if (input.priority !== undefined) updates.priority = input.priority
     if (input.includedStructureVisits !== undefined) updates.included_structure_visits = includedStructureVisits.value
@@ -505,6 +526,18 @@ export async function updateProject(input: {
     if (input.initialRemarks !== undefined) updates.initial_remarks = input.initialRemarks?.trim() || null
     if (input.description !== undefined) updates.description = input.description.trim() || null
     if (input.region !== undefined) updates.region = input.region.trim() || null
+    if (input.assignedUserId !== undefined) updates.assigned_user_id = input.assignedUserId?.trim() || null
+    if (input.contractor !== undefined) {
+      updates.contractor_organization_id = input.contractor.organizationId?.trim() || null
+      updates.contractor = input.contractor.companyName?.trim() || null
+      updates.contractor_registration_number = input.contractor.registrationNumber?.trim() || null
+      updates.contractor_address = input.contractor.address?.trim() || null
+      updates.contractor_postal_code = input.contractor.postalCode?.trim() || null
+      updates.contractor_phone = input.contractor.phone?.trim() || null
+    }
+    if (input.owners !== undefined && input.owners.length > 0) {
+      updates.client = input.owners[0].name.trim() || null
+    }
 
     const { data: updatedProject, error } = await admin
       .from("projects")

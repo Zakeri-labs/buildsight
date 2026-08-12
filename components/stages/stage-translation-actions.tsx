@@ -215,59 +215,67 @@ export function StageTranslationActions({
   const directBilingualReady = !isDirectStage || Boolean(translation.bilingualPdfPath && translation.id && !stale)
 
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1.5", inHeader ? "items-start sm:items-end" : "items-end")} onClick={(event) => event.stopPropagation()}>
-      <div className="flex flex-wrap items-center gap-1.5">
+    <div className={cn("flex min-w-0 flex-col gap-1.5", inHeader ? "w-full sm:w-auto items-stretch sm:items-end" : "items-end")} onClick={(event) => event.stopPropagation()}>
+      <div className="flex w-full items-center justify-between gap-1.5 sm:w-auto sm:justify-start">
         <Link
           href={
             !termId || termId === stageId
               ? `/projects/${projectId}/stages/${stageId}/reports/${responseId}/translate`
               : `/projects/${projectId}/stages/${stageId}/terms/${termId}/reports/${responseId}/translate`
           }
-          className={cn(buttonVariants({ size: btnSize, variant: inHeader ? "secondary" : "secondary" }), translateBtnClass)}
+          className={cn(buttonVariants({ size: btnSize, variant: inHeader ? "secondary" : "secondary" }), "h-8 px-3 text-xs font-semibold gap-1.5 shrink-0", translateBtnClass)}
         >
-          {isProcessing ? <Loader2 className="size-4 animate-spin" /> : <Languages className="size-4" />}
-          {copy.translate}
+          {isProcessing ? <Loader2 className="size-3.5 animate-spin" /> : <Languages className="size-3.5" />}
+          <span>{copy.translate}</span>
         </Link>
-        <Button size={btnSize} variant="outline" className={downloadBtnClass} disabled={busy !== null || !directOriginalReady} title={!directOriginalReady ? copy.preparing : copy.english} onClick={() => void download("original")}>
-          {busy === "original" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.english}
+        <Button
+          size={btnSize}
+          variant="outline"
+          className={cn("h-8 px-2.5 text-xs font-semibold gap-1.5 shrink-0", downloadBtnClass)}
+          disabled={busy !== null || !directOriginalReady}
+          title={!directOriginalReady ? copy.preparing : copy.english}
+          onClick={() => void download("original")}
+        >
+          {busy === "original" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+          <span>{copy.english}</span>
         </Button>
         <Button
           size={btnSize}
           variant="outline"
-          className={cn(downloadBtnClass, (!isTranslated || !directBilingualReady) && "opacity-50 cursor-not-allowed")}
+          className={cn("h-8 px-2.5 text-xs font-semibold gap-1.5 shrink-0", downloadBtnClass, (!isTranslated || !directBilingualReady) && "opacity-50 cursor-not-allowed")}
           disabled={busy !== null || !isTranslated || stale || !directBilingualReady}
           title={!directBilingualReady ? copy.preparing : !isTranslated ? untranslatedHint : stale ? copy.stale : copy.bilingual}
           onClick={() => void download("bilingual")}
         >
-          {busy === "bilingual" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          {copy.bilingual}
+          {busy === "bilingual" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+          <span>{copy.bilingual}</span>
         </Button>
       </div>
       {error ? <p role="alert" className={cn("max-w-md text-end text-[11px]", inHeader ? "text-amber-200" : "text-red-600")}>{error}</p> : null}
       {stale ? <p className={cn("max-w-md text-end text-[11px]", inHeader ? "text-amber-200" : "text-amber-700")}>{copy.stale}</p> : null}
 
       {isFullyReady ? (
-        <div className="fixed inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom duration-500 ease-out border-t bg-background/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-18px_rgba(0,0,0,0.45)] backdrop-blur md:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom duration-500 ease-out border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-18px_rgba(0,0,0,0.45)] backdrop-blur md:hidden">
           <div className="mx-auto grid h-14 max-w-lg grid-cols-2 gap-2 px-3 py-2">
             <Button
               variant="outline"
               size="sm"
-              className="h-10 min-w-0 px-2 text-xs font-semibold gap-1.5"
+              className="h-10 min-w-0 px-2 text-xs font-bold gap-1.5 text-foreground dark:text-foreground bg-background hover:bg-accent border-input shadow-xs disabled:opacity-50"
               onClick={() => void download("original")}
               disabled={busy !== null || !directOriginalReady}
             >
-              {busy === "original" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-              <span>EN</span>
+              {busy === "original" ? <Loader2 className="size-3.5 animate-spin text-foreground" /> : <Download className="size-3.5 text-foreground stroke-[2.5]" />}
+              <span className="text-foreground font-bold">EN</span>
             </Button>
             <Button
               variant="outline"
               size="sm"
-              className="h-10 min-w-0 px-2 text-xs font-semibold gap-1.5"
+              className="h-10 min-w-0 px-2 text-xs font-bold gap-1.5 text-foreground dark:text-foreground bg-background hover:bg-accent border-input shadow-xs disabled:opacity-50"
               onClick={() => void download("bilingual")}
               disabled={busy !== null || !isTranslated || stale || !directBilingualReady}
             >
-              {busy === "bilingual" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-              <span>EN / AR</span>
+              {busy === "bilingual" ? <Loader2 className="size-3.5 animate-spin text-foreground" /> : <Download className="size-3.5 text-foreground stroke-[2.5]" />}
+              <span className="text-foreground font-bold">EN / AR</span>
             </Button>
           </div>
         </div>

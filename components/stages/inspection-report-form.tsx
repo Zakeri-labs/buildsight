@@ -827,23 +827,26 @@ export function InspectionReportForm({
           <div className={cn("flex items-start justify-between gap-2 md:items-center md:gap-3", isMemberExistingReport && "flex-col md:flex-row")}>
             <div className="flex min-w-0 items-center gap-2 md:gap-3">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/15 md:size-11 md:rounded-xl"><ClipboardCheck className="size-5 md:size-6" /></span>
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-white/70 md:text-xs">{parentTerm ? "Sub-term Response" : "Construction Inspection / Report"}</p>
-                <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 md:mt-1 md:gap-2">
+                <div className="mt-0.5 flex min-w-0 items-center justify-between gap-2 md:mt-1">
                   <h1 className="min-w-0 text-base font-semibold leading-tight md:text-2xl">{cleanTermReportName}</h1>
                   <Badge
                     variant="outline"
-                    className={reportDefinition.required
-                      ? "border-amber-200 bg-amber-50 text-amber-800"
-                      : "border-white/30 bg-white/10 text-white"}
+                    className={cn(
+                      "shrink-0 text-xs px-2 py-0.5 font-medium",
+                      reportDefinition.required
+                        ? "border-amber-200 bg-amber-50 text-amber-800"
+                        : "border-white/30 bg-white/10 text-white",
+                    )}
                   >
                     {reportDefinition.required ? copy.required : copy.optional}
                   </Badge>
-                  {parentTerm ? <Badge variant="outline" className="border-white/30 bg-white/10 text-white">{subtermResponseTypeLabel(reportDefinition.responseType)}</Badge> : null}
+                  {parentTerm ? <Badge variant="outline" className="shrink-0 border-white/30 bg-white/10 text-white text-xs">{subtermResponseTypeLabel(reportDefinition.responseType)}</Badge> : null}
                 </div>
               </div>
             </div>
-            <div className={cn("flex shrink-0 flex-col items-end gap-1 md:flex-row md:flex-wrap md:items-center md:gap-2", isMemberExistingReport && "w-full items-stretch md:w-auto md:items-center")}>
+            <div className={cn("flex shrink-0 flex-col items-stretch gap-2.5 md:flex-row md:flex-wrap md:items-center md:gap-2", isMemberExistingReport && "w-full md:w-auto")}>
               {responseId && directTranslationAvailable ? (
                 <StageTranslationActions
                   projectId={project.id}
@@ -859,9 +862,9 @@ export function InspectionReportForm({
                   <Languages className="size-4" />{copy.translate}
                 </Button>
               )}
-              <div className={cn("flex items-center gap-1.5", isMemberExistingReport && "justify-between md:justify-start")}>
+              <div className="flex w-full items-center justify-between gap-1.5 md:w-auto md:justify-start">
                 <Badge variant="outline" className={cn("w-fit border-white/30 bg-white/10 text-white", status !== "draft" && "border-white/40")}>{statusLabel(status, locale)}</Badge>
-                {isMemberExistingReport && pendingReview ? <Badge variant="outline" className="border-white/30 bg-white/10 text-[10px] text-white md:hidden">{locale === "ar" ? "بانتظار المراجعة" : "Pending Review"}</Badge> : null}
+                {isMemberExistingReport && pendingReview ? <Badge variant="outline" className="border-white/30 bg-white/10 text-[10px] text-white">{locale === "ar" ? "بانتظار المراجعة" : "Pending Review"}</Badge> : null}
               </div>
             </div>
           </div>
