@@ -868,30 +868,12 @@ function drawFirstPageHeader(
   const cardX = margin
   const cardWidth = pageWidth - margin * 2
   const gridTop = headerH + 15
-  const useBilingualLocationCell = options.bilingualProjectLocationCell === true
+  const useBilingualLocationCell = true
 
   const reportTo = template.reportToRecipients || []
   const ccTo = template.ccRecipients || []
 
-  // Keep the existing two-cell recipient sizing untouched for the separate
-  // English and Arabic PDFs.
-  const getRecipientHeight = (rList: typeof reportTo) => {
-    if (!rList.length) return 7
-    let lines = 0
-    rList.forEach((r) => {
-      lines += 1 // Name
-      if (r.role) lines += 1
-      if (r.company) lines += 1
-      if (r.email) lines += 1
-      lines += 0.4 // gap between recipients
-    })
-    return Math.max(7, 4.5 + lines * 3.4)
-  }
-
-  const wrappedRecipientHeight = (rList: typeof reportTo, width: number) => {
-    // Measure to the final rendered baseline instead of reserving a complete
-    // extra line-height (and a trailing recipient gap) below the content.
-    // This keeps only the padding actually needed by the bilingual first row.
+  const wrappedRecipientHeight = (rList: typeof reportTo, width: number, isRtl: boolean) => {
     if (!rList.length) return 10
 
     let cursorY = 7.8
@@ -899,7 +881,7 @@ function drawFirstPageHeader(
 
     rList.forEach((recipient, recipientIndex) => {
       const measureField = (value: string, fontSize: number, bold: boolean, lineHeight: number) => {
-        const fieldRtl = containsArabic(value)
+        const fieldRtl = isRtl || containsArabic(value)
         setLanguage(doc, fieldRtl, fontSize, bold)
         const lines = textLines(doc, value, width - 6)
         lines.forEach(() => {
@@ -933,18 +915,26 @@ function drawFirstPageHeader(
   const locationInlineGap = 0.9
   const locationTopInset = 4
   const locationBottomInset = 1.2
-  const projectLocationFields = [
-    { label: "Address", value: template.projectAddress },
-    { label: "Phase", value: template.projectPhase },
-    { label: "Plot No.", value: template.projectPlotNo },
-  ].filter((field) => field.value.trim().length > 0)
+  const projectLocationFields = (
+    rtl
+      ? [
+          { label: "العنوان", value: template.projectAddress },
+          { label: "المرحلة", value: template.projectPhase },
+          { label: "رقم القطعة", value: template.projectPlotNo },
+        ]
+      : [
+          { label: "Address", value: template.projectAddress },
+          { label: "Phase", value: template.projectPhase },
+          { label: "Plot No.", value: template.projectPlotNo },
+        ]
+  ).filter((field) => field.value.trim().length > 0)
 
-  const getInlineLocationLayout = (label: string, value: string, width: number) => {
+  const getInlineLocationLayout = (label: string, value: string, width: number, isRtl: boolean) => {
     const labelText = `${label}:`
-    setLanguage(doc, false, locationLabelFontSize, true)
+    setLanguage(doc, isRtl, locationLabelFontSize, true)
     const labelWidth = doc.getTextWidth(labelText)
 
-    const valueRtl = containsArabic(value)
+    const valueRtl = isRtl || containsArabic(value)
     setLanguage(doc, valueRtl, locationValueFontSize, false)
     const fullValueWidth = Math.max(8, width - 6)
     const firstLineWidth = Math.max(8, fullValueWidth - labelWidth - locationInlineGap)
@@ -961,33 +951,28 @@ function drawFirstPageHeader(
   const metaRowH = 11
   let recipientsRowH: number
 
-  if (useBilingualLocationCell) {
-    let locationCursorY = locationTopInset
-    let locationLastBaselineY = locationTopInset
+  let locationCursorY = locationTopInset
+  let locationLastBaselineY = locationTopInset
 
-    projectLocationFields.forEach((field, index) => {
-      const layout = getInlineLocationLayout(field.label, field.value, cellW)
-      layout.lines.forEach((_, lineIndex) => {
-        locationLastBaselineY = locationCursorY + lineIndex * locationLineHeight
-      })
-      locationCursorY += layout.lines.length * locationLineHeight
-      if (index < projectLocationFields.length - 1) locationCursorY += locationRowGap
+  projectLocationFields.forEach((field, index) => {
+    const layout = getInlineLocationLayout(field.label, field.value, cellW, rtl)
+    layout.lines.forEach((_, lineIndex) => {
+      locationLastBaselineY = locationCursorY + lineIndex * locationLineHeight
     })
+    locationCursorY += layout.lines.length * locationLineHeight
+    if (index < projectLocationFields.length - 1) locationCursorY += locationRowGap
+  })
 
-    const locationCellHeight = projectLocationFields.length
-      ? locationLastBaselineY + locationBottomInset
-      : locationTopInset + locationBottomInset
+  const locationCellHeight = projectLocationFields.length
+    ? locationLastBaselineY + locationBottomInset
+    : locationTopInset + locationBottomInset
 
-    recipientsRowH = Math.max(
-      wrappedRecipientHeight(reportTo, cellW),
-      locationCellHeight,
-      wrappedRecipientHeight(ccTo, cellW),
-    )
-  } else {
-    const reportToH = getRecipientHeight(reportTo)
-    const ccToH = getRecipientHeight(ccTo)
-    recipientsRowH = Math.max(reportToH, ccToH, 13)
-  }
+  recipientsRowH = Math.max(
+    wrappedRecipientHeight(reportTo, cellW, rtl),
+    locationCellHeight,
+    wrappedRecipientHeight(ccTo, cellW, rtl),
+    13,
+  )
 
   const gridHeight = recipientsRowH + 2 * metaRowH
 
@@ -1006,15 +991,9 @@ function drawFirstPageHeader(
   // Horizontal divider between Meta Row 1 (Row 2) and Meta Row 2 (Row 3)
   doc.line(cardX, gridTop + recipientsRowH + metaRowH, cardX + cardWidth, gridTop + recipientsRowH + metaRowH)
 
-  if (useBilingualLocationCell) {
-    // Align the new first-row cell borders with the existing three-column rows.
-    for (let c = 1; c < cols; c += 1) {
-      doc.line(cardX + c * cellW, gridTop, cardX + c * cellW, gridTop + recipientsRowH)
-    }
-  } else {
-    // Preserve the existing two-column first row in the separate PDFs.
-    const recHalfW = cardWidth / 2
-    doc.line(cardX + recHalfW, gridTop, cardX + recHalfW, gridTop + recipientsRowH)
+  // Align the first-row cell borders with the three-column rows.
+  for (let c = 1; c < cols; c += 1) {
+    doc.line(cardX + c * cellW, gridTop, cardX + c * cellW, gridTop + recipientsRowH)
   }
 
   // Vertical lines between 3 columns in Row 2 & Row 3
@@ -1023,14 +1002,13 @@ function drawFirstPageHeader(
   }
 
   // ── RENDER ROW 1 ─────────────────────────────────────────────────────────
-  const drawRecipientColumn = (
+  const drawWrappedBilingualRecipientColumn = (
     recList: typeof reportTo,
     colLabel: string,
     x: number,
     w: number,
     isRtl: boolean,
   ) => {
-    // Header Label
     setLanguage(doc, isRtl, 6.2, true)
     doc.setTextColor(100, 116, 139)
     writePdfText(
@@ -1057,62 +1035,6 @@ function drawFirstPageHeader(
     }
 
     let currY = gridTop + 7.8
-    recList.forEach((r) => {
-      // Name (Bold Dark)
-      const nameRtl = containsArabic(r.name)
-      setLanguage(doc, nameRtl, 7.5, true)
-      doc.setTextColor(15, 23, 42)
-      writePdfText(doc, r.name, isRtl ? x + w - 3 : x + 3, currY, { align: isRtl ? "right" : "left" }, nameRtl)
-      currY += 3.4
-
-      // Role
-      if (r.role) {
-        const roleRtl = containsArabic(r.role)
-        setLanguage(doc, roleRtl, 6.5, false)
-        doc.setTextColor(71, 85, 105)
-        writePdfText(doc, r.role, isRtl ? x + w - 3 : x + 3, currY, { align: isRtl ? "right" : "left" }, roleRtl)
-        currY += 3.2
-      }
-
-      // Company
-      if (r.company) {
-        const compRtl = containsArabic(r.company)
-        setLanguage(doc, compRtl, 6.5, false)
-        doc.setTextColor(71, 85, 105)
-        writePdfText(doc, r.company, isRtl ? x + w - 3 : x + 3, currY, { align: isRtl ? "right" : "left" }, compRtl)
-        currY += 3.2
-      }
-
-      // Email
-      if (r.email) {
-        setLanguage(doc, false, 6.2, false)
-        doc.setTextColor(37, 99, 235)
-        writePdfText(doc, r.email, isRtl ? x + w - 3 : x + 3, currY, { align: isRtl ? "right" : "left" }, false)
-        currY += 3.2
-      }
-
-      currY += 1.2
-    })
-  }
-
-  const drawWrappedBilingualRecipientColumn = (
-    recList: typeof reportTo,
-    colLabel: string,
-    x: number,
-    w: number,
-  ) => {
-    setLanguage(doc, false, 6.2, true)
-    doc.setTextColor(100, 116, 139)
-    writePdfText(doc, colLabel, x + 3, gridTop + 3.5, { align: "left" }, false)
-
-    if (!recList.length) {
-      setLanguage(doc, false, 7.5, false)
-      doc.setTextColor(148, 163, 184)
-      writePdfText(doc, "—", x + 3, gridTop + 8, { align: "left" }, false)
-      return
-    }
-
-    let currY = gridTop + 7.8
     const drawField = (
       value: string,
       fontSize: number,
@@ -1121,7 +1043,7 @@ function drawFirstPageHeader(
       color: [number, number, number],
       forceLatin = false,
     ) => {
-      const fieldRtl = !forceLatin && containsArabic(value)
+      const fieldRtl = !forceLatin && (isRtl || containsArabic(value))
       setLanguage(doc, fieldRtl, fontSize, bold)
       doc.setTextColor(...color)
       const lines = textLines(doc, value, w - 6)
@@ -1142,22 +1064,29 @@ function drawFirstPageHeader(
     })
   }
 
-  const drawProjectLocationColumn = (x: number, w: number) => {
+  const drawProjectLocationColumn = (x: number, w: number, isRtl: boolean) => {
     let cursorY = gridTop + locationTopInset
 
     projectLocationFields.forEach((field, fieldIndex) => {
-      const layout = getInlineLocationLayout(field.label, field.value, w)
+      const layout = getInlineLocationLayout(field.label, field.value, w, isRtl)
 
-      setLanguage(doc, false, locationLabelFontSize, true)
+      setLanguage(doc, isRtl, locationLabelFontSize, true)
       doc.setTextColor(100, 116, 139)
-      writePdfText(doc, layout.labelText, x + 3, cursorY, { align: "left" }, false)
+      writePdfText(
+        doc,
+        layout.labelText,
+        isRtl ? x + w - 3 : x + 3,
+        cursorY,
+        { align: isRtl ? "right" : "left" },
+        isRtl,
+      )
 
       setLanguage(doc, layout.valueRtl, locationValueFontSize, false)
       doc.setTextColor(71, 85, 105)
       layout.lines.forEach((line, lineIndex) => {
         const firstLine = lineIndex === 0
         const textX = layout.valueRtl
-          ? x + w - 3
+          ? x + w - 3 - (firstLine ? layout.labelWidth + locationInlineGap : 0)
           : x + 3 + (firstLine ? layout.labelWidth + locationInlineGap : 0)
         const align = layout.valueRtl ? "right" : "left"
         writePdfText(
@@ -1175,25 +1104,16 @@ function drawFirstPageHeader(
     })
   }
 
-  if (useBilingualLocationCell) {
-    drawWrappedBilingualRecipientColumn(reportTo, "Report to:", cardX, cellW)
-    drawWrappedBilingualRecipientColumn(ccTo, "CC to:", cardX + cellW, cellW)
-    drawProjectLocationColumn(cardX + cellW * 2, cellW)
-  } else {
-    const recHalfW = cardWidth / 2
-    const leftColX = rtl ? cardX + recHalfW : cardX
-    const rightColX = rtl ? cardX : cardX + recHalfW
-    const reportToLabel = rtl ? "ارسال به / الموجه إليه:" : "Report to:"
-    const ccToLabel = rtl ? "نسخة إلى:" : "CC to:"
+  const reportToX = rtl ? cardX + 2 * cellW : cardX
+  const ccToX = cardX + cellW
+  const locationX = rtl ? cardX : cardX + 2 * cellW
 
-    if (rtl) {
-      drawRecipientColumn(reportTo, reportToLabel, leftColX, recHalfW, true)
-      drawRecipientColumn(ccTo, ccToLabel, rightColX, recHalfW, true)
-    } else {
-      drawRecipientColumn(reportTo, reportToLabel, leftColX, recHalfW, false)
-      drawRecipientColumn(ccTo, ccToLabel, rightColX, recHalfW, false)
-    }
-  }
+  const reportToLabel = rtl ? "إرسال إلى:" : "Report to:"
+  const ccToLabel = rtl ? "نسخة إلى:" : "CC to:"
+
+  drawWrappedBilingualRecipientColumn(reportTo, reportToLabel, reportToX, cellW, rtl)
+  drawWrappedBilingualRecipientColumn(ccTo, ccToLabel, ccToX, cellW, rtl)
+  drawProjectLocationColumn(locationX, cellW, rtl)
 
   // ── RENDER ROW 2 & 3: THE 6 METADATA CELLS (Matching details page 1:1) ──────
   const formattedDate = formatDateShort(template.createdAt, rtl)
