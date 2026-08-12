@@ -216,39 +216,39 @@ export function StageTranslationActions({
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-1.5", inHeader ? "w-full sm:w-auto items-stretch sm:items-end" : "items-end")} onClick={(event) => event.stopPropagation()}>
-      <div className="flex w-full items-center justify-between gap-1.5 sm:w-auto sm:justify-start">
+      <div className="grid grid-cols-[1fr_auto_1fr] w-full items-center gap-1.5 sm:flex sm:w-auto sm:justify-start">
         <Link
           href={
             !termId || termId === stageId
               ? `/projects/${projectId}/stages/${stageId}/reports/${responseId}/translate`
               : `/projects/${projectId}/stages/${stageId}/terms/${termId}/reports/${responseId}/translate`
           }
-          className={cn(buttonVariants({ size: btnSize, variant: inHeader ? "secondary" : "secondary" }), "h-8 px-3 text-xs font-semibold gap-1.5 shrink-0", translateBtnClass)}
+          className={cn(buttonVariants({ size: btnSize, variant: inHeader ? "secondary" : "secondary" }), "h-8 min-w-0 px-2 text-xs font-semibold gap-1.5 justify-center", translateBtnClass)}
         >
-          {isProcessing ? <Loader2 className="size-3.5 animate-spin" /> : <Languages className="size-3.5" />}
-          <span>{copy.translate}</span>
+          {isProcessing ? <Loader2 className="size-3.5 animate-spin shrink-0" /> : <Languages className="size-3.5 shrink-0" />}
+          <span className="truncate">{copy.translate}</span>
         </Link>
         <Button
           size={btnSize}
           variant="outline"
-          className={cn("h-8 px-2.5 text-xs font-semibold gap-1.5 shrink-0", downloadBtnClass)}
+          className={cn("h-8 shrink-0 px-2.5 text-xs font-semibold gap-1.5 justify-center", downloadBtnClass)}
           disabled={busy !== null || !directOriginalReady}
           title={!directOriginalReady ? copy.preparing : copy.english}
           onClick={() => void download("original")}
         >
-          {busy === "original" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+          {busy === "original" ? <Loader2 className="size-3.5 animate-spin shrink-0" /> : <Download className="size-3.5 shrink-0" />}
           <span>{copy.english}</span>
         </Button>
         <Button
           size={btnSize}
           variant="outline"
-          className={cn("h-8 px-2.5 text-xs font-semibold gap-1.5 shrink-0", downloadBtnClass, (!isTranslated || !directBilingualReady) && "opacity-50 cursor-not-allowed")}
+          className={cn("h-8 min-w-0 px-2 text-xs font-semibold gap-1.5 justify-center", downloadBtnClass, (!isTranslated || !directBilingualReady) && "opacity-50 cursor-not-allowed")}
           disabled={busy !== null || !isTranslated || stale || !directBilingualReady}
           title={!directBilingualReady ? copy.preparing : !isTranslated ? untranslatedHint : stale ? copy.stale : copy.bilingual}
           onClick={() => void download("bilingual")}
         >
-          {busy === "bilingual" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-          <span>{copy.bilingual}</span>
+          {busy === "bilingual" ? <Loader2 className="size-3.5 animate-spin shrink-0" /> : <Download className="size-3.5 shrink-0" />}
+          <span className="truncate">{copy.bilingual}</span>
         </Button>
       </div>
       {error ? <p role="alert" className={cn("max-w-md text-end text-[11px]", inHeader ? "text-amber-200" : "text-red-600")}>{error}</p> : null}
