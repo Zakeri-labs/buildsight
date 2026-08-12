@@ -72,12 +72,27 @@ export function StageTranslationActions({
   const [busy, setBusy] = useState<PdfKind | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const isProcessing = Boolean(
-    translation && ["pending", "processing", "queued"].includes(translation.status),
+  const isDirectStage = !termId || termId === stageId
+
+  const stale = Boolean(
+    translation.generatedAt && new Date(responseUpdatedAt).getTime() > new Date(translation.generatedAt).getTime(),
   )
 
+  const allGeneratedPdfsReady = Boolean(
+    translation?.originalPdfPath && translation?.arabicPdfPath && translation?.bilingualPdfPath,
+  )
+
+  const isFullyReady = Boolean(
+    translation?.status === "completed" &&
+      !stale &&
+      (isDirectStage ? allGeneratedPdfsReady : Boolean(translation?.translatedContent)),
+  )
+
+  const isFailed = translation?.status === "failed" || translation?.status === "error"
+  const isProcessing = !isFullyReady && !isFailed
+
   useEffect(() => {
-    if (translation.status === "completed" || translation.status === "failed" || translation.status === "error") {
+    if (isFullyReady || isFailed) {
       return
     }
 
@@ -102,10 +117,10 @@ export function StageTranslationActions({
             id: fetched.id || current.id,
             status: fetched.status,
             generatedAt: fetched.generatedAt || current.generatedAt,
-            originalPdfPath: fetched.originalPdfPath || current.originalPdfPath,
-            arabicPdfPath: fetched.arabicPdfPath || current.arabicPdfPath,
-            bilingualPdfPath: fetched.bilingualPdfPath || current.bilingualPdfPath,
-            translatedContent: fetched.translatedContent || current.translatedContent,
+            originalPdfPath: fetched.originalPdfPath ?? current.originalPdfPath,
+            arabicPdfPath: fetched.arabicPdfPath ?? current.arabicPdfPath,
+            bilingualPdfPath: fetched.bilingualPdfPath ?? current.bilingualPdfPath,
+            translatedContent: fetched.translatedContent ?? current.translatedContent,
           }))
         }
       } catch {
@@ -117,13 +132,7 @@ export function StageTranslationActions({
       isMounted = false
       clearInterval(interval)
     }
-  }, [projectId, stageId, termId, responseId, translation.status])
-
-  const stale = Boolean(
-    translation.generatedAt && new Date(responseUpdatedAt).getTime() > new Date(translation.generatedAt).getTime(),
-  )
-
-  const isDirectStage = !termId || termId === stageId
+  }, [projectId, stageId, termId, responseId, isFullyReady, isFailed])
 
   async function generateAndStore(kind: PdfKind) {
     const params = new URLSearchParams({ projectId, stageId, termId, responseId })

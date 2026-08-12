@@ -520,17 +520,13 @@ export function StageTranslationViewer({
       ) : null}
 
       {memberMobileView ? (
-        <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-18px_rgba(0,0,0,0.45)] backdrop-blur md:hidden">
-          <div className="mx-auto grid h-14 max-w-lg grid-cols-3 gap-1.5 px-2 py-2">
-            <Button variant="outline" size="sm" className="h-10 min-w-0 px-2 text-xs" onClick={() => void downloadPdf("original")} disabled={busy !== null}>
+        <div className="fixed inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom duration-500 ease-out border-t bg-background/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-18px_rgba(0,0,0,0.45)] backdrop-blur md:hidden">
+          <div className="mx-auto grid h-14 max-w-lg grid-cols-2 gap-2 px-3 py-2">
+            <Button variant="outline" size="sm" className="h-10 min-w-0 px-2 text-xs font-semibold gap-1.5" onClick={() => void downloadPdf("original")} disabled={busy !== null}>
               {busy === "original" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
               <span>EN</span>
             </Button>
-            <Button variant="outline" size="sm" className="h-10 min-w-0 px-2 text-xs" onClick={() => void downloadPdf("arabic")} disabled={busy !== null}>
-              {busy === "arabic" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-              <span>AR</span>
-            </Button>
-            <Button variant="outline" size="sm" className="h-10 min-w-0 px-2 text-xs" onClick={() => void downloadPdf("bilingual")} disabled={busy !== null}>
+            <Button variant="outline" size="sm" className="h-10 min-w-0 px-2 text-xs font-semibold gap-1.5" onClick={() => void downloadPdf("bilingual")} disabled={busy !== null}>
               {busy === "bilingual" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
               <span>EN / AR</span>
             </Button>
