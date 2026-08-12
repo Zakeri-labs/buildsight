@@ -58,7 +58,11 @@ import {
   updateProject,
   type OwnerIdCardUploadInput,
 } from "@/lib/actions/projects"
-import { saveInitialDocumentAction } from "@/lib/actions/initial-documents"
+import {
+  deleteInitialDocumentAction,
+  getInitialDocumentsForProjectAction,
+  saveInitialDocumentAction,
+} from "@/lib/actions/initial-documents"
 import { useI18n } from "@/lib/i18n"
 import { type ProjectLocationValue } from "@/lib/locations/types"
 import { DOCUMENT_ASSET_BUCKET, sanitizeStorageFileName } from "@/lib/documents/simple-upload"
@@ -290,7 +294,7 @@ export function ProjectEditDialog({
     const supabase = createClient()
     async function loadData() {
       try {
-        const [{ data: orgs }, { data: profiles }, { data: currentProjectRow }, { data: ownerRows }, { data: docRows }] = await Promise.all([
+        const [{ data: orgs }, { data: profiles }, { data: currentProjectRow }, { data: ownerRows }, initialDocsRes] = await Promise.all([
           supabase
             .from("organizations")
             .select("id, name, status, organization_category, registration_number, address, postal_code, phone")
@@ -309,11 +313,7 @@ export function ProjectEditDialog({
             .select("id, owner_order, name, contact_name, contact_email, contact_phone, viewer_user_id, viewer_invitation_id")
             .eq("project_id", project.id)
             .order("owner_order", { ascending: true }),
-          supabase
-            .from("initial_docs")
-            .select("id, category, file_name, original_file_name, file_path, file_size")
-            .eq("project_id", project.id)
-            .order("created_at", { ascending: true }),
+          getInitialDocumentsForProjectAction(project.id),
         ])
 
         if (!active) return
@@ -419,11 +419,11 @@ export function ProjectEditDialog({
           setSelectedOwnerViewers(loadedViewers)
         }
 
-        if (docRows && docRows.length > 0 && !hasInitializedDocsRef.current) {
+        if (initialDocsRes && initialDocsRes.ok && initialDocsRes.documents.length > 0 && !hasInitializedDocsRef.current) {
           hasInitializedDocsRef.current = true
-          const loadedDocs: InitialProjectDocumentSelection[] = docRows.map((doc) => {
+          const loadedDocs: InitialProjectDocumentSelection[] = initialDocsRes.documents.map((doc) => {
             const uploadCat =
-              getInitialDocumentUploadCategoryFromPath(doc.file_path)?.value ||
+              getInitialDocumentUploadCategoryFromPath(doc.filePath)?.value ||
               (doc.category === "approved_drawings"
                 ? "drawing"
                 : doc.category === "consultant_agreement"
@@ -440,9 +440,9 @@ export function ProjectEditDialog({
               id: doc.id,
               category: getInitialDocumentCategory(doc.category).value,
               uploadCategory: uploadCat as InitialDocumentUploadCategory,
-              fileName: doc.original_file_name || doc.file_name,
-              fileSize: Number(doc.file_size) || 0,
-              filePath: doc.file_path,
+              fileName: doc.originalFileName || doc.fileName,
+              fileSize: Number(doc.fileSize) || 0,
+              filePath: doc.filePath,
               isExisting: true,
             }
           })
@@ -910,30 +910,45 @@ export function ProjectEditDialog({
         }
       }
 
-      const supabase = createClient()
       if (removedDocumentIds.length > 0) {
-        await supabase.from("initial_docs").delete().in("id", removedDocumentIds)
+        for (const remId of removedDocumentIds) {
+          const delRes = await deleteInitialDocumentAction(remId, project.id)
+          if (!delRes.ok) {
+            console.error("[EditProject] Failed to delete removed document:", delRes.error, remId)
+          }
+        }
       }
 
       const newInitialDocSelections = initialDocuments.filter((sel) => sel.file && !sel.isExisting)
       if (newInitialDocSelections.length > 0) {
         setSubmissionMessage(copy.uploading)
+        const supabase = createClient()
         const { data: { session } } = await supabase.auth.getSession()
-        if (session) {
-          for (const selection of newInitialDocSelections) {
-            if (!selection.file) continue
-            const storagePath = `${project.id}/${session.user.id}/${selection.id}/category-${selection.uploadCategory}/${sanitizeInitialDocumentFileName(selection.file.name)}`
-            await uploadStorageAsset(selection.file, storagePath, session.access_token)
-            await saveInitialDocumentAction({
+        if (!session) {
+          throw new Error("Your session has expired. Please log in again.")
+        }
+        for (const selection of newInitialDocSelections) {
+          if (!selection.file) continue
+          const storagePath = `${project.id}/${session.user.id}/${selection.id}/category-${selection.uploadCategory}/${sanitizeInitialDocumentFileName(selection.file.name)}`
+          await uploadStorageAsset(selection.file, storagePath, session.access_token)
+          const saveRes = await saveInitialDocumentAction({
+            id: selection.id,
+            projectId: project.id,
+            category: selection.category,
+            storagePath,
+            originalFilename: selection.file.name,
+            mimeType: selection.file.type || "application/octet-stream",
+            sizeBytes: selection.file.size,
+          })
+          if (!saveRes.ok) {
+            console.error("[EditProject] saveInitialDocumentAction error:", saveRes.error, {
+              id: selection.id,
               projectId: project.id,
               category: selection.category,
-              file: {
-                name: selection.file.name,
-                size: selection.file.size,
-                type: selection.file.type,
-                storagePath,
-              },
+              fileName: selection.file.name,
+              storagePath,
             })
+            throw new Error(saveRes.error || "Failed to save project document record.")
           }
         }
       }

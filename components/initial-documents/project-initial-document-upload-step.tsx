@@ -3,6 +3,7 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from "react"
 import {
   CloudUpload,
+  ExternalLink,
   FileArchive,
   FileCheck2,
   FileImage,
@@ -189,6 +190,17 @@ export function ProjectInitialDocumentUploadStep({
                       <p className="truncate text-xs font-medium" title={name}>{name}</p>
                       <p className="mt-0.5 text-[11px] text-muted-foreground">{formatInitialDocumentFileSize(size)}</p>
                     </div>
+                    {selected.isExisting ? (
+                      <a
+                        href={`/api/initial-documents?id=${selected.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={isArabic ? "عرض المستند" : "View document"}
+                        className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <ExternalLink className="size-3.5" />
+                      </a>
+                    ) : null}
                     <button
                       type="button"
                       disabled={disabled}
@@ -311,6 +323,17 @@ function AdditionalDocumentsCard({
                   <p className="truncate text-xs font-medium" title={name}>{name}</p>
                   <p className="mt-0.5 text-[11px] text-muted-foreground">{formatInitialDocumentFileSize(size)}</p>
                 </div>
+                {selection.isExisting ? (
+                  <a
+                    href={`/api/initial-documents?id=${selection.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={isArabic ? "عرض المستند" : "View document"}
+                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <ExternalLink className="size-3.5" />
+                  </a>
+                ) : null}
                 <button
                   type="button"
                   disabled={disabled}

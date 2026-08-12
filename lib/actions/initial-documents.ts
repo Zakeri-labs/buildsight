@@ -105,3 +105,79 @@ export async function saveInitialDocumentAction(input: SaveInitialDocumentInput)
   revalidatePath(`/projects/${input.projectId}`)
   return { ok: true, id: input.id }
 }
+
+export type InitialDocumentRecord = {
+  id: string
+  projectId: string
+  fileName: string
+  originalFileName: string | null
+  filePath: string
+  fileSize: number
+  category: string
+}
+
+export async function getInitialDocumentsForProjectAction(
+  projectId: string,
+): Promise<{ ok: true; documents: InitialDocumentRecord[] } | { ok: false; error: string }> {
+  try {
+    const session = await requireOnboarded()
+    if (!UUID_PATTERN.test(projectId)) {
+      return { ok: false, error: "Invalid project ID." }
+    }
+    const supabase = await createClient()
+    const { data: rows, error } = await supabase
+      .from("initial_docs")
+      .select("id, project_id, file_name, original_file_name, file_path, file_size, category")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: true })
+
+    if (error) {
+      console.error("[getInitialDocumentsForProjectAction] Database error:", error, { projectId })
+      return { ok: false, error: error.message || "Failed to query project documents." }
+    }
+    const documents: InitialDocumentRecord[] = (rows ?? []).map((row) => ({
+      id: row.id,
+      projectId: row.project_id,
+      fileName: row.file_name,
+      originalFileName: row.original_file_name,
+      filePath: row.file_path,
+      fileSize: Number(row.file_size) || 0,
+      category: row.category || "other",
+    }))
+    return { ok: true, documents }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to load project documents."
+    console.error("[getInitialDocumentsForProjectAction] Unexpected error:", err, { projectId })
+    return { ok: false, error: message }
+  }
+}
+
+export async function deleteInitialDocumentAction(
+  id: string,
+  projectId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const session = await requireOnboarded()
+    if (!UUID_PATTERN.test(id) || !UUID_PATTERN.test(projectId)) {
+      return { ok: false, error: "Invalid document parameters." }
+    }
+    const supabase = await createClient()
+    const { error } = await supabase
+      .from("initial_docs")
+      .delete()
+      .eq("id", id)
+      .eq("project_id", projectId)
+
+    if (error) {
+      console.error("[deleteInitialDocumentAction] Database error:", error, { id, projectId })
+      return { ok: false, error: error.message || "Failed to delete document record." }
+    }
+    revalidatePath("/initial-documents")
+    revalidatePath(`/projects/${projectId}`)
+    return { ok: true }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to delete document."
+    console.error("[deleteInitialDocumentAction] Unexpected error:", err, { id, projectId })
+    return { ok: false, error: message }
+  }
+}
