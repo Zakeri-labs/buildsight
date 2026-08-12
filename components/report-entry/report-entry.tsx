@@ -20,6 +20,10 @@ function stageDisplayName(name: string) {
   return name.replace(/^\s*\d+\.\s*/, "")
 }
 
+function formatReportCount(count: number) {
+  return `${count} ${count === 1 ? "Report" : "Reports"}`
+}
+
 export function ReportEntry({
   projects,
   errorCode,
@@ -85,13 +89,9 @@ export function ReportEntry({
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4 md:space-y-5">
-      <div className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Stage reporting</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Report Entry</h1>
-          {linkedSiteVisitId ? <Badge variant="secondary">Linked to scheduled visit</Badge> : null}
-        </div>
-        <p className="text-sm text-muted-foreground">Choose a supervised project and stage to open the existing report response workflow.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Report Entry</h1>
+        {linkedSiteVisitId ? <Badge variant="secondary">Linked to scheduled visit</Badge> : null}
       </div>
 
       {errorCode ? (
@@ -217,13 +217,16 @@ export function ReportEntry({
                 {selectedProject.stages.length ? (
                   <div
                     ref={stageListRef}
-                    className="max-h-[13rem] w-full overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-border bg-card [scrollbar-gutter:stable]"
+                    className="max-h-[16rem] w-full overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-border bg-card [scrollbar-gutter:stable]"
                     role="listbox"
                     aria-label="Project stages"
                   >
                     <div className="divide-y divide-border">
                       {selectedProject.stages.map((stage, index) => {
                         const selected = selectedStageId === stage.id
+                        const reportsText = formatReportCount(stage.reportsCount ?? 0)
+                        const metaText = `${reportsText} · ${stage.checkedChecklistItems ?? 0}/${stage.totalChecklistItems ?? 0} · ${stage.progressPercentage ?? 0}%`
+
                         return (
                           <button
                             key={stage.id}
@@ -232,7 +235,7 @@ export function ReportEntry({
                             aria-selected={selected}
                             onClick={() => setSelectedStageId(stage.id)}
                             className={cn(
-                              "flex min-h-[3.2rem] w-full items-center gap-3 px-3 py-2 text-left transition-colors focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40",
+                              "flex min-h-[3.6rem] w-full items-start gap-3 px-3 py-2.5 text-left transition-colors focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40",
                               selected
                                 ? "bg-primary/10 text-foreground shadow-[inset_3px_0_0_0_var(--primary)]"
                                 : "bg-card text-card-foreground hover:bg-muted/40",
@@ -240,13 +243,24 @@ export function ReportEntry({
                           >
                             <span
                               className={cn(
-                                "flex h-7 w-9 shrink-0 items-center justify-center rounded-md text-[11px] font-bold tabular-nums",
+                                "mt-0.5 flex h-7 w-9 shrink-0 items-center justify-center rounded-md text-[11px] font-bold tabular-nums",
                                 selected ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary",
                               )}
                             >
                               {stageNumber(index)}
                             </span>
-                            <span className="min-w-0 flex-1 text-sm font-semibold leading-snug">{stageDisplayName(stage.name)}</span>
+                            <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
+                              <span className="min-w-0 flex-1 text-sm font-semibold leading-snug">{stageDisplayName(stage.name)}</span>
+                              <div className="flex shrink-0 flex-col items-end gap-1 text-right">
+                                <span className="text-xs font-medium text-muted-foreground">{metaText}</span>
+                                <div className="h-1 w-full overflow-hidden rounded-full bg-muted/60">
+                                  <div
+                                    className="h-full bg-primary transition-all duration-300"
+                                    style={{ width: `${Math.min(100, Math.max(0, stage.progressPercentage ?? 0))}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
                           </button>
                         )
                       })}
