@@ -29,12 +29,18 @@ export type InitialProjectDocumentSelection = {
   id: string
   category: InitialDocumentCategory
   uploadCategory: InitialDocumentUploadCategory
-  file: File
+  file?: File
+  fileName?: string
+  fileSize?: number
+  filePath?: string
+  isExisting?: boolean
 }
 
-function fileIcon(file: File) {
-  const extension = getInitialDocumentExtension(file.name)
-  if (file.type.startsWith("image/")) return FileImage
+function fileIcon(fileOrName: File | string) {
+  const fileName = typeof fileOrName === "string" ? fileOrName : fileOrName.name
+  const fileType = typeof fileOrName === "string" ? "" : fileOrName.type
+  const extension = getInitialDocumentExtension(fileName)
+  if (fileType.startsWith("image/") || ["png", "jpg", "jpeg", "webp", "gif"].includes(extension)) return FileImage
   if (["xls", "xlsx", "csv"].includes(extension)) return FileSpreadsheet
   if (["ppt", "pptx"].includes(extension)) return Presentation
   if (extension === "zip") return FileArchive
@@ -77,7 +83,7 @@ export function ProjectInitialDocumentUploadStep({
     const existingKeys = new Set(
       retained
         .filter((selection) => selection.uploadCategory === category.value)
-        .map((selection) => `${selection.file.name}:${selection.file.size}:${selection.file.lastModified}`),
+        .map((selection) => selection.file ? `${selection.file.name}:${selection.file.size}:${selection.file.lastModified}` : `${selection.fileName}:${selection.fileSize}`),
     )
     const additions = files.flatMap((file) => {
       const key = `${file.name}:${file.size}:${file.lastModified}`
@@ -139,7 +145,9 @@ export function ProjectInitialDocumentUploadStep({
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {dedicatedCategories.map((category) => {
           const selected = selections.find((selection) => selection.uploadCategory === category.value)
-          const Icon = selected ? fileIcon(selected.file) : FileText
+          const name = selected ? (selected.file ? selected.file.name : (selected.fileName || "Document")) : ""
+          const size = selected ? (selected.file ? selected.file.size : (selected.fileSize || 0)) : 0
+          const Icon = selected ? (selected.file ? fileIcon(selected.file) : fileIcon(name)) : FileText
           return (
             <div
               key={category.value}
@@ -178,14 +186,14 @@ export function ProjectInitialDocumentUploadStep({
                   <div className="flex items-center gap-2.5 rounded-xl border bg-muted/25 px-3 py-3">
                     <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background text-primary shadow-sm"><Icon className="size-4" /></span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium" title={selected.file.name}>{selected.file.name}</p>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">{formatInitialDocumentFileSize(selected.file.size)}</p>
+                      <p className="truncate text-xs font-medium" title={name}>{name}</p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">{formatInitialDocumentFileSize(size)}</p>
                     </div>
                     <button
                       type="button"
                       disabled={disabled}
                       onClick={() => removeSelection(selected.id)}
-                      aria-label={isArabic ? `إزالة ${selected.file.name}` : `Remove ${selected.file.name}`}
+                      aria-label={isArabic ? `إزالة ${name}` : `Remove ${name}`}
                       className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                     >
                       <Trash2 className="size-3.5" />
@@ -293,19 +301,21 @@ function AdditionalDocumentsCard({
       {selections.length ? (
         <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {selections.map((selection) => {
-            const Icon = fileIcon(selection.file)
+            const name = selection.file ? selection.file.name : (selection.fileName || "Document")
+            const size = selection.file ? selection.file.size : (selection.fileSize || 0)
+            const Icon = selection.file ? fileIcon(selection.file) : fileIcon(name)
             return (
               <div key={selection.id} className="flex items-center gap-2.5 rounded-xl border bg-muted/25 px-3 py-2.5">
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background text-primary shadow-sm"><Icon className="size-4" /></span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-medium" title={selection.file.name}>{selection.file.name}</p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">{formatInitialDocumentFileSize(selection.file.size)}</p>
+                  <p className="truncate text-xs font-medium" title={name}>{name}</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">{formatInitialDocumentFileSize(size)}</p>
                 </div>
                 <button
                   type="button"
                   disabled={disabled}
                   onClick={() => onRemove(selection.id)}
-                  aria-label={isArabic ? `إزالة ${selection.file.name}` : `Remove ${selection.file.name}`}
+                  aria-label={isArabic ? `إزالة ${name}` : `Remove ${name}`}
                   className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                 >
                   <Trash2 className="size-3.5" />
@@ -315,16 +325,11 @@ function AdditionalDocumentsCard({
           })}
         </div>
       ) : (
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={onChoose}
-          className="mt-4 flex min-h-24 w-full flex-col items-center justify-center rounded-xl border border-dashed px-4 py-4 text-center transition-colors hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-        >
-          <CloudUpload className="mb-1.5 size-5 text-primary" />
-          <span className="text-xs font-semibold">{isArabic ? "اسحب الملفات وأفلتها هنا" : "Drag and drop files here"}</span>
-          <span className="mt-1 text-[11px] text-muted-foreground">{isArabic ? "أو اختر الملفات" : "or choose files"}</span>
-        </button>
+        <div className="mt-4 flex flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 text-center">
+          <CloudUpload className="mb-2 size-6 text-primary" />
+          <span className="text-xs font-semibold">{isArabic ? "سحب وإفلات الملفات هنا" : "Drag and drop files here"}</span>
+          <span className="mt-1 text-[11px] text-muted-foreground">{isArabic ? "أو اختر ملفات من جهازك" : "or choose files"}</span>
+        </div>
       )}
     </div>
   )

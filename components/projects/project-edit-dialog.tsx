@@ -276,9 +276,11 @@ export function ProjectEditDialog({
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadingFile, setUploadingFile] = useState<string | null>(null)
   const [submissionMessage, setSubmissionMessage] = useState<string | null>(null)
+  const [removedDocumentIds, setRemovedDocumentIds] = useState<string[]>([])
 
   const [supervisingOrgId, setSupervisingOrgId] = useState<string>("")
   const hasInitializedRef = useRef(false)
+  const hasInitializedDocsRef = useRef(false)
 
   const projectStartDateInputRef = useRef<HTMLInputElement>(null)
   const supervisionStartDateInputRef = useRef<HTMLInputElement>(null)
@@ -288,7 +290,7 @@ export function ProjectEditDialog({
     const supabase = createClient()
     async function loadData() {
       try {
-        const [{ data: orgs }, { data: profiles }, { data: currentProjectRow }, { data: ownerRows }] = await Promise.all([
+        const [{ data: orgs }, { data: profiles }, { data: currentProjectRow }, { data: ownerRows }, { data: docRows }] = await Promise.all([
           supabase
             .from("organizations")
             .select("id, name, status, organization_category, registration_number, address, postal_code, phone")
@@ -307,6 +309,11 @@ export function ProjectEditDialog({
             .select("id, owner_order, name, contact_name, contact_email, contact_phone, viewer_user_id, viewer_invitation_id")
             .eq("project_id", project.id)
             .order("owner_order", { ascending: true }),
+          supabase
+            .from("initial_docs")
+            .select("id, category, file_name, original_file_name, file_path, file_size")
+            .eq("project_id", project.id)
+            .order("created_at", { ascending: true }),
         ])
 
         if (!active) return
@@ -410,6 +417,36 @@ export function ProjectEditDialog({
             return null
           })
           setSelectedOwnerViewers(loadedViewers)
+        }
+
+        if (docRows && docRows.length > 0 && !hasInitializedDocsRef.current) {
+          hasInitializedDocsRef.current = true
+          const loadedDocs: InitialProjectDocumentSelection[] = docRows.map((doc) => {
+            const uploadCat =
+              getInitialDocumentUploadCategoryFromPath(doc.file_path)?.value ||
+              (doc.category === "approved_drawings"
+                ? "drawing"
+                : doc.category === "consultant_agreement"
+                ? "supervision_agreement"
+                : doc.category === "contractor_agreement"
+                ? "contract_agreement"
+                : doc.category === "permits_approvals"
+                ? "approval_document"
+                : doc.category === "initial_site_reports"
+                ? "test_reports"
+                : "additional_documents")
+
+            return {
+              id: doc.id,
+              category: getInitialDocumentCategory(doc.category).value,
+              uploadCategory: uploadCat as InitialDocumentUploadCategory,
+              fileName: doc.original_file_name || doc.file_name,
+              fileSize: Number(doc.file_size) || 0,
+              filePath: doc.file_path,
+              isExisting: true,
+            }
+          })
+          setInitialDocuments(loadedDocs)
         }
       } catch {
         // Safe fallback for background lookups
@@ -674,11 +711,11 @@ export function ProjectEditDialog({
     setError(null)
   }
 
-  function selectOwnerViewer(ownerIndex: number, viewer: ProjectOwnerViewerOption) {
-    setSelectedOwnerViewers((current) => current.map((item, i) => (i === ownerIndex ? viewer : item)))
+  function selectOwnerViewer(index: number, viewer: ProjectOwnerViewerOption) {
+    setSelectedOwnerViewers((current) => current.map((item, i) => (i === index ? viewer : item)))
     setOwners((current) =>
       current.map((owner, i) =>
-        i === ownerIndex
+        i === index
           ? {
               ...owner,
               name: viewer.ownerName,
@@ -692,8 +729,8 @@ export function ProjectEditDialog({
     setError(null)
   }
 
-  function useManualOwnerEntry(ownerIndex: number) {
-    setSelectedOwnerViewers((current) => current.map((item, i) => (i === ownerIndex ? null : item)))
+  function useManualOwnerEntry(index: number) {
+    setSelectedOwnerViewers((current) => current.map((item, i) => (i === index ? null : item)))
     setError(null)
   }
 
@@ -749,8 +786,10 @@ export function ProjectEditDialog({
 
     if (targetStep === 4) {
       for (const selection of initialDocuments) {
-        const err = validateInitialDocumentFile(selection.file)
-        if (err) return err
+        if (selection.file && !selection.isExisting) {
+          const err = validateInitialDocumentFile(selection.file)
+          if (err) return err
+        }
       }
     }
     return null
@@ -831,12 +870,17 @@ export function ProjectEditDialog({
           postalCode: contractorPostalCode.trim(),
           phone: contractorPhone.trim(),
         },
-        owners: owners.map((o) => ({
-          name: o.name.trim(),
-          contactName: o.contactName.trim() || null,
-          contactEmail: o.contactEmail.trim().toLowerCase() || null,
-          contactPhone: o.contactPhone.trim() || null,
-        })),
+        owners: owners.map((o, idx) => {
+          const viewer = selectedOwnerViewers[idx]
+          return {
+            name: o.name.trim(),
+            contactName: o.contactName.trim() || null,
+            contactEmail: o.contactEmail.trim().toLowerCase() || null,
+            contactPhone: o.contactPhone.trim() || null,
+            viewerUserId: viewer?.source === "registered" ? viewer.id : null,
+            viewerInvitationId: viewer?.source === "pending" ? viewer.id : null,
+          }
+        }),
       })
 
       if (!result.ok) {
@@ -845,7 +889,6 @@ export function ProjectEditDialog({
         return
       }
 
-      // Upload extra project gallery images if selected
       if (projectImages.length > 0) {
         setSubmissionMessage(copy.uploading)
         const supabase = createClient()
@@ -867,13 +910,18 @@ export function ProjectEditDialog({
         }
       }
 
-      // Upload initial documents if selected
-      if (initialDocuments.length > 0) {
+      const supabase = createClient()
+      if (removedDocumentIds.length > 0) {
+        await supabase.from("initial_docs").delete().in("id", removedDocumentIds)
+      }
+
+      const newInitialDocSelections = initialDocuments.filter((sel) => sel.file && !sel.isExisting)
+      if (newInitialDocSelections.length > 0) {
         setSubmissionMessage(copy.uploading)
-        const supabase = createClient()
         const { data: { session } } = await supabase.auth.getSession()
         if (session) {
-          for (const selection of initialDocuments) {
+          for (const selection of newInitialDocSelections) {
+            if (!selection.file) continue
             const storagePath = `${project.id}/${session.user.id}/${selection.id}/category-${selection.uploadCategory}/${sanitizeInitialDocumentFileName(selection.file.name)}`
             await uploadStorageAsset(selection.file, storagePath, session.access_token)
             await saveInitialDocumentAction({
@@ -988,11 +1036,14 @@ export function ProjectEditDialog({
                   <button
                     type="button"
                     onClick={() => {
-                      if (!pending && number < step) setStep(number)
+                      if (!pending) {
+                        setError(null)
+                        setStep(number)
+                      }
                     }}
                     className={cn(
                       "relative z-10 flex w-full flex-col items-center gap-1.5 text-center transition-opacity",
-                      number < step && "cursor-pointer hover:opacity-80",
+                      "cursor-pointer hover:opacity-80",
                     )}
                   >
                     <span
