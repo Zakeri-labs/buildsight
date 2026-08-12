@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge"
 import { useI18n } from "@/lib/i18n"
 import type { ProjectRecord } from "@/lib/mock-data"
 import { InitialDocumentsList } from "@/components/initial-documents/initial-documents-list"
+import { AddProjectDocumentModal } from "@/components/initial-documents/add-project-document-modal"
 import type { InitialDocumentListItem } from "@/lib/initial-documents/types"
 import { ProjectParticipants, type ProjectParticipant } from "@/components/projects/project-participants"
 import type { ProjectParticipantUserOption } from "@/lib/projects/project-participant-types"
@@ -786,19 +787,29 @@ export function ProjectDetail({
             <FolderOpen className="size-5 shrink-0 text-primary" />
             {labels.projectDocuments}
           </CardTitle>
-          <Link
-            href={`/initial-documents?project=${encodeURIComponent(currentProject.id)}`}
-            className={cn(
-              buttonVariants({ variant: "outline", size: "lg" }),
-              "h-9 shrink-0",
-              isMember && "max-md:size-8 max-md:p-0",
-            )}
-            aria-label={labels.viewAllDocuments}
-            title={labels.viewAllDocuments}
-          >
-            <FolderOpen className="size-4" />
-            <span className="hidden sm:inline">{labels.viewAllDocuments}</span>
-          </Link>
+          <div className="flex items-center gap-2">
+            {canEditProject || canManageImages ? (
+              <AddProjectDocumentModal
+                projectId={currentProject.id}
+                buttonVariant="default"
+                buttonSize="default"
+                buttonClassName="h-9 shrink-0"
+              />
+            ) : null}
+            <Link
+              href={`/initial-documents?project=${encodeURIComponent(currentProject.id)}`}
+              className={cn(
+                buttonVariants({ variant: "outline", size: "lg" }),
+                "h-9 shrink-0",
+                isMember && "max-md:size-8 max-md:p-0",
+              )}
+              aria-label={labels.viewAllDocuments}
+              title={labels.viewAllDocuments}
+            >
+              <FolderOpen className="size-4" />
+              <span className="hidden sm:inline">{labels.viewAllDocuments}</span>
+            </Link>
+          </div>
         </CardHeader>
         <CardContent className={cn("p-0", isMember && !documentsOpen && "max-md:hidden")}>
           <InitialDocumentsList

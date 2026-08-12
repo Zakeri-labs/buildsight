@@ -24,6 +24,7 @@ import {
 import type { InitialDocumentListItem } from "@/lib/initial-documents/types"
 import { useI18n } from "@/lib/i18n"
 import { ProjectOverviewTableColumns, projectOverviewTableCellClass } from "@/components/projects/project-overview-table-columns"
+import { AddProjectDocumentModal } from "@/components/initial-documents/add-project-document-modal"
 import { cn } from "@/lib/utils"
 
 export type { InitialDocumentListItem } from "@/lib/initial-documents/types"
@@ -179,7 +180,7 @@ export function InitialDocumentsList({
               <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input value={search} onChange={(event: ChangeEvent<HTMLInputElement>) => setSearch(event.target.value)} placeholder={copy.search} className="h-10 rounded-xl ps-9" />
             </div>
-            <div className="grid min-w-0 grid-cols-2 gap-2 md:contents">
+            <div className="grid min-w-0 grid-cols-2 gap-2 md:flex md:items-center md:gap-3">
               <Select value={category} onValueChange={(value: unknown) => setCategory(typeof value === "string" ? value : "all")}>
                 <SelectTrigger className="h-10 min-w-0 w-full rounded-xl px-3 md:w-56">
                   <SelectValue>{(value: unknown) => value === "all" ? copy.allCategories : categoryOptions.find((item) => item.value === value)?.label ?? copy.allCategories}</SelectValue>
@@ -201,6 +202,12 @@ export function InitialDocumentsList({
                   <SelectItem value="file_size">{copy.fileSize}</SelectItem>
                 </SelectContent>
               </Select>
+              {selectedProjectId ? (
+                <AddProjectDocumentModal
+                  projectId={selectedProjectId}
+                  buttonClassName="h-10 rounded-xl font-medium shrink-0 max-md:col-span-2"
+                />
+              ) : null}
             </div>
           </div>
             </>
