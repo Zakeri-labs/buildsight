@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Download, Languages, Loader2 } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import type { ProjectStageTranslationSummary } from "@/lib/db/project-stages"
@@ -71,6 +71,53 @@ export function StageTranslationActions({
   )
   const [busy, setBusy] = useState<PdfKind | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const isProcessing = Boolean(
+    translation && ["pending", "processing", "queued"].includes(translation.status),
+  )
+
+  useEffect(() => {
+    if (translation.status === "completed" || translation.status === "failed" || translation.status === "error") {
+      return
+    }
+
+    let isMounted = true
+    const interval = setInterval(async () => {
+      try {
+        const params = new URLSearchParams({
+          projectId,
+          stageId,
+          responseId,
+          ...(termId ? { termId } : {}),
+          statusOnly: "1",
+          background: "1",
+        })
+        const res = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
+        if (!res.ok) return
+        const payload = await res.json()
+        const fetched = payload?.data?.translation
+        if (isMounted && fetched) {
+          setTranslation((current) => ({
+            ...current,
+            id: fetched.id || current.id,
+            status: fetched.status,
+            generatedAt: fetched.generatedAt || current.generatedAt,
+            originalPdfPath: fetched.originalPdfPath || current.originalPdfPath,
+            arabicPdfPath: fetched.arabicPdfPath || current.arabicPdfPath,
+            bilingualPdfPath: fetched.bilingualPdfPath || current.bilingualPdfPath,
+            translatedContent: fetched.translatedContent || current.translatedContent,
+          }))
+        }
+      } catch {
+        // Safe status poll - ignore errors
+      }
+    }, 3000)
+
+    return () => {
+      isMounted = false
+      clearInterval(interval)
+    }
+  }, [projectId, stageId, termId, responseId, translation.status])
 
   const stale = Boolean(
     translation.generatedAt && new Date(responseUpdatedAt).getTime() > new Date(translation.generatedAt).getTime(),
@@ -169,7 +216,8 @@ export function StageTranslationActions({
           }
           className={cn(buttonVariants({ size: btnSize, variant: inHeader ? "secondary" : "secondary" }), translateBtnClass)}
         >
-          <Languages className="size-4" />{copy.translate}
+          {isProcessing ? <Loader2 className="size-4 animate-spin" /> : <Languages className="size-4" />}
+          {copy.translate}
         </Link>
         <Button size={btnSize} variant="outline" className={downloadBtnClass} disabled={busy !== null || !directOriginalReady} title={!directOriginalReady ? copy.preparing : copy.english} onClick={() => void download("original")}>
           {busy === "original" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}{copy.english}

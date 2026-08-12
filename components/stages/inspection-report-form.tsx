@@ -684,18 +684,11 @@ export function InspectionReportForm({
             responseId: id,
           })
         }
-        if (isMember) {
-          router.replace(`/projects/${project.id}/stages`)
-          router.refresh()
-          return
-        }
       } else {
         setStatus(mode === "progress" ? "in_progress" : "draft")
         setSuccess(copy.saved)
       }
-      if (!response) {
-        router.replace(`/projects/${project.id}/stages/${routeStageId}/reports/${id}`)
-      }
+      router.replace(`/projects/${project.id}/stages/${routeStageId}/reports/${id}`)
       router.refresh()
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Unable to save the report.")
