@@ -55,6 +55,7 @@ export type ProjectUserRow = {
   avatarUrl: string | null
   accessRole: ProjectAccessRole
   status: MembershipStatus
+  lastSignInAt?: string | null
 }
 
 export type MemberRow = {
@@ -67,6 +68,7 @@ export type MemberRow = {
   organizationName: string
   role: OrganizationRole
   status: MembershipStatus
+  lastSignInAt?: string | null
 }
 
 export type InvitationRow = {
@@ -101,16 +103,25 @@ export type AdminConsoleData = {
 export async function loadAdminConsole(supervisingOrgId: string): Promise<AdminConsoleData> {
   const admin = createAdminClient()
 
-  const [{ data: orgs }, { data: projects }, { data: profiles }] = await Promise.all([
-    admin.from("organizations").select("id, name, type, organization_category, contact_person, email, phone, registration_number, address, postal_code, website, status").order("name"),
+  const [{ data: orgs }, { data: projects }, { data: profiles }, authUsersRes] = await Promise.all([
+    admin
+      .from("organizations")
+      .select(
+        "id, name, type, organization_category, contact_person, email, phone, registration_number, address, postal_code, website, status",
+      )
+      .order("name"),
     admin
       .from("projects")
       .select("id, name, code, location, latitude, longitude, status")
       .eq("supervising_organization_id", supervisingOrgId)
       .order("name"),
     admin.from("profiles").select("id, full_name, email, avatar_url"),
+    admin.auth.admin.listUsers({ perPage: 1000 }).catch(() => ({ data: { users: [] }, error: null })),
   ])
 
+  const lastSignInMap = new Map(
+    (authUsersRes.data?.users ?? []).map((u) => [u.id, u.last_sign_in_at ?? null]),
+  )
   const orgName = new Map((orgs ?? []).map((o) => [o.id, o.name]))
   const projectName = new Map((projects ?? []).map((p) => [p.id, p.name]))
   const profileMap = new Map(
@@ -176,6 +187,7 @@ export async function loadAdminConsole(supervisingOrgId: string): Promise<AdminC
       organizationName: orgName.get(m.organization_id) ?? "Unknown",
       role: m.role,
       status: m.status,
+      lastSignInAt: lastSignInMap.get(m.user_id) ?? null,
     }))
 
   const projectOrgs: ProjectOrgRow[] = (pom ?? [])
@@ -202,6 +214,7 @@ export async function loadAdminConsole(supervisingOrgId: string): Promise<AdminC
       avatarUrl: profileMap.get(r.user_id)?.avatarUrl ?? null,
       accessRole: r.access_role,
       status: r.status,
+      lastSignInAt: lastSignInMap.get(r.user_id) ?? null,
     }))
 
   const invitations: InvitationRow[] = (invites ?? []).map((i) => ({
