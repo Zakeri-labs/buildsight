@@ -277,6 +277,9 @@ export function ProjectEditDialog({
   const [uploadingFile, setUploadingFile] = useState<string | null>(null)
   const [submissionMessage, setSubmissionMessage] = useState<string | null>(null)
 
+  const [supervisingOrgId, setSupervisingOrgId] = useState<string>("")
+  const hasInitializedRef = useRef(false)
+
   const projectStartDateInputRef = useRef<HTMLInputElement>(null)
   const supervisionStartDateInputRef = useRef<HTMLInputElement>(null)
 
@@ -285,7 +288,7 @@ export function ProjectEditDialog({
     const supabase = createClient()
     async function loadData() {
       try {
-        const [{ data: orgs }, { data: profiles }, { data: currentProjectRow }] = await Promise.all([
+        const [{ data: orgs }, { data: profiles }, { data: currentProjectRow }, { data: ownerRows }] = await Promise.all([
           supabase
             .from("organizations")
             .select("id, name, status, organization_category, registration_number, address, postal_code, phone")
@@ -296,9 +299,14 @@ export function ProjectEditDialog({
             .select("id, full_name, email"),
           supabase
             .from("projects")
-            .select("assigned_user_id, phase, start_date, contractor_organization_id, contractor_registration_number, contractor_address, contractor_postal_code, contractor_phone, contractor")
+            .select("supervising_organization_id, assigned_user_id, assigned_supervisor_id, phase, start_date, contractor_organization_id, contractor_registration_number, contractor_address, contractor_postal_code, contractor_phone, contractor")
             .eq("id", project.id)
             .maybeSingle(),
+          supabase
+            .from("project_owners")
+            .select("id, owner_order, name, contact_name, contact_email, contact_phone, viewer_user_id, viewer_invitation_id")
+            .eq("project_id", project.id)
+            .order("owner_order", { ascending: true }),
         ])
 
         if (!active) return
@@ -329,6 +337,12 @@ export function ProjectEditDialog({
         }
 
         if (currentProjectRow) {
+          if (currentProjectRow.supervising_organization_id) {
+            setSupervisingOrgId(currentProjectRow.supervising_organization_id)
+          }
+          if (currentProjectRow.assigned_supervisor_id && !assignedSupervisorId) {
+            setAssignedSupervisorId(currentProjectRow.assigned_supervisor_id)
+          }
           if (currentProjectRow.assigned_user_id && !assignedUserId) {
             setAssignedUserId(currentProjectRow.assigned_user_id)
           }
@@ -356,6 +370,46 @@ export function ProjectEditDialog({
           if (currentProjectRow.contractor_phone && !contractorPhone) {
             setContractorPhone(currentProjectRow.contractor_phone)
           }
+        }
+
+        if (ownerRows && ownerRows.length > 0 && !hasInitializedRef.current) {
+          hasInitializedRef.current = true
+          const loadedOwners: OwnerDetails[] = ownerRows.map((row) => ({
+            name: row.name || "",
+            contactName: row.contact_name || "",
+            contactEmail: row.contact_email || "",
+            contactPhone: row.contact_phone || "",
+            idCardFile: null,
+          }))
+          setOwners(loadedOwners)
+
+          const loadedViewers: (ProjectOwnerViewerOption | null)[] = ownerRows.map((row) => {
+            if (row.viewer_user_id) {
+              const prof = profiles?.find((p) => p.id === row.viewer_user_id)
+              return {
+                id: row.viewer_user_id,
+                source: "registered" as const,
+                name: prof?.full_name?.trim() || prof?.email || row.name,
+                ownerName: row.name,
+                contactName: row.contact_name || "",
+                email: row.contact_email || prof?.email || "",
+                phone: row.contact_phone || "",
+              }
+            }
+            if (row.viewer_invitation_id) {
+              return {
+                id: row.viewer_invitation_id,
+                source: "pending" as const,
+                name: row.contact_email || row.name,
+                ownerName: row.name,
+                contactName: row.contact_name || "",
+                email: row.contact_email || "",
+                phone: row.contact_phone || "",
+              }
+            }
+            return null
+          })
+          setSelectedOwnerViewers(loadedViewers)
         }
       } catch {
         // Safe fallback for background lookups
@@ -1381,7 +1435,7 @@ export function ProjectEditDialog({
                     <div className="mb-4">
                       <ProjectOwnerViewerSelector
                         id={`edit-owner-${index}-viewer`}
-                        supervisingOrgId=""
+                        supervisingOrgId={supervisingOrgId || undefined}
                         selectedViewer={selectedOwnerViewers[index] ?? null}
                         onSelectViewer={(viewer) => selectOwnerViewer(index, viewer)}
                         onManualEntry={() => useManualOwnerEntry(index)}

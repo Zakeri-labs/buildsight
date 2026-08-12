@@ -364,6 +364,8 @@ export async function updateProject(input: {
     contactName?: string | null
     contactEmail?: string | null
     contactPhone?: string | null
+    viewerUserId?: string | null
+    viewerInvitationId?: string | null
   }>
   contractor?: {
     organizationId?: string | null
@@ -546,6 +548,21 @@ export async function updateProject(input: {
       .select("id, supervision_start_date")
       .single()
     if (error) throw error
+
+    if (input.owners !== undefined && input.owners.length > 0) {
+      await admin.from("project_owners").delete().eq("project_id", input.projectId)
+      const ownerRows = input.owners.map((owner, index) => ({
+        project_id: input.projectId,
+        owner_order: index + 1,
+        name: owner.name.trim(),
+        contact_name: owner.contactName?.trim() || null,
+        contact_email: owner.contactEmail?.trim().toLowerCase() || null,
+        contact_phone: owner.contactPhone?.trim() || null,
+        viewer_user_id: owner.viewerUserId?.trim() || null,
+        viewer_invitation_id: owner.viewerInvitationId?.trim() || null,
+      }))
+      await admin.from("project_owners").insert(ownerRows)
+    }
 
     if (input.supervisionStartDate !== undefined && updatedProject.supervision_start_date !== supervisionStartDate.date) {
       return { ok: false, error: "Supervision Start Date was not saved. Please try again." }
