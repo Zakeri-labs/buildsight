@@ -847,17 +847,6 @@ function drawFirstPageHeader(
     rtl,
   )
 
-  setLanguage(doc, rtl, 8.5, false)
-  doc.setTextColor(100, 116, 139)
-  writePdfText(
-    doc,
-    `${template.projectName}  ·  ${template.reportNumber}`,
-    rtl ? margin : pageWidth - margin,
-    headerH + 9,
-    { align: rtl ? "left" : "right" },
-    rtl,
-  )
-
   // Thin rule below title
   doc.setDrawColor(226, 232, 240)
   doc.setLineWidth(0.3)
