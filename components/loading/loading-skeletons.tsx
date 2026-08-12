@@ -9,6 +9,7 @@ type LoadingMessage =
   | "Preparing letters..."
   | "Preparing AI Summary..."
   | "Preparing translation workspace..."
+  | "Loading dashboard..."
 
 function SkeletonBlock({ className }: { className?: string }) {
   return <div aria-hidden="true" className={cn("loading-shimmer rounded-lg bg-slate-200/75 dark:bg-slate-800/80", className)} />
@@ -251,6 +252,110 @@ export function TranslationLoadingSkeleton() {
       <div className="grid items-start gap-5 lg:grid-cols-2">
         <TranslationColumnSkeleton />
         <TranslationColumnSkeleton rtl />
+      </div>
+    </RouteLoadingFrame>
+  )
+}
+
+// ─── Member Visit Row Skeleton ────────────────────────────────────────────────
+function MemberVisitRowSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-xl border bg-card">
+      <div className="grid min-h-[3.5rem] grid-cols-[3.125rem_minmax(0,1.35fr)_minmax(5.3rem,1fr)_2.25rem] items-stretch sm:min-h-[4.25rem] sm:grid-cols-[3.5rem_minmax(0,1.35fr)_minmax(6.5rem,1fr)_3rem]">
+        <div className="flex flex-col items-center justify-center border-r bg-slate-700/80 px-1">
+          <SkeletonBlock className="h-4 w-8 bg-slate-600" />
+          <SkeletonBlock className="mt-1 h-2.5 w-5 bg-slate-600" />
+        </div>
+        <div className="flex flex-col justify-center gap-1.5 px-2 py-1.5 sm:px-3">
+          <SkeletonBlock className="h-3.5 w-3/4" />
+          <SkeletonBlock className="h-2.5 w-1/2" />
+        </div>
+        <div className="flex flex-col justify-center gap-1.5 border-l px-2 py-1.5 sm:px-3">
+          <SkeletonBlock className="h-3 w-4/5" />
+          <SkeletonBlock className="h-2.5 w-2/5" />
+        </div>
+        <div className="flex flex-col items-center justify-center gap-1 border-l px-1 py-1">
+          <SkeletonBlock className="size-6 rounded-md sm:size-8 sm:rounded-lg" />
+          <SkeletonBlock className="size-6 rounded-md sm:size-8 sm:rounded-lg" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Member Request Row Skeleton ──────────────────────────────────────────────
+function MemberRequestRowSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-xl border bg-card">
+      <div className="grid min-h-[3rem] grid-cols-[3.125rem_minmax(0,1fr)_2.625rem] items-stretch lg:min-h-[5rem] lg:grid-cols-[3.5rem_minmax(0,1fr)_2.75rem]">
+        <div className="flex flex-col items-center justify-center gap-1 border-r bg-muted/30 px-1.5">
+          <SkeletonBlock className="h-5 w-7" />
+          <SkeletonBlock className="h-2.5 w-5" />
+        </div>
+        <div className="flex flex-col justify-center gap-1.5 px-2 py-1 sm:px-3">
+          <SkeletonBlock className="h-3.5 w-3/5" />
+          <SkeletonBlock className="h-2.5 w-2/5" />
+        </div>
+        <div className="flex items-center justify-center pr-1.5">
+          <SkeletonBlock className="size-8 rounded-lg lg:size-10 lg:rounded-xl" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function MemberHomepageLoadingSkeleton() {
+  return (
+    <RouteLoadingFrame message="Loading dashboard..." className="max-w-5xl">
+      {/* Summary cards — 3 columns */}
+      <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div
+            key={i}
+            className="relative min-w-0 overflow-hidden rounded-xl border border-border bg-card"
+          >
+            <div className="flex min-h-[5.5rem] flex-col justify-between gap-2 px-3 py-3">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-1">
+                <SkeletonBlock className="h-3 w-16 max-w-full sm:w-20" />
+                <SkeletonBlock className="size-3.5 rounded-sm" />
+              </div>
+              <SkeletonBlock className="h-8 w-10" />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Visit Compliance bar */}
+      <div className="mt-5 space-y-2">
+        <SkeletonBlock className="h-5 w-36" />
+        <SkeletonBlock className="h-16 w-full rounded-xl" />
+      </div>
+
+      {/* Visit Requests section */}
+      <div className="mt-5 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <SkeletonBlock className="h-6 w-32" />
+          <SkeletonBlock className="h-4 w-4" />
+        </div>
+        <div className="space-y-1 lg:space-y-2.5">
+          <MemberRequestRowSkeleton />
+          <MemberRequestRowSkeleton />
+          <MemberRequestRowSkeleton />
+        </div>
+      </div>
+
+      {/* Today's Visits section */}
+      <div className="mt-5 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <SkeletonBlock className="h-6 w-28" />
+          <SkeletonBlock className="h-4 w-4" />
+        </div>
+        <div className="space-y-1.5 sm:space-y-2">
+          <MemberVisitRowSkeleton />
+          <MemberVisitRowSkeleton />
+          <MemberVisitRowSkeleton />
+          <MemberVisitRowSkeleton />
+        </div>
       </div>
     </RouteLoadingFrame>
   )
