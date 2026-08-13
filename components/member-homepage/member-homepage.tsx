@@ -121,88 +121,128 @@ function RequestRow({
 function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
   const scheduledTime = formatTime(visit.scheduledTime)
   const isCompleted = visit.status === "completed"
-  const actionClass =
-    "inline-flex size-[1.625rem] shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-9 sm:rounded-lg"
-  const disabledActionClass = `${actionClass} cursor-not-allowed opacity-40 hover:bg-background hover:text-muted-foreground`
 
   return (
     <Card
       size="sm"
       className={cn(
-        "overflow-hidden py-0",
-        isCompleted && "bg-muted/20 opacity-80 ring-1 ring-inset ring-green-200/60 dark:ring-green-900/50",
+        "overflow-hidden py-0 border border-border shadow-2xs transition-all",
+        isCompleted && "bg-muted/30 border-green-200/80 dark:border-green-900/50",
       )}
     >
-      <div className="grid min-h-[3.5rem] grid-cols-[3.125rem_minmax(0,1.35fr)_minmax(5.3rem,1fr)_2.25rem] items-stretch sm:min-h-[4.25rem] sm:grid-cols-[3.5rem_minmax(0,1.35fr)_minmax(6.5rem,1fr)_3rem]">
-        <div className={cn(
-          "flex min-w-0 flex-col items-center justify-center bg-[#16294a] px-1 text-center text-white lg:bg-sidebar",
-          isCompleted && "bg-[#16294a]/80 lg:bg-sidebar/80",
-        )}>
+      <div className="flex min-h-[4.25rem] items-stretch">
+        {/* TIME BADGE (Dark navy #16294a) */}
+        <div
+          className={cn(
+            "flex w-14 shrink-0 flex-col items-center justify-center bg-[#16294a] px-1 text-center text-white sm:w-16",
+            isCompleted && "bg-[#16294a]/80",
+          )}
+        >
           {scheduledTime ? (
             <>
-              <span className="text-[11px] font-bold leading-3 tabular-nums sm:text-sm sm:leading-4">{scheduledTime.time}</span>
-              <span className="mt-px text-[8px] font-bold uppercase leading-2.5 tracking-wide text-white/85 sm:mt-0.5 sm:text-[10px] sm:leading-3">{scheduledTime.period}</span>
+              <span className="text-xs font-bold leading-none tabular-nums sm:text-sm">{scheduledTime.time}</span>
+              <span className="mt-1 text-[9px] font-bold uppercase leading-none text-white/80 sm:text-[10px]">{scheduledTime.period}</span>
             </>
           ) : (
-            <span className="text-sm font-semibold text-white/75">—</span>
+            <span className="text-xs font-semibold text-white/75">—</span>
           )}
         </div>
 
-        <div className="flex min-w-0 flex-col justify-center px-1.5 py-0.5 sm:px-2.5 sm:py-1.5">
-          <p className="min-w-0 truncate text-[10px] font-semibold leading-3 sm:text-sm sm:leading-4">{visit.projectName}</p>
+        {/* MIDDLE CONTENT AREA: Project Name, Code, Stage Name, Visit Number */}
+        <div className="flex min-w-0 flex-1 flex-col justify-center px-3 py-2">
+          <div className="flex min-w-0 items-baseline justify-between gap-1.5">
+            <h3 className="truncate text-xs font-bold text-foreground sm:text-sm">
+              {visit.projectName}
+            </h3>
+            {isCompleted ? (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-800 dark:bg-green-950/60 dark:text-green-300">
+                <CheckCircle2 className="size-3" aria-hidden="true" />
+                Completed
+              </span>
+            ) : null}
+          </div>
+
           {visit.projectCode ? (
-            <p className="mt-px min-w-0 whitespace-normal break-words [overflow-wrap:anywhere] text-[8px] leading-[9px] text-muted-foreground sm:mt-0.5 sm:text-[11px] sm:leading-4">
+            <p className="truncate font-mono text-[11px] text-muted-foreground">
               {visit.projectCode}
             </p>
           ) : null}
+
+          {(visit.stageName || visit.visitNumber) ? (
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-600 dark:text-slate-400">
+              {visit.stageName ? (
+                <span className="font-medium text-foreground">{visit.stageName}</span>
+              ) : null}
+              {visit.visitNumber ? (
+                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  Visit #{visit.visitNumber}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
-        <div className="flex min-w-0 flex-col justify-center border-l px-1.5 py-0.5 sm:px-2.5 sm:py-1.5">
-          {visit.stageName ? (
-            <p className="line-clamp-2 min-w-0 break-words text-[9px] font-semibold leading-[10px] sm:text-xs sm:leading-4">{visit.stageName}</p>
-          ) : null}
-          {visit.visitNumber ? (
-            <p className="mt-px whitespace-nowrap text-[8px] leading-[9px] text-muted-foreground sm:mt-0.5 sm:text-[11px] sm:leading-4">Visit No. {visit.visitNumber}</p>
-          ) : null}
+        {/* RIGHT ACTION BUTTONS: Large, standard touch targets (size-9 / 36px) */}
+        <div className="flex shrink-0 items-center gap-1.5 border-s border-border bg-muted/10 px-2.5 py-2">
+          {/* Button 1: Add Report */}
           {isCompleted ? (
-            <span className="mt-px inline-flex items-center gap-0.5 text-[7px] font-medium leading-[8px] text-green-700 dark:text-green-300 sm:mt-0.5 sm:text-[10px] sm:leading-3">
-              <CheckCircle2 className="size-2 sm:size-2.5" aria-hidden="true" />
-              Completed
-            </span>
-          ) : null}
-        </div>
-
-        <div className="flex flex-col items-center justify-center gap-0.5 border-l px-0.5 py-0.5 sm:gap-1 sm:py-1">
-          {isCompleted ? (
-            <button type="button" aria-label="Add report (completed visit)" aria-disabled="true" className={disabledActionClass} disabled>
-              <FilePlus2 className="size-3.5 sm:size-[18px]" aria-hidden="true" />
+            <button
+              type="button"
+              disabled
+              aria-label="Report completed"
+              className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed dark:border-slate-800 dark:bg-slate-900"
+            >
+              <FilePlus2 className="size-4" />
             </button>
           ) : visit.stageResponseHref ? (
-            <Link href={visit.stageResponseHref} aria-label="Open report entry" className={actionClass}>
-              <FilePlus2 className="size-3.5 sm:size-[18px]" aria-hidden="true" />
+            <Link
+              href={visit.stageResponseHref}
+              aria-label="Add report for this visit"
+              title="Add report"
+              className="inline-flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 active:scale-95"
+            >
+              <FilePlus2 className="size-4" />
             </Link>
           ) : (
-            <button type="button" aria-label="Open report entry" className={disabledActionClass} disabled>
-              <FilePlus2 className="size-3.5 sm:size-[18px]" aria-hidden="true" />
+            <button
+              type="button"
+              disabled
+              aria-label="Report unavailable"
+              className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed dark:border-slate-800 dark:bg-slate-900"
+            >
+              <FilePlus2 className="size-4" />
             </button>
           )}
+
+          {/* Button 2: Location / Map */}
           {isCompleted ? (
-            <button type="button" aria-label="Open project location in Google Maps (completed visit)" aria-disabled="true" className={disabledActionClass} disabled>
-              <MapPinned className="size-3.5 sm:size-[18px]" aria-hidden="true" />
+            <button
+              type="button"
+              disabled
+              aria-label="Location (completed)"
+              className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed dark:border-slate-800 dark:bg-slate-900"
+            >
+              <MapPinned className="size-4" />
             </button>
           ) : visit.googleMapsUrl ? (
             <a
               href={visit.googleMapsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label="Open project location in Google Maps"
-              className={actionClass}
+              aria-label="Open location in Google Maps"
+              title="Google Maps Location"
+              className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 hover:text-primary dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 active:scale-95"
             >
-              <MapPinned className="size-3.5 sm:size-[18px]" aria-hidden="true" />
+              <MapPinned className="size-4" />
             </a>
           ) : (
-            <button type="button" aria-label="Open project location in Google Maps" className={disabledActionClass} disabled>
-              <MapPinned className="size-3.5 sm:size-[18px]" aria-hidden="true" />
+            <button
+              type="button"
+              disabled
+              aria-label="Location unavailable"
+              className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed dark:border-slate-800 dark:bg-slate-900"
+            >
+              <MapPinned className="size-4" />
             </button>
           )}
         </div>
