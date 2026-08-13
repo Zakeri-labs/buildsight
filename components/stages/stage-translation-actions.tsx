@@ -149,7 +149,7 @@ export function StageTranslationActions({
     )
     if (kind !== "original" && isStale) throw new Error(copy.stale)
 
-    const exported = await exportTranslationPdf({ data, translation: record, kind })
+    const exported = await exportTranslationPdf({ data, translation: record, kind, appendClosingBlock: true })
     const storagePath = await storeTranslationPdf({
       projectId,
       translationId: record.id,

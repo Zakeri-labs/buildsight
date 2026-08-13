@@ -7,10 +7,12 @@ import {
   AlertCircle,
   ArrowLeft,
   Bold,
+  Building2,
   Check,
   CheckCircle2,
   ChevronDown,
   ClipboardCheck,
+  Copy,
   Download,
   FileDown,
   FileText,
@@ -25,10 +27,12 @@ import {
   MessageSquare,
   Mic,
   MicOff,
+  Phone,
   Plus,
   Redo2,
   Save,
   Send,
+  Share2,
   ShieldCheck,
   Sparkles,
   Table2,
@@ -36,6 +40,7 @@ import {
   Underline,
   Undo2,
   UploadCloud,
+  User,
   Wand2,
   X,
 } from "lucide-react"
@@ -796,12 +801,14 @@ export function InspectionReportForm({
                   translation: translationData.translation,
                   kind: "original",
                   ccRecipients: translationData.ccRecipients ?? [],
+                  appendClosingBlock: true,
                 }),
                 exportTranslationPdf({
                   data: translationData,
                   translation: translationData.translation,
                   kind: "bilingual",
                   ccRecipients: translationData.ccRecipients ?? [],
+                  appendClosingBlock: true,
                 }),
               ])
 
@@ -1616,6 +1623,11 @@ function EvidenceTile({ src, name, progress, onRemove }: { src: string; name: st
       ) : null}
       <div className="absolute inset-x-0 bottom-0 z-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-2 pb-1.5 pt-6 text-start">
         <p className="block w-full truncate text-[10px] font-medium leading-tight text-white drop-shadow-xs">{name}</p>
+      </div>
+    </div>
+  )
+}
+
 function DocumentRow({ name, href, progress, onRemove }: { name: string; href?: string; progress?: number; onRemove?: () => void }) {
   const body = <><span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><FileText className="size-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{name}</p>{progress !== undefined && progress > 0 ? <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary" style={{ width: `${progress}%` }} /></div> : <p className="text-xs text-muted-foreground">Supporting document</p>}</div>{href ? <FileDown className="size-4 text-muted-foreground" /> : null}</>
   return <div className="flex items-center gap-1.5 rounded-lg border px-1.5 py-1.5 md:gap-3 md:rounded-xl md:px-3 md:py-2.5">{href ? <a href={href} className="flex min-w-0 flex-1 items-center gap-3 hover:text-primary">{body}</a> : body}{onRemove ? <Button type="button" variant="ghost" size="icon-sm" onClick={onRemove} aria-label={`Remove ${name}`}><Trash2 className="size-4" /></Button> : null}</div>
@@ -1877,16 +1889,95 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
             <Redo2 />
           </EditorButton>
 
-          <span className="mx-0.5 h-5 w-px bg-border md:mx-1" />
-
-          <EditorButton label="Inline image" onClick={() => { saveSelection(); imageInputRef.current?.click() }} disabled={disabled || uploading}>
-            {uploading ? <Loader2 className="animate-spin" /> : <ImagePlus />}
+          <EditorButton
+            label={copiedText ? "متن کپی شد!" : "کپی متن بخش (Copy text)"}
+            onClick={handleCopyText}
+            disabled={disabled}
+          >
+            {copiedText ? <Check className="size-4 text-emerald-600 dark:text-emerald-400 animate-in zoom-in-50" /> : <Copy className="size-4" />}
           </EditorButton>
-          <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={imageSelected} />
+
+          <EditorButton
+            label="اشتراک‌گذاری در واتساپ (Share on WhatsApp)"
+            onClick={() => setWhatsappModalOpen(true)}
+            disabled={disabled}
+          >
+            <Share2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+          </EditorButton>
         </div>
         {uploadError ? <div className="border-b bg-red-50 px-4 py-2 text-xs text-red-700">{uploadError}</div> : null}
         <div ref={editorRef} contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-multiline="true" onFocus={saveSelection} onKeyUp={saveSelection} onMouseUp={saveSelection} onInput={() => onChange(editorRef.current?.innerHTML ?? "")} className={cn("inspection-editor bg-background px-3 py-3 text-sm outline-none md:min-h-56 md:px-7 md:py-5", disabled ? "min-h-0" : "min-h-36")} />
       </div>
+
+      {/* WhatsApp Share Modal */}
+      <Dialog open={whatsappModalOpen} onOpenChange={setWhatsappModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <MessageSquare className="size-5 text-emerald-600 dark:text-emerald-400" />
+              اشتراک‌گذاری در واتساپ (WhatsApp Share)
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              گیرنده را انتخاب کنید یا شماره تلفن دلخواه را وارد کرده و ارسال را بزنید.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-2 space-y-2.5">
+            {/* Project Registered Candidates with Phone */}
+            {ccCandidates.length > 0 ? (
+              ccCandidates.filter((c) => Boolean(c.phone)).map((candidate) => (
+                <div
+                  key={candidate.id}
+                  onClick={() => sendToWhatsapp(candidate.phone!)}
+                  className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border bg-card p-3 transition-colors hover:border-emerald-500/50 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex size-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
+                      {candidate.roleKey?.includes("contractor") ? <Building2 className="size-4" /> : <User className="size-4" />}
+                    </span>
+                    <div>
+                      <p className="text-xs font-semibold">{candidate.name} ({candidate.role})</p>
+                      <p className="text-[11px] text-muted-foreground dir-ltr">{candidate.phone}</p>
+                    </div>
+                  </div>
+                  <Button type="button" size="xs" variant="outline" className="h-7 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                    ارسال
+                  </Button>
+                </div>
+              ))
+            ) : null}
+
+            {/* Custom Phone Number Input */}
+            <div className="space-y-1.5 pt-2">
+              <label className="text-xs font-semibold text-foreground">وارد کردن شماره دلخواه (Custom Phone Number):</label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="tel"
+                  placeholder="مثال: 971501234567+ یا 0501234567"
+                  value={targetPhone}
+                  onChange={(e) => setTargetPhone(e.target.value)}
+                  className="h-9 text-xs dir-ltr"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => sendToWhatsapp()}
+                  className="h-9 gap-1.5 bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-700"
+                >
+                  <Send className="size-3.5" />
+                  ارسال
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setWhatsappModalOpen(false)}>
+              انصراف
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

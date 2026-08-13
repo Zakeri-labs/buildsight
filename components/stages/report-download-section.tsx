@@ -130,6 +130,7 @@ export function ReportDownloadSection({
         translation: data.translation,
         kind,
         ccRecipients: payload?.ccRecipients ?? [],
+        appendClosingBlock: true,
       })
 
       downloadPdfBlob(pdfResult.blob, pdfResult.filename)

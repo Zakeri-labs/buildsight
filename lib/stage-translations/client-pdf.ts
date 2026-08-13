@@ -4457,7 +4457,7 @@ export async function exportTranslationPdf({
   translation,
   kind,
   ccRecipients = [],
-  appendClosingBlock = false,
+  appendClosingBlock = true,
 }: {
   data: StageTranslationPageData
   translation: StageTranslationRecord | null
