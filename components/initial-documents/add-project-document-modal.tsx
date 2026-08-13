@@ -7,8 +7,6 @@ import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -29,6 +27,17 @@ import { uploadStorageAsset } from "@/lib/documents/storage-upload"
 import { createClient } from "@/lib/supabase/client"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+
+function getFileNameParts(filename: string) {
+  const lastDot = filename.lastIndexOf(".")
+  if (lastDot <= 0) {
+    return { name: filename, ext: "" }
+  }
+  return {
+    name: filename.slice(0, lastDot),
+    ext: filename.slice(lastDot),
+  }
+}
 
 export function AddProjectDocumentModal({
   projectId,
@@ -57,11 +66,12 @@ export function AddProjectDocumentModal({
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const fileParts = file ? getFileNameParts(file.name) : null
+
   const copy = isArabic
     ? {
         addDocument: "إضافة مستند",
         title: "إضافة مستند للمشروع",
-        description: "اختر فئة المستند وارفع الملف لحفظه ضمن مستندات المشروع.",
         categoryLabel: "فئة المستند",
         fileLabel: "الملف",
         dropPrompt: "اسحب الملف هنا أو انقر للاختيار",
@@ -75,7 +85,6 @@ export function AddProjectDocumentModal({
     : {
         addDocument: "Add Document",
         title: "Add Project Document",
-        description: "Select document category and upload file to attach it to this project.",
         categoryLabel: "Document Category",
         fileLabel: "File",
         dropPrompt: "Drag & drop file here or click to browse",
@@ -132,8 +141,8 @@ export function AddProjectDocumentModal({
   }
 
   async function handleUpload() {
-    if (!file) {
-      setErrorMessage(copy.selectFileError)
+    if (!file || pending) {
+      if (!file) setErrorMessage(copy.selectFileError)
       return
     }
 
@@ -208,19 +217,18 @@ export function AddProjectDocumentModal({
           <span>{triggerText || copy.addDocument}</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[460px]">
-        <DialogHeader>
-          <DialogTitle>{copy.title}</DialogTitle>
-          <DialogDescription>{copy.description}</DialogDescription>
+      <DialogContent className="sm:max-w-[480px] p-6 gap-0 rounded-2xl overflow-hidden">
+        <DialogHeader className="pb-4">
+          <DialogTitle className="text-base sm:text-lg font-semibold text-foreground">{copy.title}</DialogTitle>
         </DialogHeader>
 
         {errorMessage ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 text-xs font-medium text-destructive">
+          <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 text-xs font-medium text-destructive">
             {errorMessage}
           </div>
         ) : null}
 
-        <div className="space-y-4 py-2">
+        <div className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground">{copy.categoryLabel}</label>
             <Select
@@ -228,8 +236,13 @@ export function AddProjectDocumentModal({
               onValueChange={(val: unknown) => setUploadCategory(val as InitialDocumentUploadCategory)}
               disabled={pending}
             >
-              <SelectTrigger className="h-10 w-full rounded-xl">
-                <SelectValue />
+              <SelectTrigger className="h-10 w-full rounded-xl px-3 text-sm font-normal">
+                <SelectValue>
+                  {(val: unknown) => {
+                    const card = INITIAL_DOCUMENT_UPLOAD_CARDS.find((c) => c.value === val)
+                    return card ? (isArabic ? card.labelAr : card.label) : String(val)
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {INITIAL_DOCUMENT_UPLOAD_CARDS.map((card) => (
@@ -245,16 +258,19 @@ export function AddProjectDocumentModal({
             <label className="text-xs font-semibold text-foreground">{copy.fileLabel}</label>
 
             {file ? (
-              <div className="flex items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3">
-                <div className="flex min-w-0 items-center gap-2.5">
+              <div className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-muted/30 p-3 overflow-hidden">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
                   <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <FileText className="size-5" />
+                    <FileText className="size-5 shrink-0" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-medium text-foreground" title={file.name}>
-                      {file.name}
+                    <div className="flex min-w-0 items-center text-xs font-medium text-foreground" title={file.name}>
+                      <span className="truncate">{fileParts?.name}</span>
+                      {fileParts?.ext ? <span className="shrink-0">{fileParts.ext}</span> : null}
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      {formatInitialDocumentFileSize(file.size)}
                     </p>
-                    <p className="text-[11px] text-muted-foreground">{formatInitialDocumentFileSize(file.size)}</p>
                   </div>
                 </div>
                 {!pending ? (
@@ -262,11 +278,12 @@ export function AddProjectDocumentModal({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+                    className="size-7 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-destructive"
                     onClick={() => {
                       setFile(null)
                       if (fileInputRef.current) fileInputRef.current.value = ""
                     }}
+                    aria-label="Remove file"
                   >
                     <X className="size-4" />
                   </Button>
@@ -308,7 +325,7 @@ export function AddProjectDocumentModal({
                 <span>{copy.uploading}</span>
                 <span>{uploadProgress}%</span>
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                 <div
                   className="h-full bg-primary transition-all duration-200"
                   style={{ width: `${uploadProgress}%` }}
@@ -318,7 +335,7 @@ export function AddProjectDocumentModal({
           ) : null}
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <div className="mt-6 flex items-center justify-end gap-3 border-t border-border pt-4">
           <Button
             type="button"
             variant="outline"
@@ -331,10 +348,10 @@ export function AddProjectDocumentModal({
             {copy.cancel}
           </Button>
           <Button type="button" onClick={handleUpload} disabled={!file || pending}>
-            {pending ? <Loader2 className="me-2 size-4 animate-spin" /> : null}
+            {pending ? <Loader2 className="me-2 size-4 animate-spin shrink-0" /> : null}
             {pending ? copy.uploading : copy.upload}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   )
