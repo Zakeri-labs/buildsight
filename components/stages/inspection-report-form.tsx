@@ -1348,35 +1348,18 @@ export function InspectionReportForm({
                     : "Your report has been submitted. Download the English or bilingual PDF below."}
                 </DialogDescription>
               </DialogHeader>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <a
-                  href={`/projects/${project.id}/stages/${submitResult.stageId}/reports/${submitResult.responseId}/translate?kind=original`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    "inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-semibold shadow-sm transition-colors hover:bg-accent",
-                  )}
-                >
-                  <Download className="size-4 text-primary" />
-                  <span>EN</span>
-                </a>
-                <a
-                  href={`/projects/${project.id}/stages/${submitResult.stageId}/reports/${submitResult.responseId}/translate?kind=bilingual`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    "inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-semibold shadow-sm transition-colors hover:bg-accent",
-                  )}
-                >
-                  <Download className="size-4 text-primary" />
-                  <span>EN / AR</span>
-                </a>
+              <div className="mt-3">
+                <ReportDownloadSection
+                  projectId={project.id}
+                  stageId={submitResult.stageId}
+                  termId={isDirectStageReport ? undefined : reportDefinition.id}
+                  responseId={submitResult.responseId}
+                  initialTranslation={translation}
+                  responseUpdatedAt={new Date().toISOString()}
+                  locale={locale}
+                  variant="card"
+                />
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                {locale === "ar"
-                  ? "ملاحظة: قد تستغرق ملفات PDF بضع دقائق لإعدادها إذا كانت الترجمة لا تزال جارية."
-                  : "Note: PDFs may take a few minutes to prepare if translation is still processing."}
-              </p>
               <DialogFooter>
                 <Button
                   type="button"
