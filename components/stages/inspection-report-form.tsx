@@ -469,6 +469,9 @@ export function InspectionReportForm({
   const [busy, setBusy] = useState<"draft" | "progress" | "submit" | "approve" | "reject" | "inline" | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [submitModalOpen, setSubmitModalOpen] = useState(false)
+  type SubmitStep = { label: string; status: "pending" | "active" | "done" | "error" }
+  const [submitSteps, setSubmitSteps] = useState<SubmitStep[]>([])
   const [reviewComments, setReviewComments] = useState("")
   const [approvalHistory, setApprovalHistory] = useState(response?.approvals ?? [])
   const [expandedChecklistCommentId, setExpandedChecklistCommentId] = useState<string | null>(null)
@@ -612,6 +615,13 @@ export function InspectionReportForm({
     }
   }
 
+  const updateStep = (steps: SubmitStep[], index: number, status: SubmitStep["status"]) => {
+    const next = [...steps]
+    next[index] = { ...next[index], status }
+    setSubmitSteps(next)
+    return next
+  }
+
   const save = async (mode: "draft" | "progress" | "submit") => {
     if (!reportTitle.trim()) {
       setError(locale === "ar" ? "عنوان التقرير مطلوب." : "Report title is required.")
@@ -645,8 +655,33 @@ export function InspectionReportForm({
     setError(null)
     setSuccess(null)
     setBusy(mode)
+
+    // For submit mode: open progress modal with steps
+    const isSubmitMode = mode === "submit"
+    const hasImages = pendingImages.length > 0
+    const hasDocs = pendingDocuments.length > 0
+    let steps: SubmitStep[] = []
+    if (isSubmitMode) {
+      const stepList: string[] = [
+        locale === "ar" ? "حفظ بيانات التقرير" : "Saving report data",
+      ]
+      if (hasImages) stepList.push(locale === "ar" ? `رفع ${pendingImages.length} صورة` : `Uploading ${pendingImages.length} image${pendingImages.length > 1 ? "s" : ""}`)
+      if (hasDocs) stepList.push(locale === "ar" ? `رفع ${pendingDocuments.length} مستند` : `Uploading ${pendingDocuments.length} document${pendingDocuments.length > 1 ? "s" : ""}`)
+      stepList.push(locale === "ar" ? "إرسال التقرير للمراجعة" : "Submitting for review")
+      if (isDirectStageReport) {
+        stepList.push(locale === "ar" ? "جدولة الترجمة" : "Scheduling translation")
+        stepList.push(locale === "ar" ? "إعداد ملفات PDF" : "Preparing PDF files")
+      }
+      steps = stepList.map((label) => ({ label, status: "pending" as const }))
+      setSubmitSteps(steps)
+      setSubmitModalOpen(true)
+    }
+
     try {
+      let stepIdx = 0
+      if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
       const savedResponse = await ensureResponse(mode === "progress" ? "in_progress" : "draft")
+      if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
       const id = savedResponse.responseId
       let routeStageId = savedResponse.projectStageId
       if (ccSelection.internalUserIds.length || ccSelection.externalRecipients.length || initialCcRecipients.length) {
@@ -661,9 +696,19 @@ export function InspectionReportForm({
         })
         if (!ccResult.ok) throw new Error(ccResult.error)
       }
-      await uploadFiles(id, pendingImages, "evidence_image")
-      await uploadFiles(id, pendingDocuments, "document")
+      if (hasImages) {
+        if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
+        await uploadFiles(id, pendingImages, "evidence_image")
+        if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
+      }
+      if (hasDocs) {
+        if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
+        await uploadFiles(id, pendingDocuments, "document")
+        if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
+      }
+      if (!hasImages && !hasDocs && isSubmitMode) {} // no upload steps to advance
       if (mode === "submit") {
+        if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
         const reportInput = {
           projectId: project.id,
           responseId: id,
@@ -682,26 +727,38 @@ export function InspectionReportForm({
           ? await saveStageReportAction({ ...reportInput, stageId: routeStageId, siteVisitRequestId })
           : await saveTermResponseAction({ ...reportInput, termId: reportDefinition.id })
         if (!result.ok) throw new Error(result.error)
+        if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
         routeStageId = result.data.projectStageId
         setResolvedStageId(result.data.projectStageId)
         setVisitNumber(result.data.visitNumber)
         setStatus(result.data.status as ResponseStatus)
         setSuccess(copy.submitted)
         if (isDirectStageReport) {
+          if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
           enqueueStageTranslationJob({
             projectId: project.id,
             stageId: result.data.projectStageId,
             responseId: id,
           })
+          if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
+          // PDF step - mark as active then done (async, backend handles it)
+          if (isSubmitMode) { steps = updateStep(steps, stepIdx, "active") }
+          await new Promise((resolve) => setTimeout(resolve, 600))
+          if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done") }
         }
       } else {
         setStatus(mode === "progress" ? "in_progress" : "draft")
         setSuccess(copy.saved)
       }
+      // Brief pause so user can see the final done state before navigating
+      if (isSubmitMode) await new Promise((resolve) => setTimeout(resolve, 800))
+      setSubmitModalOpen(false)
       router.replace(`/projects/${project.id}/stages/${routeStageId}/reports/${id}`)
       router.refresh()
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Unable to save the report.")
+      // Mark current active step as error
+      setSubmitSteps((prev) => prev.map((s) => s.status === "active" ? { ...s, status: "error" } : s))
     } finally {
       setBusy(null)
     }
@@ -1213,6 +1270,68 @@ export function InspectionReportForm({
               {locale === "ar" ? "نعم، خروج" : "Yes, Exit"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Submit Progress Modal */}
+      <Dialog open={submitModalOpen} onOpenChange={() => {/* locked while submitting */}}>
+        <DialogContent className="sm:max-w-sm" onInteractOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Send className="size-4 text-primary" />
+              {locale === "ar" ? "جارٍ إرسال التقرير..." : "Submitting Report..."}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {locale === "ar" ? "يرجى الانتظار، لا تغلق هذه الصفحة." : "Please wait, do not close this page."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-1 space-y-2.5">
+            {submitSteps.map((step, idx) => (
+              <div key={idx} className="flex items-center gap-3">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-full">
+                  {step.status === "done" && (
+                    <span className="flex size-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
+                      <CheckCircle2 className="size-3.5" />
+                    </span>
+                  )}
+                  {step.status === "active" && (
+                    <span className="flex size-6 items-center justify-center rounded-full bg-primary/10">
+                      <Loader2 className="size-3.5 animate-spin text-primary" />
+                    </span>
+                  )}
+                  {step.status === "pending" && (
+                    <span className="flex size-6 items-center justify-center rounded-full border border-border bg-muted">
+                      <span className="size-1.5 rounded-full bg-muted-foreground/40" />
+                    </span>
+                  )}
+                  {step.status === "error" && (
+                    <span className="flex size-6 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400">
+                      <AlertCircle className="size-3.5" />
+                    </span>
+                  )}
+                </span>
+                <span className={cn(
+                  "text-sm leading-tight",
+                  step.status === "done" && "text-muted-foreground line-through",
+                  step.status === "active" && "font-semibold text-foreground",
+                  step.status === "pending" && "text-muted-foreground",
+                  step.status === "error" && "font-semibold text-red-600 dark:text-red-400",
+                )}>
+                  {step.label}
+                </span>
+              </div>
+            ))}
+            {submitSteps.some((s) => s.status === "error") && error ? (
+              <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+                {error}
+                <div className="mt-2">
+                  <Button type="button" size="sm" variant="outline" className="text-xs" onClick={() => { setSubmitModalOpen(false); setError(null) }}>
+                    {locale === "ar" ? "إغلاق والمحاولة مجدداً" : "Close and Retry"}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
