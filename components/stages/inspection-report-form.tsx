@@ -473,6 +473,7 @@ export function InspectionReportForm({
   type SubmitStep = { label: string; status: "pending" | "active" | "done" | "error" }
   const [submitSteps, setSubmitSteps] = useState<SubmitStep[]>([])
   const [submitResult, setSubmitResult] = useState<{ responseId: string; stageId: string } | null>(null)
+  const [basicOpen, setBasicOpen] = useState(false)
   const [reviewComments, setReviewComments] = useState("")
   const [approvalHistory, setApprovalHistory] = useState(response?.approvals ?? [])
   const [expandedChecklistCommentId, setExpandedChecklistCommentId] = useState<string | null>(null)
@@ -947,19 +948,36 @@ export function InspectionReportForm({
       </Card>
 
       <Card className="gap-0 py-0">
-        <CardHeader className="border-b border-blue-200/80 bg-blue-100/70 px-3 py-2.5 dark:border-blue-800/60 dark:bg-blue-900/50 md:px-6 md:py-3.5">
-          <CardTitle className="text-sm font-semibold text-blue-950 dark:text-blue-100 md:text-base">{copy.basic}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 p-3 md:gap-5 md:p-6">
-          <div className="space-y-2">
-            <Label htmlFor="report-title">{copy.title} <span className="text-destructive">*</span></Label>
-            <Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} />
+        <button
+          type="button"
+          onClick={() => setBasicOpen((o) => !o)}
+          className="flex w-full items-center justify-between border-b border-blue-200/80 bg-blue-100/70 px-3 py-2.5 text-start dark:border-blue-800/60 dark:bg-blue-900/50 md:cursor-default md:px-6 md:py-3.5"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-blue-950 dark:text-blue-100 md:text-base">{copy.basic}</p>
+            {!basicOpen && reportTitle ? (
+              <p className="mt-0.5 truncate text-[11px] text-blue-700/80 dark:text-blue-300 md:hidden">{reportTitle}</p>
+            ) : null}
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="report-subject">{copy.subject}</Label>
-            <Input id="report-subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Inspection location, package, activity, or reference" disabled={isLocked} />
-          </div>
-        </CardContent>
+          <ChevronDown
+            className={cn(
+              "size-4 shrink-0 text-blue-700/70 transition-transform duration-200 md:hidden",
+              basicOpen && "rotate-180",
+            )}
+          />
+        </button>
+        <div className={cn("md:block", basicOpen ? "block" : "hidden")}>
+          <CardContent className="grid gap-3 p-3 md:gap-5 md:p-6">
+            <div className="space-y-2">
+              <Label htmlFor="report-title">{copy.title} <span className="text-destructive">*</span></Label>
+              <Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="report-subject">{copy.subject}</Label>
+              <Input id="report-subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Inspection location, package, activity, or reference" disabled={isLocked} />
+            </div>
+          </CardContent>
+        </div>
       </Card>
 
       <CcRecipientsField
