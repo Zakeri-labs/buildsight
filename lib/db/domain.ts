@@ -190,17 +190,17 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
     if (result.error) throw result.error
     data = result.data
   } else {
-    const { data: requestedOrgMembership, error: requestedOrgMembershipError } = await admin
+    const { data: userMemberships, error: userMembershipsError } = await admin
       .from("organization_memberships")
-      .select("role")
-      .eq("organization_id", orgId)
+      .select("role, organization_id")
       .eq("user_id", userId)
       .eq("status", "active")
-      .limit(1)
-      .maybeSingle()
-    if (requestedOrgMembershipError) throw requestedOrgMembershipError
+    if (userMembershipsError) throw userMembershipsError
 
-    if (requestedOrgMembership?.role === "viewer") {
+    const matchedMembership = (userMemberships ?? []).find((m: any) => m.organization_id === orgId)
+    const effectiveRole = matchedMembership?.role ?? (userMemberships ?? [])[0]?.role
+
+    if (effectiveRole === "viewer") {
       // Viewer scope is intentionally narrower than generic organization access:
       // only immutable Owner links for this exact authenticated Viewer are allowed.
       const projectIds = await getViewerOwnedProjectIds(userId, orgId)
@@ -216,7 +216,7 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
         if (result.error) throw result.error
         data = result.data
       }
-    } else if (requestedOrgMembership?.role === "org_member") {
+    } else if (effectiveRole === "org_member") {
       // Members use the canonical explicit Project Supervisor assignment only.
       // Keeping this server-side prevents unrelated organization projects from
       // reaching Member lists, aggregate counts, shell project options, or
