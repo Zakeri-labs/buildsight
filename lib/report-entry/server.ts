@@ -101,19 +101,31 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
         .order("created_at", { ascending: false })
     }
 
-    const [projectResult, imageResult] = await Promise.all([
+    const [projectResult, imageResult, libraryStagesResult] = await Promise.all([
       admin
         .from("projects")
-        .select("id, name, code, location, region, status, image, assigned_supervisor_id")
+        .select("id, name, code, location, region, status, image, assigned_supervisor_id, supervising_organization_id")
         .in("id", projectIds),
       admin
         .from("project_images")
         .select("project_id, storage_path, order_index")
         .in("project_id", projectIds)
         .order("order_index", { ascending: true }),
+      admin
+        .from("stages")
+        .select("id, organization_id, name, description, sort_order, is_active")
+        .order("sort_order", { ascending: true }),
     ])
 
     if (projectResult.error) throw projectResult.error
+
+    const libraryStagesByOrg = new Map<string, any[]>()
+    for (const stage of libraryStagesResult.data ?? []) {
+      if ((stage as any).is_active === false || !(stage as any).organization_id) continue
+      const items = libraryStagesByOrg.get((stage as any).organization_id) ?? []
+      items.push(stage)
+      libraryStagesByOrg.set((stage as any).organization_id, items)
+    }
 
     const projectIdSet = new Set(projectIds)
     const allStageNameById = new Map<string, string>()
@@ -141,6 +153,35 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
         totalChecklistItems: 0,
         progressPercentage: 0,
       })
+      stagesByProject.set(projectId, items)
+    }
+
+    // Merge missing active template stages from organization library for each project
+    for (const projectRow of projectResult.data ?? []) {
+      const projectId = projectRow.id
+      const orgId = projectRow.supervising_organization_id
+      if (!isUuid(projectId) || !orgId) continue
+
+      const items = stagesByProject.get(projectId) ?? []
+      const existingNames = new Set(items.map((s) => s.name.trim().toLowerCase()))
+      const orgTemplateStages = libraryStagesByOrg.get(orgId) ?? []
+
+      for (const tStage of orgTemplateStages) {
+        const tName = typeof tStage.name === "string" ? tStage.name.trim() : ""
+        if (!tName || existingNames.has(tName.toLowerCase())) continue
+
+        items.push({
+          id: tStage.id,
+          name: tName,
+          sortOrder: Number.isFinite(Number(tStage.sort_order)) ? Number(tStage.sort_order) : items.length,
+          latestReport: null,
+          reportsCount: 0,
+          checkedChecklistItems: 0,
+          totalChecklistItems: 0,
+          progressPercentage: 0,
+        })
+        allStageNameById.set(tStage.id, tName)
+      }
       stagesByProject.set(projectId, items)
     }
 
