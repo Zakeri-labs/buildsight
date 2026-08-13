@@ -47,10 +47,11 @@ export async function POST(request: NextRequest) {
         "You are a senior civil engineer and construction correspondence consultant.",
         "Your task is to translate standard construction correspondence or letter text into professional, formal Arabic appropriate for official construction site correspondence (RFI, NCR, MIR, Submittal, Transmittal, Notice, Memorandum).",
         "CRITICAL REQUIREMENTS:",
-        "1. Professional Arabic: Translate accurately into formal, professional Arabic (Fusha / official business correspondence style).",
-        "2. Exact Details: Keep all numbers, dimensions, dates, axis/grid references, standards, codes, and project names EXACTLY unchanged.",
-        "3. Preserve Structure: Maintain paragraph breaks and bullet point structure (<ul>/<li>) cleanly.",
-        "4. Output Format: Return clean plain text or simple HTML suitable for an Arabic letter section.",
+        "1. ARABIC PLAIN TEXT ONLY: Return ONLY clean Arabic plain text. ABSOLUTELY NO HTML TAGS (do NOT use <div>, <p>, <h2>, <h1>, <br>, <span>, <strong>, etc.) and NO Markdown code fences (```).",
+        "2. NO RTL WRAPPER TAGS: Do NOT wrap output in <div dir=\"rtl\"> or any HTML attributes. Text direction is handled by the application UI.",
+        "3. PRESERVE STRUCTURE WITH LINE BREAKS: Maintain paragraph structure, section headers, and line breaks using plain newlines (\\n). Use double line breaks between paragraphs or sections.",
+        "4. PRESERVE PLACEHOLDERS & VALUES: Keep all bracketed placeholders (e.g. [Enter project or site name] -> [أدخل اسم المشروع أو الموقع]), numbers, dates, grid references, standards, and codes intact with their original bracket formatting.",
+        "5. Output Format: Start directly with the translated Arabic plain text content.",
       ].join("\n")
     } else {
       systemPrompt = [
@@ -104,8 +105,9 @@ export async function POST(request: NextRequest) {
       throw new Error("AI service returned empty result.")
     }
 
-    // Strip ```html markdown wrappers if present
-    if (resultText.startsWith("```")) {
+    if (action === "translate_ar") {
+      resultText = stripHtmlToPlainText(resultText)
+    } else if (resultText.startsWith("```")) {
       resultText = resultText.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim()
     }
 

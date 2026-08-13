@@ -34,6 +34,7 @@ import {
 import {
   formatBilingualDocumentDetails,
   parseBilingualDocumentDetails,
+  stripHtmlToPlainText,
 } from "@/lib/documents/bilingual-details"
 import { uploadDocumentAsset } from "@/lib/documents/storage-upload"
 import {
@@ -289,7 +290,7 @@ export function CreateLetterPage({
         throw new Error(data.error || "Unable to generate Arabic translation.")
       }
 
-      setArabicText(data.resultText)
+      setArabicText(stripHtmlToPlainText(data.resultText))
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to translate letter to Arabic.")
     } finally {
@@ -490,7 +491,7 @@ export function CreateLetterPage({
         if (!res.ok || !data.resultText) {
           throw new Error(data.error || "Unable to translate letter to Arabic.")
         }
-        currentArabicText = data.resultText
+        currentArabicText = stripHtmlToPlainText(data.resultText)
         setArabicText(currentArabicText)
         updateStepStatus("translate", "completed")
       }
