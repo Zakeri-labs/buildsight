@@ -1751,7 +1751,7 @@ function RichSectionEditor({
       const saved = localStorage.getItem("buildsight_preferred_speech_lang")
       if (saved && CONSTRUCTION_SPEECH_LANGUAGES.some((l) => l.code === saved)) return saved
     }
-    return "fa-IR"
+    return "ar-SA"
   })
 
   const handleSpeechLangChange = (newLang: string) => {
@@ -1828,7 +1828,7 @@ function RichSectionEditor({
       }
     }
 
-    setUploadError("مرورگر شما از قابلیت تبدیل صوت به متن در لحظه پشتیبانی نمی‌کند. لطفاً از مرورگر کروم، اج یا سافاری استفاده کنید.")
+    setUploadError("Your browser does not support real-time speech-to-text. Please use Chrome, Edge, or Safari.")
   }
 
   const toggleRecording = () => {
@@ -1866,7 +1866,7 @@ function RichSectionEditor({
     const currentHtml = editorRef.current?.innerHTML || ""
     const currentText = editorRef.current?.innerText || editorRef.current?.textContent || ""
     if (!currentText.trim()) {
-      setUploadError(action === "translate_en" ? "لطفاً ابتدا متنی برای ترجمه وارد کنید." : "لطفاً ابتدا متنی برای بهبود و توسعه وارد کنید.")
+      setUploadError(action === "translate_en" ? "Please enter text first to translate." : "Please enter text first to enhance.")
       return
     }
 
@@ -1880,14 +1880,14 @@ function RichSectionEditor({
       })
       const data = await res.json()
       if (!res.ok || !data.resultText) {
-        throw new Error(data.error || "تولید AI با خطا مواجه شد.")
+        throw new Error(data.error || "AI generation failed.")
       }
       if (editorRef.current) {
         editorRef.current.innerHTML = data.resultText
         onChange(data.resultText)
       }
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : "خطایی در فرآیند هوش مصنوعی رخ داد.")
+      setUploadError(err instanceof Error ? err.message : "An error occurred during AI processing.")
     } finally {
       setAiLoading(null)
     }
@@ -1932,10 +1932,10 @@ function RichSectionEditor({
             <EditorButton
               label={
                 isRecording
-                  ? "در حال ضبط و تایپ زنده (برای توقف کلیک کنید)..."
+                  ? "Recording and transcribing live (click to stop)..."
                   : countdown !== null
-                    ? `آماده شوید: ${countdown} ...`
-                    : `تایپ زنده وویس (${speechLang === "hi-IN" ? "هندی" : speechLang === "fa-IR" ? "فارسی" : speechLang === "ar-SA" ? "عربی" : "انگلیسی"})`
+                    ? `Get ready: ${countdown} ...`
+                    : "Voice Input"
               }
               onClick={toggleRecording}
               disabled={disabled}
@@ -1955,7 +1955,7 @@ function RichSectionEditor({
               value={speechLang}
               onChange={(e) => handleSpeechLangChange(e.target.value)}
               disabled={disabled || isRecording || countdown !== null}
-              title="زبان گفتار پیش‌فرض برای تایپ زنده وویس"
+              title="Speech language for voice input"
               aria-label="Speech Language"
               className="h-8 max-w-[125px] rounded-lg border border-input bg-background px-1.5 text-xs font-semibold text-foreground shadow-2xs outline-none hover:bg-accent cursor-pointer truncate"
             >
@@ -1968,7 +1968,7 @@ function RichSectionEditor({
           </div>
 
           <EditorButton
-            label="ترجمه انگلیسی تخصصی عمران (AI Construction English)"
+            label="AI Construction English"
             onClick={() => void handleAiAction("translate_en")}
             disabled={disabled || aiLoading !== null}
           >
@@ -1976,7 +1976,7 @@ function RichSectionEditor({
           </EditorButton>
 
           <EditorButton
-            label="استایل و توسعه متن گزارش (AI Enhance Notes)"
+            label="AI Enhance Notes"
             onClick={() => void handleAiAction("enhance_style")}
             disabled={disabled || aiLoading !== null}
           >
@@ -1994,7 +1994,7 @@ function RichSectionEditor({
           </EditorButton>
 
           <EditorButton
-            label={copiedText ? "متن کپی شد!" : "کپی متن بخش (Copy text)"}
+            label={copiedText ? "Copied!" : "Copy text"}
             onClick={handleCopyText}
             disabled={disabled}
           >
@@ -2019,7 +2019,7 @@ function RichSectionEditor({
                   <span className="text-3xl font-black tabular-nums">{countdown}</span>
                 </div>
                 <p className="text-xs font-bold text-rose-600 dark:text-rose-400">
-                  آماده شوید... صحبت را آغاز کنید! (Get ready to speak...)
+                  Get ready... Speak now!
                 </p>
               </div>
             </div>
@@ -2033,7 +2033,7 @@ function RichSectionEditor({
       {showCopyToast ? (
         <div className="fixed bottom-6 start-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 rounded-2xl border border-emerald-500/40 bg-slate-950/95 px-5 py-3 text-xs font-semibold text-white shadow-2xl backdrop-blur animate-in slide-in-from-bottom-5">
           <Check className="size-4 text-emerald-400 stroke-[3]" />
-          <span>متن این بخش با موفقیت کپی شد! (Copied to clipboard)</span>
+          <span>Copied to clipboard!</span>
         </div>
       ) : null}
 
