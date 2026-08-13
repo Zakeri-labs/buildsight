@@ -1203,9 +1203,9 @@ export function InspectionReportForm({
 
       {!workflowActive ? <div role="status" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100"><AlertCircle className="mt-0.5 size-4 shrink-0" />This workflow item is disabled for the project. Existing review history remains available, but new employee work is blocked.</div> : null}
 
-      {((canRenderReviewerActions && pendingReview) || (workflowActive && isEditable)) ? (
+      {((canRenderReviewerActions && pendingReview) || (workflowActive && isEditable) || (responseId && !isEditable)) ? (
         <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/95 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur md:start-64 md:z-30 md:px-8 md:py-3">
-          <div className="mx-auto flex max-w-7xl flex-col-reverse gap-1.5 md:flex-row md:items-center md:justify-between md:gap-3">
+          <div className="mx-auto flex max-w-7xl flex-col-reverse gap-2 md:flex-row md:items-center md:justify-between md:gap-3">
             <div className="flex min-w-0 flex-1 items-center gap-2">
               {error ? (
                 <div role="alert" className="flex max-w-xl items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
@@ -1216,6 +1216,11 @@ export function InspectionReportForm({
                 <div role="status" className="flex max-w-xl items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">
                   <CheckCircle2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                   <span className="truncate">{success}</span>
+                </div>
+              ) : responseId && !isEditable ? (
+                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                  <CheckCircle2 className="size-4 text-emerald-600" />
+                  <span>{locale === "ar" ? "تم إرسال التقرير بنجاح" : "Report submitted successfully."}</span>
                 </div>
               ) : null}
             </div>
@@ -1262,6 +1267,33 @@ export function InspectionReportForm({
                     <span className="md:hidden">Submit</span>
                     <span className="hidden md:inline">{copy.submit}</span>
                   </Button>
+                </div>
+              ) : responseId && !isEditable ? (
+                <div className="flex w-full items-center justify-end gap-2 md:w-auto">
+                  <a
+                    href={`/projects/${project.id}/stages/${resolvedStageId}/reports/${responseId}/translate?kind=original`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(
+                      buttonVariants({ variant: "outline", size: "sm" }),
+                      "h-9 gap-1.5 rounded-lg px-3 text-xs font-semibold shadow-xs",
+                    )}
+                  >
+                    <Download className="size-3.5 text-primary" />
+                    <span>English PDF</span>
+                  </a>
+                  <a
+                    href={`/projects/${project.id}/stages/${resolvedStageId}/reports/${responseId}/translate?kind=bilingual`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(
+                      buttonVariants({ variant: "default", size: "sm" }),
+                      "h-9 gap-1.5 rounded-lg px-3 text-xs font-semibold shadow-xs",
+                    )}
+                  >
+                    <Download className="size-3.5" />
+                    <span>Bilingual PDF</span>
+                  </a>
                 </div>
               ) : null}
             </div>
