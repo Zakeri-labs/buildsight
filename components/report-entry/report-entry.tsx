@@ -318,8 +318,13 @@ export function ReportEntry({
               <section className="space-y-2.5" aria-labelledby="report-entry-stage-title">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h2 id="report-entry-stage-title" className="text-sm font-semibold text-foreground">Stage</h2>
-                    <p className="text-xs text-muted-foreground">Select the stage you want to report on.</p>
+                    <div className="flex items-center gap-2">
+                      <h2 id="report-entry-stage-title" className="text-sm font-semibold text-foreground">Stage</h2>
+                      <Badge variant="secondary" className="text-[11px] font-medium">
+                        {selectedProject.stages.length} {selectedProject.stages.length === 1 ? "Stage" : "Stages"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Select the stage you want to report on (scroll to view all stages).</p>
                   </div>
                   <ClipboardList className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
                 </div>
@@ -327,7 +332,7 @@ export function ReportEntry({
                 {selectedProject.stages.length ? (
                   <div
                     ref={stageListRef}
-                    className="max-h-[16rem] w-full overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-border bg-card [scrollbar-gutter:stable]"
+                    className="max-h-[26rem] w-full overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-border bg-card [scrollbar-gutter:stable] sm:max-h-[30rem]"
                     role="listbox"
                     aria-label="Project stages"
                   >
