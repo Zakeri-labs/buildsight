@@ -886,7 +886,7 @@ export function InspectionReportForm({
   }
 
   return (
-    <div className={cn("mx-auto flex w-full max-w-7xl flex-col gap-3 md:gap-5 md:pb-24", isMemberReadOnlyReport ? "pb-4" : "pb-[calc(4.75rem+env(safe-area-inset-bottom))]")}>
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 pb-28 md:gap-5 md:pb-24">
       <button
         type="button"
         onClick={handleGoBack}
@@ -947,6 +947,54 @@ export function InspectionReportForm({
           />
         </CardContent>
       </Card>
+
+      {/* Prominent PDF Downloads Card right below header if report is generated */}
+      {responseId ? (
+        <Card className="overflow-hidden border-primary/30 bg-primary/5 p-3 sm:p-4">
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <FileDown className="size-5" />
+              </span>
+              <div>
+                <h3 className="text-xs font-bold text-foreground sm:text-sm">
+                  {locale === "ar" ? "تحميل ملف PDF للتقرير" : "Download Report PDF"}
+                </h3>
+                <p className="text-[11px] text-muted-foreground">
+                  {locale === "ar" ? "تنزيل تقرير المعاينة المعتمد بالإنجليزية أو دوزبانه" : "Download official inspection report in English or bilingual format"}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+              <a
+                href={`/projects/${project.id}/stages/${resolvedStageId}/reports/${responseId}/translate?kind=original`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                  "h-9 gap-1.5 rounded-xl border-primary/30 bg-background px-3 text-xs font-bold shadow-2xs hover:bg-accent",
+                )}
+              >
+                <Download className="size-4 text-primary" />
+                <span>English PDF</span>
+              </a>
+              <a
+                href={`/projects/${project.id}/stages/${resolvedStageId}/reports/${responseId}/translate?kind=bilingual`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  buttonVariants({ variant: "default", size: "sm" }),
+                  "h-9 gap-1.5 rounded-xl px-3 text-xs font-bold shadow-2xs",
+                )}
+              >
+                <Download className="size-4" />
+                <span>Bilingual PDF</span>
+              </a>
+            </div>
+          </div>
+        </Card>
+      ) : null}
 
       <Card className="gap-0 py-0">
         <div className="border-b border-blue-200/80 bg-blue-100/70 px-3 py-2.5 dark:border-blue-800/60 dark:bg-blue-900/50 md:px-6 md:py-3.5">
