@@ -158,7 +158,6 @@ export function ReportEntry({
 }) {
   const initialProjectId = linkedSiteVisit?.projectId ?? (projects.length === 1 ? projects[0]!.id : "")
   const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId)
-  const [selectedStageId, setSelectedStageId] = useState("")
   const [linkedSiteVisitId, setLinkedSiteVisitId] = useState<string | null>(linkedSiteVisit?.id ?? null)
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null)
   const [changeProjectOpen, setChangeProjectOpen] = useState(false)
@@ -170,15 +169,8 @@ export function ReportEntry({
     [projects, selectedProjectId],
   )
 
-  const selectedStage = useMemo(
-    () => selectedProject?.stages.find((stage) => stage.id === selectedStageId) ?? null,
-    [selectedProject, selectedStageId],
-  )
-
-  const contextualLatestReport = selectedStage ? selectedStage.latestReport : selectedProject?.latestReport ?? null
-  const latestReportContextLabel = selectedStage
-    ? `Last Report of ${stageDisplayName(selectedStage.name)} Stage`
-    : "Latest Project Report"
+  const contextualLatestReport = selectedProject?.latestReport ?? null
+  const latestReportContextLabel = "Latest Project Report"
 
   const reportedCount = useMemo(
     () => selectedProject?.stages.filter((stage) => stage.reportsCount > 0).length ?? 0,
@@ -194,7 +186,6 @@ export function ReportEntry({
 
   const applyProjectChange = (projectId: string) => {
     setSelectedProjectId(projectId)
-    setSelectedStageId("")
     if (stageListRef.current) stageListRef.current.scrollTop = 0
   }
 
@@ -376,30 +367,15 @@ export function ReportEntry({
                 {visibleStages.length ? (
                   <div className="divide-y divide-border/70" ref={stageListRef}>
                     {visibleStages.map((stage, index) => {
-                      const selected = selectedStageId === stage.id
                       const hasReports = stage.reportsCount > 0
 
                       return (
-                        <button
+                        <div
                           key={stage.id}
-                          type="button"
-                          role="option"
-                          aria-selected={selected}
-                          onClick={() => setSelectedStageId(stage.id)}
-                          className={cn(
-                            "flex w-full items-center justify-between gap-2.5 px-3 py-2.5 text-left transition-colors",
-                            selected
-                              ? "bg-primary/10 text-foreground shadow-[inset_3px_0_0_0_var(--primary)]"
-                              : "bg-card text-card-foreground hover:bg-muted/40",
-                          )}
+                          className="flex items-center justify-between gap-2.5 px-3 py-2.5 text-left"
                         >
                           <div className="flex min-w-0 items-center gap-2.5">
-                            <div
-                              className={cn(
-                                "flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold tabular-nums",
-                                selected ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary",
-                              )}
-                            >
+                            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold tabular-nums text-primary">
                               {stageNumber(index)}
                             </div>
 
@@ -426,19 +402,37 @@ export function ReportEntry({
                             </div>
                           </div>
 
-                          <div className="flex shrink-0 items-center">
-                            <div
-                              className={cn(
-                                "flex size-5 items-center justify-center rounded-full border transition-all",
-                                selected
-                                  ? "border-primary bg-primary text-primary-foreground"
-                                  : "border-muted-foreground/30 bg-transparent",
-                              )}
-                            >
-                              {selected ? <Check className="size-3 stroke-[3]" /> : null}
-                            </div>
+                          {/* Right Action buttons: Eye icon if reports exist + '+ Report' button */}
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {hasReports ? (
+                              <Link
+                                href={`/projects/${selectedProject.id}/stages/${stage.id}`}
+                                aria-label={`View stage reports for ${stageDisplayName(stage.name)}`}
+                                title="View reports"
+                                className={cn(
+                                  buttonVariants({ variant: "outline", size: "sm" }),
+                                  "size-8 shrink-0 rounded-lg p-0 text-muted-foreground hover:bg-muted hover:text-foreground",
+                                )}
+                              >
+                                <Eye className="size-4" aria-hidden="true" />
+                              </Link>
+                            ) : null}
+
+                            <form action={startReportEntryAction}>
+                              <input type="hidden" name="projectId" value={selectedProject.id} />
+                              <input type="hidden" name="stageId" value={stage.id} />
+                              {linkedSiteVisitId ? <input type="hidden" name="siteVisitId" value={linkedSiteVisitId} /> : null}
+                              <Button
+                                type="submit"
+                                size="sm"
+                                className="h-8 gap-1 rounded-lg px-2.5 text-xs font-semibold"
+                              >
+                                <Plus className="size-3.5" aria-hidden="true" />
+                                Report
+                              </Button>
+                            </form>
                           </div>
-                        </button>
+                        </div>
                       )
                     })}
                   </div>
@@ -454,16 +448,6 @@ export function ReportEntry({
               No reportable stages are available for this project.
             </div>
           )}
-
-          <form action={startReportEntryAction} className="pt-2">
-            <input type="hidden" name="projectId" value={selectedProject.id} />
-            <input type="hidden" name="stageId" value={selectedStageId} />
-            {linkedSiteVisitId ? <input type="hidden" name="siteVisitId" value={linkedSiteVisitId} /> : null}
-            <Button type="submit" size="lg" disabled={!selectedStageId} className="h-11 w-full gap-2 text-sm font-semibold">
-              Start Report
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </Button>
-          </form>
         </div>
       )}
 
