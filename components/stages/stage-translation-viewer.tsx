@@ -227,17 +227,19 @@ export function StageTranslationViewer({
   )
   const generationFailed = translation?.status === "failed"
 
+  const isSubmittedReport = data.response.status !== "draft" && data.response.status !== "in_progress"
+
   useEffect(() => {
-    if (!isDirectStage || generationComplete || generationFailed) return
+    if (!isDirectStage || !isSubmittedReport || generationComplete || generationFailed) return
     enqueueStageTranslationJob({
       projectId: data.project.id,
       stageId: data.stage.id,
       responseId: data.response.id,
     })
-  }, [data.project.id, data.stage.id, data.response.id, isDirectStage, generationComplete, generationFailed])
+  }, [data.project.id, data.stage.id, data.response.id, isDirectStage, isSubmittedReport, generationComplete, generationFailed])
 
   useEffect(() => {
-    if (!isDirectStage || generationComplete || generationFailed) return
+    if (!isDirectStage || !isSubmittedReport || generationComplete || generationFailed) return
     let cancelled = false
     let timer: number | null = null
 

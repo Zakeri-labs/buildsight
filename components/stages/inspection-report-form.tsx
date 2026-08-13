@@ -741,18 +741,18 @@ export function InspectionReportForm({
         setVisitNumber(result.data.visitNumber)
         setStatus(result.data.status as ResponseStatus)
         setSuccess(copy.submitted)
-        if (isDirectStageReport) {
-          if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
+        if (isDirectStageReport && isSubmitMode) {
+          steps = updateStep(steps, stepIdx, "active")
           enqueueStageTranslationJob({
             projectId: project.id,
             stageId: result.data.projectStageId,
             responseId: id,
           })
-          if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
-          // PDF step - mark as active then done (async, backend handles it)
-          if (isSubmitMode) { steps = updateStep(steps, stepIdx, "active") }
+          steps = updateStep(steps, stepIdx, "done")
+          stepIdx++
+          steps = updateStep(steps, stepIdx, "active")
           await new Promise((resolve) => setTimeout(resolve, 600))
-          if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done") }
+          steps = updateStep(steps, stepIdx, "done")
         }
       } else {
         setStatus(mode === "progress" ? "in_progress" : "draft")
@@ -953,8 +953,8 @@ export function InspectionReportForm({
         </CardContent>
       </Card>
 
-      {/* Prominent PDF Downloads Card right below header if report is generated */}
-      {responseId ? (
+      {/* Prominent PDF Downloads Card right below header if report is submitted */}
+      {responseId && status !== "draft" && status !== "in_progress" ? (
         <ReportDownloadSection
           projectId={project.id}
           stageId={resolvedStageId}
