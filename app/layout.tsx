@@ -27,10 +27,35 @@ const gretaArabic = localFont({
 })
 
 export const metadata: Metadata = {
-  title: "Provision Consultancy — Construction Supervision Platform",
+  title: "Bonyan — Construction Supervision Platform",
   description:
     "Supervise and manage construction projects: inspections, NCRs, RFIs, variation orders, documents, and progress tracking for consultants, contractors, and owners.",
   generator: "v0.app",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Bonyan",
+    startupImage: [
+      {
+        url: "/app-icons-bonyan/iphone/apple-touch-icon.png",
+        media: "(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)",
+      },
+    ],
+  },
+  icons: {
+    icon: [
+      { url: "/app-icons-bonyan/favicon/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/app-icons-bonyan/favicon/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/app-icons-bonyan/favicon/favicon-48x48.png", sizes: "48x48", type: "image/png" },
+      { url: "/app-icons-bonyan/favicon/favicon.ico", rel: "shortcut icon" },
+    ],
+    apple: [
+      { url: "/app-icons-bonyan/iphone/apple-touch-icon.png", sizes: "180x180" },
+      { url: "/app-icons-bonyan/iphone/apple-touch-icon-152.png", sizes: "152x152" },
+      { url: "/app-icons-bonyan/iphone/apple-touch-icon-167.png", sizes: "167x167" },
+    ],
+  },
 }
 
 export const viewport: Viewport = {
@@ -38,6 +63,9 @@ export const viewport: Viewport = {
   themeColor: "#16273f",
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
 }
 
 export default function RootLayout({
@@ -47,6 +75,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" dir="ltr" className={`${inter.variable} ${geistMono.variable} ${gretaArabic.variable} bg-background`}>
+      <head>
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Bonyan" />
+        <link rel="apple-touch-icon" href="/app-icons-bonyan/iphone/apple-touch-icon.png" />
+        <link rel="apple-touch-icon" sizes="152x152" href="/app-icons-bonyan/iphone/apple-touch-icon-152.png" />
+        <link rel="apple-touch-icon" sizes="167x167" href="/app-icons-bonyan/iphone/apple-touch-icon-167.png" />
+        <link rel="icon" type="image/x-icon" href="/app-icons-bonyan/favicon/favicon.ico" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/app-icons-bonyan/favicon/favicon-16x16.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/app-icons-bonyan/favicon/favicon-32x32.png" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+      </head>
       <body className="font-sans antialiased">
         <I18nProvider>
           <TooltipProvider>{children}</TooltipProvider>
