@@ -948,36 +948,19 @@ export function InspectionReportForm({
       </Card>
 
       <Card className="gap-0 py-0">
-        <button
-          type="button"
-          onClick={() => setBasicOpen((o) => !o)}
-          className="flex w-full items-center justify-between border-b border-blue-200/80 bg-blue-100/70 px-3 py-2.5 text-start dark:border-blue-800/60 dark:bg-blue-900/50 md:cursor-default md:px-6 md:py-3.5"
-        >
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-blue-950 dark:text-blue-100 md:text-base">{copy.basic}</p>
-            {!basicOpen && reportTitle ? (
-              <p className="mt-0.5 truncate text-[11px] text-blue-700/80 dark:text-blue-300 md:hidden">{reportTitle}</p>
-            ) : null}
-          </div>
-          <ChevronDown
-            className={cn(
-              "size-4 shrink-0 text-blue-700/70 transition-transform duration-200 md:hidden",
-              basicOpen && "rotate-180",
-            )}
-          />
-        </button>
-        <div className={cn("md:block", basicOpen ? "block" : "hidden")}>
-          <CardContent className="grid gap-3 p-3 md:gap-5 md:p-6">
-            <div className="space-y-2">
-              <Label htmlFor="report-title">{copy.title} <span className="text-destructive">*</span></Label>
-              <Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="report-subject">{copy.subject}</Label>
-              <Input id="report-subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Inspection location, package, activity, or reference" disabled={isLocked} />
-            </div>
-          </CardContent>
+        <div className="border-b border-blue-200/80 bg-blue-100/70 px-3 py-2.5 dark:border-blue-800/60 dark:bg-blue-900/50 md:px-6 md:py-3.5">
+          <p className="text-sm font-semibold text-blue-950 dark:text-blue-100 md:text-base">{copy.basic}</p>
         </div>
+        <CardContent className="grid gap-3 p-3 md:gap-4 md:p-5">
+          <div className="space-y-1.5">
+            <Label htmlFor="report-title" className="text-xs font-semibold text-foreground">{copy.title} <span className="text-destructive">*</span></Label>
+            <Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} className="h-9 px-3 text-xs md:text-sm" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="report-subject" className="text-xs font-semibold text-foreground">{copy.subject}</Label>
+            <Input id="report-subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Inspection location, package, activity, or reference" disabled={isLocked} className="h-9 px-3 text-xs md:text-sm" />
+          </div>
+        </CardContent>
       </Card>
 
       <CcRecipientsField
@@ -1011,11 +994,11 @@ export function InspectionReportForm({
               </div>
             ) : reportDefinition.responseType === "measurement" ? (
               <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(140px,0.45fr)]">
-                <div className="space-y-2"><Label htmlFor="measurement-value">Value <span className="text-destructive">*</span></Label><Input id="measurement-value" inputMode="decimal" value={content.measurementValue} onChange={(event) => setContent((current) => ({ ...current, measurementValue: event.target.value }))} placeholder="Enter numeric value" disabled={isLocked} /></div>
-                <div className="space-y-2"><Label htmlFor="measurement-unit">Unit</Label><Input id="measurement-unit" value={content.measurementUnit} onChange={(event) => setContent((current) => ({ ...current, measurementUnit: event.target.value.slice(0, 100) }))} placeholder="mm, m², MPa…" disabled={isLocked} /></div>
+                <div className="space-y-2"><Label htmlFor="measurement-value">Value <span className="text-destructive">*</span></Label><Input id="measurement-value" inputMode="decimal" value={content.measurementValue} onChange={(event) => setContent((current) => ({ ...current, measurementValue: event.target.value }))} placeholder="Enter numeric value" disabled={isLocked} className="h-9 px-3 text-xs md:text-sm" /></div>
+                <div className="space-y-2"><Label htmlFor="measurement-unit">Unit</Label><Input id="measurement-unit" value={content.measurementUnit} onChange={(event) => setContent((current) => ({ ...current, measurementUnit: event.target.value.slice(0, 100) }))} placeholder="mm, m², MPa…" disabled={isLocked} className="h-9 px-3 text-xs md:text-sm" /></div>
               </div>
             ) : reportDefinition.responseType === "date" ? (
-              <div className="max-w-sm space-y-2"><Label htmlFor="configured-date">Date <span className="text-destructive">*</span></Label><Input id="configured-date" type="date" value={content.dateValue} onChange={(event) => setContent((current) => ({ ...current, dateValue: event.target.value }))} disabled={isLocked} /></div>
+              <div className="max-w-sm space-y-2"><Label htmlFor="configured-date">Date <span className="text-destructive">*</span></Label><Input id="configured-date" type="date" value={content.dateValue} onChange={(event) => setContent((current) => ({ ...current, dateValue: event.target.value }))} disabled={isLocked} className="h-9 px-3 text-xs md:text-sm" /></div>
             ) : (
               <p className="text-sm text-muted-foreground">{reportDefinition.responseType === "file_upload" ? "Upload at least one supporting file before submitting for review." : "Upload at least one evidence photo before submitting for review."}</p>
             )}
@@ -1023,7 +1006,7 @@ export function InspectionReportForm({
         </Card>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-1 md:gap-5 xl:grid-cols-2">
+      <div className="w-full">
         <AttachmentCard
           title={copy.evidence}
           description={copy.evidenceHint}
@@ -1034,7 +1017,7 @@ export function InspectionReportForm({
           hideActionOnMobile={isMemberReadOnlyReport}
         >
           <input ref={imageInputRef} type="file" accept={STAGE_EVIDENCE_ACCEPT} multiple className="hidden" onChange={(event) => { addImages(Array.from(event.target.files ?? [])); event.target.value = "" }} />
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4">
+          <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
             {evidenceImages.map((attachment) => <EvidenceTile key={attachment.id} src={`/api/stage-evidence?path=${encodeURIComponent(attachment.storagePath)}`} name={attachment.originalFilename} onRemove={isLocked ? undefined : () => void removeExisting(attachment)} />)}
             {pendingImages.map((item) => <EvidenceTile key={item.id} src={item.previewUrl ?? ""} name={item.file.name} progress={item.progress} onRemove={() => removePending("image", item.id)} />)}
             {!evidenceImages.length && !pendingImages.length ? (
@@ -1046,32 +1029,6 @@ export function InspectionReportForm({
                   <div className="col-span-full hidden md:block"><EmptyAttachment text={copy.uploadImages} onClick={() => imageInputRef.current?.click()} /></div>
                 </>
               ) : <EmptyAttachment text={copy.uploadImages} onClick={() => imageInputRef.current?.click()} />
-            ) : null}
-          </div>
-        </AttachmentCard>
-
-        <AttachmentCard
-          title={copy.documents}
-          description={copy.documentHint}
-          icon={<FileText className="size-5" />}
-          actionLabel={copy.addDocuments}
-          onAction={() => documentInputRef.current?.click()}
-          disabled={isLocked || busy !== null || documentAttachments.length + pendingDocuments.length >= STAGE_DOCUMENT_MAX_FILES}
-          hideActionOnMobile={isMemberReadOnlyReport}
-        >
-          <input ref={documentInputRef} type="file" accept={STAGE_DOCUMENT_ACCEPT} multiple className="hidden" onChange={(event) => { addDocuments(Array.from(event.target.files ?? [])); event.target.value = "" }} />
-          <div className="space-y-2">
-            {documentAttachments.map((attachment) => <DocumentRow key={attachment.id} name={attachment.originalFilename} href={`/api/stage-evidence?path=${encodeURIComponent(attachment.storagePath)}&download=1&filename=${encodeURIComponent(attachment.originalFilename)}`} onRemove={isLocked ? undefined : () => void removeExisting(attachment)} />)}
-            {pendingDocuments.map((item) => <DocumentRow key={item.id} name={item.file.name} progress={item.progress} onRemove={() => removePending("document", item.id)} />)}
-            {!documentAttachments.length && !pendingDocuments.length ? (
-              isMemberReadOnlyReport ? (
-                <>
-                  <div className="flex min-h-12 items-center justify-center rounded-lg border border-dashed px-2 text-center text-[11px] text-muted-foreground md:hidden">
-                    {locale === "ar" ? "لا توجد مستندات مرفقة." : "No documents attached."}
-                  </div>
-                  <div className="hidden md:block"><EmptyAttachment text={copy.addDocuments} compact onClick={() => documentInputRef.current?.click()} /></div>
-                </>
-              ) : <EmptyAttachment text={copy.addDocuments} compact onClick={() => documentInputRef.current?.click()} />
             ) : null}
           </div>
         </AttachmentCard>
