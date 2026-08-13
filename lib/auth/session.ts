@@ -1,4 +1,5 @@
 import "server-only"
+import { cache } from "react"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import type { Organization, OrganizationRole, Profile } from "@/lib/db/types"
@@ -20,8 +21,9 @@ export type SessionContext = {
  * Returns the authenticated user's identity and organization memberships.
  * Reads run through the RLS-scoped server client, so results are already
  * limited to what the user is allowed to see.
+ * Deduplicated per-request via React cache().
  */
-export async function getSession(): Promise<SessionContext | null> {
+export const getSession = cache(async (): Promise<SessionContext | null> => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   if (!url || !anonKey || url.includes("placeholder")) {
@@ -35,13 +37,14 @@ export async function getSession(): Promise<SessionContext | null> {
     } = await supabase.auth.getUser()
     if (!user) return null
 
-    const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle()
-
-    const { data: memberRows } = await supabase
-      .from("organization_memberships")
-      .select("role, organizations(*)")
-      .eq("user_id", user.id)
-      .eq("status", "active")
+    const [{ data: profile }, { data: memberRows }] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+      supabase
+        .from("organization_memberships")
+        .select("role, organizations(*)")
+        .eq("user_id", user.id)
+        .eq("status", "active"),
+    ])
 
     const memberships: OrgMembership[] = (memberRows ?? []).map((row: any) => ({
       role: row.role,
@@ -65,7 +68,7 @@ export async function getSession(): Promise<SessionContext | null> {
     )
     return null
   }
-}
+})
 
 /** Require a signed-in user or redirect to login. */
 export async function requireSession(): Promise<SessionContext> {
