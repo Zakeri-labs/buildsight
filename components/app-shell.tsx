@@ -43,11 +43,12 @@ export function AppShell({
   const isMemberStageReportsList = /^\/projects\/[^/]+\/stages\/[^/]+\/?$/.test(pathname) && isMember
   const isMemberStageReport = /^\/projects\/[^/]+\/stages\/[^/]+\/reports\/(?:new|[^/]+)\/?$/.test(pathname) && isMember
   const isMemberReportTranslation = /^\/projects\/[^/]+\/stages\/[^/]+\/reports\/[^/]+\/translate\/?$/.test(pathname) && isMember
+  const isMemberMyReports = (pathname === "/my-reports" || pathname.startsWith("/my-reports/")) && isMember
   const isMemberDashboard = (pathname === "/" || pathname === "/memberhomepage") && isMember
   const isMemberMobileShell =
-    isMemberDashboard || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberInitialDocuments || isMemberProjectDetail || isMemberProjectStages || isMemberStageReportsList || isMemberStageReport || isMemberReportTranslation
+    isMemberDashboard || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberInitialDocuments || isMemberProjectDetail || isMemberProjectStages || isMemberStageReportsList || isMemberStageReport || isMemberReportTranslation || isMemberMyReports
   const isCompactMemberMobileShell =
-    isMemberHomepage || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberInitialDocuments || isMemberProjectDetail || isMemberProjectStages || isMemberStageReportsList || isMemberStageReport || isMemberReportTranslation
+    isMemberHomepage || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberInitialDocuments || isMemberProjectDetail || isMemberProjectStages || isMemberStageReportsList || isMemberStageReport || isMemberReportTranslation || isMemberMyReports
   const showMemberBottomNavigation = isMemberMobileShell && !isMemberStageReport && !isMemberReportTranslation
 
   const activeProjectName =

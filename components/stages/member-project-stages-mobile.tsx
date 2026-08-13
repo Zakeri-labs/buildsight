@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
-import { Building2, FileText, Plus } from "lucide-react"
+import { Building2, Eye, Plus } from "lucide-react"
 
 import { buttonVariants } from "@/components/ui/button"
 import type { ProjectStageExecutionData } from "@/lib/db/project-stages"
@@ -160,13 +160,13 @@ export function MemberProjectStagesMobile({ data }: { data: ProjectStageExecutio
                           <Link
                             href={`/projects/${data.project.id}/stages/${stage.id}`}
                             aria-label={`View stage reports for ${cleanStageName(stage.name)}`}
+                            title="View reports"
                             className={cn(
                               buttonVariants({ variant: "outline", size: "sm" }),
-                              "h-7 gap-1 px-2 text-[10px] font-medium",
+                              "h-7 size-7 shrink-0 p-0 text-muted-foreground hover:bg-muted hover:text-foreground",
                             )}
                           >
-                            <FileText className="size-3" aria-hidden="true" />
-                            Reports
+                            <Eye className="size-3.5" aria-hidden="true" />
                           </Link>
                         ) : null}
 
