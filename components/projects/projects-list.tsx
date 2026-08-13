@@ -1271,26 +1271,16 @@ function MobileProjectCard({
   row,
   locale,
   canDeleteProjects,
-  onLocation,
   onEdit,
   onDelete,
 }: {
   row: ProjectRow
   locale: string
   canDeleteProjects: boolean
-  onLocation: () => void
+  onLocation?: () => void
   onEdit: () => void
   onDelete: () => void
 }) {
-  const hasAddress = row.address.trim().length > 0 && row.address.trim() !== "—"
-  const hasCoordinates =
-    Number.isFinite(row.latitude) &&
-    Number.isFinite(row.longitude) &&
-    Number(row.latitude) >= -90 &&
-    Number(row.latitude) <= 90 &&
-    Number(row.longitude) >= -180 &&
-    Number(row.longitude) <= 180
-  const hasLocation = hasAddress || hasCoordinates
   const supervision = row.supervisionType?.trim()
     ? supervisionTypeLabel(row.supervisionType, row.supervisionTypeOther)
     : locale === "ar" ? "غير محدد" : "Not set"
@@ -1298,100 +1288,105 @@ function MobileProjectCard({
     row.ownerClient !== "—" ? row.ownerClient : null,
     supervision !== "Not set" && supervision !== "غير محدد" ? supervision : null,
   ].filter(Boolean).join(" • ")
-  const typeAndDate = [
-    row.projectType !== "—" ? row.projectType : null,
-    row.startDate !== "—" ? row.startDate : null,
-  ].filter(Boolean).join(" • ")
 
   return (
-    <article className="relative min-h-[5.5rem] min-w-0 overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-xs transition-colors active:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:active:bg-slate-800/50">
-      <Link
-        href={`/projects/${encodeURIComponent(row.id)}`}
-        aria-label={`${locale === "ar" ? "فتح المشروع" : "Open project"} ${row.name}`}
-        className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-      />
-
-      <div className="pointer-events-none relative z-10 flex min-w-0 gap-2.5 p-2.5 pe-11">
-        <ProjectImageDisplay
-          src={row.imageUrl}
-          projectId={row.id}
-          alt={row.name}
-          className="size-12 shrink-0 rounded-lg border border-slate-200 dark:border-slate-700"
-          iconClassName="size-4"
-        />
+    <article className="relative min-w-0 overflow-hidden rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-xs transition-colors dark:border-slate-800 dark:bg-slate-900">
+      {/* Top Header Row: Name & Status & More Actions */}
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <h2 className="truncate text-[13px] font-bold leading-4 text-slate-950 dark:text-white">{row.name}</h2>
-              <p className="mt-0.5 line-clamp-2 break-all font-mono text-[10px] leading-3.5 text-slate-500 dark:text-slate-400">{row.code}</p>
-            </div>
-            <ProjectStatusBadge status={row.status} />
-          </div>
+          <Link
+            href={`/projects/${encodeURIComponent(row.id)}`}
+            className="group block min-w-0"
+          >
+            <h2 className="truncate text-sm font-bold text-slate-950 group-hover:text-primary dark:text-white">
+              {row.name}
+            </h2>
+          </Link>
+          {row.code ? (
+            <p className="mt-0.5 truncate font-mono text-[11px] text-slate-500 dark:text-slate-400">
+              {row.code}
+            </p>
+          ) : null}
+        </div>
 
-          {metadata ? <p className="mt-1 truncate text-[10px] leading-4 text-slate-600 dark:text-slate-400">{metadata}</p> : null}
-          {typeAndDate ? <p className="truncate text-[10px] leading-4 text-slate-500 dark:text-slate-500">{typeAndDate}</p> : null}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <ProjectStatusBadge status={row.status} />
 
-          <div className="mt-1 flex min-w-0 items-center gap-2">
-            <span className="shrink-0 text-[10px] font-semibold tabular-nums text-slate-700 dark:text-slate-300">{row.progress}%</span>
-            <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-              <div className="h-full rounded-full bg-blue-600" style={{ width: `${row.progress}%` }} />
-            </div>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={`${locale === "ar" ? "إجراءات" : "Actions for"} ${row.name}`}
+                  className="inline-flex size-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400"
+                >
+                  <MoreVertical className="size-4" />
+                </button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem
+                render={
+                  <Link href={`/projects/${row.id}`}>
+                    <Eye className="size-4" />
+                    {locale === "ar" ? "عرض المشروع" : "View Project"}
+                  </Link>
+                }
+              />
+              <DropdownMenuItem
+                render={
+                  <Link href={`/projects/${row.id}/stages`}>
+                    <Plus className="size-4" />
+                    {locale === "ar" ? "إضافة تقرير" : "Add Report"}
+                  </Link>
+                }
+              />
+              {row.canEdit ? (
+                <DropdownMenuItem onClick={onEdit}>
+                  <Pencil className="size-4" />
+                  {locale === "ar" ? "تعديل المشروع" : "Edit Project"}
+                </DropdownMenuItem>
+              ) : null}
+              {canDeleteProjects ? (
+                <DropdownMenuItem variant="destructive" onClick={onDelete}>
+                  <Trash2 className="size-4" />
+                  {locale === "ar" ? "حذف المشروع" : "Delete Project"}
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      <div className="absolute end-1.5 top-1.5 z-20 flex flex-col gap-1">
-        {hasLocation ? (
-          <button
-            type="button"
-            aria-label={locale === "ar" ? "عرض موقع المشروع" : "View project location"}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              onLocation()
-            }}
-            className="inline-flex size-7 items-center justify-center rounded-md bg-white/95 text-slate-400 shadow-xs hover:bg-slate-100 hover:text-blue-600 dark:bg-slate-900/95 dark:hover:bg-slate-800 dark:hover:text-blue-400"
-          >
-            <MapPin className="size-3.5" />
-          </button>
-        ) : null}
+      {/* Metadata Row */}
+      {metadata ? (
+        <p className="mt-1.5 truncate text-[11px] text-slate-600 dark:text-slate-400">
+          {metadata}
+        </p>
+      ) : null}
 
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                aria-label={`${locale === "ar" ? "إجراءات" : "Actions for"} ${row.name}`}
-                onClick={(event) => event.stopPropagation()}
-                className="inline-flex size-7 items-center justify-center rounded-md bg-white/95 text-slate-400 shadow-xs hover:bg-slate-100 hover:text-slate-700 dark:bg-slate-900/95 dark:hover:bg-slate-800"
-              >
-                <MoreVertical className="size-4" />
-              </button>
-            }
+      {/* Progress Bar Row */}
+      <div className="mt-2.5 flex items-center gap-2.5">
+        <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+          <div
+            className="h-full rounded-full bg-primary transition-all duration-300"
+            style={{ width: `${row.progress}%` }}
           />
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem
-              render={
-                <Link href={`/projects/${row.id}`}>
-                  <Eye className="size-4" />
-                  {locale === "ar" ? "عرض المشروع" : "View Project"}
-                </Link>
-              }
-            />
-            {row.canEdit ? (
-              <DropdownMenuItem onClick={onEdit}>
-                <Pencil className="size-4" />
-                {locale === "ar" ? "تعديل المشروع" : "Edit Project"}
-              </DropdownMenuItem>
-            ) : null}
-            {canDeleteProjects ? (
-              <DropdownMenuItem variant="destructive" onClick={onDelete}>
-                <Trash2 className="size-4" />
-                {locale === "ar" ? "حذف المشروع" : "Delete Project"}
-              </DropdownMenuItem>
-            ) : null}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        </div>
+        <span className="shrink-0 text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-300">
+          {row.progress}%
+        </span>
+      </div>
+
+      {/* Action Row: Add Report button */}
+      <div className="mt-3 flex items-center justify-end border-t border-slate-100 pt-2.5 dark:border-slate-800/80">
+        <Link
+          href={`/projects/${encodeURIComponent(row.id)}/stages`}
+          className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 active:scale-[0.98]"
+        >
+          <Plus className="size-3.5" />
+          <span>{locale === "ar" ? "إضافة تقرير" : "Add Report"}</span>
+        </Link>
       </div>
     </article>
   )

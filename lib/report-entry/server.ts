@@ -1,6 +1,6 @@
 import "server-only"
 
-import { resolveExplicitSupervisorProjectScope } from "@/lib/calendar/server"
+import { resolveCalendarProjectScope, resolveExplicitSupervisorProjectScope } from "@/lib/calendar/server"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 import { createAdminClient } from "@/lib/supabase/admin"
 
