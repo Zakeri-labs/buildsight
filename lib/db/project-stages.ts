@@ -254,16 +254,26 @@ export async function loadProjectStageExecution(
   if (!access) return null
   const admin = createAdminClient()
 
+  let stagesResult: { data: any[] | null; error: any } = await admin
+    .from("project_stages")
+    .select("id, template_stage_id, name, description, status, sort_order, is_pre_completed")
+    .eq("project_id", projectId)
+    .order("sort_order", { ascending: true })
+
+  if (stagesResult.error) {
+    stagesResult = await admin
+      .from("project_stages")
+      .select("id, template_stage_id, name, description, status, sort_order")
+      .eq("project_id", projectId)
+      .order("sort_order", { ascending: true })
+  }
+  const stagesError = stagesResult.error
+  const projectStages = stagesResult.data
+
   const [
-    { data: allStages, error: stagesError },
     { data: libraryStages, error: libraryError },
     { data: libraryTerms, error: libraryTermsError },
   ] = await Promise.all([
-    admin
-      .from("project_stages")
-      .select("id, template_stage_id, name, description, status, sort_order, is_pre_completed")
-      .eq("project_id", projectId)
-      .order("sort_order", { ascending: true }),
     admin
       .from("stages")
       .select("id, name, description, sort_order, is_active")
@@ -279,7 +289,7 @@ export async function loadProjectStageExecution(
   if (libraryError) throw libraryError
   if (libraryTermsError) throw libraryTermsError
 
-  const stageRows = allStages ?? []
+  const stageRows = projectStages ?? []
   const stageIds = stageRows.map((stage: any) => stage.id as string)
   const { data: allTerms, error: termsError } = stageIds.length
     ? await admin

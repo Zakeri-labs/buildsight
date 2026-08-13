@@ -68,17 +68,26 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
   if (!projectIds.length) return []
 
   const admin = createAdminClient()
-  const [projectResult, stageResult, reportResult, imageResult] = await Promise.all([
+  let stageResult: { data: any[] | null; error: any } = await admin
+    .from("project_stages")
+    .select("id, project_id, name, status, sort_order, is_pre_completed")
+    .in("project_id", projectIds)
+    .order("sort_order", { ascending: true })
+
+  if (stageResult.error) {
+    stageResult = await admin
+      .from("project_stages")
+      .select("id, project_id, name, status, sort_order")
+      .in("project_id", projectIds)
+      .order("sort_order", { ascending: true })
+  }
+
+  const [projectResult, reportResult, imageResult] = await Promise.all([
     admin
       .from("projects")
       .select("id, name, code, location, region, status, image, assigned_supervisor_id")
       .in("id", projectIds)
       .eq("assigned_supervisor_id", userId),
-    admin
-      .from("project_stages")
-      .select("id, project_id, name, status, sort_order, is_pre_completed")
-      .in("project_id", projectIds)
-      .order("sort_order", { ascending: true }),
     admin
       .from("term_responses")
       .select("id, project_id, project_stage_id, report_number, report_title, subject, visit_number, created_at, response_content")

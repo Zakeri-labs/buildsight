@@ -274,15 +274,19 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
 
   const projectRows = data ?? []
   const projectIds = projectRows.map((project: any) => project.id)
-  const [{ data: imageRows }, { data: activeStageRows }] = projectIds.length
-    ? await Promise.all([
-        admin.from("project_images").select("project_id, storage_path").in("project_id", projectIds).eq("order_index", 0),
-        admin.from("project_stages").select("id, project_id, name, status, is_pre_completed").in("project_id", projectIds).neq("status", "disabled"),
-      ])
-    : [
-        { data: [] as Array<{ project_id: string; storage_path: string }> },
-        { data: [] as Array<{ id: string; project_id: string; name: string; status?: string; is_pre_completed?: boolean }> },
-      ]
+  let activeStageRowsResult: { data: any[] | null; error: any } = projectIds.length
+    ? await admin.from("project_stages").select("id, project_id, name, status, is_pre_completed").in("project_id", projectIds).neq("status", "disabled")
+    : { data: [] as any[], error: null }
+  if (activeStageRowsResult.error) {
+    activeStageRowsResult = projectIds.length
+      ? await admin.from("project_stages").select("id, project_id, name, status").in("project_id", projectIds).neq("status", "disabled")
+      : { data: [] as any[], error: null }
+  }
+  const activeStageRows = activeStageRowsResult.data ?? []
+
+  const { data: imageRows } = projectIds.length
+    ? await admin.from("project_images").select("project_id, storage_path").in("project_id", projectIds).eq("order_index", 0)
+    : { data: [] as any[] }
   const activeStageIds = (activeStageRows ?? []).map((stage: any) => stage.id as string)
   const [{ data: progressTermRows }, { data: responseRows }] = activeStageIds.length
     ? await Promise.all([
