@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { CalendarDays, FolderKanban, Home, Plus, User } from "lucide-react"
+import { CalendarDays, FileText, FolderKanban, Home, Plus, User } from "lucide-react"
 import { useState } from "react"
 
 import { AppSidebar } from "@/components/app-sidebar"
@@ -162,7 +162,7 @@ export function MemberMobileBottomNavigation({ compact = false }: { compact?: bo
         </div>
 
         <BottomNavItem label="Calendar" icon={CalendarDays} href="/calendar" active={pathname.startsWith("/calendar")} compact={compact} />
-        <BottomNavItem label="Profile" icon={User} href="/settings" active={pathname.startsWith("/settings")} compact={compact} />
+        <BottomNavItem label="Reports" icon={FileText} href="/my-reports" active={pathname.startsWith("/my-reports")} compact={compact} />
       </div>
     </nav>
   )
