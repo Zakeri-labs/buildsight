@@ -253,8 +253,8 @@ export function ReportEntry({
           {selectedProject ? (
             <>
               <Card className="py-0">
-                <div className="grid grid-cols-[6.75rem_minmax(0,1fr)] gap-0 sm:grid-cols-[9rem_minmax(0,1fr)]">
-                  <div className="relative min-h-40 overflow-hidden bg-muted sm:min-h-44">
+                <div className="grid grid-cols-1 sm:grid-cols-[9rem_minmax(0,1fr)]">
+                  <div className="hidden sm:block relative min-h-44 overflow-hidden bg-muted">
                     {selectedProject.imageUrl ? (
                       <img src={selectedProject.imageUrl} alt={`${selectedProject.name} cover`} className="absolute inset-0 size-full object-cover" />
                     ) : (
@@ -317,14 +317,11 @@ export function ReportEntry({
 
               <section className="space-y-2.5" aria-labelledby="report-entry-stage-title">
                 <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 id="report-entry-stage-title" className="text-sm font-semibold text-foreground">Stage</h2>
-                      <Badge variant="secondary" className="text-[11px] font-medium">
-                        {selectedProject.stages.length} {selectedProject.stages.length === 1 ? "Stage" : "Stages"}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">Select the stage you want to report on (scroll to view all stages).</p>
+                  <div className="flex items-center gap-2">
+                    <h2 id="report-entry-stage-title" className="text-sm font-semibold text-foreground">Stage</h2>
+                    <Badge variant="secondary" className="text-[11px] font-medium">
+                      {selectedProject.stages.length} {selectedProject.stages.length === 1 ? "Stage" : "Stages"}
+                    </Badge>
                   </div>
                   <ClipboardList className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
                 </div>
