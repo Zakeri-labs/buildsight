@@ -43,6 +43,7 @@ import {
   type AttachmentRegistration,
 } from "@/lib/actions/project-stages"
 import { saveReportCcRecipientsAction } from "@/lib/actions/report-cc"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto-generation"
 import { StageTranslationActions } from "@/components/stages/stage-translation-actions"
 import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
@@ -332,7 +333,7 @@ function initialRecipientSelection(
         email: recipient.email ?? "",
         company: recipient.company ?? "",
         role: recipient.role ?? "",
-        group: recipients[0]?.id === recipient.id ? "reportTo" as const : "ccTo" as const,
+        group: recipients[0]?.id === recipient.id ? ("reportTo" as const) : ("ccTo" as const),
       })),
     reportToUserIds,
     ccToUserIds,
@@ -408,6 +409,15 @@ export function InspectionReportForm({
   const isDirectStageReport = Boolean(stageReportConfig)
   const [resolvedStageId, setResolvedStageId] = useState(stage.id)
   const reportsHref = `/projects/${project.id}/stages/${resolvedStageId}`
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
+
+  const handleGoBack = useCallback(() => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back()
+    } else {
+      router.push(reportsHref)
+    }
+  }, [router, reportsHref])
   const { locale } = useI18n()
   const copy = COPY[locale]
   const cleanStageName = stage.name.replace(/^\d+[\.\s\-]+/, "")
@@ -813,9 +823,13 @@ export function InspectionReportForm({
 
   return (
     <div className={cn("mx-auto flex w-full max-w-7xl flex-col gap-3 md:gap-5 md:pb-24", isMemberReadOnlyReport ? "pb-4" : "pb-[calc(4.75rem+env(safe-area-inset-bottom))]")}>
-      <Link href={reportsHref} className="inline-flex w-fit items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground md:gap-2 md:text-sm">
+      <button
+        type="button"
+        onClick={handleGoBack}
+        className="inline-flex w-fit items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground md:gap-2 md:text-sm"
+      >
         <ArrowLeft className="size-4 flip-rtl" />{copy.back}
-      </Link>
+      </button>
 
       <nav aria-label="Breadcrumb" className="hidden flex-wrap items-center gap-1.5 text-xs text-muted-foreground md:flex">
         <span>{project.name}</span><span aria-hidden>/</span><span>{cleanStageName}</span>
@@ -1151,15 +1165,56 @@ export function InspectionReportForm({
               ) : null}
               {workflowActive && isEditable ? (
                 <div className="grid w-full grid-cols-3 gap-1.5 md:flex md:w-auto md:items-center md:gap-3">
-                  <Button variant="outline" size="lg" className="min-w-0 px-1.5 text-[10px] md:px-2.5 md:text-sm" disabled={busy !== null} onClick={() => void save("draft")}>{busy === "draft" ? <Loader2 className="size-3.5 animate-spin md:size-4" /> : <Save className="size-3.5 md:size-4" />}<span className="md:hidden">Draft</span><span className="hidden md:inline">{copy.saveDraft}</span></Button>
-                  <Button variant="outline" size="lg" className="min-w-0 px-1.5 text-[10px] md:px-2.5 md:text-sm" disabled={busy !== null} onClick={() => void save("progress")}>{busy === "progress" ? <Loader2 className="size-3.5 animate-spin md:size-4" /> : <ClipboardCheck className="size-3.5 md:size-4" />}<span className="md:hidden">In Progress</span><span className="hidden md:inline">{copy.saveProgress}</span></Button>
-                  <Button size="lg" className="min-w-0 px-1.5 text-[10px] md:px-2.5 md:text-sm" disabled={busy !== null} onClick={() => void save("submit")}>{busy === "submit" ? <Loader2 className="size-3.5 animate-spin md:size-4" /> : <Send className="size-3.5 md:size-4" />}<span className="md:hidden">Submit</span><span className="hidden md:inline">{copy.submit}</span></Button>
+                  <Button variant="outline" size="lg" className="min-w-0 px-1.5 text-[10px] md:px-2.5 md:text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-300" disabled={busy !== null} onClick={() => setCancelDialogOpen(true)}>
+                    <X className="size-3.5 md:size-4" />
+                    <span>{locale === "ar" ? "إلغاء" : "Cancel"}</span>
+                  </Button>
+                  <Button variant="outline" size="lg" className="min-w-0 px-1.5 text-[10px] md:px-2.5 md:text-sm" disabled={busy !== null} onClick={() => void save("draft")}>
+                    {busy === "draft" ? <Loader2 className="size-3.5 animate-spin md:size-4" /> : <Save className="size-3.5 md:size-4" />}
+                    <span className="md:hidden">Draft</span>
+                    <span className="hidden md:inline">{copy.saveDraft}</span>
+                  </Button>
+                  <Button size="lg" className="min-w-0 px-1.5 text-[10px] md:px-2.5 md:text-sm" disabled={busy !== null} onClick={() => void save("submit")}>
+                    {busy === "submit" ? <Loader2 className="size-3.5 animate-spin md:size-4" /> : <Send className="size-3.5 md:size-4" />}
+                    <span className="md:hidden">Submit</span>
+                    <span className="hidden md:inline">{copy.submit}</span>
+                  </Button>
                 </div>
               ) : null}
             </div>
           </div>
         </div>
       ) : null}
+
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {locale === "ar" ? "إلغاء وإغلاق التقرير؟" : "Cancel and Exit Report?"}
+            </DialogTitle>
+            <DialogDescription>
+              {locale === "ar"
+                ? "هل أنت تأكدت من الإلغاء؟ أي تغييرات غير محفوظة ستضيع."
+                : "Are you sure you want to cancel and exit? Any unsaved changes will be lost."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setCancelDialogOpen(false)}>
+              {locale === "ar" ? "متابعة التعديل" : "Continue Editing"}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                setCancelDialogOpen(false)
+                handleGoBack()
+              }}
+            >
+              {locale === "ar" ? "نعم، خروج" : "Yes, Exit"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
