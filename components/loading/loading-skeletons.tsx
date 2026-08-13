@@ -31,17 +31,15 @@ function LoadingStatus({ message }: { message: LoadingMessage }) {
 }
 
 function RouteLoadingFrame({
-  message,
   children,
   className,
 }: {
-  message: LoadingMessage
+  message?: LoadingMessage
   children: React.ReactNode
   className?: string
 }) {
   return (
     <div className={cn("route-loading-reveal mx-auto w-full", className)} aria-busy="true">
-      <LoadingStatus message={message} />
       {children}
     </div>
   )
