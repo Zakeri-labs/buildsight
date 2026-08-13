@@ -396,7 +396,6 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
 
     const content = normalizeContent(input.content)
     const admin = createAdminClient()
-    const userClient = await createServerClient()
     const { data: existing, error: existingError } = await admin
       .from("term_responses")
       .select("id, report_number, visit_number, status, created_by, project_stage_id, project_stage_term_id, responsible_user_id, approval_required, response_type, site_visit_request_id")
@@ -525,7 +524,7 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       }
       if (input.submit) updatePayload.submitted_at = now
       else if (existing.status === "rejected") updatePayload.submitted_at = null
-      const { error } = await userClient.from("term_responses").update(updatePayload).eq("id", existing.id)
+      const { error } = await admin.from("term_responses").update(updatePayload).eq("id", existing.id)
       if (error) {
         if (error.code === "23505") return { ok: false, error: "A report with the same reference already exists." }
         throw error
@@ -542,7 +541,7 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       const projCode = proj?.code?.trim() || "PROJ"
       reportNumber = `${projCode}/${formattedVisitNo}`
 
-      const { error: insertError } = await userClient.from("term_responses").insert({
+      const { error: insertError } = await admin.from("term_responses").insert({
         id: input.responseId,
         project_id: input.projectId,
         project_stage_id: projectStageId,
@@ -698,7 +697,6 @@ export async function registerResponseAttachmentsAction(input: {
     if (!input.attachments.length) return { ok: true, data: { ids: [] } }
     if (input.attachments.length > 20) return { ok: false, error: "Too many attachments." }
     const admin = createAdminClient()
-    const userClient = await createServerClient()
     const { data: response, error: responseError } = await admin
       .from("term_responses")
       .select("id, status, project_stage_term_id, project_stage_id, created_by")
@@ -747,7 +745,7 @@ export async function registerResponseAttachmentsAction(input: {
         uploaded_by: actorId,
       }
     })
-    const { data, error } = await userClient.from("response_attachments").insert(rows).select("id")
+    const { data, error } = await admin.from("response_attachments").insert(rows).select("id")
     if (error) throw error
     revalidatePath(`/projects/${input.projectId}/stages`)
     revalidatePath(`/projects/${input.projectId}/stages`, "page")
