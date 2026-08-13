@@ -1322,7 +1322,7 @@ function MobileProjectCard({
           href={`/projects/${encodeURIComponent(row.id)}`}
           className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/70 bg-muted/40 text-primary transition-opacity hover:opacity-90"
         >
-          {row.imageUrl ? (
+          {row.imageUrl && !row.imageUrl.includes("placeholder") ? (
             <img src={row.imageUrl} alt={formattedName} className="size-full object-cover" />
           ) : (
             <Building2 className="size-6 text-primary" aria-hidden="true" />
