@@ -160,17 +160,19 @@ function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
             </p>
           ) : null}
 
-          {(visit.stageName || visit.visitNumber) ? (
-            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-600 dark:text-slate-400">
-              {visit.stageName ? (
-                <span className="font-medium text-foreground">{visit.stageName}</span>
-              ) : null}
+          {visit.stageName ? (
+            <p className="mt-1 text-[12px] font-semibold leading-snug text-foreground">
+              {visit.stageName}
               {visit.visitNumber ? (
-                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                <span className="ms-1.5 inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground align-baseline">
                   Visit #{visit.visitNumber}
                 </span>
               ) : null}
-            </div>
+            </p>
+          ) : visit.visitNumber ? (
+            <p className="mt-1 text-[11px] font-semibold text-muted-foreground">
+              Visit #{visit.visitNumber}
+            </p>
           ) : null}
         </div>
 
