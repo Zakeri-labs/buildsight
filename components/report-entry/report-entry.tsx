@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight, Building2, ChevronRight, ClipboardList, FileText, ImageIcon, MapPin } from "lucide-react"
+import { ArrowRight, Building2, Check, ChevronRight, ChevronsUpDown, ClipboardList, FileText, ImageIcon, MapPin, Search, X } from "lucide-react"
 import { useMemo, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -22,6 +22,127 @@ function stageDisplayName(name: string) {
 
 function formatReportCount(count: number) {
   return `${count} ${count === 1 ? "Report" : "Reports"}`
+}
+
+function SearchableProjectSelect({
+  projects,
+  selectedProjectId,
+  onSelectProject,
+}: {
+  projects: ReportEntryProject[]
+  selectedProjectId: string
+  onSelectProject: (projectId: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+
+  const selectedProject = useMemo(
+    () => projects.find((p) => p.id === selectedProjectId),
+    [projects, selectedProjectId],
+  )
+
+  const filteredProjects = useMemo(() => {
+    if (!searchQuery.trim()) return projects
+    const q = searchQuery.trim().toLowerCase()
+    return projects.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        (p.code && p.code.toLowerCase().includes(q)),
+    )
+  }, [projects, searchQuery])
+
+  const handleSelect = (id: string) => {
+    onSelectProject(id)
+    setOpen(false)
+    setSearchQuery("")
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-input bg-background px-3.5 text-sm font-medium text-foreground outline-none transition-all hover:bg-accent/40 focus:border-ring focus:ring-2 focus:ring-ring/20"
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          {selectedProject ? (
+            <span className="truncate">
+              <span className="font-semibold">{selectedProject.name}</span>
+              {selectedProject.code ? (
+                <span className="ms-1.5 font-mono text-xs text-muted-foreground">· {selectedProject.code}</span>
+              ) : null}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">Search or select project... ({projects.length} available)</span>
+          )}
+        </div>
+        <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      </button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="gap-0 overflow-hidden p-0 rounded-2xl sm:max-w-lg">
+          <DialogHeader className="border-b p-4 pb-3">
+            <DialogTitle className="text-base font-bold">Select Project</DialogTitle>
+            <DialogDescription className="text-xs">Search from {projects.length} supervised projects by name or code.</DialogDescription>
+            <div className="relative mt-2">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <input
+                type="text"
+                autoFocus
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Type project name or code..."
+                className="h-10 w-full rounded-lg border border-input bg-muted/30 pl-9 pr-8 text-sm outline-none focus:border-primary focus:bg-background focus:ring-2 focus:ring-primary/20"
+              />
+              {searchQuery ? (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="size-4" />
+                </button>
+              ) : null}
+            </div>
+          </DialogHeader>
+
+          <div className="max-h-[60vh] overflow-y-auto divide-y divide-border/60 p-1">
+            {filteredProjects.length > 0 ? (
+              filteredProjects.map((project) => {
+                const isSelected = project.id === selectedProjectId
+                return (
+                  <button
+                    key={project.id}
+                    type="button"
+                    onClick={() => handleSelect(project.id)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
+                      isSelected
+                        ? "bg-primary/10 font-semibold text-primary"
+                        : "text-foreground hover:bg-accent/60",
+                    )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold">{project.name}</div>
+                      {project.code ? (
+                        <div className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{project.code}</div>
+                      ) : null}
+                    </div>
+                    {isSelected ? <Check className="size-4 shrink-0 text-primary" /> : null}
+                  </button>
+                )
+              })
+            ) : (
+              <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                No projects match &ldquo;{searchQuery}&rdquo;
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
 }
 
 export function ReportEntry({
@@ -119,25 +240,14 @@ export function ReportEntry({
       ) : (
         <>
           <section className="space-y-2" aria-labelledby="report-entry-project-label">
-            <label id="report-entry-project-label" htmlFor="report-entry-project" className="text-sm font-semibold text-foreground">
+            <label id="report-entry-project-label" className="text-sm font-semibold text-foreground">
               Project
             </label>
-            <div className="relative">
-              <select
-                id="report-entry-project"
-                value={selectedProjectId}
-                onChange={(event) => handleProjectChange(event.target.value)}
-                className="h-11 w-full appearance-none rounded-xl border border-input bg-background px-3 pr-10 text-sm font-medium text-foreground outline-none transition-shadow focus:border-ring focus:ring-3 focus:ring-ring/20"
-              >
-                {projects.length > 1 ? <option value="">Select project</option> : null}
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.code ? `${project.name} · ${project.code}` : project.name}
-                  </option>
-                ))}
-              </select>
-              <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-muted-foreground">⌄</span>
-            </div>
+            <SearchableProjectSelect
+              projects={projects}
+              selectedProjectId={selectedProjectId}
+              onSelectProject={handleProjectChange}
+            />
           </section>
 
           {selectedProject ? (
