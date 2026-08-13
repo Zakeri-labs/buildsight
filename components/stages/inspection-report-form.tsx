@@ -48,6 +48,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto-generation"
 import { StageTranslationActions } from "@/components/stages/stage-translation-actions"
 import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
+import { ReportDownloadSection } from "@/components/stages/report-download-section"
 import type { ProjectStageAttachment, ProjectStageApproval, ProjectStagePerson, ProjectStageTranslationSummary } from "@/lib/db/project-stages"
 import type { ProjectCcCandidate, ReportCcRecipient, ReportCcSelection } from "@/lib/report-cc/types"
 import {
@@ -950,50 +951,16 @@ export function InspectionReportForm({
 
       {/* Prominent PDF Downloads Card right below header if report is generated */}
       {responseId ? (
-        <Card className="overflow-hidden border-primary/30 bg-primary/5 p-3 sm:p-4">
-          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2.5">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <FileDown className="size-5" />
-              </span>
-              <div>
-                <h3 className="text-xs font-bold text-foreground sm:text-sm">
-                  {locale === "ar" ? "تحميل ملف PDF للتقرير" : "Download Report PDF"}
-                </h3>
-                <p className="text-[11px] text-muted-foreground">
-                  {locale === "ar" ? "تنزيل تقرير المعاينة المعتمد بالإنجليزية أو دوزبانه" : "Download official inspection report in English or bilingual format"}
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
-              <a
-                href={`/projects/${project.id}/stages/${resolvedStageId}/reports/${responseId}/translate?kind=original`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={cn(
-                  buttonVariants({ variant: "outline", size: "sm" }),
-                  "h-9 gap-1.5 rounded-xl border-primary/30 bg-background px-3 text-xs font-bold shadow-2xs hover:bg-accent",
-                )}
-              >
-                <Download className="size-4 text-primary" />
-                <span>English PDF</span>
-              </a>
-              <a
-                href={`/projects/${project.id}/stages/${resolvedStageId}/reports/${responseId}/translate?kind=bilingual`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={cn(
-                  buttonVariants({ variant: "default", size: "sm" }),
-                  "h-9 gap-1.5 rounded-xl px-3 text-xs font-bold shadow-2xs",
-                )}
-              >
-                <Download className="size-4" />
-                <span>Bilingual PDF</span>
-              </a>
-            </div>
-          </div>
-        </Card>
+        <ReportDownloadSection
+          projectId={project.id}
+          stageId={resolvedStageId}
+          termId={isDirectStageReport ? undefined : reportDefinition.id}
+          responseId={responseId}
+          initialTranslation={translation}
+          responseUpdatedAt={response?.updatedAt}
+          locale={locale}
+          variant="card"
+        />
       ) : null}
 
       <Card className="gap-0 py-0">
@@ -1317,32 +1284,16 @@ export function InspectionReportForm({
                   </Button>
                 </div>
               ) : responseId && !isEditable ? (
-                <div className="flex w-full items-center justify-end gap-2 md:w-auto">
-                  <a
-                    href={`/projects/${project.id}/stages/${resolvedStageId}/reports/${responseId}/translate?kind=original`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={cn(
-                      buttonVariants({ variant: "outline", size: "sm" }),
-                      "h-9 gap-1.5 rounded-lg px-3 text-xs font-semibold shadow-xs",
-                    )}
-                  >
-                    <Download className="size-3.5 text-primary" />
-                    <span>English PDF</span>
-                  </a>
-                  <a
-                    href={`/projects/${project.id}/stages/${resolvedStageId}/reports/${responseId}/translate?kind=bilingual`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={cn(
-                      buttonVariants({ variant: "default", size: "sm" }),
-                      "h-9 gap-1.5 rounded-lg px-3 text-xs font-semibold shadow-xs",
-                    )}
-                  >
-                    <Download className="size-3.5" />
-                    <span>Bilingual PDF</span>
-                  </a>
-                </div>
+                <ReportDownloadSection
+                  projectId={project.id}
+                  stageId={resolvedStageId}
+                  termId={isDirectStageReport ? undefined : reportDefinition.id}
+                  responseId={responseId}
+                  initialTranslation={translation}
+                  responseUpdatedAt={response?.updatedAt}
+                  locale={locale}
+                  variant="sticky"
+                />
               ) : null}
             </div>
           </div>
