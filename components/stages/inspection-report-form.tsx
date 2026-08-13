@@ -1667,13 +1667,84 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
     onChange(editorRef.current?.innerHTML ?? "")
   }
 
-  const toggleRecording = () => {
-    if (isRecording) {
-      if (recognitionRef.current) {
-        try { recognitionRef.current.stop() } catch {}
-      }
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const [transcribingVoice, setTranscribingVoice] = useState(false)
+
+  const toggleRecording = async () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop()
       setIsRecording(false)
       return
+    }
+
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop() } catch {}
+      recognitionRef.current = null
+      setIsRecording(false)
+      return
+    }
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        const mediaRecorder = new MediaRecorder(stream)
+        audioChunksRef.current = []
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) audioChunksRef.current.push(event.data)
+        }
+
+        mediaRecorder.onstop = async () => {
+          stream.getTracks().forEach((track) => track.stop())
+
+          const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" })
+          if (audioBlob.size === 0) return
+
+          setTranscribingVoice(true)
+          setUploadError(null)
+
+          try {
+            const formData = new FormData()
+            formData.append("audio", audioBlob, "dictation.webm")
+
+            const res = await fetch("/api/ai/transcribe-voice", {
+              method: "POST",
+              body: formData,
+            })
+            const data = await res.json()
+
+            if (!res.ok || !data.text) {
+              throw new Error(data.error || "تشخیص صوت با خطا مواجه شد.")
+            }
+
+            const spokenText = String(data.text).trim()
+            if (spokenText && editorRef.current) {
+              const currentHtml = editorRef.current.innerHTML.trim()
+              const isPlaceholder = !currentHtml || currentHtml === "<p><br></p>" || currentHtml === "<br>"
+              if (isPlaceholder) {
+                editorRef.current.innerHTML = `<p>${escapeHtml(spokenText)}</p>`
+              } else {
+                const cleanBase = currentHtml.replace(/<\/p>$/i, "").replace(/<br\s*\/?>$/i, "")
+                editorRef.current.innerHTML = `${cleanBase} ${escapeHtml(spokenText)}</p>`
+              }
+              onChange(editorRef.current.innerHTML)
+            }
+          } catch (err) {
+            setUploadError(err instanceof Error ? err.message : "خطایی در تبدیل صوت به متن رخ داد.")
+          } finally {
+            setTranscribingVoice(false)
+          }
+        }
+
+        mediaRecorderRef.current = mediaRecorder
+        mediaRecorder.start()
+        setIsRecording(true)
+        setUploadError(null)
+        return
+      } catch (micErr) {
+        console.warn("MediaRecorder mic access error:", micErr)
+      }
     }
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -1686,7 +1757,7 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
       const recognition = new SpeechRecognition()
       recognition.continuous = true
       recognition.interimResults = true
-      recognition.lang = "fa-IR"
+      recognition.lang = navigator.language || ""
 
       const currentHtml = editorRef.current?.innerHTML ?? ""
       const isPlaceholder = !currentHtml || currentHtml.trim() === "<p><br></p>" || currentHtml.trim() === "<br>"
@@ -1810,12 +1881,25 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
       <div className={cn(!mobileExpanded && "hidden md:block")}>
         <div className={cn("flex flex-wrap items-center gap-0.5 border-b bg-muted/35 px-2 py-1.5 md:gap-1 md:px-3 md:py-2", disabled && "hidden md:flex")}>
           <EditorButton
-            label={isRecording ? "در حال ضبط صوت زنده..." : "وویس به متن در لحظه (Voice Dictation)"}
+            label={
+              transcribingVoice
+                ? "در حال پردازش صوت با هوش مصنوعی..."
+                : isRecording
+                ? "در حال ضبط صوت (برای توقف کلیک کنید)..."
+                : "وویس به متن هوشمند (تشخیص خودکار هندی، فارسی، عربی، انگلیسی)"
+            }
             onClick={toggleRecording}
-            disabled={disabled}
-            className={cn(isRecording && "bg-rose-600 text-white hover:bg-rose-700 animate-pulse")}
+            disabled={disabled || transcribingVoice}
+            className={cn(
+              isRecording && "bg-rose-600 text-white hover:bg-rose-700 animate-pulse",
+              transcribingVoice && "bg-amber-500 text-white hover:bg-amber-600",
+            )}
           >
-            <Mic className={cn("size-4", isRecording ? "text-white" : "text-rose-600 dark:text-rose-400")} />
+            {transcribingVoice ? (
+              <Loader2 className="size-4 animate-spin text-white" />
+            ) : (
+              <Mic className={cn("size-4", isRecording ? "text-white" : "text-rose-600 dark:text-rose-400")} />
+            )}
           </EditorButton>
 
           <EditorButton
