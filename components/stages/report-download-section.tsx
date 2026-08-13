@@ -169,6 +169,16 @@ export function ReportDownloadSection({
               )}
               <span>Bilingual PDF</span>
             </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              title={locale === "ar" ? "إعادة محاولة / توليد الترجمة" : "Regenerate PDF"}
+              onClick={handleRetry}
+              className="h-9 size-9 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <RotateCw className="size-3.5" />
+            </Button>
           </>
         )}
       </div>
