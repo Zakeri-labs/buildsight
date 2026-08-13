@@ -944,12 +944,16 @@ function drawFirstPageHeader(
   let locationLastBaselineY = locationTopInset
 
   projectLocationFields.forEach((field, index) => {
-    const layout = getInlineLocationLayout(field.label, field.value, cellW, rtl)
-    layout.lines.forEach((_, lineIndex) => {
+    // stacked layout: label takes 1 line, then value lines
+    locationCursorY += locationLineHeight  // label line
+    const valueRtlCheck = rtl || containsArabic(field.value)
+    setLanguage(doc, valueRtlCheck, locationValueFontSize, false)
+    const valLines = textLines(doc, field.value, cellW - 6)
+    valLines.forEach((_, lineIndex) => {
       locationLastBaselineY = locationCursorY + lineIndex * locationLineHeight
     })
-    locationCursorY += layout.lines.length * locationLineHeight
-    if (index < projectLocationFields.length - 1) locationCursorY += locationRowGap
+    locationCursorY += valLines.length * locationLineHeight
+    if (index < projectLocationFields.length - 1) locationCursorY += locationRowGap + 0.5
   })
 
   const locationCellHeight = projectLocationFields.length
@@ -1047,7 +1051,10 @@ function drawFirstPageHeader(
     recList.forEach((recipient) => {
       drawField(recipient.name, 7.5, true, 3.4, [15, 23, 42])
       if (recipient.role) drawField(recipient.role, 6.5, false, 3.2, [71, 85, 105])
-      if (recipient.company) drawField(recipient.company, 6.5, false, 3.2, [71, 85, 105])
+      // Only draw company if it differs from the recipient name
+      if (recipient.company && recipient.company.trim() !== recipient.name.trim()) {
+        drawField(recipient.company, 6.5, false, 3.2, [71, 85, 105])
+      }
       if (recipient.email) drawField(recipient.email, 6.2, false, 3.2, [180, 138, 32], true)
       currY += 1.2
     })
@@ -1057,39 +1064,39 @@ function drawFirstPageHeader(
     let cursorY = gridTop + locationTopInset
 
     projectLocationFields.forEach((field, fieldIndex) => {
-      const layout = getInlineLocationLayout(field.label, field.value, w, isRtl)
+      const labelText = `${field.label}:`
+      const valueRtl = isRtl || containsArabic(field.value)
 
+      // Label on its own line
       setLanguage(doc, isRtl, locationLabelFontSize, true)
       doc.setTextColor(100, 116, 139)
       writePdfText(
         doc,
-        layout.labelText,
+        labelText,
         isRtl ? x + w - 3 : x + 3,
         cursorY,
         { align: isRtl ? "right" : "left" },
         isRtl,
       )
+      cursorY += locationLineHeight
 
-      setLanguage(doc, layout.valueRtl, locationValueFontSize, false)
+      // Value on next line(s)
+      setLanguage(doc, valueRtl, locationValueFontSize, false)
       doc.setTextColor(71, 85, 105)
-      layout.lines.forEach((line, lineIndex) => {
-        const firstLine = lineIndex === 0
-        const textX = layout.valueRtl
-          ? x + w - 3 - (firstLine ? layout.labelWidth + locationInlineGap : 0)
-          : x + 3 + (firstLine ? layout.labelWidth + locationInlineGap : 0)
-        const align = layout.valueRtl ? "right" : "left"
+      const valLines = textLines(doc, field.value, w - 6)
+      valLines.forEach((line) => {
         writePdfText(
           doc,
           line,
-          textX,
-          cursorY + lineIndex * locationLineHeight,
-          { align },
-          layout.valueRtl,
+          valueRtl ? x + w - 3 : x + 3,
+          cursorY,
+          { align: valueRtl ? "right" : "left" },
+          valueRtl,
         )
+        cursorY += locationLineHeight
       })
 
-      cursorY += layout.lines.length * locationLineHeight
-      if (fieldIndex < projectLocationFields.length - 1) cursorY += locationRowGap
+      if (fieldIndex < projectLocationFields.length - 1) cursorY += locationRowGap + 0.5
     })
   }
 
