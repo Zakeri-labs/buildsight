@@ -43,6 +43,29 @@ export function MemberProjectStagesMobile({ data }: { data: ProjectStageExecutio
     return stages
   }, [filter, stages])
 
+  const totalProjectReports = useMemo(() => stages.reduce((acc, { stage }) => acc + stage.reports.length, 0), [stages])
+  const totalProjectItems = useMemo(() => {
+    return stages.reduce((acc, { stage }) => {
+      return acc + ((stage.terms ?? []).reduce((tAcc, t) => tAcc + 1 + (t.subterms?.length || 0), 0) || 10)
+    }, 0)
+  }, [stages])
+  const completedProjectItems = useMemo(() => {
+    return stages.reduce((acc, { stage }) => {
+      return acc + (stage.terms ?? []).reduce((tAcc, t) => {
+        let count = t.response || t.status === "completed" ? 1 : 0
+        if (t.subterms) {
+          for (const st of t.subterms) {
+            if (st.response || st.status === "completed") count++
+          }
+        }
+        return tAcc + count
+      }, 0)
+    }, 0)
+  }, [stages])
+  const overallPercentage = useMemo(() => {
+    return Math.min(100, Math.max(0, Math.round((completedProjectItems / Math.max(1, totalProjectItems)) * 100)))
+  }, [completedProjectItems, totalProjectItems])
+
   const projectImageUrl = (data.project as any).imageUrl || (data.project as any).image || null
 
   return (
@@ -71,9 +94,17 @@ export function MemberProjectStagesMobile({ data }: { data: ProjectStageExecutio
             {data.project.code ? (
               <p className="truncate font-mono text-[11px] text-muted-foreground">{data.project.code}</p>
             ) : null}
-            <p className="mt-1 text-[11px] font-medium text-muted-foreground">
-              {reportedCount} Reported <span aria-hidden="true">·</span> {stages.length - reportedCount} No Reports
-            </p>
+            <div className="mt-1 space-y-1">
+              <p className="text-[11px] font-medium leading-none text-muted-foreground">
+                {totalProjectReports} {totalProjectReports === 1 ? "Report" : "Reports"} · {completedProjectItems}/{totalProjectItems} · {overallPercentage}%
+              </p>
+              <div className="h-1.5 w-full max-w-[160px] overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-300"
+                  style={{ width: `${overallPercentage}%` }}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </section>

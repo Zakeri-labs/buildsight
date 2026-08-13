@@ -309,9 +309,17 @@ export function ReportEntry({
                 {selectedProject.code ? (
                   <p className="truncate font-mono text-[11px] text-muted-foreground">{selectedProject.code}</p>
                 ) : null}
-                <p className="mt-1 text-[11px] font-medium text-muted-foreground">
-                  {reportedCount} Reported <span aria-hidden="true">·</span> {selectedProject.stages.length - reportedCount} No Reports
-                </p>
+                <div className="mt-1 space-y-1">
+                  <p className="text-[11px] font-medium leading-none text-muted-foreground">
+                    {totalProjectReports} {totalProjectReports === 1 ? "Report" : "Reports"} · {completedProjectItems}/{totalProjectItems} · {overallPercentage}%
+                  </p>
+                  <div className="h-1.5 w-full max-w-[160px] overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-300"
+                      style={{ width: `${overallPercentage}%` }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
