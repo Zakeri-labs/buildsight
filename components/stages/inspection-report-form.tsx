@@ -1656,7 +1656,27 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;")
 }
 
-function RichSectionEditor({ title, description, value, onChange, allowTable, disabled, uploadInlineImage }: { title: string; description: string; value: string; onChange: (value: string) => void; allowTable: boolean; disabled: boolean; uploadInlineImage: (file: File) => Promise<string> }) {
+function RichSectionEditor({
+  title,
+  description,
+  value,
+  onChange,
+  allowTable,
+  disabled,
+  uploadInlineImage,
+  project,
+  ccCandidates = [],
+}: {
+  title: string
+  description: string
+  value: string
+  onChange: (value: string) => void
+  allowTable: boolean
+  disabled: boolean
+  uploadInlineImage: (file: File) => Promise<string>
+  project?: { id: string; name: string; code?: string }
+  ccCandidates?: ProjectCcCandidate[]
+}) {
   const editorRef = useRef<HTMLDivElement | null>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const savedRangeRef = useRef<Range | null>(null)
@@ -1668,6 +1688,9 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
   const [mobileExpanded, setMobileExpanded] = useState(true)
   const [isRecording, setIsRecording] = useState(false)
   const [aiLoading, setAiLoading] = useState<"translate_en" | "enhance_style" | null>(null)
+  const [copiedText, setCopiedText] = useState(false)
+  const [whatsappModalOpen, setWhatsappModalOpen] = useState(false)
+  const [targetPhone, setTargetPhone] = useState("")
 
   useEffect(() => { if (editorRef.current && editorRef.current.innerHTML !== value) editorRef.current.innerHTML = value || "<p><br></p>" }, [])
 
@@ -1686,6 +1709,34 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
     restore()
     document.execCommand(name, false, argument)
     onChange(editorRef.current?.innerHTML ?? "")
+  }
+
+  const handleCopyText = async () => {
+    const text = editorRef.current?.innerText || editorRef.current?.textContent || ""
+    if (!text.trim()) return
+    try {
+      await navigator.clipboard.writeText(text.trim())
+      setCopiedText(true)
+      setTimeout(() => setCopiedText(false), 2000)
+    } catch {
+      // fallback
+    }
+  }
+
+  const sendToWhatsapp = (phoneToUse?: string) => {
+    const rawPhone = phoneToUse || targetPhone
+    const cleanPhone = rawPhone.replace(/[^0-9]/g, "")
+    if (!cleanPhone) {
+      setUploadError("لطفاً شماره تلفن معتبری برای واتساپ وارد کنید.")
+      return
+    }
+    const text = editorRef.current?.innerText || editorRef.current?.textContent || ""
+    const projectName = project?.name || "Project"
+    const message = `🏗️ *BuildSight Inspection Notes*\n*Project:* ${projectName}\n*Section:* ${title}\n---------------------------------\n${text.trim()}`
+
+    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, "_blank")
+    setWhatsappModalOpen(false)
+    setUploadError(null)
   }
 
   const [speechLang, setSpeechLang] = useState<string>("fa-IR")
