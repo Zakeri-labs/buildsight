@@ -25,13 +25,13 @@ export function MemberProjectStagesMobile({ data }: { data: ProjectStageExecutio
 
   const stages = useMemo(
     () =>
-      data.stages
+      (data.stages ?? [])
         .filter((stage) => stage.templateStageId === null || stage.id !== stage.templateStageId)
         .map((stage, index) => ({
           stage,
           index,
-          latestReport: stage.reports[0] ?? null,
-          hasReports: stage.reports.length > 0,
+          latestReport: stage.reports?.[0] ?? null,
+          hasReports: (stage.reports?.length ?? 0) > 0,
         })),
     [data.stages],
   )
@@ -43,7 +43,7 @@ export function MemberProjectStagesMobile({ data }: { data: ProjectStageExecutio
     return stages
   }, [filter, stages])
 
-  const totalProjectReports = useMemo(() => stages.reduce((acc, { stage }) => acc + stage.reports.length, 0), [stages])
+  const totalProjectReports = useMemo(() => stages.reduce((acc, { stage }) => acc + (stage.reports?.length ?? 0), 0), [stages])
   const totalProjectItems = useMemo(() => {
     return stages.reduce((acc, { stage }) => {
       return acc + ((stage.terms ?? []).reduce((tAcc, t) => tAcc + 1 + (t.subterms?.length || 0), 0) || 10)
@@ -139,7 +139,7 @@ export function MemberProjectStagesMobile({ data }: { data: ProjectStageExecutio
             {visibleStages.length ? (
               <div className="divide-y divide-border/70">
                 {visibleStages.map(({ stage, index, hasReports }) => {
-                  const reportsCount = stage.reports.length
+                  const reportsCount = stage.reports?.length ?? 0
                   const totalItems = (stage.terms ?? []).reduce((acc, t) => acc + 1 + (t.subterms?.length || 0), 0) || 10
                   const completedItems = (stage.terms ?? []).reduce((acc, t) => {
                     let count = t.response || t.status === "completed" ? 1 : 0

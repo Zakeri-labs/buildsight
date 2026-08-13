@@ -1289,11 +1289,11 @@ export function InspectionReportForm({
       ) : null}
 
       {reportDefinition.responseType === "combined" ? SECTION_META.map((section) => (
-        <RichSectionEditor key={section.key} title={locale === "ar" ? section.titleAr : section.title} description={section.description} value={content[section.key]} onChange={(value) => updateSection(section.key, value)} allowTable={section.key === "feedback"} disabled={isLocked} uploadInlineImage={uploadInlineImage} />
+        <RichSectionEditor key={section.key} title={locale === "ar" ? section.titleAr : section.title} description={section.description} value={content[section.key]} onChange={(value) => updateSection(section.key, value)} allowTable={section.key === "feedback"} disabled={isLocked} uploadInlineImage={uploadInlineImage} project={project} ccCandidates={ccCandidates} />
       )) : reportDefinition.responseType === "inspection_checklist" ? (
-        <RichSectionEditor title="Overall Notes" description="Add overall inspection observations or follow-up notes." value={content.feedback} onChange={(value) => updateSection("feedback", value)} allowTable={false} disabled={isLocked} uploadInlineImage={uploadInlineImage} />
+        <RichSectionEditor title="Overall Notes" description="Add overall inspection observations or follow-up notes." value={content.feedback} onChange={(value) => updateSection("feedback", value)} allowTable={false} disabled={isLocked} uploadInlineImage={uploadInlineImage} project={project} ccCandidates={ccCandidates} />
       ) : reportDefinition.responseType === "text" ? null : (
-        <RichSectionEditor title="Comments / Notes" description="Add context, observations, or supporting notes." value={content.feedback} onChange={(value) => updateSection("feedback", value)} allowTable={false} disabled={isLocked} uploadInlineImage={uploadInlineImage} />
+        <RichSectionEditor title="Comments / Notes" description="Add context, observations, or supporting notes." value={content.feedback} onChange={(value) => updateSection("feedback", value)} allowTable={false} disabled={isLocked} uploadInlineImage={uploadInlineImage} project={project} ccCandidates={ccCandidates} />
       )}
 
       {responseId && (status === "submitted" || status === "under_review" || status === "rejected" || status === "approved") ? (
