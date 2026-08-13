@@ -221,20 +221,20 @@ export function CompletedVisitsBySupervisorCard({
                       : 0
 
                   return (
-                    <li key={supervisor.supervisorId} className="py-2 first:pt-0 last:pb-0">
-                      <div className="flex items-baseline gap-3 text-sm">
+                    <li key={supervisor.supervisorId} className="py-2.5 first:pt-0 last:pb-0">
+                      <div className="flex items-baseline justify-between gap-3 text-sm">
                         <div className="min-w-0 flex-1">
                           <SupervisorVisitDialog supervisor={supervisor} dateRangeLabel={dateRangeLabel} />
                         </div>
-                        <span className="shrink-0 font-semibold tabular-nums text-foreground">
-                          {supervisor.completedVisitCount}
+                        <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">
+                          {supervisor.completedVisitCount} of {supervisorTotal}
                         </span>
                       </div>
-                      <div className="mt-1 flex items-center gap-2.5">
+                      <div className="mt-1.5 flex items-center gap-3">
                         <span className="w-[66px] shrink-0 text-xs text-muted-foreground">
                           {supervisor.projectCount} {supervisor.projectCount === 1 ? "Project" : "Projects"}
                         </span>
-                        <div className="h-2 min-w-0 flex-1 max-w-[170px] overflow-hidden rounded-full bg-muted/70">
+                        <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted/70">
                           <div
                             className="h-full rounded-full bg-primary transition-[width]"
                             style={{ width: `${relativeWidth}%` }}
