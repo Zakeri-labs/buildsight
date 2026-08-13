@@ -1616,15 +1616,24 @@ function EvidenceTile({ src, name, progress, onRemove }: { src: string; name: st
       ) : null}
       <div className="absolute inset-x-0 bottom-0 z-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-2 pb-1.5 pt-6 text-start">
         <p className="block w-full truncate text-[10px] font-medium leading-tight text-white drop-shadow-xs">{name}</p>
-      </div>
-    </div>
-  )
-}
-
 function DocumentRow({ name, href, progress, onRemove }: { name: string; href?: string; progress?: number; onRemove?: () => void }) {
   const body = <><span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><FileText className="size-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{name}</p>{progress !== undefined && progress > 0 ? <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary" style={{ width: `${progress}%` }} /></div> : <p className="text-xs text-muted-foreground">Supporting document</p>}</div>{href ? <FileDown className="size-4 text-muted-foreground" /> : null}</>
   return <div className="flex items-center gap-1.5 rounded-lg border px-1.5 py-1.5 md:gap-3 md:rounded-xl md:px-3 md:py-2.5">{href ? <a href={href} className="flex min-w-0 flex-1 items-center gap-3 hover:text-primary">{body}</a> : body}{onRemove ? <Button type="button" variant="ghost" size="icon-sm" onClick={onRemove} aria-label={`Remove ${name}`}><Trash2 className="size-4" /></Button> : null}</div>
 }
+
+const CONSTRUCTION_SPEECH_LANGUAGES = [
+  { code: "fa-IR", label: "🇮🇷 فارسی" },
+  { code: "ur-PK", label: "🇵🇰 اردو (Urdu)" },
+  { code: "hi-IN", label: "🇮🇳 हिंदी (Hindi)" },
+  { code: "en-US", label: "🇺🇸 English" },
+  { code: "ar-SA", label: "🇸🇦 العربية" },
+  { code: "tl-PH", label: "🇵🇭 Tagalog" },
+  { code: "ml-IN", label: "🇮🇳 മലയാളം" },
+  { code: "bn-BD", label: "🇧🇩 বাংলা" },
+  { code: "ta-IN", label: "🇮🇳 தமிழ்" },
+  { code: "pa-IN", label: "🇵🇰 Punjabi" },
+  { code: "ps-AF", label: "🇦🇫 پشتو" },
+]
 
 function escapeHtml(value: string) {
   return value
@@ -1828,16 +1837,17 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
 
             <select
               value={speechLang}
-              onChange={(e) => setSpeechLang(e.target.value)}
+              onChange={(e) => handleSpeechLangChange(e.target.value)}
               disabled={disabled || isRecording}
-              title="زبان گفتار برای تایپ زنده"
+              title="زبان گفتار پیش‌فرض برای تایپ زنده وویس"
               aria-label="Speech Language"
-              className="h-8 rounded-lg border border-input bg-background px-1 text-xs font-semibold text-foreground shadow-2xs outline-none hover:bg-accent cursor-pointer"
+              className="h-8 max-w-[125px] rounded-lg border border-input bg-background px-1.5 text-xs font-semibold text-foreground shadow-2xs outline-none hover:bg-accent cursor-pointer truncate"
             >
-              <option value="fa-IR">🇮🇷 FA</option>
-              <option value="hi-IN">🇮🇳 HI</option>
-              <option value="en-US">🇺🇸 EN</option>
-              <option value="ar-SA">🇸🇦 AR</option>
+              {CONSTRUCTION_SPEECH_LANGUAGES.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.label}
+                </option>
+              ))}
             </select>
           </div>
 
