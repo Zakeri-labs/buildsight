@@ -51,6 +51,7 @@ export default async function AppGroupLayout({
     (m) => m.role === "org_member" || m.role === "org_admin" || m.role === "org_manager",
   )
   const canShowSiteVisitsInSidebar = !isOrgTeam && siteVisitAccess.size > 0
+  const projectOptions = projects.map((p) => ({ id: p.id, name: p.name }))
 
   return (
     <CurrentUserProvider user={user}>
