@@ -50,6 +50,7 @@ import {
 import { saveReportCcRecipientsAction } from "@/lib/actions/report-cc"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto-generation"
+import { exportTranslationPdf, storeTranslationPdf, downloadPdfBlob } from "@/lib/stage-translations/client-pdf"
 import { StageTranslationActions } from "@/components/stages/stage-translation-actions"
 import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
 import { ReportDownloadSection } from "@/components/stages/report-download-section"
@@ -479,6 +480,10 @@ export function InspectionReportForm({
   type SubmitStep = { label: string; status: "pending" | "active" | "done" | "error" }
   const [submitSteps, setSubmitSteps] = useState<SubmitStep[]>([])
   const [submitResult, setSubmitResult] = useState<{ responseId: string; stageId: string } | null>(null)
+  const [readyPdfs, setReadyPdfs] = useState<{
+    original?: { blob: Blob; filename: string }
+    bilingual?: { blob: Blob; filename: string }
+  } | null>(null)
   const [basicOpen, setBasicOpen] = useState(false)
   const [reviewComments, setReviewComments] = useState("")
   const [approvalHistory, setApprovalHistory] = useState(response?.approvals ?? [])
@@ -742,26 +747,98 @@ export function InspectionReportForm({
         setStatus(result.data.status as ResponseStatus)
         setSuccess(copy.submitted)
         if (isDirectStageReport && isSubmitMode) {
+          // Step 3: AI Translation
           steps = updateStep(steps, stepIdx, "active")
           enqueueStageTranslationJob({
             projectId: project.id,
             stageId: result.data.projectStageId,
             responseId: id,
           })
+
+          let translationData: any = null
+          const startTime = Date.now()
+          while (Date.now() - startTime < 45_000) {
+            await new Promise((resolve) => setTimeout(resolve, 1500))
+            try {
+              const params = new URLSearchParams({
+                projectId: project.id,
+                stageId: result.data.projectStageId,
+                responseId: id,
+              })
+              const res = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
+              if (res.ok) {
+                const payload = await res.json()
+                if (payload?.data?.translation?.status === "completed" && payload?.data?.translation?.translatedContent) {
+                  translationData = payload.data
+                  break
+                }
+              }
+            } catch {
+              // ignore transient errors
+            }
+          }
+
           steps = updateStep(steps, stepIdx, "done")
           stepIdx++
+
+          // Step 4: Preparing PDF Files
           steps = updateStep(steps, stepIdx, "active")
-          await new Promise((resolve) => setTimeout(resolve, 600))
+          let generatedPdfs: {
+            original?: { blob: Blob; filename: string }
+            bilingual?: { blob: Blob; filename: string }
+          } = {}
+
+          if (translationData) {
+            try {
+              const [originalPdf, bilingualPdf] = await Promise.all([
+                exportTranslationPdf({
+                  data: translationData,
+                  translation: translationData.translation,
+                  kind: "original",
+                  ccRecipients: translationData.ccRecipients ?? [],
+                }),
+                exportTranslationPdf({
+                  data: translationData,
+                  translation: translationData.translation,
+                  kind: "bilingual",
+                  ccRecipients: translationData.ccRecipients ?? [],
+                }),
+              ])
+
+              generatedPdfs = { original: originalPdf, bilingual: bilingualPdf }
+
+              if (translationData.translation?.id) {
+                Promise.all([
+                  storeTranslationPdf({
+                    projectId: project.id,
+                    translationId: translationData.translation.id,
+                    kind: "original",
+                    blob: originalPdf.blob,
+                    filename: originalPdf.filename,
+                  }),
+                  storeTranslationPdf({
+                    projectId: project.id,
+                    translationId: translationData.translation.id,
+                    kind: "bilingual",
+                    blob: bilingualPdf.blob,
+                    filename: bilingualPdf.filename,
+                  }),
+                ]).catch(() => undefined)
+              }
+            } catch (pdfErr) {
+              console.warn("Client PDF generation warning:", pdfErr)
+            }
+          }
+
+          setReadyPdfs(generatedPdfs)
           steps = updateStep(steps, stepIdx, "done")
         }
       } else {
         setStatus(mode === "progress" ? "in_progress" : "draft")
         setSuccess(copy.saved)
       }
-      // Brief pause so user can see the final done state
-      if (isSubmitMode) await new Promise((resolve) => setTimeout(resolve, 600))
+
       if (isSubmitMode) {
-        // Show success screen in modal instead of navigating
         setSubmitResult({ responseId: id, stageId: routeStageId })
       } else {
         router.replace(`/projects/${project.id}/stages/${routeStageId}/reports/${id}`)
@@ -1340,33 +1417,57 @@ export function InspectionReportForm({
                   <span className="flex size-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
                     <CheckCircle2 className="size-4" />
                   </span>
-                  {locale === "ar" ? "تم إنشاء التقرير بنجاح" : "Report Created!"}
+                  {locale === "ar" ? "تم إرسال التقرير وجاهز للتحميل!" : "Report & PDFs Ready!"}
                 </DialogTitle>
                 <DialogDescription className="text-xs">
                   {locale === "ar"
-                    ? "تم إرسال التقرير. يمكنك تنزيل النسخة الإنجليزية أو ثنائية اللغة."
-                    : "Your report has been submitted. Download the English or bilingual PDF below."}
+                    ? "تم إرسال التقرير وإنشاء كافة ملفات PDF بنجاح. انقر أدناه للتحميل المباشر."
+                    : "Your report has been submitted and all PDF documents are ready for instant download."}
                 </DialogDescription>
               </DialogHeader>
-              <div className="mt-3">
-                <ReportDownloadSection
-                  projectId={project.id}
-                  stageId={submitResult.stageId}
-                  termId={isDirectStageReport ? undefined : reportDefinition.id}
-                  responseId={submitResult.responseId}
-                  initialTranslation={translation}
-                  responseUpdatedAt={new Date().toISOString()}
-                  locale={locale}
-                  variant="card"
-                />
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (readyPdfs?.original) {
+                      downloadPdfBlob(readyPdfs.original.blob, readyPdfs.original.filename)
+                    } else {
+                      window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&translationId=${translation?.id}&kind=original`)
+                    }
+                  }}
+                  className="h-10 gap-2 rounded-lg font-semibold shadow-xs"
+                >
+                  <Download className="size-4 text-primary" />
+                  <span>English PDF</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={() => {
+                    if (readyPdfs?.bilingual) {
+                      downloadPdfBlob(readyPdfs.bilingual.blob, readyPdfs.bilingual.filename)
+                    } else {
+                      window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&translationId=${translation?.id}&kind=bilingual`)
+                    }
+                  }}
+                  className="h-10 gap-2 rounded-lg font-semibold shadow-xs"
+                >
+                  <Download className="size-4" />
+                  <span>Bilingual PDF</span>
+                </Button>
               </div>
-              <DialogFooter>
+              <DialogFooter className="mt-4">
                 <Button
                   type="button"
                   className="w-full"
                   onClick={() => {
                     setSubmitModalOpen(false)
                     setSubmitResult(null)
+                    setReadyPdfs(null)
                     router.replace(`/projects/${project.id}/stages/${submitResult.stageId}/reports/${submitResult.responseId}`)
                     router.refresh()
                   }}

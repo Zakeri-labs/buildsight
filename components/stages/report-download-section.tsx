@@ -6,6 +6,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import type { ProjectStageTranslationSummary } from "@/lib/db/project-stages"
 import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto-generation"
+import { exportTranslationPdf, downloadPdfBlob, storeTranslationPdf } from "@/lib/stage-translations/client-pdf"
 import { cn } from "@/lib/utils"
 
 export function ReportDownloadSection({
@@ -90,30 +91,62 @@ export function ReportDownloadSection({
     })
   }
 
-  function handleDownload(kind: "original" | "bilingual") {
+  async function handleDownload(kind: "original" | "bilingual") {
     if (downloading) return
     setDownloading(kind)
 
-    const storedPath =
-      kind === "original"
-        ? translation?.originalPdfPath
-        : translation?.bilingualPdfPath
+    try {
+      const storedPath =
+        kind === "original"
+          ? translation?.originalPdfPath
+          : translation?.bilingualPdfPath
 
-    if (storedPath && translation?.id) {
+      if (storedPath && translation?.id) {
+        const params = new URLSearchParams({
+          projectId,
+          translationId: translation.id,
+          kind,
+        })
+        window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
+        setTimeout(() => setDownloading(null), 2500)
+        return
+      }
+
+      // Live client PDF generation fallback without navigating to secondary page
       const params = new URLSearchParams({
         projectId,
-        translationId: translation.id,
-        kind,
+        stageId: termId || stageId,
+        responseId,
+        ...(termId ? { termId } : {}),
       })
-      window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
-      setTimeout(() => setDownloading(null), 2500)
-    } else {
-      // Fallback: open translate endpoint which renders or triggers generation
-      window.open(
-        `/projects/${projectId}/stages/${stageId}/reports/${responseId}/translate?kind=${kind}`,
-        "_blank",
-      )
-      setTimeout(() => setDownloading(null), 1000)
+      const res = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
+      if (!res.ok) throw new Error("Unable to load report translation data.")
+      const payload = await res.json()
+      const data = payload?.data
+      if (!data) throw new Error("Report data unavailable.")
+
+      const pdfResult = await exportTranslationPdf({
+        data,
+        translation: data.translation,
+        kind,
+        ccRecipients: payload?.ccRecipients ?? [],
+      })
+
+      downloadPdfBlob(pdfResult.blob, pdfResult.filename)
+
+      if (data.translation?.id) {
+        storeTranslationPdf({
+          projectId,
+          translationId: data.translation.id,
+          kind,
+          blob: pdfResult.blob,
+          filename: pdfResult.filename,
+        }).catch(() => undefined)
+      }
+    } catch (err) {
+      console.error("PDF download error:", err)
+    } finally {
+      setDownloading(null)
     }
   }
 
