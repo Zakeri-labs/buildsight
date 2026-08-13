@@ -1643,6 +1643,7 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
   }
 
   const handleAiAction = async (action: "translate_en" | "enhance_style") => {
+    const currentHtml = editorRef.current?.innerHTML || ""
     const currentText = editorRef.current?.innerText || editorRef.current?.textContent || ""
     if (!currentText.trim()) {
       setUploadError(action === "translate_en" ? "لطفاً ابتدا متنی برای ترجمه وارد کنید." : "لطفاً ابتدا متنی برای بهبود و توسعه وارد کنید.")
@@ -1655,7 +1656,7 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
       const res = await fetch("/api/ai/enhance-text", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: currentText, action }),
+        body: JSON.stringify({ html: currentHtml, text: currentText, action }),
       })
       const data = await res.json()
       if (!res.ok || !data.resultText) {

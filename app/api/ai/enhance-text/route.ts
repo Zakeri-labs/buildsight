@@ -12,11 +12,13 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({})) as Record<string, unknown>
     const text = typeof body.text === "string" ? body.text.trim() : ""
+    const html = typeof body.html === "string" ? body.html.trim() : ""
     const action = typeof body.action === "string" ? body.action : "translate_en"
     const projectId = typeof body.projectId === "string" ? body.projectId : null
 
-    if (!text) {
-      return NextResponse.json({ error: "No text provided for AI processing." }, { status: 400 })
+    const inputContent = html || text
+    if (!inputContent) {
+      return NextResponse.json({ error: "No content provided for AI processing." }, { status: 400 })
     }
 
     if (projectId) {
@@ -32,23 +34,24 @@ export async function POST(request: NextRequest) {
     if (action === "translate_en") {
       systemPrompt = [
         "You are a senior civil engineer and site inspection consultant.",
-        "Your task is to translate the user's site inspection notes (which may be in Persian, Arabic, or informal engineering notes) into professional, standard civil engineering English.",
-        "CRITICAL RULES:",
-        "1. Use exact civil engineering and construction site terminology (e.g. formwork, rebar, shuttering, beam level, concrete pour, slump test, compaction, honeycomb, expansion joint, curing).",
-        "2. Keep all numbers, dimensions, dates, axis/grid references, and factual observations EXACTLY as provided in the input.",
-        "3. DO NOT invent any extra facts, observations, or numbers that are not in the source text.",
-        "4. Return clean, well-formatted HTML with simple <p>, <ul>, <li>, or <strong> tags suitable for a site inspection report.",
+        "Your task is to translate site inspection notes (which may contain HTML tags, bullet points <ul>/<li>, or informal Persian/Arabic text) into professional, standard civil engineering English.",
+        "CRITICAL REQUIREMENTS:",
+        "1. PRESERVE STRUCTURE: If the input contains bullet points <ul>/<li> or list items, maintain them as <ul><li>...</li></ul> in the output. Do NOT flatten list items into a single paragraph.",
+        "2. Professional Terminology: Use exact civil engineering and construction site terminology (e.g. formwork, rebar, shuttering, beam level, concrete pour, slump test, compaction, honeycomb, expansion joint, curing).",
+        "3. Exact Details: Keep all numbers, dimensions, dates, axis/grid references, and factual observations EXACTLY as provided.",
+        "4. DO NOT invent any extra facts, observations, or numbers that are not in the source text.",
+        "5. Output Format: Return ONLY clean HTML (e.g., <ul><li>...</li></ul> or <p>...</p>) suitable for a rich-text report editor.",
       ].join("\n")
     } else {
       systemPrompt = [
         "You are a senior construction quality control manager.",
-        "Your task is to enhance the style, grammar, structure, and readability of the user's site inspection notes.",
-        "CRITICAL RULES:",
-        "1. Improve the tone, clarity, and formatting to look like a professional site inspection report.",
-        "2. Keep all numbers, dimensions, grid lines, and technical details EXACTLY unchanged.",
-        "3. DO NOT invent any new facts, findings, or observations that were not in the original text.",
-        "4. DO NOT change the core meaning.",
-        "5. Return clean, well-formatted HTML with simple <p>, <ul>, <li>, or <strong> tags.",
+        "Your task is to enhance the professional tone, engineering clarity, and formatting of site inspection notes.",
+        "CRITICAL REQUIREMENTS:",
+        "1. PRESERVE STRUCTURE: If the input contains bullet points <ul>/<li> or multiple items, PRESERVE them as bullet points <ul><li>...</li></ul>. If the text lists multiple observations or actions, structure them as bullet points (<ul><li>...</li></ul>) to look clean and executive.",
+        "2. DO NOT REMOVE BULLET POINTS: Under no circumstances should you flatten bullet points or list items into plain block paragraphs.",
+        "3. Tone & Grammar: Improve the tone, technical vocabulary, and clarity without adding fake facts or changing numbers/grid dimensions.",
+        "4. Exact Details: Keep all numbers, measurements, dates, and grid references EXACTLY unchanged.",
+        "5. Output Format: Return ONLY clean HTML (e.g., <ul><li>...</li></ul> or <p>...</p>).",
       ].join("\n")
     }
 
@@ -64,7 +67,7 @@ export async function POST(request: NextRequest) {
         max_output_tokens: 4000,
         input: [
           { role: "developer", content: [{ type: "input_text", text: systemPrompt }] },
-          { role: "user", content: [{ type: "input_text", text: `INPUT TEXT:\n${text}` }] },
+          { role: "user", content: [{ type: "input_text", text: `INPUT HTML / TEXT:\n${inputContent}` }] },
         ],
       }),
       signal: AbortSignal.timeout(45_000),
