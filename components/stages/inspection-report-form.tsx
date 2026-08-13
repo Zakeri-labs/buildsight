@@ -472,6 +472,7 @@ export function InspectionReportForm({
   const [submitModalOpen, setSubmitModalOpen] = useState(false)
   type SubmitStep = { label: string; status: "pending" | "active" | "done" | "error" }
   const [submitSteps, setSubmitSteps] = useState<SubmitStep[]>([])
+  const [submitResult, setSubmitResult] = useState<{ responseId: string; stageId: string } | null>(null)
   const [reviewComments, setReviewComments] = useState("")
   const [approvalHistory, setApprovalHistory] = useState(response?.approvals ?? [])
   const [expandedChecklistCommentId, setExpandedChecklistCommentId] = useState<string | null>(null)
@@ -750,11 +751,15 @@ export function InspectionReportForm({
         setStatus(mode === "progress" ? "in_progress" : "draft")
         setSuccess(copy.saved)
       }
-      // Brief pause so user can see the final done state before navigating
-      if (isSubmitMode) await new Promise((resolve) => setTimeout(resolve, 800))
-      setSubmitModalOpen(false)
-      router.replace(`/projects/${project.id}/stages/${routeStageId}/reports/${id}`)
-      router.refresh()
+      // Brief pause so user can see the final done state
+      if (isSubmitMode) await new Promise((resolve) => setTimeout(resolve, 600))
+      if (isSubmitMode) {
+        // Show success screen in modal instead of navigating
+        setSubmitResult({ responseId: id, stageId: routeStageId })
+      } else {
+        router.replace(`/projects/${project.id}/stages/${routeStageId}/reports/${id}`)
+        router.refresh()
+      }
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Unable to save the report.")
       // Mark current active step as error
@@ -1271,62 +1276,127 @@ export function InspectionReportForm({
       {/* Submit Progress Modal */}
       <Dialog open={submitModalOpen} onOpenChange={() => {/* locked while submitting */}}>
         <DialogContent className="sm:max-w-sm" onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <Send className="size-4 text-primary" />
-              {locale === "ar" ? "جارٍ إرسال التقرير..." : "Submitting Report..."}
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              {locale === "ar" ? "يرجى الانتظار، لا تغلق هذه الصفحة." : "Please wait, do not close this page."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="mt-1 space-y-2.5">
-            {submitSteps.map((step, idx) => (
-              <div key={idx} className="flex items-center gap-3">
-                <span className="flex size-6 shrink-0 items-center justify-center rounded-full">
-                  {step.status === "done" && (
-                    <span className="flex size-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
-                      <CheckCircle2 className="size-3.5" />
-                    </span>
+          {submitResult ? (
+            // ── Success screen ──────────────────────────────────────────
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-base">
+                  <span className="flex size-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
+                    <CheckCircle2 className="size-4" />
+                  </span>
+                  {locale === "ar" ? "تم إنشاء التقرير بنجاح" : "Report Created!"}
+                </DialogTitle>
+                <DialogDescription className="text-xs">
+                  {locale === "ar"
+                    ? "تم إرسال التقرير. يمكنك تنزيل النسخة الإنجليزية أو ثنائية اللغة."
+                    : "Your report has been submitted. Download the English or bilingual PDF below."}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <a
+                  href={`/projects/${project.id}/stages/${submitResult.stageId}/reports/${submitResult.responseId}/translate?kind=original`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    "inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-semibold shadow-sm transition-colors hover:bg-accent",
                   )}
-                  {step.status === "active" && (
-                    <span className="flex size-6 items-center justify-center rounded-full bg-primary/10">
-                      <Loader2 className="size-3.5 animate-spin text-primary" />
-                    </span>
+                >
+                  <Download className="size-4 text-primary" />
+                  <span>EN</span>
+                </a>
+                <a
+                  href={`/projects/${project.id}/stages/${submitResult.stageId}/reports/${submitResult.responseId}/translate?kind=bilingual`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    "inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-input bg-background px-3 text-sm font-semibold shadow-sm transition-colors hover:bg-accent",
                   )}
-                  {step.status === "pending" && (
-                    <span className="flex size-6 items-center justify-center rounded-full border border-border bg-muted">
-                      <span className="size-1.5 rounded-full bg-muted-foreground/40" />
-                    </span>
-                  )}
-                  {step.status === "error" && (
-                    <span className="flex size-6 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400">
-                      <AlertCircle className="size-3.5" />
-                    </span>
-                  )}
-                </span>
-                <span className={cn(
-                  "text-sm leading-tight",
-                  step.status === "done" && "text-muted-foreground line-through",
-                  step.status === "active" && "font-semibold text-foreground",
-                  step.status === "pending" && "text-muted-foreground",
-                  step.status === "error" && "font-semibold text-red-600 dark:text-red-400",
-                )}>
-                  {step.label}
-                </span>
+                >
+                  <Download className="size-4 text-primary" />
+                  <span>EN / AR</span>
+                </a>
               </div>
-            ))}
-            {submitSteps.some((s) => s.status === "error") && error ? (
-              <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
-                {error}
-                <div className="mt-2">
-                  <Button type="button" size="sm" variant="outline" className="text-xs" onClick={() => { setSubmitModalOpen(false); setError(null) }}>
-                    {locale === "ar" ? "إغلاق والمحاولة مجدداً" : "Close and Retry"}
-                  </Button>
-                </div>
+              <p className="text-[11px] text-muted-foreground">
+                {locale === "ar"
+                  ? "ملاحظة: قد تستغرق ملفات PDF بضع دقائق لإعدادها إذا كانت الترجمة لا تزال جارية."
+                  : "Note: PDFs may take a few minutes to prepare if translation is still processing."}
+              </p>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  className="w-full"
+                  onClick={() => {
+                    setSubmitModalOpen(false)
+                    setSubmitResult(null)
+                    router.replace(`/projects/${project.id}/stages/${submitResult.stageId}/reports/${submitResult.responseId}`)
+                    router.refresh()
+                  }}
+                >
+                  {locale === "ar" ? "إغلاق وعرض التقرير" : "Close & View Report"}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            // ── In-progress steps screen ────────────────────────────────
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-base">
+                  <Send className="size-4 text-primary" />
+                  {locale === "ar" ? "جارٍ إرسال التقرير..." : "Submitting Report..."}
+                </DialogTitle>
+                <DialogDescription className="text-xs">
+                  {locale === "ar" ? "يرجى الانتظار، لا تغلق هذه الصفحة." : "Please wait, do not close this page."}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="mt-1 space-y-2.5">
+                {submitSteps.map((step, idx) => (
+                  <div key={idx} className="flex items-center gap-3">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full">
+                      {step.status === "done" && (
+                        <span className="flex size-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
+                          <CheckCircle2 className="size-3.5" />
+                        </span>
+                      )}
+                      {step.status === "active" && (
+                        <span className="flex size-6 items-center justify-center rounded-full bg-primary/10">
+                          <Loader2 className="size-3.5 animate-spin text-primary" />
+                        </span>
+                      )}
+                      {step.status === "pending" && (
+                        <span className="flex size-6 items-center justify-center rounded-full border border-border bg-muted">
+                          <span className="size-1.5 rounded-full bg-muted-foreground/40" />
+                        </span>
+                      )}
+                      {step.status === "error" && (
+                        <span className="flex size-6 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400">
+                          <AlertCircle className="size-3.5" />
+                        </span>
+                      )}
+                    </span>
+                    <span className={cn(
+                      "text-sm leading-tight",
+                      step.status === "done" && "text-muted-foreground line-through",
+                      step.status === "active" && "font-semibold text-foreground",
+                      step.status === "pending" && "text-muted-foreground",
+                      step.status === "error" && "font-semibold text-red-600 dark:text-red-400",
+                    )}>
+                      {step.label}
+                    </span>
+                  </div>
+                ))}
+                {submitSteps.some((s) => s.status === "error") && error ? (
+                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+                    {error}
+                    <div className="mt-2">
+                      <Button type="button" size="sm" variant="outline" className="text-xs" onClick={() => { setSubmitModalOpen(false); setError(null) }}>
+                        {locale === "ar" ? "إغلاق والمحاولة مجدداً" : "Close and Retry"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
