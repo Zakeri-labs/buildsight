@@ -145,6 +145,8 @@ function SearchableProjectSelect({
   )
 }
 
+type StageFilter = "all" | "reported" | "no-reports"
+
 export function ReportEntry({
   projects,
   errorCode,
@@ -160,6 +162,7 @@ export function ReportEntry({
   const [linkedSiteVisitId, setLinkedSiteVisitId] = useState<string | null>(linkedSiteVisit?.id ?? null)
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null)
   const [changeProjectOpen, setChangeProjectOpen] = useState(false)
+  const [filter, setFilter] = useState<StageFilter>("all")
   const stageListRef = useRef<HTMLDivElement>(null)
 
   const selectedProject = useMemo(
@@ -176,6 +179,18 @@ export function ReportEntry({
   const latestReportContextLabel = selectedStage
     ? `Last Report of ${stageDisplayName(selectedStage.name)} Stage`
     : "Latest Project Report"
+
+  const reportedCount = useMemo(
+    () => selectedProject?.stages.filter((stage) => stage.reportsCount > 0).length ?? 0,
+    [selectedProject],
+  )
+
+  const visibleStages = useMemo(() => {
+    if (!selectedProject) return []
+    if (filter === "reported") return selectedProject.stages.filter((s) => s.reportsCount > 0)
+    if (filter === "no-reports") return selectedProject.stages.filter((s) => s.reportsCount === 0)
+    return selectedProject.stages
+  }, [selectedProject, filter])
 
   const applyProjectChange = (projectId: string) => {
     setSelectedProjectId(projectId)
@@ -210,11 +225,6 @@ export function ReportEntry({
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4 md:space-y-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Report Entry</h1>
-        {linkedSiteVisitId ? <Badge variant="secondary">Linked to scheduled visit</Badge> : null}
-      </div>
-
       {errorCode ? (
         <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           {errorCode === "unauthorized-project"
@@ -237,8 +247,14 @@ export function ReportEntry({
             <p className="mt-1 max-w-sm text-sm text-muted-foreground">Projects explicitly assigned to you as Supervisor will appear here.</p>
           </CardContent>
         </Card>
-      ) : (
-        <>
+      ) : !selectedProject ? (
+        /* State 1: No project selected - original dropdown & title */
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Report Entry</h1>
+            {linkedSiteVisitId ? <Badge variant="secondary">Linked to scheduled visit</Badge> : null}
+          </div>
+
           <section className="space-y-2" aria-labelledby="report-entry-project-label">
             <label id="report-entry-project-label" className="text-sm font-semibold text-foreground">
               Project
@@ -250,163 +266,205 @@ export function ReportEntry({
             />
           </section>
 
-          {selectedProject ? (
+          <Card size="sm">
+            <CardContent className="flex min-h-44 flex-col items-center justify-center px-5 py-7 text-center">
+              <div className="mb-3 flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Building2 className="size-5" aria-hidden="true" />
+              </div>
+              <h2 className="font-semibold text-foreground">Select a project</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Project details, the latest report, and ordered stages will appear here.</p>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        /* State 2: Project selected - MemberProjectStagesMobile design */
+        <div className="space-y-3 pb-1">
+          {/* Top project dropdown selector */}
+          <div className="space-y-1">
+            <SearchableProjectSelect
+              projects={projects}
+              selectedProjectId={selectedProjectId}
+              onSelectProject={handleProjectChange}
+            />
+          </div>
+
+          {/* 1. Stages title & count badge outside card */}
+          <div className="flex items-center justify-between gap-3 px-0.5 pt-0.5">
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">Stages</h1>
+              {linkedSiteVisitId ? <Badge variant="secondary" className="text-xs">Linked visit</Badge> : null}
+            </div>
+            <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+              {selectedProject.stages.length} {selectedProject.stages.length === 1 ? "Stage" : "Stages"}
+            </span>
+          </div>
+
+          {/* 2. Compact Project Card with cover image / building icon on left */}
+          <section className="overflow-hidden rounded-xl border border-border bg-card p-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted/40 text-primary">
+                {selectedProject.imageUrl ? (
+                  <img src={selectedProject.imageUrl} alt={selectedProject.name} className="size-full object-cover" />
+                ) : (
+                  <Building2 className="size-6 text-primary" aria-hidden="true" />
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="truncate text-sm font-bold leading-tight text-foreground">{selectedProject.name}</h2>
+                  {selectedProject.status ? <Badge variant="secondary" className="shrink-0 text-[10px]">{selectedProject.status}</Badge> : null}
+                </div>
+                {selectedProject.code ? (
+                  <p className="truncate font-mono text-[11px] text-muted-foreground">{selectedProject.code}</p>
+                ) : null}
+                <p className="mt-1 text-[11px] font-medium text-muted-foreground">
+                  {reportedCount} Reported <span aria-hidden="true">·</span> {selectedProject.stages.length - reportedCount} No Reports
+                </p>
+              </div>
+            </div>
+
+            {/* Latest report preview if available */}
+            {contextualLatestReport ? (
+              <div className="mt-2.5 border-t border-border/60 pt-2">
+                <Link
+                  href={`/projects/${selectedProject.id}/stages/${contextualLatestReport.stageId}/reports/${contextualLatestReport.id}`}
+                  className="group flex items-center justify-between gap-2 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-muted/50"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-1.5 text-[11px] font-semibold text-foreground">
+                      <FileText className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+                      <span className="truncate">{latestReportContextLabel}</span>
+                    </p>
+                    <p className="mt-0.5 truncate text-[12px] font-semibold text-foreground group-hover:text-primary">
+                      {contextualLatestReport.reportTitle}
+                    </p>
+                  </div>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                </Link>
+              </div>
+            ) : null}
+          </section>
+
+          {/* 3. Filter tabs and stage list */}
+          {selectedProject.stages.length ? (
             <>
-              <Card className="py-0">
-                <div className="grid grid-cols-1 sm:grid-cols-[9rem_minmax(0,1fr)]">
-                  <div className="hidden sm:block relative min-h-44 overflow-hidden bg-muted">
-                    {selectedProject.imageUrl ? (
-                      <img src={selectedProject.imageUrl} alt={`${selectedProject.name} cover`} className="absolute inset-0 size-full object-cover" />
-                    ) : (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-2 text-center text-muted-foreground">
-                        <ImageIcon className="size-6" aria-hidden="true" />
-                        <span className="text-[11px]">No project image</span>
-                      </div>
+              <div className="grid grid-cols-3 overflow-hidden rounded-lg border bg-muted/20 p-0.5" aria-label="Filter stages by report history">
+                {(
+                  [
+                    ["all", "All"],
+                    ["reported", "Reported"],
+                    ["no-reports", "No Reports"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setFilter(value)}
+                    aria-pressed={filter === value}
+                    className={cn(
+                      "min-w-0 rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors",
+                      filter === value ? "bg-background text-primary shadow-xs" : "text-muted-foreground hover:text-foreground",
                     )}
-                  </div>
-
-                  <div className="min-w-0 space-y-3 p-3.5 sm:p-4">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <h2 className="min-w-0 flex-1 text-base font-bold leading-snug text-foreground">{selectedProject.name}</h2>
-                        {selectedProject.status ? <Badge variant="secondary" className="max-w-full">{selectedProject.status}</Badge> : null}
-                      </div>
-                      {selectedProject.code ? (
-                        <p className="mt-1 max-w-full break-words font-mono text-[11px] leading-[1.25] text-muted-foreground [overflow-wrap:anywhere]">
-                          {selectedProject.code}
-                        </p>
-                      ) : null}
-                      {selectedProject.location ? (
-                        <div className="mt-2 flex items-start gap-1.5 text-xs leading-snug text-muted-foreground">
-                          <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-                          <span className="min-w-0 break-words">{selectedProject.location}</span>
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="border-t pt-3">
-                      <div className="mb-1.5 flex min-w-0 items-center gap-1.5 text-[11px] font-semibold leading-tight text-foreground">
-                        <FileText className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
-                        <span className="min-w-0 truncate" title={latestReportContextLabel}>{latestReportContextLabel}</span>
-                      </div>
-                      {contextualLatestReport ? (
-                        <Link
-                          href={`/projects/${selectedProject.id}/stages/${contextualLatestReport.stageId}/reports/${contextualLatestReport.id}`}
-                          className="group -mx-1 flex w-[calc(100%+0.5rem)] min-w-0 items-start gap-2 rounded-lg px-1 py-0.5 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/40"
-                          aria-label={`Open ${contextualLatestReport.reportTitle}`}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-[13px] font-semibold leading-snug text-foreground" title={contextualLatestReport.reportTitle}>
-                              {contextualLatestReport.reportTitle}
-                            </p>
-                            <p className="mt-0.5 line-clamp-2 text-[11px] leading-[1.05rem] text-muted-foreground">
-                              {contextualLatestReport.subject || "No subject provided"}
-                            </p>
-                          </div>
-                          <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-                        </Link>
-                      ) : (
-                        <p className="text-xs leading-5 text-muted-foreground">
-                          {selectedStage ? "No reports yet for this stage" : "No reports yet for this project"}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </Card>
-
-              <section className="space-y-2.5" aria-labelledby="report-entry-stage-title">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <h2 id="report-entry-stage-title" className="text-sm font-semibold text-foreground">Stage</h2>
-                    <Badge variant="secondary" className="text-[11px] font-medium">
-                      {selectedProject.stages.length} {selectedProject.stages.length === 1 ? "Stage" : "Stages"}
-                    </Badge>
-                  </div>
-                  <ClipboardList className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                </div>
-
-                {selectedProject.stages.length ? (
-                  <div
-                    ref={stageListRef}
-                    className="max-h-[26rem] w-full overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-border bg-card [scrollbar-gutter:stable] sm:max-h-[30rem]"
-                    role="listbox"
-                    aria-label="Project stages"
                   >
-                    <div className="divide-y divide-border">
-                      {selectedProject.stages.map((stage, index) => {
-                        const selected = selectedStageId === stage.id
-                        const reportsText = formatReportCount(stage.reportsCount ?? 0)
-                        const metaText = `${reportsText} · ${stage.checkedChecklistItems ?? 0}/${stage.totalChecklistItems ?? 0} · ${stage.progressPercentage ?? 0}%`
+                    {label}
+                  </button>
+                ))}
+              </div>
 
-                        return (
-                          <button
-                            key={stage.id}
-                            type="button"
-                            role="option"
-                            aria-selected={selected}
-                            onClick={() => setSelectedStageId(stage.id)}
-                            className={cn(
-                              "flex min-h-[3.6rem] w-full items-start gap-3 px-3 py-2.5 text-left transition-colors focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40",
-                              selected
-                                ? "bg-primary/10 text-foreground shadow-[inset_3px_0_0_0_var(--primary)]"
-                                : "bg-card text-card-foreground hover:bg-muted/40",
-                            )}
-                          >
-                            <span
+              <div className="overflow-hidden rounded-xl border bg-card shadow-2xs">
+                {visibleStages.length ? (
+                  <div className="divide-y divide-border/70" ref={stageListRef}>
+                    {visibleStages.map((stage, index) => {
+                      const selected = selectedStageId === stage.id
+                      const hasReports = stage.reportsCount > 0
+
+                      return (
+                        <button
+                          key={stage.id}
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          onClick={() => setSelectedStageId(stage.id)}
+                          className={cn(
+                            "flex w-full items-center justify-between gap-2.5 px-3 py-2.5 text-left transition-colors",
+                            selected
+                              ? "bg-primary/10 text-foreground shadow-[inset_3px_0_0_0_var(--primary)]"
+                              : "bg-card text-card-foreground hover:bg-muted/40",
+                          )}
+                        >
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <div
                               className={cn(
-                                "mt-0.5 flex h-7 w-9 shrink-0 items-center justify-center rounded-md text-[11px] font-bold tabular-nums",
+                                "flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold tabular-nums",
                                 selected ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary",
                               )}
                             >
                               {stageNumber(index)}
-                            </span>
-                            <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
-                              <span className="min-w-0 flex-1 text-sm font-semibold leading-snug">{stageDisplayName(stage.name)}</span>
-                              <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-                                <span className="text-xs font-medium text-muted-foreground">{metaText}</span>
-                                <div className="h-1 w-full overflow-hidden rounded-full bg-muted/60">
-                                  <div
-                                    className="h-full bg-primary transition-all duration-300"
-                                    style={{ width: `${Math.min(100, Math.max(0, stage.progressPercentage ?? 0))}%` }}
-                                  />
-                                </div>
-                              </div>
                             </div>
-                          </button>
-                        )
-                      })}
-                    </div>
+
+                            <div className="min-w-0 self-center">
+                              <p className="line-clamp-2 text-[13px] font-semibold leading-[1.15rem] text-foreground">
+                                {stageDisplayName(stage.name)}
+                              </p>
+
+                              {hasReports ? (
+                                <div className="mt-1 space-y-1">
+                                  <p className="text-[11px] font-medium leading-none text-muted-foreground">
+                                    {stage.reportsCount} {stage.reportsCount === 1 ? "Report" : "Reports"} · {stage.checkedChecklistItems}/{stage.totalChecklistItems} · {stage.progressPercentage}%
+                                  </p>
+                                  <div className="h-1 w-full max-w-[130px] overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                                    <div
+                                      className="h-full rounded-full bg-primary transition-all duration-300"
+                                      style={{ width: `${stage.progressPercentage}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="mt-0.5 text-[11px] font-medium text-muted-foreground">No reports yet</p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex shrink-0 items-center">
+                            <div
+                              className={cn(
+                                "flex size-5 items-center justify-center rounded-full border transition-all",
+                                selected
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-muted-foreground/30 bg-transparent",
+                              )}
+                            >
+                              {selected ? <Check className="size-3 stroke-[3]" /> : null}
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })}
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-                    No reportable stages are available for this project.
+                  <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    No stages match this filter.
                   </div>
                 )}
-              </section>
-
-              <form action={startReportEntryAction} className="pt-1">
-                <input type="hidden" name="projectId" value={selectedProject.id} />
-                <input type="hidden" name="stageId" value={selectedStageId} />
-                {linkedSiteVisitId ? <input type="hidden" name="siteVisitId" value={linkedSiteVisitId} /> : null}
-                <Button type="submit" size="lg" disabled={!selectedStageId} className="h-11 w-full gap-2 text-sm font-semibold">
-                  Start Report
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </Button>
-              </form>
+              </div>
             </>
           ) : (
-            <Card size="sm">
-              <CardContent className="flex min-h-44 flex-col items-center justify-center px-5 py-7 text-center">
-                <div className="mb-3 flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Building2 className="size-5" aria-hidden="true" />
-                </div>
-                <h2 className="font-semibold text-foreground">Select a project</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Project details, the latest report, and ordered stages will appear here.</p>
-              </CardContent>
-            </Card>
+            <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+              No reportable stages are available for this project.
+            </div>
           )}
-        </>
+
+          <form action={startReportEntryAction} className="pt-2">
+            <input type="hidden" name="projectId" value={selectedProject.id} />
+            <input type="hidden" name="stageId" value={selectedStageId} />
+            {linkedSiteVisitId ? <input type="hidden" name="siteVisitId" value={linkedSiteVisitId} /> : null}
+            <Button type="submit" size="lg" disabled={!selectedStageId} className="h-11 w-full gap-2 text-sm font-semibold">
+              Start Report
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Button>
+          </form>
+        </div>
       )}
 
       <Dialog open={changeProjectOpen} onOpenChange={handleProjectDialogOpenChange}>
