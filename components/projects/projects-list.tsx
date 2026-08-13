@@ -1340,62 +1340,8 @@ function MobileProjectCard({
                 {formattedName}
               </h2>
             </Link>
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="shrink-0">
               <ProjectStatusBadge status={row.status} />
-
-              <Link
-                href={`/projects/${encodeURIComponent(row.id)}/stages`}
-                title={locale === "ar" ? "إضافة تقرير" : "Add Report"}
-                aria-label={`${locale === "ar" ? "إضافة تقرير" : "Add Report for"} ${formattedName}`}
-                className="inline-flex h-7 items-center gap-1 rounded-lg bg-primary/10 px-2 text-xs font-semibold text-primary shadow-2xs transition-all hover:bg-primary hover:text-primary-foreground active:scale-95"
-              >
-                <Plus className="size-3.5 stroke-[2.5]" aria-hidden="true" />
-                <span>{locale === "ar" ? "تقرير" : "Report"}</span>
-              </Link>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <button
-                      type="button"
-                      aria-label={`${locale === "ar" ? "إجراءات" : "Actions for"} ${formattedName}`}
-                      className="inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
-                    >
-                      <MoreVertical className="size-3.5" />
-                    </button>
-                  }
-                />
-                <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem
-                    render={
-                      <Link href={`/projects/${row.id}`}>
-                        <Eye className="size-4" />
-                        {locale === "ar" ? "عرض المشروع" : "View Project"}
-                      </Link>
-                    }
-                  />
-                  <DropdownMenuItem
-                    render={
-                      <Link href={`/projects/${row.id}/stages`}>
-                        <Plus className="size-4" />
-                        {locale === "ar" ? "إضافة تقرير" : "Add Report"}
-                      </Link>
-                    }
-                  />
-                  {row.canEdit ? (
-                    <DropdownMenuItem onClick={onEdit}>
-                      <Pencil className="size-4" />
-                      {locale === "ar" ? "تعديل المشروع" : "Edit Project"}
-                    </DropdownMenuItem>
-                  ) : null}
-                  {canDeleteProjects ? (
-                    <DropdownMenuItem variant="destructive" onClick={onDelete}>
-                      <Trash2 className="size-4" />
-                      {locale === "ar" ? "حذف المشروع" : "Delete Project"}
-                    </DropdownMenuItem>
-                  ) : null}
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
           </div>
 
@@ -1405,13 +1351,25 @@ function MobileProjectCard({
             </p>
           ) : null}
 
-          <div className="mt-1 flex items-center justify-between gap-2 text-[11px] font-medium text-muted-foreground">
+          <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px] font-medium text-muted-foreground">
             <span className="truncate">
               {row.ownerClient !== "—" ? row.ownerClient : (supervision !== "Not set" && supervision !== "غير محدد" ? supervision : `${row.progress}% ${locale === "ar" ? "إنجاز" : "Progress"}`)}
             </span>
-            <span className="shrink-0 text-[10px] font-semibold text-primary">
-              {row.progress}%
-            </span>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[10px] font-semibold text-primary">
+                {row.progress}%
+              </span>
+              <Link
+                href={`/projects/${encodeURIComponent(row.id)}/stages`}
+                title={locale === "ar" ? "إضافة تقرير" : "Add Report"}
+                aria-label={`${locale === "ar" ? "إضافة تقرير" : "Add Report for"} ${formattedName}`}
+                className="inline-flex h-7 items-center gap-1 rounded-lg bg-primary/10 px-2.5 text-xs font-semibold text-primary shadow-2xs transition-all hover:bg-primary hover:text-primary-foreground active:scale-95"
+              >
+                <Plus className="size-3.5 stroke-[2.5]" aria-hidden="true" />
+                <span>{locale === "ar" ? "تقرير" : "Report"}</span>
+              </Link>
+            </div>
           </div>
         </div>
       </div>
