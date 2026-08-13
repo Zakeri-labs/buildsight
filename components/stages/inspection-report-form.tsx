@@ -1734,7 +1734,7 @@ function RichSectionEditor({
     const rawPhone = phoneToUse || targetPhone
     const cleanPhone = rawPhone.replace(/[^0-9]/g, "")
     if (!cleanPhone) {
-      setUploadError("لطفاً شماره تلفن معتبری برای واتساپ وارد کنید.")
+      setUploadError("Please enter a valid WhatsApp phone number.")
       return
     }
     const text = editorRef.current?.innerText || editorRef.current?.textContent || ""
@@ -2002,7 +2002,7 @@ function RichSectionEditor({
           </EditorButton>
 
           <EditorButton
-            label="اشتراک‌گذاری در واتساپ (Share on WhatsApp)"
+            label="Share on WhatsApp"
             onClick={() => setWhatsappModalOpen(true)}
             disabled={disabled}
           >
@@ -2039,7 +2039,7 @@ function RichSectionEditor({
 
       {/* WhatsApp Share Modal */}
       <Dialog open={whatsappModalOpen} onOpenChange={setWhatsappModalOpen}>
-        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-lg">
+        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-lg" dir="ltr">
           <div className="bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-700 px-6 py-5 text-white">
             <div className="flex items-center gap-3">
               <span className="flex size-10 items-center justify-center rounded-xl bg-white/20 shadow-inner">
@@ -2047,10 +2047,10 @@ function RichSectionEditor({
               </span>
               <div>
                 <DialogTitle className="text-base font-bold text-white">
-                  اشتراک‌گذاری در واتساپ (WhatsApp Direct)
+                  Share via WhatsApp (WhatsApp Direct)
                 </DialogTitle>
                 <DialogDescription className="text-xs text-emerald-100">
-                  ارسال سریع ملاحظات این بخش به پیمانکار، کارفرما یا شماره دلخواه
+                  Quickly share the notes from this section with a project stakeholder or any phone number.
                 </DialogDescription>
               </div>
             </div>
@@ -2059,16 +2059,16 @@ function RichSectionEditor({
           <div className="space-y-4 p-5 sm:p-6">
             {/* Note Snippet Preview */}
             <div className="rounded-xl border border-emerald-500/20 bg-emerald-50/50 p-3 dark:bg-emerald-950/20">
-              <p className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">پیش‌نمایش متن ارسالی (Message Preview):</p>
+              <p className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">Message Preview</p>
               <p className="mt-1 line-clamp-3 text-xs text-muted-foreground italic">
-                "{editorRef.current?.innerText?.trim() || editorRef.current?.textContent?.trim() || "متن یادداشت گزارش..."}"
+                "{editorRef.current?.innerText?.trim() || editorRef.current?.textContent?.trim() || "Report notes..."}"
               </p>
             </div>
 
             {/* Project Stakeholder Contacts */}
             {ccCandidates.length > 0 ? (
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">مخاطبان ثبت‌شده پروژه (Project Stakeholders):</label>
+                <label className="text-xs font-semibold text-foreground">Project Stakeholders</label>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {ccCandidates.filter((c) => Boolean(c.phone)).map((candidate) => (
                     <div
@@ -2082,12 +2082,12 @@ function RichSectionEditor({
                         </span>
                         <div className="min-w-0">
                           <p className="truncate text-xs font-bold text-foreground">{candidate.name}</p>
-                          <p className="truncate text-[10px] font-medium text-muted-foreground">{candidate.role || "نقش نامشخص"}</p>
+                          <p className="truncate text-[10px] font-medium text-muted-foreground">{candidate.role || "Unknown role"}</p>
                           <p className="truncate text-[11px] font-mono font-medium text-emerald-700 dark:text-emerald-400 dir-ltr">{candidate.phone}</p>
                         </div>
                       </div>
                       <Button type="button" size="xs" className="h-7 shrink-0 bg-emerald-600 px-2.5 text-[11px] font-bold text-white hover:bg-emerald-700 shadow-2xs">
-                        ارسال
+                        Send
                       </Button>
                     </div>
                   ))}
@@ -2097,7 +2097,7 @@ function RichSectionEditor({
 
             {/* Custom Phone Number Input */}
             <div className="space-y-2 pt-1">
-              <label className="text-xs font-semibold text-foreground">وارد کردن شماره دلخواه (Custom Phone Number):</label>
+              <label className="text-xs font-semibold text-foreground">Custom Phone Number</label>
 
               {/* Quick Country Code Badges */}
               <div className="flex flex-wrap items-center gap-1.5 pb-1">
@@ -2126,7 +2126,7 @@ function RichSectionEditor({
               <div className="flex items-center gap-2">
                 <Input
                   type="tel"
-                  placeholder="مثال: 971501234567+ یا 0501234567"
+                  placeholder="Example: +971501234567 or 0501234567"
                   value={targetPhone}
                   onChange={(e) => setTargetPhone(e.target.value)}
                   className="h-10 text-xs font-mono dir-ltr"
@@ -2138,7 +2138,7 @@ function RichSectionEditor({
                   className="h-10 gap-1.5 bg-emerald-600 px-4 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm"
                 >
                   <Send className="size-3.5" />
-                  ارسال
+                  Send
                 </Button>
               </div>
             </div>
@@ -2146,7 +2146,7 @@ function RichSectionEditor({
 
           <DialogFooter className="border-t bg-muted/20 px-6 py-3">
             <Button type="button" variant="ghost" size="sm" onClick={() => setWhatsappModalOpen(false)}>
-              انصراف
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>
