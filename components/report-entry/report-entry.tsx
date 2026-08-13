@@ -396,9 +396,7 @@ export function ReportEntry({
                                     />
                                   </div>
                                 </div>
-                              ) : (
-                                <p className="mt-0.5 text-[11px] font-medium text-muted-foreground">No reports yet</p>
-                              )}
+                              ) : null}
                             </div>
                           </div>
 
