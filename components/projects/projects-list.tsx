@@ -1299,7 +1299,6 @@ function MobileProjectCard({
   row,
   locale,
   canDeleteProjects,
-  onLocation,
   onEdit,
   onDelete,
 }: {
@@ -1396,17 +1395,16 @@ function MobileProjectCard({
               {row.code}
             </p>
           ) : null}
-      </div>
 
-      {/* Action Row: Add Report button */}
-      <div className="mt-3 flex items-center justify-end border-t border-slate-100 pt-2.5 dark:border-slate-800/80">
-        <Link
-          href={`/projects/${encodeURIComponent(row.id)}/stages`}
-          className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 active:scale-[0.98]"
-        >
-          <Plus className="size-3.5" />
-          <span>{locale === "ar" ? "إضافة تقرير" : "Add Report"}</span>
-        </Link>
+          <div className="mt-1 flex items-center justify-between gap-2 text-[11px] font-medium text-muted-foreground">
+            <span className="truncate">
+              {row.ownerClient !== "—" ? row.ownerClient : (supervision !== "Not set" && supervision !== "غير محدد" ? supervision : `${row.progress}% ${locale === "ar" ? "إنجاز" : "Progress"}`)}
+            </span>
+            <span className="shrink-0 text-[10px] font-semibold text-primary">
+              {row.progress}%
+            </span>
+          </div>
+        </div>
       </div>
     </article>
   )
