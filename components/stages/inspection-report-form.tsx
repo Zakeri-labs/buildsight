@@ -1051,7 +1051,7 @@ export function InspectionReportForm({
                 {content.checklist.map((item, index) => (
                   <div key={item.id} className="contents">
                     <div className="rounded-lg border bg-muted/20 p-1.5 md:hidden">
-                      <div className={cn("grid items-center gap-1.5", reportDefinition.responseType === "inspection_checklist" ? "grid-cols-[64px_minmax(0,1fr)_58px]" : "grid-cols-[30px_minmax(0,1fr)_58px]")}>
+                      <div className={cn("grid items-start gap-1.5", reportDefinition.responseType === "inspection_checklist" ? "grid-cols-[64px_minmax(0,1fr)_58px]" : "grid-cols-[30px_minmax(0,1fr)_58px]")}>
                         {reportDefinition.responseType === "inspection_checklist" ? (
                           <Select value={item.result || "pending"} onValueChange={(value) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, result: value === "pending" ? "" : (value as "pass" | "fail" | "na"), checked: value === "pass" } : row) }))} disabled={isLocked}>
                             <SelectTrigger className="h-8 min-w-0 px-1 text-[10px]"><SelectValue /></SelectTrigger>
@@ -1071,7 +1071,7 @@ export function InspectionReportForm({
                             else if (itemResult === "pass") nextResult = "fail"
                             else if (itemResult === "fail") nextResult = "in_progress"
                             setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, result: nextResult, checked: nextChecked } : row) }))
-                          }} className={cn("flex size-7 shrink-0 items-center justify-center rounded-md border transition-all duration-150", btnClasses)} title={statusTooltip} aria-label={`Mark checklist item ${index + 1}: ${statusTooltip}`}>{icon}</button>
+                          }} className={cn("mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border transition-all duration-150", btnClasses)} title={statusTooltip} aria-label={`Mark checklist item ${index + 1}: ${statusTooltip}`}>{icon}</button>
                         })()}
                         <div className="min-w-0 flex-1">
                           {isLocked ? (
@@ -1079,24 +1079,30 @@ export function InspectionReportForm({
                           ) : (
                             <textarea
                               rows={1}
-                              className="w-full resize-none overflow-hidden rounded-md border bg-background px-2 py-1.5 text-xs leading-snug outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
+                              ref={(el) => {
+                                if (el) {
+                                  el.style.height = "auto"
+                                  el.style.height = `${Math.max(34, el.scrollHeight)}px`
+                                }
+                              }}
+                              className="w-full min-h-[34px] resize-none overflow-hidden rounded-md border bg-background px-2 py-1.5 text-xs leading-snug outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
                               value={item.label}
                               onChange={(event) => {
                                 const el = event.target
                                 el.style.height = "auto"
-                                el.style.height = el.scrollHeight + "px"
+                                el.style.height = `${Math.max(34, el.scrollHeight)}px`
                                 setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))
                               }}
                               onFocus={(event) => {
                                 const el = event.target
                                 el.style.height = "auto"
-                                el.style.height = el.scrollHeight + "px"
+                                el.style.height = `${Math.max(34, el.scrollHeight)}px`
                               }}
                               placeholder={`Checklist item ${index + 1}`}
                             />
                           )}
                         </div>
-                        <div className="flex items-center justify-end gap-0.5">
+                        <div className="mt-0.5 flex items-center justify-end gap-0.5">
                           <button type="button" disabled={isLocked && !item.notes?.trim()} aria-label={`${isLocked ? "View" : "Edit"} comment for checklist item ${index + 1}`} aria-expanded={expandedChecklistCommentId === item.id} onClick={() => setExpandedChecklistCommentId((current) => current === item.id ? null : item.id)} className={cn("relative flex size-7 items-center justify-center rounded-md border text-muted-foreground transition-colors", item.notes?.trim() ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-background hover:bg-muted", isLocked && !item.notes?.trim() && "opacity-40")}>
                             <MessageSquare className="size-3.5" />
                             {item.notes?.trim() ? <span className="absolute end-0.5 top-0.5 size-1.5 rounded-full bg-primary" aria-hidden="true" /> : null}
