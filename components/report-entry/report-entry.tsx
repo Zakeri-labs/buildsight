@@ -423,7 +423,8 @@ export function ReportEntry({
                               <Button
                                 type="submit"
                                 size="sm"
-                                className="h-8 gap-1 rounded-lg px-2.5 text-xs font-semibold"
+                                variant="secondary"
+                                className="h-8 gap-1 rounded-lg bg-primary/10 px-2.5 text-xs font-semibold text-primary hover:bg-primary/20 active:scale-[0.98]"
                               >
                                 <Plus className="size-3.5" aria-hidden="true" />
                                 Report

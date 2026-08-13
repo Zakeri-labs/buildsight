@@ -172,11 +172,11 @@ export function MemberProjectStagesMobile({ data }: { data: ProjectStageExecutio
                           href={`/projects/${data.project.id}/stages/${stage.id}/reports/new`}
                           aria-label={`Start Report for ${cleanStageName(stage.name)}`}
                           className={cn(
-                            buttonVariants({ size: "sm" }),
-                            "h-7 gap-0.5 px-2.5 text-[10px] font-semibold",
+                            buttonVariants({ variant: "secondary", size: "sm" }),
+                            "h-8 gap-1 rounded-lg bg-primary/10 px-2.5 text-xs font-semibold text-primary hover:bg-primary/20 active:scale-[0.98]",
                           )}
                         >
-                          <Plus className="size-3" aria-hidden="true" />
+                          <Plus className="size-3.5" aria-hidden="true" />
                           Report
                         </Link>
                       </div>
