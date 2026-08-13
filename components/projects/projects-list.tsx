@@ -1340,8 +1340,18 @@ function MobileProjectCard({
                 {formattedName}
               </h2>
             </Link>
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               <ProjectStatusBadge status={row.status} />
+
+              <Link
+                href={`/projects/${encodeURIComponent(row.id)}/stages`}
+                title={locale === "ar" ? "إضافة تقرير" : "Add Report"}
+                aria-label={`${locale === "ar" ? "إضافة تقرير" : "Add Report for"} ${formattedName}`}
+                className="inline-flex h-7 items-center gap-1 rounded-lg bg-primary/10 px-2 text-xs font-semibold text-primary shadow-2xs transition-all hover:bg-primary hover:text-primary-foreground active:scale-95"
+              >
+                <Plus className="size-3.5 stroke-[2.5]" aria-hidden="true" />
+                <span>{locale === "ar" ? "تقرير" : "Report"}</span>
+              </Link>
 
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -1349,7 +1359,7 @@ function MobileProjectCard({
                     <button
                       type="button"
                       aria-label={`${locale === "ar" ? "إجراءات" : "Actions for"} ${formattedName}`}
-                      className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                      className="inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
                     >
                       <MoreVertical className="size-3.5" />
                     </button>
