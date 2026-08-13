@@ -177,6 +177,26 @@ export function ReportEntry({
     [selectedProject],
   )
 
+  const totalProjectReports = useMemo(
+    () => selectedProject?.stages.reduce((acc, stage) => acc + stage.reportsCount, 0) ?? 0,
+    [selectedProject],
+  )
+
+  const completedProjectItems = useMemo(
+    () => selectedProject?.stages.reduce((acc, stage) => acc + stage.checkedChecklistItems, 0) ?? 0,
+    [selectedProject],
+  )
+
+  const totalProjectItems = useMemo(
+    () => selectedProject?.stages.reduce((acc, stage) => acc + stage.totalChecklistItems, 0) ?? 0,
+    [selectedProject],
+  )
+
+  const overallPercentage = useMemo(() => {
+    if (!totalProjectItems) return 0
+    return Math.round((completedProjectItems / totalProjectItems) * 100)
+  }, [completedProjectItems, totalProjectItems])
+
   const visibleStages = useMemo(() => {
     if (!selectedProject) return []
     if (filter === "reported") return selectedProject.stages.filter((s) => s.reportsCount > 0)

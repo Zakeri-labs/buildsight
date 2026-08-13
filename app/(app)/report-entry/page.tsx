@@ -6,6 +6,12 @@ import { getReportEntryProjects, getReportEntrySiteVisitContext } from "@/lib/re
 
 export const dynamic = "force-dynamic"
 
+const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
+
+function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_PATTERN.test(value.trim())
+}
+
 export default async function ReportEntryPage({
   searchParams,
 }: {
@@ -22,11 +28,11 @@ export default async function ReportEntryPage({
 
   const errorCode = Array.isArray(query.error) ? query.error[0] : query.error
   const rawSiteVisitId = Array.isArray(query.siteVisitId) ? query.siteVisitId[0] : query.siteVisitId
-  const hasSiteVisitContext = typeof rawSiteVisitId === "string" && rawSiteVisitId.trim().length > 0
+  const hasSiteVisitContext = typeof rawSiteVisitId === "string" && rawSiteVisitId.trim().length > 0 && isUuid(rawSiteVisitId)
   let linkedSiteVisit = null
   if (hasSiteVisitContext) {
     try {
-      linkedSiteVisit = await getReportEntrySiteVisitContext(rawSiteVisitId!.trim(), projects.map((project) => project.id))
+      linkedSiteVisit = await getReportEntrySiteVisitContext(rawSiteVisitId.trim(), projects.map((project) => project.id))
     } catch {
       linkedSiteVisit = null
     }

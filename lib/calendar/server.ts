@@ -158,21 +158,21 @@ export async function resolveCalendarProjectScope(userId: string): Promise<Calen
   if (!isValidCalendarUuid(userId)) return []
   const admin = createAdminClient()
 
-  const [organizationMembershipResult, projectAdminMembershipResult, supervisorProjects, viewerMembershipResult] = await Promise.all([
+  const [organizationMembershipResult, projectUserMembershipResult, supervisorProjects, viewerMembershipResult] = await Promise.all([
     admin.from("organization_memberships").select("organization_id").eq("user_id", userId).eq("status", "active").eq("role", "org_admin"),
-    admin.from("project_user_memberships").select("project_id").eq("user_id", userId).eq("status", "active").eq("access_role", "project_admin"),
+    admin.from("project_user_memberships").select("project_id").eq("user_id", userId).eq("status", "active"),
     resolveExplicitSupervisorProjectScope(userId),
     admin.from("organization_memberships").select("organization_id").eq("user_id", userId).eq("status", "active").eq("role", "viewer"),
   ])
 
   if (organizationMembershipResult.error) throw organizationMembershipResult.error
-  if (projectAdminMembershipResult.error) throw projectAdminMembershipResult.error
+  if (projectUserMembershipResult.error) throw projectUserMembershipResult.error
   if (viewerMembershipResult.error) throw viewerMembershipResult.error
 
   const adminOrganizationIds = uniqueValidUuids((organizationMembershipResult.data ?? []).map((row: any) => row.organization_id))
   const viewerOrganizationIds = uniqueValidUuids((viewerMembershipResult.data ?? []).map((row: any) => row.organization_id))
   const viewerOrganizationIdSet = new Set(viewerOrganizationIds)
-  const explicitProjectAdminIds = uniqueValidUuids((projectAdminMembershipResult.data ?? []).map((row: any) => row.project_id))
+  const explicitProjectAdminIds = uniqueValidUuids((projectUserMembershipResult.data ?? []).map((row: any) => row.project_id))
   const projectColumns = "id, name, code, latitude, longitude, assigned_supervisor_id, supervising_organization_id"
 
   const viewerOwnerResult = viewerOrganizationIds.length

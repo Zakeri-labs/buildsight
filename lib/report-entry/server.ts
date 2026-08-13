@@ -62,13 +62,18 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
   if (!isUuid(userId)) return []
 
   try {
-    let supervisorScope = await resolveExplicitSupervisorProjectScope(userId)
-    if (!supervisorScope.length) {
-      supervisorScope = await resolveCalendarProjectScope(userId)
+    const [explicitScope, calendarScope] = await Promise.all([
+      resolveExplicitSupervisorProjectScope(userId),
+      resolveCalendarProjectScope(userId),
+    ])
+    const combinedScopeMap = new Map<string, any>()
+    for (const project of [...explicitScope, ...calendarScope]) {
+      if (project && isUuid(project.id) && !combinedScopeMap.has(project.id)) {
+        combinedScopeMap.set(project.id, project)
+      }
     }
-    const projectIds = Array.from(
-      new Set(supervisorScope.map((project) => project.id).filter((id): id is string => isUuid(id))),
-    )
+    const supervisorScope = Array.from(combinedScopeMap.values())
+    const projectIds = supervisorScope.map((project) => project.id)
     if (!projectIds.length) return []
 
     const admin = createAdminClient()
