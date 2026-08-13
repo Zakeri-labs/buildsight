@@ -1511,7 +1511,31 @@ function EmptyAttachment({ text, compact = false, onClick }: { text: string; com
 }
 
 function EvidenceTile({ src, name, progress, onRemove }: { src: string; name: string; progress?: number; onRemove?: () => void }) {
-  return <div className="group relative aspect-[4/3] overflow-hidden rounded-xl border bg-muted"><img src={src} alt={name} className="size-full object-cover" />{onRemove ? <button type="button" onClick={onRemove} className="absolute end-2 top-2 flex size-7 items-center justify-center rounded-full bg-black/70 text-white opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100" aria-label={`Remove ${name}`}><X className="size-4" /></button> : null}{progress !== undefined && progress > 0 && progress < 100 ? <div className="absolute inset-x-2 bottom-2"><div className="h-1.5 overflow-hidden rounded-full bg-black/30"><div className="h-full bg-white" style={{ width: `${progress}%` }} /></div></div> : null}<div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-2 pb-2 pt-5"><p className="truncate text-[11px] font-medium text-white">{name}</p></div></div>
+  return (
+    <div className="group relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-border/80 bg-muted">
+      <img src={src} alt={name} className="size-full object-cover" />
+      {onRemove ? (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="absolute end-2 top-2 z-10 flex size-7 items-center justify-center rounded-full bg-black/70 text-white opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+          aria-label={`Remove ${name}`}
+        >
+          <X className="size-4" />
+        </button>
+      ) : null}
+      {progress !== undefined && progress > 0 && progress < 100 ? (
+        <div className="absolute inset-x-2 bottom-2 z-10">
+          <div className="h-1.5 overflow-hidden rounded-full bg-black/30">
+            <div className="h-full bg-white" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      ) : null}
+      <div className="absolute inset-x-0 bottom-0 z-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-2 pb-1.5 pt-6 text-start">
+        <p className="block w-full truncate text-[10px] font-medium leading-tight text-white drop-shadow-xs">{name}</p>
+      </div>
+    </div>
+  )
 }
 
 function DocumentRow({ name, href, progress, onRemove }: { name: string; href?: string; progress?: number; onRemove?: () => void }) {

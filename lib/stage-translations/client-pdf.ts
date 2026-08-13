@@ -944,15 +944,21 @@ function drawFirstPageHeader(
   let locationLastBaselineY = locationTopInset
 
   projectLocationFields.forEach((field, index) => {
-    // stacked layout: label takes 1 line, then value lines
-    locationCursorY += locationLineHeight  // label line
-    const valueRtlCheck = rtl || containsArabic(field.value)
-    setLanguage(doc, valueRtlCheck, locationValueFontSize, false)
-    const valLines = textLines(doc, field.value, cellW - 6)
-    valLines.forEach((_, lineIndex) => {
-      locationLastBaselineY = locationCursorY + lineIndex * locationLineHeight
-    })
-    locationCursorY += valLines.length * locationLineHeight
+    const isInline = field.label.includes("Plot") || field.label.includes("Phase") || field.label.includes("القطعة") || field.label.includes("المرحلة")
+    if (isInline) {
+      locationCursorY += locationLineHeight
+      locationLastBaselineY = locationCursorY
+    } else {
+      // stacked layout: label takes 1 line, then value lines
+      locationCursorY += locationLineHeight  // label line
+      const valueRtlCheck = rtl || containsArabic(field.value)
+      setLanguage(doc, valueRtlCheck, locationValueFontSize, false)
+      const valLines = textLines(doc, field.value, cellW - 6)
+      valLines.forEach((_, lineIndex) => {
+        locationLastBaselineY = locationCursorY + lineIndex * locationLineHeight
+      })
+      locationCursorY += valLines.length * locationLineHeight
+    }
     if (index < projectLocationFields.length - 1) locationCursorY += locationRowGap + 0.5
   })
 
@@ -1066,35 +1072,55 @@ function drawFirstPageHeader(
     projectLocationFields.forEach((field, fieldIndex) => {
       const labelText = `${field.label}:`
       const valueRtl = isRtl || containsArabic(field.value)
+      const isInline = field.label.includes("Plot") || field.label.includes("Phase") || field.label.includes("القطعة") || field.label.includes("المرحلة")
 
-      // Label on its own line
-      setLanguage(doc, isRtl, locationLabelFontSize, true)
-      doc.setTextColor(100, 116, 139)
-      writePdfText(
-        doc,
-        labelText,
-        isRtl ? x + w - 3 : x + 3,
-        cursorY,
-        { align: isRtl ? "right" : "left" },
-        isRtl,
-      )
-      cursorY += locationLineHeight
+      if (isInline) {
+        setLanguage(doc, isRtl, locationLabelFontSize, true)
+        doc.setTextColor(100, 116, 139)
+        const labelW = doc.getTextWidth(labelText)
 
-      // Value on next line(s)
-      setLanguage(doc, valueRtl, locationValueFontSize, false)
-      doc.setTextColor(71, 85, 105)
-      const valLines = textLines(doc, field.value, w - 6)
-      valLines.forEach((line) => {
+        if (isRtl) {
+          writePdfText(doc, labelText, x + w - 3, cursorY, { align: "right" }, true)
+          setLanguage(doc, valueRtl, locationValueFontSize, true)
+          doc.setTextColor(15, 23, 42)
+          writePdfText(doc, field.value, x + w - 3 - labelW - 1.5, cursorY, { align: "right" }, valueRtl)
+        } else {
+          writePdfText(doc, labelText, x + 3, cursorY, { align: "left" }, false)
+          setLanguage(doc, valueRtl, locationValueFontSize, true)
+          doc.setTextColor(15, 23, 42)
+          writePdfText(doc, field.value, x + 3 + labelW + 1.5, cursorY, { align: "left" }, valueRtl)
+        }
+        cursorY += locationLineHeight
+      } else {
+        // Label on its own line
+        setLanguage(doc, isRtl, locationLabelFontSize, true)
+        doc.setTextColor(100, 116, 139)
         writePdfText(
           doc,
-          line,
-          valueRtl ? x + w - 3 : x + 3,
+          labelText,
+          isRtl ? x + w - 3 : x + 3,
           cursorY,
-          { align: valueRtl ? "right" : "left" },
-          valueRtl,
+          { align: isRtl ? "right" : "left" },
+          isRtl,
         )
         cursorY += locationLineHeight
-      })
+
+        // Value on next line(s)
+        setLanguage(doc, valueRtl, locationValueFontSize, false)
+        doc.setTextColor(71, 85, 105)
+        const valLines = textLines(doc, field.value, w - 6)
+        valLines.forEach((line) => {
+          writePdfText(
+            doc,
+            line,
+            valueRtl ? x + w - 3 : x + 3,
+            cursorY,
+            { align: valueRtl ? "right" : "left" },
+            valueRtl,
+          )
+          cursorY += locationLineHeight
+        })
+      }
 
       if (fieldIndex < projectLocationFields.length - 1) cursorY += locationRowGap + 0.5
     })
