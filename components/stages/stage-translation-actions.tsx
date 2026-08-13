@@ -170,22 +170,29 @@ export function StageTranslationActions({
     downloadPdfBlob(exported.blob, exported.filename)
   }
 
+  const [downloading, setDownloading] = useState<PdfKind | null>(null)
+
   async function download(kind: PdfKind) {
-    if (busy || (kind !== "original" && stale)) return
+    if (busy || downloading || (kind !== "original" && stale)) return
     setError(null)
+    setDownloading(kind)
     const storedPath = pdfPath(translation, kind)
     if (isDirectStage) {
       if (!storedPath || !translation.id) {
         setError(copy.preparing)
+        setDownloading(null)
         return
       }
       const params = new URLSearchParams({ projectId, translationId: translation.id, kind })
       window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
+      // Clear after a moment — browser starts downloading
+      setTimeout(() => setDownloading(null), 2000)
       return
     }
     if (storedPath && kind !== "original") {
       const params = new URLSearchParams({ projectId, translationId: translation.id, kind })
       window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
+      setTimeout(() => setDownloading(null), 2000)
       return
     }
 
@@ -196,6 +203,7 @@ export function StageTranslationActions({
       setError(downloadError instanceof Error ? downloadError.message : copy.failed)
     } finally {
       setBusy(null)
+      setDownloading(null)
     }
   }
 
@@ -237,22 +245,22 @@ export function StageTranslationActions({
           size={btnSize}
           variant="outline"
           className={cn("h-8 shrink-0 px-2.5 text-xs font-semibold gap-1.5 justify-center hidden sm:flex", downloadBtnClass)}
-          disabled={busy !== null || !directOriginalReady}
+          disabled={busy !== null || downloading !== null || !directOriginalReady}
           title={!directOriginalReady ? copy.preparing : copy.english}
           onClick={() => void download("original")}
         >
-          {busy === "original" ? <Loader2 className="size-3.5 animate-spin shrink-0" /> : <Download className="size-3.5 shrink-0" />}
+          {downloading === "original" || busy === "original" ? <Loader2 className="size-3.5 animate-spin shrink-0" /> : <Download className="size-3.5 shrink-0" />}
           <span>{copy.english}</span>
         </Button>
         <Button
           size={btnSize}
           variant="outline"
           className={cn("h-8 min-w-0 px-2 text-xs font-semibold gap-1.5 justify-center hidden sm:flex", downloadBtnClass, (!isTranslated || !directBilingualReady) && "opacity-50 cursor-not-allowed")}
-          disabled={busy !== null || !isTranslated || stale || !directBilingualReady}
+          disabled={busy !== null || downloading !== null || !isTranslated || stale || !directBilingualReady}
           title={!directBilingualReady ? copy.preparing : !isTranslated ? untranslatedHint : stale ? copy.stale : copy.bilingual}
           onClick={() => void download("bilingual")}
         >
-          {busy === "bilingual" ? <Loader2 className="size-3.5 animate-spin shrink-0" /> : <Download className="size-3.5 shrink-0" />}
+          {downloading === "bilingual" || busy === "bilingual" ? <Loader2 className="size-3.5 animate-spin shrink-0" /> : <Download className="size-3.5 shrink-0" />}
           <span className="truncate">{copy.bilingual}</span>
         </Button>
       </div>
@@ -267,9 +275,9 @@ export function StageTranslationActions({
               size="sm"
               className="h-10 min-w-0 px-2 text-xs font-bold gap-1.5 text-foreground dark:text-foreground bg-background hover:bg-accent border-input shadow-xs disabled:opacity-50"
               onClick={() => void download("original")}
-              disabled={busy !== null || !directOriginalReady}
+              disabled={busy !== null || downloading !== null || !directOriginalReady}
             >
-              {busy === "original" ? <Loader2 className="size-3.5 animate-spin text-foreground" /> : <Download className="size-3.5 text-foreground stroke-[2.5]" />}
+              {downloading === "original" || busy === "original" ? <Loader2 className="size-3.5 animate-spin text-foreground" /> : <Download className="size-3.5 text-foreground stroke-[2.5]" />}
               <span className="text-foreground font-bold">EN</span>
             </Button>
             <Button
@@ -277,9 +285,9 @@ export function StageTranslationActions({
               size="sm"
               className="h-10 min-w-0 px-2 text-xs font-bold gap-1.5 text-foreground dark:text-foreground bg-background hover:bg-accent border-input shadow-xs disabled:opacity-50"
               onClick={() => void download("bilingual")}
-              disabled={busy !== null || !isTranslated || stale || !directBilingualReady}
+              disabled={busy !== null || downloading !== null || !isTranslated || stale || !directBilingualReady}
             >
-              {busy === "bilingual" ? <Loader2 className="size-3.5 animate-spin text-foreground" /> : <Download className="size-3.5 text-foreground stroke-[2.5]" />}
+              {downloading === "bilingual" || busy === "bilingual" ? <Loader2 className="size-3.5 animate-spin text-foreground" /> : <Download className="size-3.5 text-foreground stroke-[2.5]" />}
               <span className="text-foreground font-bold">EN / AR</span>
             </Button>
           </div>

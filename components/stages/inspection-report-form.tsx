@@ -1116,7 +1116,29 @@ export function InspectionReportForm({
                             setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, result: nextResult, checked: nextChecked } : row) }))
                           }} className={cn("flex size-7 shrink-0 items-center justify-center rounded-md border transition-all duration-150", btnClasses)} title={statusTooltip} aria-label={`Mark checklist item ${index + 1}: ${statusTooltip}`}>{icon}</button>
                         })()}
-                        <Input className="h-8 min-w-0 px-2 text-xs leading-tight" value={item.label} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))} placeholder={`Checklist item ${index + 1}`} />
+                        <div className="min-w-0 flex-1">
+                          {isLocked ? (
+                            <p className="text-xs leading-snug text-foreground">{item.label || `Checklist item ${index + 1}`}</p>
+                          ) : (
+                            <textarea
+                              rows={1}
+                              className="w-full resize-none overflow-hidden rounded-md border bg-background px-2 py-1.5 text-xs leading-snug outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
+                              value={item.label}
+                              onChange={(event) => {
+                                const el = event.target
+                                el.style.height = "auto"
+                                el.style.height = el.scrollHeight + "px"
+                                setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))
+                              }}
+                              onFocus={(event) => {
+                                const el = event.target
+                                el.style.height = "auto"
+                                el.style.height = el.scrollHeight + "px"
+                              }}
+                              placeholder={`Checklist item ${index + 1}`}
+                            />
+                          )}
+                        </div>
                         <div className="flex items-center justify-end gap-0.5">
                           <button type="button" disabled={isLocked && !item.notes?.trim()} aria-label={`${isLocked ? "View" : "Edit"} comment for checklist item ${index + 1}`} aria-expanded={expandedChecklistCommentId === item.id} onClick={() => setExpandedChecklistCommentId((current) => current === item.id ? null : item.id)} className={cn("relative flex size-7 items-center justify-center rounded-md border text-muted-foreground transition-colors", item.notes?.trim() ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-background hover:bg-muted", isLocked && !item.notes?.trim() && "opacity-40")}>
                             <MessageSquare className="size-3.5" />
@@ -1163,7 +1185,29 @@ export function InspectionReportForm({
                               setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, result: nextResult, checked: nextChecked } : row) }))
                             }} className={cn("flex size-7 shrink-0 items-center justify-center rounded-lg border transition-all duration-150", btnClasses)} title={statusTooltip} aria-label={`Mark checklist item ${index + 1}: ${statusTooltip}`}>{icon}</button>
                           })()}
-                          <Input value={item.label} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))} placeholder={`Checklist item ${index + 1}`} />
+                          <div className="min-w-0 flex-1">
+                            {isLocked ? (
+                              <p className="text-sm leading-snug text-foreground">{item.label || `Checklist item ${index + 1}`}</p>
+                            ) : (
+                              <textarea
+                                rows={1}
+                                className="w-full resize-none overflow-hidden rounded-lg border bg-background px-3 py-2 text-sm leading-snug outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
+                                value={item.label}
+                                onChange={(event) => {
+                                  const el = event.target
+                                  el.style.height = "auto"
+                                  el.style.height = el.scrollHeight + "px"
+                                  setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, label: event.target.value } : row) }))
+                                }}
+                                onFocus={(event) => {
+                                  const el = event.target
+                                  el.style.height = "auto"
+                                  el.style.height = el.scrollHeight + "px"
+                                }}
+                                placeholder={`Checklist item ${index + 1}`}
+                              />
+                            )}
+                          </div>
                         </>
                       )}
                       <Input value={item.notes ?? ""} disabled={isLocked} onChange={(event) => setContent((current) => ({ ...current, checklist: current.checklist.map((row) => row.id === item.id ? { ...row, notes: event.target.value } : row) }))} placeholder="Comment / reference" />
