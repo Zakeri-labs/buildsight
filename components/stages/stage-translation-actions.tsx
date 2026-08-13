@@ -216,7 +216,12 @@ export function StageTranslationActions({
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-1.5", inHeader ? "w-full sm:w-auto items-stretch sm:items-end" : "items-end")} onClick={(event) => event.stopPropagation()}>
-      <div className="grid grid-cols-[1fr_auto_1fr] w-full items-center gap-1.5 sm:flex sm:w-auto sm:justify-start">
+      <div className={cn(
+        "items-center gap-1.5",
+        inHeader
+          ? "flex w-full justify-end sm:grid sm:grid-cols-[1fr_auto_1fr] sm:w-auto"
+          : "grid grid-cols-[1fr_auto_1fr] w-full sm:flex sm:w-auto sm:justify-start"
+      )}>
         <Link
           href={
             !termId || termId === stageId
@@ -226,12 +231,12 @@ export function StageTranslationActions({
           className={cn(buttonVariants({ size: btnSize, variant: inHeader ? "secondary" : "secondary" }), "h-8 min-w-0 px-2 text-xs font-semibold gap-1.5 justify-center", translateBtnClass)}
         >
           {isProcessing ? <Loader2 className="size-3.5 animate-spin shrink-0" /> : <Languages className="size-3.5 shrink-0" />}
-          <span className="truncate">{copy.translate}</span>
+          <span className="truncate sm:inline hidden">{copy.translate}</span>
         </Link>
         <Button
           size={btnSize}
           variant="outline"
-          className={cn("h-8 shrink-0 px-2.5 text-xs font-semibold gap-1.5 justify-center", downloadBtnClass)}
+          className={cn("h-8 shrink-0 px-2.5 text-xs font-semibold gap-1.5 justify-center hidden sm:flex", downloadBtnClass)}
           disabled={busy !== null || !directOriginalReady}
           title={!directOriginalReady ? copy.preparing : copy.english}
           onClick={() => void download("original")}
@@ -242,7 +247,7 @@ export function StageTranslationActions({
         <Button
           size={btnSize}
           variant="outline"
-          className={cn("h-8 min-w-0 px-2 text-xs font-semibold gap-1.5 justify-center", downloadBtnClass, (!isTranslated || !directBilingualReady) && "opacity-50 cursor-not-allowed")}
+          className={cn("h-8 min-w-0 px-2 text-xs font-semibold gap-1.5 justify-center hidden sm:flex", downloadBtnClass, (!isTranslated || !directBilingualReady) && "opacity-50 cursor-not-allowed")}
           disabled={busy !== null || !isTranslated || stale || !directBilingualReady}
           title={!directBilingualReady ? copy.preparing : !isTranslated ? untranslatedHint : stale ? copy.stale : copy.bilingual}
           onClick={() => void download("bilingual")}

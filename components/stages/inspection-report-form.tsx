@@ -924,11 +924,6 @@ export function InspectionReportForm({
               <Badge variant="outline" className={cn("border-white/30 bg-white/10 text-white text-[11px]", status !== "draft" && "border-white/40")}>
                 {statusLabel(status, locale)}
               </Badge>
-              {isMemberExistingReport && pendingReview ? (
-                <Badge variant="outline" className="border-white/30 bg-white/10 text-[10px] text-white">
-                  {locale === "ar" ? "بانتظار المراجعة" : "Pending Review"}
-                </Badge>
-              ) : null}
             </div>
           </div>
         </div>
