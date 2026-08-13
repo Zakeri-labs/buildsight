@@ -21,11 +21,13 @@ import {
   Loader2,
   AlertTriangle,
   ArrowUpDown,
+  Building2,
   MapPin,
   SlidersHorizontal,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { useCurrentUser } from "@/components/current-user-provider"
+import { cn, capitalizeWords } from "@/lib/utils"
 import { ProjectImageDisplay } from "@/components/projects/project-image-display"
 import { ProjectLocationPreviewDialog } from "@/components/projects/project-location-preview-dialog"
 import { ProjectEditDialog } from "@/components/projects/project-edit-dialog"
@@ -1297,6 +1299,7 @@ function MobileProjectCard({
   row,
   locale,
   canDeleteProjects,
+  onLocation,
   onEdit,
   onDelete,
 }: {
@@ -1310,98 +1313,89 @@ function MobileProjectCard({
   const supervision = row.supervisionType?.trim()
     ? supervisionTypeLabel(row.supervisionType, row.supervisionTypeOther)
     : locale === "ar" ? "غير محدد" : "Not set"
-  const metadata = [
-    row.ownerClient !== "—" ? row.ownerClient : null,
-    supervision !== "Not set" && supervision !== "غير محدد" ? supervision : null,
-  ].filter(Boolean).join(" • ")
+
+  const formattedName = capitalizeWords(row.name)
 
   return (
-    <article className="relative min-w-0 overflow-hidden rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-xs transition-colors dark:border-slate-800 dark:bg-slate-900">
-      {/* Top Header Row: Name & Status & More Actions */}
-      <div className="flex items-start justify-between gap-2">
+    <article className="relative min-w-0 overflow-hidden rounded-xl border border-border/80 bg-card p-3 shadow-2xs transition-colors hover:border-primary/40">
+      <div className="flex items-center gap-3">
+        {/* Left: Building icon / Image container */}
+        <Link
+          href={`/projects/${encodeURIComponent(row.id)}`}
+          className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/70 bg-muted/40 text-primary transition-opacity hover:opacity-90"
+        >
+          {row.imageUrl ? (
+            <img src={row.imageUrl} alt={formattedName} className="size-full object-cover" />
+          ) : (
+            <Building2 className="size-6 text-primary" aria-hidden="true" />
+          )}
+        </Link>
+
+        {/* Center: Details */}
         <div className="min-w-0 flex-1">
-          <Link
-            href={`/projects/${encodeURIComponent(row.id)}`}
-            className="group block min-w-0"
-          >
-            <h2 className="truncate text-sm font-bold text-slate-950 group-hover:text-primary dark:text-white">
-              {row.name}
-            </h2>
-          </Link>
+          <div className="flex items-center justify-between gap-2">
+            <Link
+              href={`/projects/${encodeURIComponent(row.id)}`}
+              className="group min-w-0 flex-1"
+            >
+              <h2 className="truncate text-sm font-bold leading-tight text-foreground group-hover:text-primary">
+                {formattedName}
+              </h2>
+            </Link>
+            <div className="flex items-center gap-1 shrink-0">
+              <ProjectStatusBadge status={row.status} />
+
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={`${locale === "ar" ? "إجراءات" : "Actions for"} ${formattedName}`}
+                      className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                    >
+                      <MoreVertical className="size-3.5" />
+                    </button>
+                  }
+                />
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem
+                    render={
+                      <Link href={`/projects/${row.id}`}>
+                        <Eye className="size-4" />
+                        {locale === "ar" ? "عرض المشروع" : "View Project"}
+                      </Link>
+                    }
+                  />
+                  <DropdownMenuItem
+                    render={
+                      <Link href={`/projects/${row.id}/stages`}>
+                        <Plus className="size-4" />
+                        {locale === "ar" ? "إضافة تقرير" : "Add Report"}
+                      </Link>
+                    }
+                  />
+                  {row.canEdit ? (
+                    <DropdownMenuItem onClick={onEdit}>
+                      <Pencil className="size-4" />
+                      {locale === "ar" ? "تعديل المشروع" : "Edit Project"}
+                    </DropdownMenuItem>
+                  ) : null}
+                  {canDeleteProjects ? (
+                    <DropdownMenuItem variant="destructive" onClick={onDelete}>
+                      <Trash2 className="size-4" />
+                      {locale === "ar" ? "حذف المشروع" : "Delete Project"}
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
           {row.code ? (
-            <p className="mt-0.5 truncate font-mono text-[11px] text-slate-500 dark:text-slate-400">
+            <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
               {row.code}
             </p>
           ) : null}
-        </div>
-
-        <div className="flex items-center gap-1.5 shrink-0">
-          <ProjectStatusBadge status={row.status} />
-
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <button
-                  type="button"
-                  aria-label={`${locale === "ar" ? "إجراءات" : "Actions for"} ${row.name}`}
-                  className="inline-flex size-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400"
-                >
-                  <MoreVertical className="size-4" />
-                </button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem
-                render={
-                  <Link href={`/projects/${row.id}`}>
-                    <Eye className="size-4" />
-                    {locale === "ar" ? "عرض المشروع" : "View Project"}
-                  </Link>
-                }
-              />
-              <DropdownMenuItem
-                render={
-                  <Link href={`/projects/${row.id}/stages`}>
-                    <Plus className="size-4" />
-                    {locale === "ar" ? "إضافة تقرير" : "Add Report"}
-                  </Link>
-                }
-              />
-              {row.canEdit ? (
-                <DropdownMenuItem onClick={onEdit}>
-                  <Pencil className="size-4" />
-                  {locale === "ar" ? "تعديل المشروع" : "Edit Project"}
-                </DropdownMenuItem>
-              ) : null}
-              {canDeleteProjects ? (
-                <DropdownMenuItem variant="destructive" onClick={onDelete}>
-                  <Trash2 className="size-4" />
-                  {locale === "ar" ? "حذف المشروع" : "Delete Project"}
-                </DropdownMenuItem>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
-      {/* Metadata Row */}
-      {metadata ? (
-        <p className="mt-1.5 truncate text-[11px] text-slate-600 dark:text-slate-400">
-          {metadata}
-        </p>
-      ) : null}
-
-      {/* Progress Bar Row */}
-      <div className="mt-2.5 flex items-center gap-2.5">
-        <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-          <div
-            className="h-full rounded-full bg-primary transition-all duration-300"
-            style={{ width: `${row.progress}%` }}
-          />
-        </div>
-        <span className="shrink-0 text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-300">
-          {row.progress}%
-        </span>
       </div>
 
       {/* Action Row: Add Report button */}
