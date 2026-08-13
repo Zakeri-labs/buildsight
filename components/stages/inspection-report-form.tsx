@@ -1232,11 +1232,6 @@ export function InspectionReportForm({
                   <CheckCircle2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                   <span className="truncate">{success}</span>
                 </div>
-              ) : responseId && !isEditable ? (
-                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-                  <CheckCircle2 className="size-4 text-emerald-600" />
-                  <span>{locale === "ar" ? "تم إرسال التقرير بنجاح" : "Report submitted successfully."}</span>
-                </div>
               ) : null}
             </div>
 
