@@ -150,17 +150,9 @@ function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
 
         {/* MIDDLE CONTENT AREA: Project Name, Code, Stage Name, Visit Number */}
         <div className="flex min-w-0 flex-1 flex-col justify-center px-3 py-2">
-          <div className="flex min-w-0 items-baseline justify-between gap-1.5">
-            <h3 className="truncate text-xs font-bold text-foreground sm:text-sm">
-              {visit.projectName}
-            </h3>
-            {isCompleted ? (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-800 dark:bg-green-950/60 dark:text-green-300">
-                <CheckCircle2 className="size-3" aria-hidden="true" />
-                Completed
-              </span>
-            ) : null}
-          </div>
+          <h3 className="truncate text-xs font-bold text-foreground sm:text-sm">
+            {visit.projectName}
+          </h3>
 
           {visit.projectCode ? (
             <p className="truncate font-mono text-[11px] text-muted-foreground">
@@ -182,69 +174,78 @@ function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
           ) : null}
         </div>
 
-        {/* RIGHT ACTION BUTTONS: Large, standard touch targets (size-9 / 36px) */}
-        <div className="flex shrink-0 items-center gap-1.5 border-s border-border bg-muted/10 px-2.5 py-2">
-          {/* Button 1: Add Report */}
+        {/* RIGHT ACTION COLUMN: Completed tag on top, buttons on bottom */}
+        <div className="flex shrink-0 flex-col items-center justify-center gap-1.5 border-s border-border bg-muted/10 px-2.5 py-2">
           {isCompleted ? (
-            <button
-              type="button"
-              disabled
-              aria-label="Report completed"
-              className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed dark:border-slate-800 dark:bg-slate-900"
-            >
-              <FilePlus2 className="size-4" />
-            </button>
-          ) : visit.stageResponseHref ? (
-            <Link
-              href={visit.stageResponseHref}
-              aria-label="Add report for this visit"
-              title="Add report"
-              className="inline-flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 active:scale-95"
-            >
-              <FilePlus2 className="size-4" />
-            </Link>
-          ) : (
-            <button
-              type="button"
-              disabled
-              aria-label="Report unavailable"
-              className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed dark:border-slate-800 dark:bg-slate-900"
-            >
-              <FilePlus2 className="size-4" />
-            </button>
-          )}
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-800 dark:bg-green-950/60 dark:text-green-300">
+              <CheckCircle2 className="size-3" aria-hidden="true" />
+              Completed
+            </span>
+          ) : null}
 
-          {/* Button 2: Location / Map */}
-          {isCompleted ? (
-            <button
-              type="button"
-              disabled
-              aria-label="Location (completed)"
-              className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed dark:border-slate-800 dark:bg-slate-900"
-            >
-              <MapPinned className="size-4" />
-            </button>
-          ) : visit.googleMapsUrl ? (
-            <a
-              href={visit.googleMapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Open location in Google Maps"
-              title="Google Maps Location"
-              className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 hover:text-primary dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 active:scale-95"
-            >
-              <MapPinned className="size-4" />
-            </a>
-          ) : (
-            <button
-              type="button"
-              disabled
-              aria-label="Location unavailable"
-              className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed dark:border-slate-800 dark:bg-slate-900"
-            >
-              <MapPinned className="size-4" />
-            </button>
-          )}
+          <div className="flex items-center gap-1.5">
+            {/* Button 1: Add Report */}
+            {isCompleted ? (
+              <button
+                type="button"
+                disabled
+                aria-label="Report completed"
+                className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed dark:border-slate-800 dark:bg-slate-900"
+              >
+                <FilePlus2 className="size-4" />
+              </button>
+            ) : visit.stageResponseHref ? (
+              <Link
+                href={visit.stageResponseHref}
+                aria-label="Add report for this visit"
+                title="Add report"
+                className="inline-flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs transition-colors hover:bg-primary/90 active:scale-95"
+              >
+                <FilePlus2 className="size-4" />
+              </Link>
+            ) : (
+              <button
+                type="button"
+                disabled
+                aria-label="Report unavailable"
+                className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed dark:border-slate-800 dark:bg-slate-900"
+              >
+                <FilePlus2 className="size-4" />
+              </button>
+            )}
+
+            {/* Button 2: Location / Map */}
+            {isCompleted ? (
+              <button
+                type="button"
+                disabled
+                aria-label="Location (completed)"
+                className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed dark:border-slate-800 dark:bg-slate-900"
+              >
+                <MapPinned className="size-4" />
+              </button>
+            ) : visit.googleMapsUrl ? (
+              <a
+                href={visit.googleMapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open location in Google Maps"
+                title="Google Maps Location"
+                className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 hover:text-primary dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 active:scale-95"
+              >
+                <MapPinned className="size-4" />
+              </a>
+            ) : (
+              <button
+                type="button"
+                disabled
+                aria-label="Location unavailable"
+                className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed dark:border-slate-800 dark:bg-slate-900"
+              >
+                <MapPinned className="size-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </Card>
