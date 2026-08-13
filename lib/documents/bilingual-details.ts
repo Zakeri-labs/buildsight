@@ -1,6 +1,7 @@
 export type ParsedBilingualDetails = {
   englishText: string
   arabicText: string | null
+  attachArabic: boolean
   hasArabic: boolean
 }
 
@@ -46,12 +47,24 @@ export function stripHtmlToPlainText(rawText: string | null | undefined): string
 
 export function parseBilingualDocumentDetails(rawDetails: string | null | undefined): ParsedBilingualDetails {
   if (!rawDetails) {
-    return { englishText: "", arabicText: null, hasArabic: false }
+    return { englishText: "", arabicText: null, attachArabic: false, hasArabic: false }
   }
 
+  const attachMarkerRegex = /\n\s*(?:---|───|\+\+\+)\s*(?:ATTACH ARABIC TRANSLATION|ATTACH_ARABIC)\s*(?:---|───|\+\+\+)?\s*$/i
   const separatorRegex = /\n\s*(?:---|───|\+\+\+)\s*(?:ARABIC TRANSLATION|ARABIC_TRANSLATION|الترجمة العربية)\s*(?:---|───|\+\+\+)?\s*\n/i
-  const match = rawDetails.match(separatorRegex)
 
+  const attachMatch = rawDetails.match(attachMarkerRegex)
+  if (attachMatch && attachMatch.index !== undefined) {
+    const englishText = rawDetails.slice(0, attachMatch.index).trimEnd()
+    return {
+      englishText,
+      arabicText: null,
+      attachArabic: true,
+      hasArabic: false,
+    }
+  }
+
+  const match = rawDetails.match(separatorRegex)
   if (match && match.index !== undefined) {
     const englishText = rawDetails.slice(0, match.index).trimEnd()
     const rawArabic = rawDetails.slice(match.index + match[0].length).trim()
@@ -59,6 +72,7 @@ export function parseBilingualDocumentDetails(rawDetails: string | null | undefi
     return {
       englishText,
       arabicText: cleanArabic || null,
+      attachArabic: true,
       hasArabic: Boolean(cleanArabic),
     }
   }
@@ -66,17 +80,26 @@ export function parseBilingualDocumentDetails(rawDetails: string | null | undefi
   return {
     englishText: rawDetails,
     arabicText: null,
+    attachArabic: false,
     hasArabic: false,
   }
 }
 
-export function formatBilingualDocumentDetails(englishText: string, arabicText?: string | null): string {
+export function formatBilingualDocumentDetails(
+  englishText: string,
+  arabicText?: string | null,
+  attachArabic?: boolean,
+): string {
   const cleanEnglish = (englishText || "").trimEnd()
   const cleanArabic = stripHtmlToPlainText(arabicText)
 
-  if (!cleanArabic) {
-    return cleanEnglish
+  if (cleanArabic) {
+    return `${cleanEnglish}\n\n--- ARABIC TRANSLATION ---\n\n${cleanArabic}`
   }
 
-  return `${cleanEnglish}\n\n--- ARABIC TRANSLATION ---\n\n${cleanArabic}`
+  if (attachArabic) {
+    return `${cleanEnglish}\n\n--- ATTACH ARABIC TRANSLATION ---`
+  }
+
+  return cleanEnglish
 }

@@ -14,7 +14,6 @@ import {
   Languages,
   Loader2,
   Paperclip,
-  RotateCcw,
   Send,
   Trash2,
   X,
@@ -128,9 +127,7 @@ export function CreateLetterPage({
   const [title, setTitle] = useState("")
   const [documentType, setDocumentType] = useState<ConstructionDocumentTypeValue | "">("")
   const [englishText, setEnglishText] = useState("")
-  const [arabicText, setArabicText] = useState("")
-  const [showArabicTranslation, setShowArabicTranslation] = useState(false)
-  const [translatingArabic, setTranslatingArabic] = useState(false)
+  const [attachArabic, setAttachArabic] = useState(false)
 
   const [recipientOptions, setRecipientOptions] = useState<RecipientOption[]>([])
   const [letterToRecipientIds, setLetterToRecipientIds] = useState<string[]>([])
@@ -259,43 +256,11 @@ export function CreateLetterPage({
     }
 
     setDocumentType(value)
-    setEnglishText(getDocumentDetailsTemplate(value))
+    const templateText = getDocumentDetailsTemplate(value)
+    const parsed = parseBilingualDocumentDetails(templateText)
+    setEnglishText(parsed.englishText)
+    if (parsed.attachArabic) setAttachArabic(true)
     setError(null)
-  }
-
-  const handleAddArabicTranslation = async () => {
-    if (!englishText.trim()) {
-      setError("Please enter English letter text first before generating Arabic translation.")
-      return
-    }
-
-    setError(null)
-    setTranslatingArabic(true)
-    setShowArabicTranslation(true)
-
-    try {
-      const res = await fetch("/api/ai/enhance-text", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: englishText,
-          html: englishText,
-          action: "translate_ar",
-          projectId: selectedProjectId || undefined,
-        }),
-      })
-
-      const data = await res.json()
-      if (!res.ok || !data.resultText) {
-        throw new Error(data.error || "Unable to generate Arabic translation.")
-      }
-
-      setArabicText(stripHtmlToPlainText(data.resultText))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to translate letter to Arabic.")
-    } finally {
-      setTranslatingArabic(false)
-    }
   }
 
   const addAttachments = (event: ChangeEvent<HTMLInputElement>) => {
@@ -352,7 +317,7 @@ export function CreateLetterPage({
     submissionRef.current = true
 
     try {
-      const finalDetails = formatBilingualDocumentDetails(englishText, showArabicTranslation ? arabicText : null)
+      const finalDetails = formatBilingualDocumentDetails(englishText, null, attachArabic)
       let docId = savedDocumentId
 
       if (!docId) {
@@ -370,6 +335,19 @@ export function CreateLetterPage({
         docId = result.documentId
         setSavedDocumentId(docId)
         setSavedDocumentMode("draft")
+      } else {
+        const supabase = createClient()
+        const { error: updateErr } = await supabase
+          .from("documents")
+          .update({
+            title,
+            document_type: documentType,
+            document_details: finalDetails,
+            status: "draft",
+          })
+          .eq("id", docId)
+
+        if (updateErr) throw new Error(updateErr.message)
       }
 
       // Upload pending attachments
@@ -429,20 +407,15 @@ export function CreateLetterPage({
     if (submissionRef.current) return
     submissionRef.current = true
 
-    const needsArabicTranslation = showArabicTranslation && !arabicText.trim()
     const hasAttachments = pendingAttachments.length > 0
 
     const initialSteps: ProcessingStep[] = [
-      { id: "analyze", label: "Analyzing English text", status: "active" },
+      { id: "analyze", label: attachArabic ? "Analyzing English text" : "Analyzing Letter", status: "active" },
     ]
 
-    if (needsArabicTranslation) {
+    if (attachArabic) {
       initialSteps.push(
         { id: "translate", label: "Translating to Arabic", status: "pending" },
-        { id: "integrate", label: "Adding Arabic translation", status: "pending" },
-      )
-    } else if (showArabicTranslation && arabicText.trim()) {
-      initialSteps.push(
         { id: "integrate", label: "Adding Arabic translation", status: "pending" },
       )
     }
@@ -473,9 +446,9 @@ export function CreateLetterPage({
       await new Promise((r) => setTimeout(r, 400))
       updateStepStatus("analyze", "completed")
 
-      // Step 2: Translate to Arabic if needed
-      let currentArabicText = arabicText
-      if (needsArabicTranslation) {
+      // Step 2: Translate to Arabic if attachArabic option is selected
+      let generatedArabicText: string | null = null
+      if (attachArabic) {
         updateStepStatus("translate", "active")
         const res = await fetch("/api/ai/enhance-text", {
           method: "POST",
@@ -491,13 +464,10 @@ export function CreateLetterPage({
         if (!res.ok || !data.resultText) {
           throw new Error(data.error || "Unable to translate letter to Arabic.")
         }
-        currentArabicText = stripHtmlToPlainText(data.resultText)
-        setArabicText(currentArabicText)
+        generatedArabicText = stripHtmlToPlainText(data.resultText)
         updateStepStatus("translate", "completed")
-      }
 
-      // Step 3: Integrate Arabic translation
-      if (showArabicTranslation && currentArabicText) {
+        // Step 3: Integrate Arabic translation
         updateStepStatus("integrate", "active")
         await new Promise((r) => setTimeout(r, 300))
         updateStepStatus("integrate", "completed")
@@ -506,7 +476,8 @@ export function CreateLetterPage({
       // Format combined details
       const finalDetails = formatBilingualDocumentDetails(
         englishText,
-        showArabicTranslation ? currentArabicText : null,
+        generatedArabicText,
+        attachArabic,
       )
 
       // Step 4: Process attachments if any
@@ -759,27 +730,27 @@ export function CreateLetterPage({
             />
           </div>
 
-          {/* English Text & Optional Arabic Translation */}
+          {/* English Text & Attach Arabic Translation Option */}
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Label htmlFor="create-letter-text" className="text-xs font-semibold text-foreground">
                 Text <span className="text-muted-foreground font-normal">(Primary English Content)</span>
               </Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={isSubmitting || translatingArabic || !englishText.trim()}
-                onClick={handleAddArabicTranslation}
-                className="h-8 gap-1.5 rounded-lg border-emerald-500/40 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+              <label
+                htmlFor="attach-arabic-translation"
+                className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-1.5 text-xs font-semibold text-slate-800 transition-colors hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-200"
               >
-                {translatingArabic ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <Languages className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-                )}
-                {showArabicTranslation ? "Update Arabic Translation" : "Add Arabic Translation"}
-              </Button>
+                <input
+                  type="checkbox"
+                  id="attach-arabic-translation"
+                  checked={attachArabic}
+                  disabled={isSubmitting}
+                  onChange={(e) => setAttachArabic(e.target.checked)}
+                  className="size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-700"
+                />
+                <Languages className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Attach Arabic Translation</span>
+              </label>
             </div>
 
             {/* Primary English Text Area */}
@@ -792,50 +763,6 @@ export function CreateLetterPage({
               placeholder={documentType ? "Enter English letter text..." : "Select a letter type to load its template"}
               className="min-h-48 w-full resize-y rounded-xl border border-input bg-background px-4 py-3 font-mono text-sm leading-6 outline-none transition-shadow placeholder:font-sans placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-muted/30 disabled:opacity-70"
             />
-
-            {/* Arabic Translation Block (Displayed below divider when active) */}
-            {showArabicTranslation ? (
-              <div className="space-y-3 pt-2">
-                {/* Horizontal Divider */}
-                <div className="relative flex items-center py-1">
-                  <div className="flex-grow border-t border-slate-200 dark:border-slate-800" />
-                  <span className="mx-4 shrink-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Arabic Translation
-                  </span>
-                  <div className="flex-grow border-t border-slate-200 dark:border-slate-800" />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="create-letter-text-ar" className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
-                      <span>الترجمة العربية</span>
-                      <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">RTL</span>
-                    </Label>
-                    <button
-                      type="button"
-                      onClick={() => setShowArabicTranslation(false)}
-                      className="text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      Remove Arabic
-                    </button>
-                  </div>
-
-                  <textarea
-                    id="create-letter-text-ar"
-                    dir="rtl"
-                    value={arabicText}
-                    maxLength={100000}
-                    disabled={isSubmitting}
-                    onChange={(e) => setArabicText(e.target.value)}
-                    placeholder="نص الرسالة باللغة العربية..."
-                    className="min-h-40 w-full resize-y rounded-xl border border-emerald-500/30 bg-emerald-50/20 px-4 py-3 font-sans text-sm leading-6 text-right outline-none transition-shadow placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-emerald-950/20"
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    You can manually edit the Arabic translation above. Manual edits will be preserved when saving or sending.
-                  </p>
-                </div>
-              </div>
-            ) : null}
           </div>
 
           {/* Add Attachments Section */}
