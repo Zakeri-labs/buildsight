@@ -21,17 +21,33 @@ import { useI18n } from "@/lib/i18n"
 import { ReviewNotificationCenter } from "@/components/notifications/review-notification-center"
 import type { AppNotificationFeed } from "@/lib/notifications/types"
 
+import { useState } from "react"
+import { AppSidebar } from "@/components/app-sidebar"
+import type { ProjectOption } from "@/components/app-shell"
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
+
 export function AppTopbar({
   activeProjectName,
   notificationFeed,
+  projects = [],
+  selectedProjectId = "all",
+  canManageStages = false,
+  canAccessSiteVisits = false,
+  homeHref = "/",
 }: {
   activeProjectName?: string | null
   notificationFeed: AppNotificationFeed
+  projects?: ProjectOption[]
+  selectedProjectId?: string
+  canManageStages?: boolean
+  canAccessSiteVisits?: boolean
+  homeHref?: "/" | "/memberhomepage"
 }) {
   const pathname = usePathname()
   const currentUser = useCurrentUser()
   const userRoleLabel = currentUser.role ? roleLabel(currentUser.role) : "Admin"
   const { t } = useI18n()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const titleMap: Record<string, { title: string; subtitle: string }> = {
     "/": { title: t.nav.dashboard, subtitle: t.dashboard.overallProgress },
@@ -77,14 +93,48 @@ export function AppTopbar({
   const isTitlelessPage = isSiteVisitRequestList || isInitialDocumentsPage
 
   return (
-    <header className={`sticky top-0 z-30 flex items-center gap-4 bg-background/95 px-4 backdrop-blur md:px-8 ${isTitlelessPage ? "h-14 justify-end" : "h-20"}`}>
+    <header className={`sticky top-0 z-30 flex items-center gap-3 bg-background/95 px-4 backdrop-blur md:px-8 ${isTitlelessPage ? "h-14 justify-between md:justify-end" : "h-20"}`}>
+      {/* Mobile Hamburger Drawer Trigger */}
+      <button
+        type="button"
+        aria-label="Open navigation menu"
+        aria-expanded={mobileMenuOpen}
+        onClick={() => setMobileMenuOpen(true)}
+        className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-foreground shadow-xs transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+      >
+        <span className="flex w-4 flex-col gap-1" aria-hidden="true">
+          <span className="h-0.5 w-full rounded-full bg-current" />
+          <span className="h-0.5 w-full rounded-full bg-current" />
+          <span className="h-0.5 w-full rounded-full bg-current" />
+        </span>
+      </button>
+
+      {/* Mobile Navigation Drawer */}
+      <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+        <SheetContent side="left" className="w-72 p-0">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
+          <AppSidebar
+            projects={projects}
+            selectedProjectId={selectedProjectId}
+            canManageStages={canManageStages}
+            canAccessSiteVisits={canAccessSiteVisits}
+            homeHref={homeHref}
+            onNavigate={() => setMobileMenuOpen(false)}
+          />
+        </SheetContent>
+      </Sheet>
+
       {/* Page title */}
       {!isTitlelessPage ? (
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-2xl font-bold tracking-tight text-foreground">{title}</h1>
-          {subtitle && <p className="truncate text-sm text-muted-foreground">{subtitle}</p>}
+          <h1 className="truncate text-xl font-bold tracking-tight text-foreground md:text-2xl">{title}</h1>
+          {subtitle && <p className="hidden truncate text-sm text-muted-foreground sm:block">{subtitle}</p>}
         </div>
-      ) : null}
+      ) : (
+        <div className="min-w-0 flex-1 md:hidden">
+          <h1 className="truncate text-lg font-bold tracking-tight text-foreground">{title}</h1>
+        </div>
+      )}
 
       {/* Right-side actions */}
       <div className="flex items-center gap-1.5">

@@ -57,7 +57,7 @@ export function AppShell({
     <div className="flex min-h-dvh bg-background">
       <Suspense fallback={null}><NavigationProgress /></Suspense>
       <StageTranslationBackgroundWorker />
-      <div className={isMemberMobileShell ? "hidden md:flex" : "flex"}>
+      <div className="hidden md:flex">
         <AppSidebar
           projects={projects}
           selectedProjectId={selectedProjectId}
@@ -70,7 +70,15 @@ export function AppShell({
         {isMemberMobileShell ? (
           <>
             <div className="hidden md:block">
-              <AppTopbar activeProjectName={activeProjectName} notificationFeed={notificationFeed} />
+              <AppTopbar
+                activeProjectName={activeProjectName}
+                notificationFeed={notificationFeed}
+                projects={projects}
+                selectedProjectId={selectedProjectId}
+                canManageStages={canManageStages}
+                canAccessSiteVisits={canAccessSiteVisits}
+                homeHref={isMember ? "/memberhomepage" : "/"}
+              />
             </div>
             <MemberMobileDashboardHeader
               projects={projects}
@@ -81,7 +89,15 @@ export function AppShell({
             />
           </>
         ) : (
-          <AppTopbar activeProjectName={activeProjectName} notificationFeed={notificationFeed} />
+          <AppTopbar
+            activeProjectName={activeProjectName}
+            notificationFeed={notificationFeed}
+            projects={projects}
+            selectedProjectId={selectedProjectId}
+            canManageStages={canManageStages}
+            canAccessSiteVisits={canAccessSiteVisits}
+            homeHref={isMember ? "/memberhomepage" : "/"}
+          />
         )}
         <main
           className={
