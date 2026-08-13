@@ -60,7 +60,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useI18n } from "@/lib/i18n"
-import { cn } from "@/lib/utils"
 import { supervisionTypeLabel, type ProjectTypeValue } from "@/lib/projects/project-options"
 import type { ProjectSupervisorCandidate } from "@/lib/projects/supervisor-candidates"
 import {
