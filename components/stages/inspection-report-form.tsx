@@ -1689,8 +1689,11 @@ function RichSectionEditor({
   const [isRecording, setIsRecording] = useState(false)
   const [aiLoading, setAiLoading] = useState<"translate_en" | "enhance_style" | null>(null)
   const [copiedText, setCopiedText] = useState(false)
+  const [showCopyToast, setShowCopyToast] = useState(false)
   const [whatsappModalOpen, setWhatsappModalOpen] = useState(false)
   const [targetPhone, setTargetPhone] = useState("")
+  const [countdown, setCountdown] = useState<number | null>(null)
+  const countdownTimerRef = useRef<any>(null)
 
   useEffect(() => { if (editorRef.current && editorRef.current.innerHTML !== value) editorRef.current.innerHTML = value || "<p><br></p>" }, [])
 
@@ -1717,7 +1720,11 @@ function RichSectionEditor({
     try {
       await navigator.clipboard.writeText(text.trim())
       setCopiedText(true)
-      setTimeout(() => setCopiedText(false), 2000)
+      setShowCopyToast(true)
+      setTimeout(() => {
+        setCopiedText(false)
+        setShowCopyToast(false)
+      }, 3000)
     } catch {
       // fallback
     }
@@ -1756,16 +1763,7 @@ function RichSectionEditor({
     }
   }
 
-  const toggleRecording = () => {
-    if (isRecording) {
-      if (recognitionRef.current) {
-        try { recognitionRef.current.stop() } catch {}
-        recognitionRef.current = null
-      }
-      setIsRecording(false)
-      return
-    }
-
+  const startActualRecording = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (SpeechRecognition) {
       try {
@@ -1831,6 +1829,37 @@ function RichSectionEditor({
     }
 
     setUploadError("مرورگر شما از قابلیت تبدیل صوت به متن در لحظه پشتیبانی نمی‌کند. لطفاً از مرورگر کروم، اج یا سافاری استفاده کنید.")
+  }
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop() } catch {}
+        recognitionRef.current = null
+      }
+      setIsRecording(false)
+      return
+    }
+
+    if (countdown !== null) {
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
+      setCountdown(null)
+      return
+    }
+
+    let currentCount = 3
+    setCountdown(3)
+
+    countdownTimerRef.current = setInterval(() => {
+      currentCount -= 1
+      if (currentCount > 0) {
+        setCountdown(currentCount)
+      } else {
+        clearInterval(countdownTimerRef.current)
+        setCountdown(null)
+        startActualRecording()
+      }
+    }, 750)
   }
 
   const handleAiAction = async (action: "translate_en" | "enhance_style") => {
@@ -1904,19 +1933,28 @@ function RichSectionEditor({
               label={
                 isRecording
                   ? "در حال ضبط و تایپ زنده (برای توقف کلیک کنید)..."
-                  : `تایپ زنده وویس (${speechLang === "hi-IN" ? "هندی" : speechLang === "fa-IR" ? "فارسی" : speechLang === "ar-SA" ? "عربی" : "انگلیسی"})`
+                  : countdown !== null
+                    ? `آماده شوید: ${countdown} ...`
+                    : `تایپ زنده وویس (${speechLang === "hi-IN" ? "هندی" : speechLang === "fa-IR" ? "فارسی" : speechLang === "ar-SA" ? "عربی" : "انگلیسی"})`
               }
               onClick={toggleRecording}
               disabled={disabled}
-              className={cn(isRecording && "bg-rose-600 text-white hover:bg-rose-700 animate-pulse")}
+              className={cn(
+                isRecording && "bg-rose-600 text-white hover:bg-rose-700 animate-pulse",
+                countdown !== null && "bg-amber-500 text-white hover:bg-amber-600 animate-bounce"
+              )}
             >
-              <Mic className={cn("size-4", isRecording ? "text-white" : "text-rose-600 dark:text-rose-400")} />
+              {countdown !== null ? (
+                <span className="text-xs font-black tabular-nums">{countdown}</span>
+              ) : (
+                <Mic className={cn("size-4", isRecording ? "text-white" : "text-rose-600 dark:text-rose-400")} />
+              )}
             </EditorButton>
 
             <select
               value={speechLang}
               onChange={(e) => handleSpeechLangChange(e.target.value)}
-              disabled={disabled || isRecording}
+              disabled={disabled || isRecording || countdown !== null}
               title="زبان گفتار پیش‌فرض برای تایپ زنده وویس"
               aria-label="Speech Language"
               className="h-8 max-w-[125px] rounded-lg border border-input bg-background px-1.5 text-xs font-semibold text-foreground shadow-2xs outline-none hover:bg-accent cursor-pointer truncate"
@@ -1972,63 +2010,132 @@ function RichSectionEditor({
           </EditorButton>
         </div>
         {uploadError ? <div className="border-b bg-red-50 px-4 py-2 text-xs text-red-700">{uploadError}</div> : null}
-        <div ref={editorRef} contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-multiline="true" onFocus={saveSelection} onKeyUp={saveSelection} onMouseUp={saveSelection} onInput={() => onChange(editorRef.current?.innerHTML ?? "")} className={cn("inspection-editor bg-background px-3 py-3 text-sm outline-none md:min-h-56 md:px-7 md:py-5", disabled ? "min-h-0" : "min-h-36")} />
+
+        <div className="relative">
+          {countdown !== null ? (
+            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-background/85 backdrop-blur-xs animate-in fade-in zoom-in-95">
+              <div className="flex flex-col items-center gap-2 text-center">
+                <div className="flex size-16 items-center justify-center rounded-2xl bg-rose-600 text-white shadow-xl shadow-rose-600/30 animate-pulse">
+                  <span className="text-3xl font-black tabular-nums">{countdown}</span>
+                </div>
+                <p className="text-xs font-bold text-rose-600 dark:text-rose-400">
+                  آماده شوید... صحبت را آغاز کنید! (Get ready to speak...)
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          <div ref={editorRef} contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-multiline="true" onFocus={saveSelection} onKeyUp={saveSelection} onMouseUp={saveSelection} onInput={() => onChange(editorRef.current?.innerHTML ?? "")} className={cn("inspection-editor bg-background px-3 py-3 text-sm outline-none md:min-h-56 md:px-7 md:py-5", disabled ? "min-h-0" : "min-h-36")} />
+        </div>
       </div>
+
+      {/* Floating Copy Toast Banner */}
+      {showCopyToast ? (
+        <div className="fixed bottom-6 start-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 rounded-2xl border border-emerald-500/40 bg-slate-950/95 px-5 py-3 text-xs font-semibold text-white shadow-2xl backdrop-blur animate-in slide-in-from-bottom-5">
+          <Check className="size-4 text-emerald-400 stroke-[3]" />
+          <span>متن این بخش با موفقیت کپی شد! (Copied to clipboard)</span>
+        </div>
+      ) : null}
 
       {/* WhatsApp Share Modal */}
       <Dialog open={whatsappModalOpen} onOpenChange={setWhatsappModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <MessageSquare className="size-5 text-emerald-600 dark:text-emerald-400" />
-              اشتراک‌گذاری در واتساپ (WhatsApp Share)
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              گیرنده را انتخاب کنید یا شماره تلفن دلخواه را وارد کرده و ارسال را بزنید.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-lg">
+          <div className="bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-700 px-6 py-5 text-white">
+            <div className="flex items-center gap-3">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-white/20 shadow-inner">
+                <MessageSquare className="size-5 text-white" />
+              </span>
+              <div>
+                <DialogTitle className="text-base font-bold text-white">
+                  اشتراک‌گذاری در واتساپ (WhatsApp Direct)
+                </DialogTitle>
+                <DialogDescription className="text-xs text-emerald-100">
+                  ارسال سریع ملاحظات این بخش به پیمانکار، کارفرما یا شماره دلخواه
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
 
-          <div className="mt-2 space-y-2.5">
-            {/* Project Registered Candidates with Phone */}
+          <div className="space-y-4 p-5 sm:p-6">
+            {/* Note Snippet Preview */}
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-50/50 p-3 dark:bg-emerald-950/20">
+              <p className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">پیش‌نمایش متن ارسالی (Message Preview):</p>
+              <p className="mt-1 line-clamp-3 text-xs text-muted-foreground italic">
+                "{editorRef.current?.innerText?.trim() || editorRef.current?.textContent?.trim() || "متن یادداشت گزارش..."}"
+              </p>
+            </div>
+
+            {/* Project Stakeholder Contacts */}
             {ccCandidates.length > 0 ? (
-              ccCandidates.filter((c) => Boolean(c.phone)).map((candidate) => (
-                <div
-                  key={candidate.id}
-                  onClick={() => sendToWhatsapp(candidate.phone!)}
-                  className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border bg-card p-3 transition-colors hover:border-emerald-500/50 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="flex size-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
-                      {candidate.roleKey?.includes("contractor") ? <Building2 className="size-4" /> : <User className="size-4" />}
-                    </span>
-                    <div>
-                      <p className="text-xs font-semibold">{candidate.name} ({candidate.role})</p>
-                      <p className="text-[11px] text-muted-foreground dir-ltr">{candidate.phone}</p>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground">مخاطبان ثبت‌شده پروژه (Project Stakeholders):</label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {ccCandidates.filter((c) => Boolean(c.phone)).map((candidate) => (
+                    <div
+                      key={candidate.id}
+                      onClick={() => sendToWhatsapp(candidate.phone!)}
+                      className="group flex cursor-pointer items-center justify-between gap-2.5 rounded-xl border bg-card p-3 transition-all hover:border-emerald-500 hover:bg-emerald-50/60 hover:shadow-sm dark:hover:bg-emerald-950/30"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                          {candidate.roleKey?.includes("contractor") ? <Building2 className="size-4" /> : <User className="size-4" />}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-bold text-foreground">{candidate.name}</p>
+                          <p className="truncate text-[10px] font-medium text-muted-foreground">{candidate.role || "نقش نامشخص"}</p>
+                          <p className="truncate text-[11px] font-mono font-medium text-emerald-700 dark:text-emerald-400 dir-ltr">{candidate.phone}</p>
+                        </div>
+                      </div>
+                      <Button type="button" size="xs" className="h-7 shrink-0 bg-emerald-600 px-2.5 text-[11px] font-bold text-white hover:bg-emerald-700 shadow-2xs">
+                        ارسال
+                      </Button>
                     </div>
-                  </div>
-                  <Button type="button" size="xs" variant="outline" className="h-7 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                    ارسال
-                  </Button>
+                  ))}
                 </div>
-              ))
+              </div>
             ) : null}
 
             {/* Custom Phone Number Input */}
-            <div className="space-y-1.5 pt-2">
+            <div className="space-y-2 pt-1">
               <label className="text-xs font-semibold text-foreground">وارد کردن شماره دلخواه (Custom Phone Number):</label>
+
+              {/* Quick Country Code Badges */}
+              <div className="flex flex-wrap items-center gap-1.5 pb-1">
+                {[
+                  { code: "+971", label: "🇦🇪 UAE (+971)" },
+                  { code: "+98", label: "🇮🇷 IR (+98)" },
+                  { code: "+966", label: "🇸🇦 KSA (+966)" },
+                  { code: "+91", label: "🇮🇳 IN (+91)" },
+                  { code: "+92", label: "🇵🇰 PK (+92)" },
+                ].map((country) => (
+                  <button
+                    key={country.code}
+                    type="button"
+                    onClick={() => {
+                      if (!targetPhone.startsWith(country.code)) {
+                        setTargetPhone(country.code + targetPhone.replace(/^\+\d+/, ""))
+                      }
+                    }}
+                    className="rounded-lg border bg-muted/30 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/40 cursor-pointer"
+                  >
+                    {country.label}
+                  </button>
+                ))}
+              </div>
+
               <div className="flex items-center gap-2">
                 <Input
                   type="tel"
                   placeholder="مثال: 971501234567+ یا 0501234567"
                   value={targetPhone}
                   onChange={(e) => setTargetPhone(e.target.value)}
-                  className="h-9 text-xs dir-ltr"
+                  className="h-10 text-xs font-mono dir-ltr"
                 />
                 <Button
                   type="button"
                   size="sm"
                   onClick={() => sendToWhatsapp()}
-                  className="h-9 gap-1.5 bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-700"
+                  className="h-10 gap-1.5 bg-emerald-600 px-4 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm"
                 >
                   <Send className="size-3.5" />
                   ارسال
@@ -2037,7 +2144,7 @@ function RichSectionEditor({
             </div>
           </div>
 
-          <DialogFooter className="mt-2">
+          <DialogFooter className="border-t bg-muted/20 px-6 py-3">
             <Button type="button" variant="ghost" size="sm" onClick={() => setWhatsappModalOpen(false)}>
               انصراف
             </Button>
