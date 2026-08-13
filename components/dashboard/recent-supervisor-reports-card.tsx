@@ -31,7 +31,7 @@ export function RecentSupervisorReportsCard({
     <div className="flex h-full min-h-0 flex-col rounded-xl border border-border bg-card p-5">
       <h2 className="text-base font-semibold text-foreground">Recent Supervisor Reports</h2>
 
-      <div className="mt-3 flex min-h-0 flex-1 flex-col justify-center overflow-y-auto">
+      <div className="mt-3 flex min-h-0 flex-1 flex-col justify-start overflow-y-auto">
         {reports.length ? (
           <ul className="divide-y divide-border/70">
             {reports.map((report) => {
