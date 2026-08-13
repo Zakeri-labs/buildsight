@@ -110,6 +110,7 @@ export type ProjectStageExecution = {
   name: string
   description: string | null
   status: "not_started" | "in_progress" | "completed" | "disabled"
+  isPreCompleted?: boolean
   sortOrder: number
   reports: ProjectTermResponse[]
   reportSummary: { total: number; draft: number; inProgress: number; pendingReview: number; approved: number; rejected: number }
@@ -137,6 +138,7 @@ export type ProjectStageSelectionOption = {
   description: string | null
   sortOrder: number
   active: boolean
+  isPreCompleted?: boolean
   hasData: boolean
   hasPendingReview: boolean
   terms: ProjectTermSelectionOption[]
@@ -259,7 +261,7 @@ export async function loadProjectStageExecution(
   ] = await Promise.all([
     admin
       .from("project_stages")
-      .select("id, template_stage_id, name, description, status, sort_order")
+      .select("id, template_stage_id, name, description, status, sort_order, is_pre_completed")
       .eq("project_id", projectId)
       .order("sort_order", { ascending: true }),
     admin
@@ -560,6 +562,7 @@ export async function loadProjectStageExecution(
         name: stage.name,
         description: stage.description,
         status: stage.status,
+        isPreCompleted: Boolean(stage.is_pre_completed),
         sortOrder: stage.sort_order,
         reports: stageReports,
         reportSummary: {
@@ -701,6 +704,7 @@ export async function loadProjectStageExecution(
     description: ps.description,
     sortOrder: ps.sort_order,
     active: ps.status !== "disabled",
+    isPreCompleted: Boolean(ps.is_pre_completed),
     hasData: ["in_progress", "completed"].includes(ps.status),
     hasPendingReview: false,
     terms: [],
@@ -725,6 +729,7 @@ export async function loadProjectStageExecution(
           description: stage.description,
           sortOrder: stage.sort_order,
           active: Boolean(projectStage ? projectStage.status !== "disabled" : true),
+          isPreCompleted: Boolean(projectStage?.is_pre_completed),
           hasData:
             allItems.some((item) => item.hasData) ||
             legacyHasData ||

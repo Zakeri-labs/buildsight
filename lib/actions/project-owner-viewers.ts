@@ -98,7 +98,7 @@ export async function loadProjectOwnerViewers(input: {
           phone: "",
         } satisfies ProjectOwnerViewerOption
       })
-      .filter((viewer): viewer is ProjectOwnerViewerOption => Boolean(viewer))
+      .filter((viewer): viewer is NonNullable<typeof viewer> => viewer !== null)
 
     // Registered Viewer membership is authoritative when the same email also
     // has invitation history. This prevents an accepted Viewer from appearing

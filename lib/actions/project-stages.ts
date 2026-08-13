@@ -29,6 +29,7 @@ import {
   isReportType,
   isSubtermResponseType,
   sanitizeReportHtml,
+  type ChecklistResult,
   type ReportTypeValue,
   type SubtermResponseType,
   type TermResponseContent,
@@ -874,6 +875,7 @@ type ProjectStageSelectionInput = {
   selectedTemplateStageIds: string[]
   selectedTemplateTermIds: string[]
   selectedTemplateSubtermIds: string[]
+  preCompletedStageIds?: string[]
 }
 
 function isUniqueViolation(error: unknown) {
@@ -955,7 +957,7 @@ export async function saveProjectStageSelectionAction(
         .order("sort_order", { ascending: true }),
       admin
         .from("project_stages")
-        .select("id, template_stage_id, status")
+        .select("id, template_stage_id, status, is_pre_completed")
         .eq("project_id", input.projectId),
     ])
     if (libraryStageError) throw libraryStageError
@@ -1008,13 +1010,13 @@ export async function saveProjectStageSelectionAction(
           sort_order: definition.sort_order,
         }
       })
-      .filter(Boolean)
+      .filter((item): item is NonNullable<typeof item> => item !== null)
     if (missingStageRows.length) {
       const { error } = await admin.from("project_stages").insert(missingStageRows)
       if (error && !isUniqueViolation(error)) throw error
       const { data, error: reloadError } = await admin
         .from("project_stages")
-        .select("id, template_stage_id, status")
+        .select("id, template_stage_id, status, is_pre_completed")
         .eq("project_id", input.projectId)
       if (reloadError) throw reloadError
       projectStages = data ?? []
@@ -1071,7 +1073,7 @@ export async function saveProjectStageSelectionAction(
           is_active: requestedTermIds.includes(definition.id),
         }
       })
-      .filter(Boolean)
+      .filter((item): item is NonNullable<typeof item> => item !== null)
     if (missingParents.length) {
       const { error } = await admin.from("project_stage_terms").insert(missingParents)
       if (error && !isUniqueViolation(error)) throw error
@@ -1114,7 +1116,7 @@ export async function saveProjectStageSelectionAction(
           is_active: true,
         }
       })
-      .filter(Boolean)
+      .filter((item): item is NonNullable<typeof item> => item !== null)
     if (missingChildren.length) {
       const { error } = await admin.from("project_stage_terms").insert(missingChildren)
       if (error && !isUniqueViolation(error)) throw error
@@ -1132,20 +1134,44 @@ export async function saveProjectStageSelectionAction(
     }
 
     const selectedStageSet = new Set(requestedStageIds)
+    const preCompletedStageSet = new Set(uniqueIds(input.preCompletedStageIds) ?? [])
     for (const projectStage of projectStages) {
-      const shouldEnable = projectStage.template_stage_id
-        ? selectedStageSet.has(projectStage.template_stage_id) || selectedStageSet.has(projectStage.id)
-        : selectedStageSet.has(projectStage.id)
+      const templateId = projectStage.template_stage_id || projectStage.id
+      const shouldEnable = selectedStageSet.has(templateId) || selectedStageSet.has(projectStage.id)
+      const isPreCompleted = shouldEnable && (preCompletedStageSet.has(templateId) || preCompletedStageSet.has(projectStage.id))
       const nextStatus = shouldEnable
-        ? projectStage.status === "disabled" ? await deriveProjectStageStatus(projectStage.id) : projectStage.status
+        ? isPreCompleted
+          ? "completed"
+          : projectStage.status === "disabled"
+            ? await deriveProjectStageStatus(projectStage.id)
+            : projectStage.status
         : "disabled"
-      if (nextStatus !== projectStage.status) {
+
+      const updates: Record<string, unknown> = {}
+      if (nextStatus !== projectStage.status) updates.status = nextStatus
+      if (Boolean(projectStage.is_pre_completed) !== isPreCompleted) updates.is_pre_completed = isPreCompleted
+
+      if (Object.keys(updates).length > 0) {
         const { error } = await admin
           .from("project_stages")
-          .update({ status: nextStatus })
+          .update(updates)
           .eq("id", projectStage.id)
           .eq("project_id", input.projectId)
-        if (error) throw error
+        if (error) {
+          if (updates.is_pre_completed !== undefined) {
+            delete updates.is_pre_completed
+            if (Object.keys(updates).length > 0) {
+              const { error: fallbackError } = await admin
+                .from("project_stages")
+                .update(updates)
+                .eq("id", projectStage.id)
+                .eq("project_id", input.projectId)
+              if (fallbackError) throw fallbackError
+            }
+          } else {
+            throw error
+          }
+        }
       }
     }
 

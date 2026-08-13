@@ -76,7 +76,7 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
       .eq("assigned_supervisor_id", userId),
     admin
       .from("project_stages")
-      .select("id, project_id, name, status, sort_order")
+      .select("id, project_id, name, status, sort_order, is_pre_completed")
       .in("project_id", projectIds)
       .order("sort_order", { ascending: true }),
     admin
@@ -101,6 +101,7 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
   const allStageNameById = new Map<string, string>()
   const stagesByProject = new Map<string, ReportEntryStage[]>()
 
+  const stageRowById = new Map<string, any>()
   for (const row of stageResult.data ?? []) {
     const projectId = (row as any).project_id
     const stageId = (row as any).id
@@ -108,6 +109,7 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
     if (!isUuid(projectId) || !projectIdSet.has(projectId) || !isUuid(stageId) || !name) continue
 
     allStageNameById.set(stageId, name)
+    stageRowById.set(stageId, row)
     if ((row as any).status === "disabled") continue
 
     const items = stagesByProject.get(projectId) ?? []
@@ -179,7 +181,13 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
     for (const stage of stages) {
       stage.latestReport = latestReportByStage.get(stage.id) ?? null
       const stageReports = reportsByStage.get(stage.id) ?? []
-      const stats = calculateStageStats({ name: stage.name, reports: stageReports })
+      const stageRow = stageRowById.get(stage.id)
+      const stats = calculateStageStats({
+        name: stage.name,
+        reports: stageReports,
+        isPreCompleted: Boolean(stageRow?.is_pre_completed),
+        status: stageRow?.status,
+      })
       stage.reportsCount = stats.reportsCount
       stage.checkedChecklistItems = stats.checkedChecklistItems
       stage.totalChecklistItems = stats.totalChecklistItems

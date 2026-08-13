@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { AlertTriangle, Layers3, Plus, Search } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Layers3, Plus, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -17,11 +17,13 @@ import { Label } from "@/components/ui/label"
 import { createProjectStageAction, saveProjectStageSelectionAction } from "@/lib/actions/project-stages"
 import type { ProjectStageSelectionOption, ProjectTermSelectionOption } from "@/lib/db/project-stages"
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n"
 
 type SelectionState = {
   stages: Set<string>
   terms: Set<string>
   subterms: Set<string>
+  preCompletedStages: Set<string>
 }
 
 type DisabledItem = {
@@ -38,6 +40,7 @@ function initialSelection(stages: ProjectStageSelectionOption[]): SelectionState
     ? stages.filter((stage) => stage.active).map((stage) => stage.templateStageId)
     : stages.map((stage) => stage.templateStageId)
 
+  const preCompleted = stages.filter((stage) => stage.isPreCompleted).map((stage) => stage.templateStageId)
   const selectedTerms = stages.flatMap((stage) => stage.terms).map((term) => term.templateTermId)
   const selectedSubterms = stages.flatMap((stage) => stage.terms).flatMap((term) => term.subterms).map((subterm) => subterm.templateTermId)
 
@@ -45,6 +48,7 @@ function initialSelection(stages: ProjectStageSelectionOption[]): SelectionState
     stages: new Set(selectedStages),
     terms: new Set(selectedTerms),
     subterms: new Set(selectedSubterms),
+    preCompletedStages: new Set(preCompleted),
   }
 }
 
@@ -53,6 +57,7 @@ function cloneSelection(selection: SelectionState): SelectionState {
     stages: new Set(selection.stages),
     terms: new Set(selection.terms),
     subterms: new Set(selection.subterms),
+    preCompletedStages: new Set(selection.preCompletedStages),
   }
 }
 
@@ -96,6 +101,8 @@ export function ManageProjectStagesButton({
   stages: ProjectStageSelectionOption[]
 }) {
   const router = useRouter()
+  const { locale } = useI18n()
+  const isArabic = locale === "ar"
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [selection, setSelection] = useState<SelectionState>(() => initialSelection(stages))
@@ -140,10 +147,28 @@ export function ManageProjectStagesButton({
 
       if (current.stages.has(stage.templateStageId)) {
         next.stages.delete(stage.templateStageId)
+        next.preCompletedStages.delete(stage.templateStageId)
         childTermIds.forEach((id) => next.terms.delete(id))
         childSubtermIds.forEach((id) => next.subterms.delete(id))
       } else {
         next.stages.add(stage.templateStageId)
+        childTermIds.forEach((id) => next.terms.add(id))
+        childSubtermIds.forEach((id) => next.subterms.add(id))
+      }
+      return next
+    })
+  }
+
+  const togglePreCompleted = (stage: ProjectStageSelectionOption) => {
+    setSelection((current) => {
+      const next = cloneSelection(current)
+      if (current.preCompletedStages.has(stage.templateStageId)) {
+        next.preCompletedStages.delete(stage.templateStageId)
+      } else {
+        next.preCompletedStages.add(stage.templateStageId)
+        next.stages.add(stage.templateStageId)
+        const childTermIds = stage.terms.map((term) => term.templateTermId)
+        const childSubtermIds = stage.terms.flatMap((term) => term.subterms.map((subterm) => subterm.templateTermId))
         childTermIds.forEach((id) => next.terms.add(id))
         childSubtermIds.forEach((id) => next.subterms.add(id))
       }
@@ -158,6 +183,7 @@ export function ManageProjectStagesButton({
       subterms: new Set(
         stages.flatMap((stage) => stage.terms).flatMap((term) => term.subterms).map((subterm) => subterm.templateTermId),
       ),
+      preCompletedStages: new Set(),
     })
   }
 
@@ -191,6 +217,7 @@ export function ManageProjectStagesButton({
         selectedTemplateStageIds: Array.from(selection.stages),
         selectedTemplateTermIds: Array.from(selection.terms),
         selectedTemplateSubtermIds: Array.from(selection.subterms),
+        preCompletedStageIds: Array.from(selection.preCompletedStages),
       })
       if (!result.ok) {
         setError(result.error)
@@ -363,7 +390,7 @@ export function ManageProjectStagesButton({
                     variant="ghost"
                     size="sm"
                     onClick={() => {
-                      setSelection((current) => ({ ...cloneSelection(current), stages: new Set() }))
+                      setSelection((current) => ({ ...cloneSelection(current), stages: new Set(), preCompletedStages: new Set() }))
                     }}
                   >
                     Clear All
@@ -375,27 +402,53 @@ export function ManageProjectStagesButton({
                 {filteredStages.length ? (
                   filteredStages.map((stage) => {
                     const stageActive = selection.stages.has(stage.templateStageId)
+                    const isPreCompleted = selection.preCompletedStages.has(stage.templateStageId)
                     const cleanDescription = stage.description
                       ? stage.description.replace(/inspection checklists/gi, "inspection reports").replace(/checklists/gi, "reports")
                       : null
 
                     return (
-                      <label
+                      <div
                         key={stage.templateStageId}
-                        className="flex cursor-pointer items-center gap-3 border-b px-4 py-3.5 last:border-b-0 transition-colors hover:bg-muted/30"
+                        className={cn(
+                          "flex items-center justify-between gap-3 border-b px-4 py-3.5 last:border-b-0 transition-colors",
+                          isPreCompleted ? "bg-emerald-50/40 dark:bg-emerald-950/20" : "hover:bg-muted/30"
+                        )}
                       >
-                        <HierarchyCheckbox
-                          checked={stageActive}
-                          label={`Enable ${stage.name}`}
-                          onChange={() => setStage(stage)}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold leading-5 text-foreground">{stage.name}</p>
-                          {cleanDescription ? (
-                            <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{cleanDescription}</p>
-                          ) : null}
-                        </div>
-                      </label>
+                        <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+                          <HierarchyCheckbox
+                            checked={stageActive}
+                            label={`Enable ${stage.name}`}
+                            onChange={() => setStage(stage)}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-semibold leading-5 text-foreground">{stage.name}</p>
+                              {isPreCompleted ? (
+                                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                  <CheckCircle2 className="size-3" />
+                                  100% {isArabic ? "تکمیل‌شده قبل از شروع" : "Pre-completed"}
+                                </span>
+                              ) : null}
+                            </div>
+                            {cleanDescription ? (
+                              <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{cleanDescription}</p>
+                            ) : null}
+                          </div>
+                        </label>
+
+                        {stageActive ? (
+                          <label className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 cursor-pointer shadow-2xs">
+                            <input
+                              type="checkbox"
+                              checked={isPreCompleted}
+                              onChange={() => togglePreCompleted(stage)}
+                              className="size-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 accent-emerald-600"
+                            />
+                            <span>{isArabic ? "تکمیل‌شده قبلی (۱۰۰٪)" : "Pre-completed (100%)"}</span>
+                          </label>
+                        ) : null}
+                      </div>
                     )
                   })
                 ) : (

@@ -56,7 +56,13 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
 
   const stageStats = useMemo(() => {
     return data.stages.map((stage) => {
-      const stats = calculateStageStats(stage)
+      const stats = calculateStageStats({
+        name: stage.name,
+        status: stage.status,
+        isPreCompleted: stage.isPreCompleted,
+        terms: stage.terms,
+        reports: stage.reports,
+      })
       const stageReportsMap = new Map<string, any>()
       for (const term of stage.terms ?? []) {
         const responses = term.responses ?? (term.response ? [term.response] : [])
@@ -76,6 +82,7 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
       return {
         stage,
         stageReports,
+        isPreCompleted: Boolean(stage.isPreCompleted),
         stageTotalCheckboxes: stats.totalChecklistItems,
         stageCheckedCheckboxes: stats.checkedChecklistItems,
         stageCheckboxPercentage: stats.progressPercentage,
@@ -128,7 +135,7 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
         </Card>
       ) : (
         <div className="flex flex-col gap-4">
-          {stageStats.map(({ stage, stageReports, stageTotalCheckboxes, stageCheckedCheckboxes, stageCheckboxPercentage }) => {
+          {stageStats.map(({ stage, stageReports, isPreCompleted, stageTotalCheckboxes, stageCheckedCheckboxes, stageCheckboxPercentage }) => {
             const open = openStages.has(stage.id)
             const cleanStageName = stage.name.replace(/^\d+[\.\s\-]+/, "")
 
@@ -150,7 +157,14 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
                       <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                         {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4 flip-rtl" />}
                       </span>
-                      <CardTitle className="truncate text-base font-semibold text-foreground">{cleanStageName}</CardTitle>
+                      <CardTitle className="truncate text-base font-semibold text-foreground flex items-center gap-2">
+                        <span>{cleanStageName}</span>
+                        {isPreCompleted ? (
+                          <Badge variant="outline" className="border-emerald-300 bg-emerald-100 text-emerald-800 text-[11px] font-bold dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                            {language === "ar" ? "مكتملة قبل البدء (۱۰۰٪)" : "Pre-completed (100%)"}
+                          </Badge>
+                        ) : null}
+                      </CardTitle>
                       <span className={cn("text-xs whitespace-nowrap", stageReports.length > 0 ? "font-semibold text-foreground" : "text-muted-foreground")}>
                         (<strong className={cn(stageReports.length > 0 && "font-bold text-slate-900 dark:text-slate-100")}>{stageReports.length}</strong> {copy.reports})
                       </span>

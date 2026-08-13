@@ -275,13 +275,10 @@ export function getFallbackStageChecklist(stageName: string): Array<{ id: string
 
 export type StageStatsInput = {
   name: string
-  terms?: Array<{
-    active?: boolean
-    subterms?: Array<{ active?: boolean }>
-    response?: { id?: string; content?: any; response_content?: any }
-    responses?: Array<{ id?: string; content?: any; response_content?: any }>
-  }>
-  reports?: Array<{ id?: string; content?: any; response_content?: any }>
+  status?: string
+  isPreCompleted?: boolean
+  terms?: Array<any>
+  reports?: Array<any>
 }
 
 export type StageStatsResult = {
@@ -334,14 +331,25 @@ export function calculateStageStats(stage: StageStatsInput): StageStatsResult {
   let stageTermsCount = 0
   for (const term of stage.terms ?? []) {
     if (term.subterms && term.subterms.length > 0) {
-      stageTermsCount += term.subterms.filter((s) => s.active !== false).length
-    } else if (term.active !== false) {
+      stageTermsCount += term.subterms.filter((s: any) => s.isActive !== false && s.active !== false).length
+    } else if (term.isActive !== false && term.active !== false) {
       stageTermsCount += 1
     }
   }
 
   const fallbackChecklistCount = getFallbackStageChecklist(stage.name).length
   const stageTotalCheckboxes = Math.max(reportChecklistTotal, stageTermsCount, fallbackChecklistCount)
+
+  if (stage.isPreCompleted || stage.status === "pre_completed") {
+    const total = stageTotalCheckboxes > 0 ? stageTotalCheckboxes : Math.max(stageTermsCount, fallbackChecklistCount, 1)
+    return {
+      reportsCount: stageReports.length,
+      totalChecklistItems: total,
+      checkedChecklistItems: total,
+      progressPercentage: 100,
+    }
+  }
+
   const stageCheckboxPercentage = stageTotalCheckboxes > 0 ? Math.round((stageCheckedCheckboxes / stageTotalCheckboxes) * 100) : 0
 
   return {

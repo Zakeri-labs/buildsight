@@ -277,11 +277,11 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
   const [{ data: imageRows }, { data: activeStageRows }] = projectIds.length
     ? await Promise.all([
         admin.from("project_images").select("project_id, storage_path").in("project_id", projectIds).eq("order_index", 0),
-        admin.from("project_stages").select("id, project_id, name").in("project_id", projectIds).neq("status", "disabled"),
+        admin.from("project_stages").select("id, project_id, name, status, is_pre_completed").in("project_id", projectIds).neq("status", "disabled"),
       ])
     : [
         { data: [] as Array<{ project_id: string; storage_path: string }> },
-        { data: [] as Array<{ id: string; project_id: string; name: string }> },
+        { data: [] as Array<{ id: string; project_id: string; name: string; status?: string; is_pre_completed?: boolean }> },
       ]
   const activeStageIds = (activeStageRows ?? []).map((stage: any) => stage.id as string)
   const [{ data: progressTermRows }, { data: responseRows }] = activeStageIds.length
@@ -392,8 +392,11 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
 
       const fallbackCount = getFallbackStageChecklist(tmplStage.name).length
       const stageTotal = Math.max(reportChecklistTotal, stageTermsCount, fallbackCount)
+      if (dbStage?.is_pre_completed) {
+        stageChecked = stageTotal > 0 ? stageTotal : 1
+      }
 
-      projectTotalCheckboxes += stageTotal
+      projectTotalCheckboxes += stageTotal > 0 ? stageTotal : (dbStage?.is_pre_completed ? 1 : 0)
       projectCheckedCheckboxes += stageChecked
     }
 
