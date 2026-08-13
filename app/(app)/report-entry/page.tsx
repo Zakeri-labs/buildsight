@@ -12,15 +12,25 @@ export default async function ReportEntryPage({
   searchParams: Promise<{ error?: string | string[]; siteVisitId?: string | string[] }>
 }) {
   const [session, query] = await Promise.all([requireOnboarded(), searchParams])
-  if (session.memberships[0]?.role !== "org_member") redirect("/")
 
-  const projects = await getReportEntryProjects(session.userId)
+  let projects = []
+  try {
+    projects = await getReportEntryProjects(session.userId)
+  } catch (err) {
+    console.error("[report-entry/page] loader error:", err)
+  }
+
   const errorCode = Array.isArray(query.error) ? query.error[0] : query.error
   const rawSiteVisitId = Array.isArray(query.siteVisitId) ? query.siteVisitId[0] : query.siteVisitId
   const hasSiteVisitContext = typeof rawSiteVisitId === "string" && rawSiteVisitId.trim().length > 0
-  const linkedSiteVisit = hasSiteVisitContext
-    ? await getReportEntrySiteVisitContext(rawSiteVisitId!.trim(), projects.map((project) => project.id))
-    : null
+  let linkedSiteVisit = null
+  if (hasSiteVisitContext) {
+    try {
+      linkedSiteVisit = await getReportEntrySiteVisitContext(rawSiteVisitId!.trim(), projects.map((project) => project.id))
+    } catch {
+      linkedSiteVisit = null
+    }
+  }
 
   if (hasSiteVisitContext && !linkedSiteVisit) notFound()
 
