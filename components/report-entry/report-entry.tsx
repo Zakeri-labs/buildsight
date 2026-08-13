@@ -1,16 +1,16 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight, Building2, Check, ChevronRight, ChevronsUpDown, ClipboardList, FileText, ImageIcon, MapPin, Search, X } from "lucide-react"
+import { ArrowRight, Building2, Check, ChevronRight, ChevronsUpDown, ClipboardList, Eye, FileText, ImageIcon, MapPin, Plus, Search, X } from "lucide-react"
 import { useMemo, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import type { ReportEntryProject, ReportEntrySiteVisitContext } from "@/lib/report-entry/server"
 import { startReportEntryAction } from "@/lib/report-entry/actions"
-import { cn } from "@/lib/utils"
+import { cn, capitalizeWords } from "@/lib/utils"
 
 function stageNumber(index: number) {
   return String(index + 1).padStart(2, "0")
@@ -68,7 +68,7 @@ function SearchableProjectSelect({
           <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           {selectedProject ? (
             <span className="truncate">
-              <span className="font-semibold">{selectedProject.name}</span>
+              <span className="font-semibold">{capitalizeWords(selectedProject.name)}</span>
               {selectedProject.code ? (
                 <span className="ms-1.5 font-mono text-xs text-muted-foreground">· {selectedProject.code}</span>
               ) : null}
@@ -124,7 +124,7 @@ function SearchableProjectSelect({
                     )}
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-semibold">{project.name}</div>
+                      <div className="truncate font-semibold">{capitalizeWords(project.name)}</div>
                       {project.code ? (
                         <div className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{project.code}</div>
                       ) : null}
@@ -303,7 +303,7 @@ export function ReportEntry({
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
-                  <h2 className="truncate text-sm font-bold leading-tight text-foreground">{selectedProject.name}</h2>
+                  <h2 className="truncate text-sm font-bold leading-tight text-foreground">{capitalizeWords(selectedProject.name)}</h2>
                   {selectedProject.status ? <Badge variant="secondary" className="shrink-0 text-[10px]">{selectedProject.status}</Badge> : null}
                 </div>
                 {selectedProject.code ? (
