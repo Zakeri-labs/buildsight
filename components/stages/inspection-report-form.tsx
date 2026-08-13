@@ -1667,151 +1667,83 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
     onChange(editorRef.current?.innerHTML ?? "")
   }
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const audioChunksRef = useRef<Blob[]>([])
-  const [transcribingVoice, setTranscribingVoice] = useState(false)
+  const [speechLang, setSpeechLang] = useState<string>("fa-IR")
 
-  const toggleRecording = async () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-      mediaRecorderRef.current.stop()
-      setIsRecording(false)
-      return
-    }
-
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop() } catch {}
-      recognitionRef.current = null
-      setIsRecording(false)
-      return
-    }
-
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        const mediaRecorder = new MediaRecorder(stream)
-        audioChunksRef.current = []
-
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) audioChunksRef.current.push(event.data)
-        }
-
-        mediaRecorder.onstop = async () => {
-          stream.getTracks().forEach((track) => track.stop())
-
-          const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" })
-          if (audioBlob.size === 0) return
-
-          setTranscribingVoice(true)
-          setUploadError(null)
-
-          try {
-            const formData = new FormData()
-            formData.append("audio", audioBlob, "dictation.webm")
-
-            const res = await fetch("/api/ai/transcribe-voice", {
-              method: "POST",
-              body: formData,
-            })
-            const data = await res.json()
-
-            if (!res.ok || !data.text) {
-              throw new Error(data.error || "تشخیص صوت با خطا مواجه شد.")
-            }
-
-            const spokenText = String(data.text).trim()
-            if (spokenText && editorRef.current) {
-              const currentHtml = editorRef.current.innerHTML.trim()
-              const isPlaceholder = !currentHtml || currentHtml === "<p><br></p>" || currentHtml === "<br>"
-              if (isPlaceholder) {
-                editorRef.current.innerHTML = `<p>${escapeHtml(spokenText)}</p>`
-              } else {
-                const cleanBase = currentHtml.replace(/<\/p>$/i, "").replace(/<br\s*\/?>$/i, "")
-                editorRef.current.innerHTML = `${cleanBase} ${escapeHtml(spokenText)}</p>`
-              }
-              onChange(editorRef.current.innerHTML)
-            }
-          } catch (err) {
-            setUploadError(err instanceof Error ? err.message : "خطایی در تبدیل صوت به متن رخ داد.")
-          } finally {
-            setTranscribingVoice(false)
-          }
-        }
-
-        mediaRecorderRef.current = mediaRecorder
-        mediaRecorder.start()
-        setIsRecording(true)
-        setUploadError(null)
-        return
-      } catch (micErr) {
-        console.warn("MediaRecorder mic access error:", micErr)
+  const toggleRecording = () => {
+    if (isRecording) {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop() } catch {}
+        recognitionRef.current = null
       }
+      setIsRecording(false)
+      return
     }
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    if (!SpeechRecognition) {
-      setUploadError("مرورگر شما از قابلیت تبدیل صوت به متن پشتیبانی نمی‌کند. لطفاً از مرورگر کروم، اج یا سافاری استفاده کنید.")
-      return
-    }
+    if (SpeechRecognition) {
+      try {
+        const recognition = new SpeechRecognition()
+        recognition.continuous = true
+        recognition.interimResults = true
+        recognition.lang = speechLang
 
-    try {
-      const recognition = new SpeechRecognition()
-      recognition.continuous = true
-      recognition.interimResults = true
-      recognition.lang = navigator.language || ""
+        const currentHtml = editorRef.current?.innerHTML ?? ""
+        const isPlaceholder = !currentHtml || currentHtml.trim() === "<p><br></p>" || currentHtml.trim() === "<br>"
+        baseContentRef.current = isPlaceholder ? "" : currentHtml
+        accumulatedFinalRef.current = ""
 
-      const currentHtml = editorRef.current?.innerHTML ?? ""
-      const isPlaceholder = !currentHtml || currentHtml.trim() === "<p><br></p>" || currentHtml.trim() === "<br>"
-      baseContentRef.current = isPlaceholder ? "" : currentHtml
-      accumulatedFinalRef.current = ""
+        recognition.onresult = (event: any) => {
+          let interimTranscript = ""
+          let newFinalChunk = ""
 
-      recognition.onresult = (event: any) => {
-        let interimTranscript = ""
-        let newFinalChunk = ""
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const chunk = event.results[i][0].transcript
+            if (event.results[i].isFinal) {
+              newFinalChunk += chunk + " "
+            } else {
+              interimTranscript += chunk
+            }
+          }
 
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const chunk = event.results[i][0].transcript
-          if (event.results[i].isFinal) {
-            newFinalChunk += chunk + " "
-          } else {
-            interimTranscript += chunk
+          if (newFinalChunk) {
+            accumulatedFinalRef.current += newFinalChunk
+          }
+
+          const spokenText = (accumulatedFinalRef.current + interimTranscript).trim()
+          if (spokenText && editorRef.current) {
+            const base = baseContentRef.current
+            if (!base) {
+              editorRef.current.innerHTML = `<p>${escapeHtml(spokenText)}</p>`
+            } else {
+              const cleanBase = base.replace(/<\/p>$/i, "").replace(/<br\s*\/?>$/i, "")
+              editorRef.current.innerHTML = `${cleanBase} ${escapeHtml(spokenText)}</p>`
+            }
+            onChange(editorRef.current.innerHTML)
           }
         }
 
-        if (newFinalChunk) {
-          accumulatedFinalRef.current += newFinalChunk
-        }
-
-        const spokenText = (accumulatedFinalRef.current + interimTranscript).trim()
-        if (spokenText && editorRef.current) {
-          const base = baseContentRef.current
-          if (!base) {
-            editorRef.current.innerHTML = `<p>${escapeHtml(spokenText)}</p>`
-          } else {
-            const cleanBase = base.replace(/<\/p>$/i, "").replace(/<br\s*\/?>$/i, "")
-            editorRef.current.innerHTML = `${cleanBase} ${escapeHtml(spokenText)}</p>`
+        recognition.onerror = (event: any) => {
+          console.warn("Speech recognition error:", event.error)
+          if (event.error !== "no-speech") {
+            setIsRecording(false)
           }
-          onChange(editorRef.current.innerHTML)
         }
-      }
 
-      recognition.onerror = (event: any) => {
-        console.warn("Speech recognition error:", event.error)
-        if (event.error !== "no-speech") {
+        recognition.onend = () => {
           setIsRecording(false)
         }
-      }
 
-      recognition.onend = () => {
-        setIsRecording(false)
+        recognitionRef.current = recognition
+        recognition.start()
+        setIsRecording(true)
+        setUploadError(null)
+        return
+      } catch (err) {
+        console.warn("SpeechRecognition init error:", err)
       }
-
-      recognitionRef.current = recognition
-      recognition.start()
-      setIsRecording(true)
-    } catch {
-      setIsRecording(false)
-      setUploadError("خطایی در اجرای ضبط صوت رخ داد.")
     }
+
+    setUploadError("مرورگر شما از قابلیت تبدیل صوت به متن در لحظه پشتیبانی نمی‌کند. لطفاً از مرورگر کروم، اج یا سافاری استفاده کنید.")
   }
 
   const handleAiAction = async (action: "translate_en" | "enhance_style") => {
@@ -1880,27 +1812,34 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
       </div>
       <div className={cn(!mobileExpanded && "hidden md:block")}>
         <div className={cn("flex flex-wrap items-center gap-0.5 border-b bg-muted/35 px-2 py-1.5 md:gap-1 md:px-3 md:py-2", disabled && "hidden md:flex")}>
-          <EditorButton
-            label={
-              transcribingVoice
-                ? "در حال پردازش صوت با هوش مصنوعی..."
-                : isRecording
-                ? "در حال ضبط صوت (برای توقف کلیک کنید)..."
-                : "وویس به متن هوشمند (تشخیص خودکار هندی، فارسی، عربی، انگلیسی)"
-            }
-            onClick={toggleRecording}
-            disabled={disabled || transcribingVoice}
-            className={cn(
-              isRecording && "bg-rose-600 text-white hover:bg-rose-700 animate-pulse",
-              transcribingVoice && "bg-amber-500 text-white hover:bg-amber-600",
-            )}
-          >
-            {transcribingVoice ? (
-              <Loader2 className="size-4 animate-spin text-white" />
-            ) : (
+          <div className="flex items-center gap-1">
+            <EditorButton
+              label={
+                isRecording
+                  ? "در حال ضبط و تایپ زنده (برای توقف کلیک کنید)..."
+                  : `تایپ زنده وویس (${speechLang === "hi-IN" ? "هندی" : speechLang === "fa-IR" ? "فارسی" : speechLang === "ar-SA" ? "عربی" : "انگلیسی"})`
+              }
+              onClick={toggleRecording}
+              disabled={disabled}
+              className={cn(isRecording && "bg-rose-600 text-white hover:bg-rose-700 animate-pulse")}
+            >
               <Mic className={cn("size-4", isRecording ? "text-white" : "text-rose-600 dark:text-rose-400")} />
-            )}
-          </EditorButton>
+            </EditorButton>
+
+            <select
+              value={speechLang}
+              onChange={(e) => setSpeechLang(e.target.value)}
+              disabled={disabled || isRecording}
+              title="زبان گفتار برای تایپ زنده"
+              aria-label="Speech Language"
+              className="h-8 rounded-lg border border-input bg-background px-1 text-xs font-semibold text-foreground shadow-2xs outline-none hover:bg-accent cursor-pointer"
+            >
+              <option value="fa-IR">🇮🇷 FA</option>
+              <option value="hi-IN">🇮🇳 HI</option>
+              <option value="en-US">🇺🇸 EN</option>
+              <option value="ar-SA">🇸🇦 AR</option>
+            </select>
+          </div>
 
           <EditorButton
             label="ترجمه انگلیسی تخصصی عمران (AI Construction English)"
