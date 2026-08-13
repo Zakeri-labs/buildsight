@@ -26,6 +26,10 @@ import {
 import { createClient } from "@/lib/supabase/client"
 import { uploadDocumentAsset } from "@/lib/documents/storage-upload"
 import { formatFileSize } from "@/lib/documents/simple-upload"
+import {
+  formatBilingualDocumentDetails,
+  parseBilingualDocumentDetails,
+} from "@/lib/documents/bilingual-details"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -67,7 +71,10 @@ export function ConstructionDocumentWorkspace({
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
-  const [details, setDetails] = useState(initialDetails)
+  const parsedInitial = parseBilingualDocumentDetails(initialDetails)
+  const [englishText, setEnglishText] = useState(parsedInitial.englishText)
+  const [arabicText, setArabicText] = useState(parsedInitial.arabicText ?? "")
+  const [hasArabic, setHasArabic] = useState(parsedInitial.hasArabic)
   const [savingDetails, setSavingDetails] = useState(false)
   const [uploading, setUploading] = useState<UploadProgress | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
@@ -82,7 +89,8 @@ export function ConstructionDocumentWorkspace({
     setSavingDetails(true)
     setMessage(null)
     try {
-      const result = await updateConstructionDocumentDetailsAction({ documentId, projectId, details })
+      const detailsToSave = formatBilingualDocumentDetails(englishText, hasArabic ? arabicText : null)
+      const result = await updateConstructionDocumentDetailsAction({ documentId, projectId, details: detailsToSave })
       if (!result.ok) {
         setMessage({ type: "error", text: result.error })
         return
@@ -236,20 +244,50 @@ export function ConstructionDocumentWorkspace({
             <CardTitle className="text-lg">Letter Details</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">Edit the predefined template or replace it with project-specific information.</p>
           </div>
-          <Button variant="outline" size="sm" disabled={!details || savingDetails} onClick={() => setDetails("")}>Clear Template</Button>
+          <Button variant="outline" size="sm" disabled={!englishText || savingDetails} onClick={() => { setEnglishText(""); setArabicText(""); setHasArabic(false) }}>Clear Template</Button>
         </CardHeader>
-        <CardContent className="px-5 py-5 sm:px-6">
-          <textarea
-            value={details}
-            maxLength={100000}
-            disabled={savingDetails}
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setDetails(event.target.value)}
-            aria-label="Letter details"
-            className="min-h-[360px] w-full resize-y rounded-xl border border-input bg-white px-4 py-4 font-mono text-sm leading-7 outline-none transition-shadow placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60 dark:bg-slate-950"
-            placeholder="Add letter-specific information..."
-          />
-          <div className="mt-4 flex items-center justify-between gap-4">
-            <span className="text-xs tabular-nums text-muted-foreground">{details.length.toLocaleString("en-GB")} / 100,000 characters</span>
+        <CardContent className="space-y-4 px-5 py-5 sm:px-6">
+          <div className="space-y-1.5">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">English Content</span>
+            <textarea
+              value={englishText}
+              maxLength={100000}
+              disabled={savingDetails}
+              onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setEnglishText(event.target.value)}
+              aria-label="English Letter Details"
+              className="min-h-[280px] w-full resize-y rounded-xl border border-input bg-white px-4 py-4 font-mono text-sm leading-7 outline-none transition-shadow placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60 dark:bg-slate-950"
+              placeholder="Add letter-specific information..."
+            />
+          </div>
+
+          {hasArabic && arabicText ? (
+            <div className="space-y-3 pt-2">
+              <div className="relative flex items-center py-1">
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-800" />
+                <span className="mx-4 shrink-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Arabic Translation
+                </span>
+                <div className="flex-grow border-t border-slate-200 dark:border-slate-800" />
+              </div>
+
+              <div className="space-y-1.5">
+                <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">الترجمة العربية (RTL)</span>
+                <textarea
+                  dir="rtl"
+                  value={arabicText}
+                  maxLength={100000}
+                  disabled={savingDetails}
+                  onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setArabicText(event.target.value)}
+                  aria-label="Arabic Letter Translation"
+                  className="min-h-[220px] w-full resize-y rounded-xl border border-emerald-500/30 bg-emerald-50/20 px-4 py-4 font-sans text-sm leading-7 text-right outline-none transition-shadow placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60 dark:bg-emerald-950/20"
+                  placeholder="نص الرسالة..."
+                />
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-4 flex items-center justify-between gap-4 pt-2">
+            <span className="text-xs tabular-nums text-muted-foreground">{(englishText.length + arabicText.length).toLocaleString("en-GB")} / 100,000 characters</span>
             <Button disabled={savingDetails} onClick={() => void saveDetails()}>
               {savingDetails ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
               Save Details

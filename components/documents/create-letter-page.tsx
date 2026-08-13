@@ -1,0 +1,1145 @@
+"use client"
+
+import { useEffect, useRef, useState, type ChangeEvent } from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import {
+  AlertCircle,
+  ArrowLeft,
+  Check,
+  CheckCircle2,
+  File as FileIcon,
+  FilePlus2,
+  Image as ImageIcon,
+  Languages,
+  Loader2,
+  Paperclip,
+  RotateCcw,
+  Send,
+  Trash2,
+  X,
+} from "lucide-react"
+import {
+  addDocumentAttachmentsAction,
+  createConstructionDocumentAction,
+  type DocumentAttachmentInput,
+} from "@/lib/actions/documents"
+import {
+  CONSTRUCTION_DOCUMENT_TYPES,
+  getConstructionDocumentTypeLabel,
+  getDocumentDetailsTemplate,
+  isConstructionDocumentType,
+  type ConstructionDocumentTypeValue,
+} from "@/lib/documents/construction-document-types"
+import {
+  formatBilingualDocumentDetails,
+  parseBilingualDocumentDetails,
+} from "@/lib/documents/bilingual-details"
+import { uploadDocumentAsset } from "@/lib/documents/storage-upload"
+import {
+  SIMPLE_UPLOAD_ACCEPT,
+  formatFileSize,
+  validateSimpleUploadFile,
+} from "@/lib/documents/simple-upload"
+import { createClient } from "@/lib/supabase/client"
+import { Button, buttonVariants } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { cn } from "@/lib/utils"
+
+type PendingAttachment = {
+  id: string
+  file: File
+  attachmentType: "file" | "image"
+  previewUrl: string | null
+}
+
+type ProjectOption = {
+  id: string
+  name: string
+  code: string | null
+}
+
+type RecipientOption = {
+  id: string
+  label: string
+  secondary: string | null
+}
+
+type SaveMode = "draft" | "published"
+
+type ProcessingStepId =
+  | "analyze"
+  | "translate"
+  | "integrate"
+  | "attachments"
+  | "finalize"
+  | "send"
+
+type ProcessingStep = {
+  id: ProcessingStepId
+  label: string
+  status: "pending" | "active" | "completed" | "failed"
+}
+
+function humanize(value: string | null | undefined) {
+  if (!value) return ""
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase())
+}
+
+function formatProjectLabel(project: { name: string; code: string | null }) {
+  return project.code?.trim() ? `${project.name} — ${project.code}` : project.name
+}
+
+export function CreateLetterPage({
+  initialProjectId = "",
+  projectOptions: serverProjectOptions = [],
+}: {
+  initialProjectId?: string
+  projectOptions?: ProjectOption[]
+}) {
+  const router = useRouter()
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null)
+  const pendingAttachmentsRef = useRef<PendingAttachment[]>([])
+  const submissionRef = useRef(false)
+
+  const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId)
+  const [projectOptions, setProjectOptions] = useState<ProjectOption[]>(serverProjectOptions)
+  const [loadingProjects, setLoadingProjects] = useState(serverProjectOptions.length === 0)
+  const [title, setTitle] = useState("")
+  const [documentType, setDocumentType] = useState<ConstructionDocumentTypeValue | "">("")
+  const [englishText, setEnglishText] = useState("")
+  const [arabicText, setArabicText] = useState("")
+  const [showArabicTranslation, setShowArabicTranslation] = useState(false)
+  const [translatingArabic, setTranslatingArabic] = useState(false)
+
+  const [recipientOptions, setRecipientOptions] = useState<RecipientOption[]>([])
+  const [letterToRecipientIds, setLetterToRecipientIds] = useState<string[]>([])
+  const [ccRecipientIds, setCcRecipientIds] = useState<string[]>([])
+  const [loadingRecipients, setLoadingRecipients] = useState(false)
+
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+
+  const [savedDocumentId, setSavedDocumentId] = useState<string | null>(null)
+  const [savedDocumentMode, setSavedDocumentMode] = useState<SaveMode | null>(null)
+  const [savingMode, setSavingMode] = useState<SaveMode | null>(null)
+
+  // Confirmation & Processing modals
+  const [confirmSendOpen, setConfirmSendOpen] = useState(false)
+  const [processingOpen, setProcessingOpen] = useState(false)
+  const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([])
+  const [processingError, setProcessingError] = useState<string | null>(null)
+  const [processingComplete, setProcessingComplete] = useState(false)
+
+  const isSubmitting = savingMode !== null || processingOpen
+
+  useEffect(() => {
+    pendingAttachmentsRef.current = pendingAttachments
+  }, [pendingAttachments])
+
+  useEffect(() => () => {
+    for (const attachment of pendingAttachmentsRef.current) {
+      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl)
+    }
+  }, [])
+
+  // Load project options if not provided
+  useEffect(() => {
+    if (serverProjectOptions.length > 0) return
+    let cancelled = false
+    const loadProjects = async () => {
+      setLoadingProjects(true)
+      const supabase = createClient()
+      const { data, error: projectsError } = await supabase
+        .from("projects")
+        .select("id, name, code")
+        .order("name", { ascending: true })
+
+      if (cancelled) return
+      setLoadingProjects(false)
+
+      if (projectsError) {
+        setError("Unable to load Projects available to you.")
+        return
+      }
+
+      const options = (data ?? []).map((p) => ({
+        id: p.id,
+        name: p.name,
+        code: p.code ?? null,
+      }))
+      setProjectOptions(options)
+      if (!selectedProjectId && options.length > 0) {
+        setSelectedProjectId(options[0].id)
+      }
+    }
+
+    void loadProjects()
+    return () => {
+      cancelled = true
+    }
+  }, [serverProjectOptions, selectedProjectId])
+
+  // Load recipients whenever selectedProjectId changes
+  useEffect(() => {
+    setLetterToRecipientIds([])
+    setCcRecipientIds([])
+    setRecipientOptions([])
+
+    if (!selectedProjectId) {
+      setLoadingRecipients(false)
+      return
+    }
+
+    let cancelled = false
+    const loadRecipients = async () => {
+      setLoadingRecipients(true)
+      const supabase = createClient()
+      const { data, error: recipientsError } = await supabase
+        .from("project_participants")
+        .select("id, organization_name, participant_type, project_role, key_contact_name, status, sort_order")
+        .eq("project_id", selectedProjectId)
+        .eq("status", "active")
+        .order("sort_order", { ascending: true })
+        .order("organization_name", { ascending: true })
+
+      if (cancelled) return
+      setLoadingRecipients(false)
+
+      if (recipientsError) {
+        setError("Unable to load recipient options for the selected Project.")
+        return
+      }
+
+      setRecipientOptions((data ?? []).map((participant) => {
+        const organizationName = participant.organization_name?.trim() || participant.key_contact_name?.trim() || "Project participant"
+        const contactName = participant.key_contact_name?.trim()
+        const role = humanize(participant.project_role || participant.participant_type)
+        const details = [contactName && contactName !== organizationName ? contactName : null, role || null].filter(Boolean)
+        return {
+          id: participant.id,
+          label: organizationName,
+          secondary: details.length ? details.join(" · ") : null,
+        }
+      }))
+    }
+
+    void loadRecipients()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedProjectId])
+
+  const handleDocumentTypeChange = (value: string | null) => {
+    if (!isConstructionDocumentType(value)) {
+      setDocumentType("")
+      setEnglishText("")
+      return
+    }
+
+    setDocumentType(value)
+    setEnglishText(getDocumentDetailsTemplate(value))
+    setError(null)
+  }
+
+  const handleAddArabicTranslation = async () => {
+    if (!englishText.trim()) {
+      setError("Please enter English letter text first before generating Arabic translation.")
+      return
+    }
+
+    setError(null)
+    setTranslatingArabic(true)
+    setShowArabicTranslation(true)
+
+    try {
+      const res = await fetch("/api/ai/enhance-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: englishText,
+          html: englishText,
+          action: "translate_ar",
+          projectId: selectedProjectId || undefined,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.resultText) {
+        throw new Error(data.error || "Unable to generate Arabic translation.")
+      }
+
+      setArabicText(data.resultText)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to translate letter to Arabic.")
+    } finally {
+      setTranslatingArabic(false)
+    }
+  }
+
+  const addAttachments = (event: ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(event.target.files ?? [])
+    event.target.value = ""
+    if (!selected.length) return
+
+    const validationError = selected.map((file) => validateSimpleUploadFile(file)).find(Boolean)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    setError(null)
+    setPendingAttachments((current) => [
+      ...current,
+      ...selected.map((file) => {
+        const attachmentType: PendingAttachment["attachmentType"] = file.type.startsWith("image/") ? "image" : "file"
+        return {
+          id: crypto.randomUUID(),
+          file,
+          attachmentType,
+          previewUrl: attachmentType === "image" ? URL.createObjectURL(file) : null,
+        }
+      }),
+    ])
+  }
+
+  const removePendingAttachment = (id: string) => {
+    setPendingAttachments((current) => {
+      const attachment = current.find((item) => item.id === id)
+      if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl)
+      return current.filter((item) => item.id !== id)
+    })
+  }
+
+  const validateForm = () => {
+    if (!selectedProjectId) return "Project is required."
+    if (!isConstructionDocumentType(documentType)) return "Letter Type is required."
+    if (!title.trim()) return "Subject is required."
+    if (letterToRecipientIds.length === 0) return "Letter To is required."
+    return null
+  }
+
+  const handleSaveDraft = async () => {
+    const validationErr = validateForm()
+    if (validationErr) {
+      setError(validationErr)
+      return
+    }
+
+    setError(null)
+    setSavingMode("draft")
+    submissionRef.current = true
+
+    try {
+      const finalDetails = formatBilingualDocumentDetails(englishText, showArabicTranslation ? arabicText : null)
+      let docId = savedDocumentId
+
+      if (!docId) {
+        const result = await createConstructionDocumentAction({
+          projectId: selectedProjectId,
+          title,
+          documentType,
+          documentDetails: finalDetails,
+          status: "draft",
+          letterToParticipantIds: letterToRecipientIds,
+          ccParticipantIds: ccRecipientIds,
+          requireRecipients: true,
+        })
+        if (!result.ok) throw new Error(result.error)
+        docId = result.documentId
+        setSavedDocumentId(docId)
+        setSavedDocumentMode("draft")
+      }
+
+      // Upload pending attachments
+      if (pendingAttachments.length && docId) {
+        const supabase = createClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) throw new Error("Your session has expired. Sign in again.")
+
+        const attachmentsToUpload = [...pendingAttachments]
+        for (const pending of attachmentsToUpload) {
+          const folder = pending.attachmentType === "image" ? "images" : "files"
+          const safeName = pending.file.name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "attachment"
+          const storagePath = `${selectedProjectId}/${session.user.id}/documents/${docId}/${folder}/${crypto.randomUUID()}-${safeName}`
+
+          await uploadDocumentAsset(pending.file, storagePath, session.access_token)
+          const record: DocumentAttachmentInput = {
+            attachmentType: pending.attachmentType,
+            storagePath,
+            originalFilename: pending.file.name,
+            mimeType: pending.file.type || "application/octet-stream",
+            sizeBytes: pending.file.size,
+          }
+          const attachmentResult = await addDocumentAttachmentsAction({
+            documentId: docId,
+            projectId: selectedProjectId,
+            attachments: [record],
+          })
+          if (!attachmentResult.ok) throw new Error(attachmentResult.error)
+
+          if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl)
+          setPendingAttachments((current) => current.filter((item) => item.id !== pending.id))
+        }
+      }
+
+      setSuccess("Draft saved successfully.")
+      setTimeout(() => setSuccess(null), 4000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save draft.")
+    } finally {
+      submissionRef.current = false
+      setSavingMode(null)
+    }
+  }
+
+  const handleOpenSendConfirmation = () => {
+    const validationErr = validateForm()
+    if (validationErr) {
+      setError(validationErr)
+      return
+    }
+    setError(null)
+    setConfirmSendOpen(true)
+  }
+
+  const handleStartSendWorkflow = async () => {
+    setConfirmSendOpen(false)
+    if (submissionRef.current) return
+    submissionRef.current = true
+
+    const needsArabicTranslation = showArabicTranslation && !arabicText.trim()
+    const hasAttachments = pendingAttachments.length > 0
+
+    const initialSteps: ProcessingStep[] = [
+      { id: "analyze", label: "Analyzing English text", status: "active" },
+    ]
+
+    if (needsArabicTranslation) {
+      initialSteps.push(
+        { id: "translate", label: "Translating to Arabic", status: "pending" },
+        { id: "integrate", label: "Adding Arabic translation", status: "pending" },
+      )
+    } else if (showArabicTranslation && arabicText.trim()) {
+      initialSteps.push(
+        { id: "integrate", label: "Adding Arabic translation", status: "pending" },
+      )
+    }
+
+    if (hasAttachments) {
+      initialSteps.push({ id: "attachments", label: "Processing attachments", status: "pending" })
+    }
+
+    initialSteps.push(
+      { id: "finalize", label: "Finalizing letter", status: "pending" },
+      { id: "send", label: "Sending letter", status: "pending" },
+    )
+
+    setProcessingSteps(initialSteps)
+    setProcessingError(null)
+    setProcessingComplete(false)
+    setProcessingOpen(true)
+
+    const updateStepStatus = (stepId: ProcessingStepId, status: ProcessingStep["status"]) => {
+      setProcessingSteps((current) =>
+        current.map((step) => (step.id === stepId ? { ...step, status } : step)),
+      )
+    }
+
+    try {
+      // Step 1: Analyze English text
+      updateStepStatus("analyze", "active")
+      await new Promise((r) => setTimeout(r, 400))
+      updateStepStatus("analyze", "completed")
+
+      // Step 2: Translate to Arabic if needed
+      let currentArabicText = arabicText
+      if (needsArabicTranslation) {
+        updateStepStatus("translate", "active")
+        const res = await fetch("/api/ai/enhance-text", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: englishText,
+            html: englishText,
+            action: "translate_ar",
+            projectId: selectedProjectId || undefined,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok || !data.resultText) {
+          throw new Error(data.error || "Unable to translate letter to Arabic.")
+        }
+        currentArabicText = data.resultText
+        setArabicText(currentArabicText)
+        updateStepStatus("translate", "completed")
+      }
+
+      // Step 3: Integrate Arabic translation
+      if (showArabicTranslation && currentArabicText) {
+        updateStepStatus("integrate", "active")
+        await new Promise((r) => setTimeout(r, 300))
+        updateStepStatus("integrate", "completed")
+      }
+
+      // Format combined details
+      const finalDetails = formatBilingualDocumentDetails(
+        englishText,
+        showArabicTranslation ? currentArabicText : null,
+      )
+
+      // Step 4: Process attachments if any
+      let docId = savedDocumentId
+      if (hasAttachments) {
+        updateStepStatus("attachments", "active")
+        const supabase = createClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) throw new Error("Your session has expired. Sign in again.")
+
+        // First ensure letter is created to get docId
+        if (!docId) {
+          const createRes = await createConstructionDocumentAction({
+            projectId: selectedProjectId,
+            title,
+            documentType,
+            documentDetails: finalDetails,
+            status: "draft",
+            letterToParticipantIds: letterToRecipientIds,
+            ccParticipantIds: ccRecipientIds,
+            requireRecipients: true,
+          })
+          if (!createRes.ok) throw new Error(createRes.error)
+          docId = createRes.documentId
+          setSavedDocumentId(docId)
+        }
+
+        const attachmentsToUpload = [...pendingAttachments]
+        for (const pending of attachmentsToUpload) {
+          const folder = pending.attachmentType === "image" ? "images" : "files"
+          const safeName = pending.file.name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "attachment"
+          const storagePath = `${selectedProjectId}/${session.user.id}/documents/${docId}/${folder}/${crypto.randomUUID()}-${safeName}`
+
+          await uploadDocumentAsset(pending.file, storagePath, session.access_token)
+          const record: DocumentAttachmentInput = {
+            attachmentType: pending.attachmentType,
+            storagePath,
+            originalFilename: pending.file.name,
+            mimeType: pending.file.type || "application/octet-stream",
+            sizeBytes: pending.file.size,
+          }
+          const attachmentResult = await addDocumentAttachmentsAction({
+            documentId: docId!,
+            projectId: selectedProjectId,
+            attachments: [record],
+          })
+          if (!attachmentResult.ok) throw new Error(attachmentResult.error)
+
+          if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl)
+          setPendingAttachments((current) => current.filter((item) => item.id !== pending.id))
+        }
+        updateStepStatus("attachments", "completed")
+      }
+
+      // Step 5: Finalize letter
+      updateStepStatus("finalize", "active")
+      if (!docId) {
+        const createRes = await createConstructionDocumentAction({
+          projectId: selectedProjectId,
+          title,
+          documentType,
+          documentDetails: finalDetails,
+          status: "published",
+          letterToParticipantIds: letterToRecipientIds,
+          ccParticipantIds: ccRecipientIds,
+          requireRecipients: true,
+        })
+        if (!createRes.ok) throw new Error(createRes.error)
+        docId = createRes.documentId
+        setSavedDocumentId(docId)
+      } else {
+        // Publish existing draft
+        const supabase = createClient()
+        const { error: updateErr } = await supabase
+          .from("documents")
+          .update({
+            title,
+            document_type: documentType,
+            document_details: finalDetails,
+            status: "published",
+            published_at: new Date().toISOString(),
+          })
+          .eq("id", docId)
+
+        if (updateErr) throw new Error(updateErr.message)
+      }
+      updateStepStatus("finalize", "completed")
+
+      // Step 6: Send letter / Notify
+      updateStepStatus("send", "active")
+      await new Promise((r) => setTimeout(r, 400))
+      updateStepStatus("send", "completed")
+
+      setProcessingComplete(true)
+      submissionRef.current = false
+
+      setTimeout(() => {
+        router.push(`/documents/${docId}`)
+        router.refresh()
+      }, 1000)
+    } catch (err) {
+      submissionRef.current = false
+      const errorMsg = err instanceof Error ? err.message : "Letter sending failed."
+      setProcessingError(errorMsg)
+      setProcessingSteps((current) =>
+        current.map((step) => (step.status === "active" ? { ...step, status: "failed" } : step)),
+      )
+    }
+  }
+
+  const backHref = selectedProjectId
+    ? `/documents?project=${encodeURIComponent(selectedProjectId)}`
+    : "/documents"
+
+  return (
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 py-4">
+      {/* Top Bar with Back Link */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link
+          href={backHref}
+          className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" />
+          Back to Letters
+        </Link>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
+          <FilePlus2 className="size-3.5" />
+          New Letter
+        </span>
+      </div>
+
+      {/* Main Card Form */}
+      <Card className="gap-0 overflow-hidden py-0 shadow-sm">
+        <CardHeader className="border-b bg-muted/20 px-6 py-5">
+          <CardTitle className="text-xl font-bold tracking-tight">Create Letter</CardTitle>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Fill in the letter details, target project, recipients, and content below.
+          </p>
+        </CardHeader>
+
+        <CardContent className="space-y-6 px-6 py-6">
+          {/* Project Selection */}
+          <div className="space-y-2">
+            <Label htmlFor="create-letter-project" className="text-xs font-semibold text-foreground">
+              Project <span className="text-destructive">*</span>
+            </Label>
+            <Select
+              value={selectedProjectId || null}
+              onValueChange={(value) => {
+                setSelectedProjectId(value ?? "")
+                setError(null)
+              }}
+              disabled={isSubmitting || Boolean(savedDocumentId) || loadingProjects}
+            >
+              <SelectTrigger id="create-letter-project" className="h-11 w-full rounded-lg px-3 text-sm">
+                <SelectValue placeholder={loadingProjects ? "Loading projects..." : "Select project"}>
+                  {(value) => {
+                    const option = projectOptions.find((p) => p.id === value)
+                    return option ? formatProjectLabel(option) : "Select project"
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="start" className="max-w-[calc(100vw-2rem)]">
+                {projectOptions.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {formatProjectLabel(project)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Letter Type & Subject */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="create-letter-type" className="text-xs font-semibold text-foreground">
+                Letter Type <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={documentType || null}
+                onValueChange={handleDocumentTypeChange}
+                disabled={isSubmitting || Boolean(savedDocumentId)}
+              >
+                <SelectTrigger id="create-letter-type" className="h-11 w-full rounded-lg px-3 text-sm">
+                  <SelectValue placeholder="Select letter type">
+                    {(value) => getConstructionDocumentTypeLabel(value) ?? "Select letter type"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent align="start">
+                  {CONSTRUCTION_DOCUMENT_TYPES.map((type) => (
+                    <SelectItem key={type.value} value={type.value}>
+                      {type.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="create-letter-subject" className="text-xs font-semibold text-foreground">
+                Subject <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="create-letter-subject"
+                value={title}
+                maxLength={180}
+                disabled={isSubmitting || Boolean(savedDocumentId)}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Enter subject"
+                className="h-11 text-sm"
+              />
+            </div>
+          </div>
+
+          {/* Letter To & CC Recipients */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <RecipientPicker
+              id="create-letter-to"
+              label="Letter To"
+              required
+              placeholder="Select recipient(s)"
+              options={recipientOptions}
+              selectedIds={letterToRecipientIds}
+              excludedIds={ccRecipientIds}
+              loading={loadingRecipients}
+              disabled={isSubmitting || Boolean(savedDocumentId) || !selectedProjectId}
+              onAdd={(id) => {
+                setLetterToRecipientIds((curr) => (curr.includes(id) ? curr : [...curr, id]))
+                setCcRecipientIds((curr) => curr.filter((i) => i !== id))
+                setError(null)
+              }}
+              onRemove={(id) => setLetterToRecipientIds((curr) => curr.filter((i) => i !== id))}
+            />
+
+            <RecipientPicker
+              id="create-letter-cc"
+              label="CC"
+              placeholder="Select CC"
+              options={recipientOptions}
+              selectedIds={ccRecipientIds}
+              excludedIds={letterToRecipientIds}
+              loading={loadingRecipients}
+              disabled={isSubmitting || Boolean(savedDocumentId) || !selectedProjectId}
+              onAdd={(id) => {
+                setCcRecipientIds((curr) => (curr.includes(id) ? curr : [...curr, id]))
+                setLetterToRecipientIds((curr) => curr.filter((i) => i !== id))
+                setError(null)
+              }}
+              onRemove={(id) => setCcRecipientIds((curr) => curr.filter((i) => i !== id))}
+            />
+          </div>
+
+          {/* English Text & Optional Arabic Translation */}
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Label htmlFor="create-letter-text" className="text-xs font-semibold text-foreground">
+                Text <span className="text-muted-foreground font-normal">(Primary English Content)</span>
+              </Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isSubmitting || translatingArabic || !englishText.trim()}
+                onClick={handleAddArabicTranslation}
+                className="h-8 gap-1.5 rounded-lg border-emerald-500/40 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+              >
+                {translatingArabic ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Languages className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                )}
+                {showArabicTranslation ? "Update Arabic Translation" : "Add Arabic Translation"}
+              </Button>
+            </div>
+
+            {/* Primary English Text Area */}
+            <textarea
+              id="create-letter-text"
+              value={englishText}
+              maxLength={100000}
+              disabled={isSubmitting || !documentType}
+              onChange={(e) => setEnglishText(e.target.value)}
+              placeholder={documentType ? "Enter English letter text..." : "Select a letter type to load its template"}
+              className="min-h-48 w-full resize-y rounded-xl border border-input bg-background px-4 py-3 font-mono text-sm leading-6 outline-none transition-shadow placeholder:font-sans placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-muted/30 disabled:opacity-70"
+            />
+
+            {/* Arabic Translation Block (Displayed below divider when active) */}
+            {showArabicTranslation ? (
+              <div className="space-y-3 pt-2">
+                {/* Horizontal Divider */}
+                <div className="relative flex items-center py-1">
+                  <div className="flex-grow border-t border-slate-200 dark:border-slate-800" />
+                  <span className="mx-4 shrink-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Arabic Translation
+                  </span>
+                  <div className="flex-grow border-t border-slate-200 dark:border-slate-800" />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="create-letter-text-ar" className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                      <span>الترجمة العربية</span>
+                      <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">RTL</span>
+                    </Label>
+                    <button
+                      type="button"
+                      onClick={() => setShowArabicTranslation(false)}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Remove Arabic
+                    </button>
+                  </div>
+
+                  <textarea
+                    id="create-letter-text-ar"
+                    dir="rtl"
+                    value={arabicText}
+                    maxLength={100000}
+                    disabled={isSubmitting}
+                    onChange={(e) => setArabicText(e.target.value)}
+                    placeholder="نص الرسالة باللغة العربية..."
+                    className="min-h-40 w-full resize-y rounded-xl border border-emerald-500/30 bg-emerald-50/20 px-4 py-3 font-sans text-sm leading-6 text-right outline-none transition-shadow placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-emerald-950/20"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    You can manually edit the Arabic translation above. Manual edits will be preserved when saving or sending.
+                  </p>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Add Attachments Section */}
+          <div className="space-y-3 pt-2">
+            <input
+              ref={attachmentInputRef}
+              type="file"
+              multiple
+              accept={SIMPLE_UPLOAD_ACCEPT}
+              className="hidden"
+              onChange={addAttachments}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => attachmentInputRef.current?.click()}
+              className="gap-2"
+            >
+              <Paperclip className="size-4" />
+              Add Attachments
+            </Button>
+
+            {pendingAttachments.length ? (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {pendingAttachments.map((attachment) => (
+                  <div
+                    key={attachment.id}
+                    className="flex min-w-0 items-center gap-3 rounded-xl border bg-muted/20 px-3 py-2.5"
+                  >
+                    {attachment.previewUrl ? (
+                      <span className="size-10 shrink-0 overflow-hidden rounded-lg bg-muted">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={attachment.previewUrl} alt="" className="size-full object-cover" />
+                      </span>
+                    ) : (
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300">
+                        {attachment.attachmentType === "image" ? <ImageIcon className="size-5" /> : <FileIcon className="size-5" />}
+                      </span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold" title={attachment.file.name}>
+                        {attachment.file.name}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">{formatFileSize(attachment.file.size)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => removePendingAttachment(attachment.id)}
+                      className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
+                      title="Remove attachment"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Feedback Banners */}
+          {success ? (
+            <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+              <CheckCircle2 className="size-4 shrink-0" />
+              <span>{success}</span>
+            </div>
+          ) : null}
+
+          {error ? (
+            <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {/* Sticky Bottom Action Footer (Cancel | Save Draft | Send) */}
+      <div className="sticky bottom-0 z-10 flex items-center justify-between gap-3 rounded-2xl border bg-background/95 p-4 shadow-lg backdrop-blur">
+        <Link
+          href={backHref}
+          className={cn(buttonVariants({ variant: "outline" }), "h-10 px-4")}
+        >
+          Cancel
+        </Link>
+
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSubmitting}
+            onClick={() => void handleSaveDraft()}
+            className="h-10 gap-2 px-4 font-semibold"
+          >
+            {savingMode === "draft" ? <Loader2 className="size-4 animate-spin" /> : null}
+            Save Draft
+          </Button>
+
+          <Button
+            type="button"
+            disabled={isSubmitting}
+            onClick={handleOpenSendConfirmation}
+            className="h-10 gap-2 bg-blue-600 px-5 font-bold text-white hover:bg-blue-700 shadow-sm"
+          >
+            <Send className="size-4" />
+            Send
+          </Button>
+        </div>
+      </div>
+
+      {/* Send Confirmation Dialog */}
+      <Dialog open={confirmSendOpen} onOpenChange={setConfirmSendOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Send this letter now?</DialogTitle>
+            <DialogDescription className="space-y-1 pt-2 text-sm text-muted-foreground">
+              <p>After sending, you can’t edit it.</p>
+              <p>To keep editing later, choose Save Draft.</p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setConfirmSendOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-blue-600 font-bold text-white hover:bg-blue-700"
+              onClick={() => void handleStartSendWorkflow()}
+            >
+              Confirm & Send
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Processing Progress Status Modal */}
+      <Dialog open={processingOpen} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-md [&>button]:hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold">
+              {processingComplete ? (
+                <>
+                  <CheckCircle2 className="size-5 text-emerald-600" />
+                  Letter Sent Successfully
+                </>
+              ) : processingError ? (
+                <>
+                  <AlertCircle className="size-5 text-rose-600" />
+                  Sending Failed
+                </>
+              ) : (
+                <>
+                  <Loader2 className="size-5 animate-spin text-blue-600" />
+                  Preparing Letter
+                </>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            {processingSteps.map((step) => (
+              <div key={step.id} className="flex items-center gap-3 text-sm font-medium">
+                {step.status === "completed" ? (
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+                    <Check className="size-3.5 stroke-[3]" />
+                  </span>
+                ) : step.status === "active" ? (
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
+                    <Loader2 className="size-3.5 animate-spin" />
+                  </span>
+                ) : step.status === "failed" ? (
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400">
+                    <X className="size-3.5 stroke-[3]" />
+                  </span>
+                ) : (
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <span className="size-2 rounded-full bg-muted-foreground/40" />
+                  </span>
+                )}
+
+                <span
+                  className={cn(
+                    step.status === "completed" && "text-foreground font-semibold",
+                    step.status === "active" && "text-blue-600 dark:text-blue-400 font-semibold",
+                    step.status === "failed" && "text-rose-600 dark:text-rose-400 font-semibold",
+                    step.status === "pending" && "text-muted-foreground",
+                  )}
+                >
+                  {step.label}
+                </span>
+              </div>
+            ))}
+
+            {processingError ? (
+              <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">
+                {processingError}
+              </div>
+            ) : null}
+          </div>
+
+          {processingError ? (
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setProcessingOpen(false)}
+              >
+                Close & Keep Editing
+              </Button>
+              <Button
+                type="button"
+                className="bg-blue-600 font-bold text-white hover:bg-blue-700"
+                onClick={() => void handleStartSendWorkflow()}
+              >
+                Retry
+              </Button>
+            </DialogFooter>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function RecipientPicker({
+  id,
+  label,
+  required = false,
+  placeholder,
+  options,
+  selectedIds,
+  excludedIds,
+  loading,
+  disabled,
+  onAdd,
+  onRemove,
+}: {
+  id: string
+  label: string
+  required?: boolean
+  placeholder: string
+  options: RecipientOption[]
+  selectedIds: string[]
+  excludedIds: string[]
+  loading: boolean
+  disabled: boolean
+  onAdd: (id: string) => void
+  onRemove: (id: string) => void
+}) {
+  const selectedOptions = selectedIds
+    .map((selectedId) => options.find((option) => option.id === selectedId))
+    .filter((option): option is RecipientOption => Boolean(option))
+  const unavailable = new Set([...selectedIds, ...excludedIds])
+  const availableOptions = options.filter((option) => !unavailable.has(option.id))
+  const emptyPlaceholder = !options.length && !loading ? "No recipients available" : placeholder
+
+  return (
+    <div className="min-w-0 space-y-2">
+      <Label htmlFor={id} className="text-xs font-semibold text-foreground">
+        {label}
+        {required ? <span className="text-destructive"> *</span> : null}
+      </Label>
+      {selectedOptions.length ? (
+        <div className="flex flex-wrap gap-1.5 pb-1">
+          {selectedOptions.map((option) => (
+            <span
+              key={option.id}
+              className="inline-flex max-w-full items-center gap-1 rounded-full border bg-muted/35 px-2.5 py-1 text-xs font-medium"
+            >
+              <span className="max-w-[220px] truncate">{option.label}</span>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onRemove(option.id)}
+                className="rounded-full text-muted-foreground hover:text-foreground disabled:opacity-50"
+                aria-label={`Remove ${option.label}`}
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <Select
+        value={null}
+        onValueChange={(value) => {
+          if (value) onAdd(value)
+        }}
+        disabled={disabled || loading || availableOptions.length === 0}
+      >
+        <SelectTrigger id={id} className="h-11 w-full min-w-0 rounded-lg px-3 text-sm">
+          <SelectValue placeholder={loading ? "Loading recipients..." : emptyPlaceholder} />
+        </SelectTrigger>
+        <SelectContent align="start" className="max-w-[calc(100vw-2rem)]">
+          {availableOptions.map((option) => (
+            <SelectItem key={option.id} value={option.id} className="py-2">
+              <span className="min-w-0">
+                <span className="block truncate font-medium">{option.label}</span>
+                {option.secondary ? <span className="block truncate text-xs text-muted-foreground">{option.secondary}</span> : null}
+              </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}

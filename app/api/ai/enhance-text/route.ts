@@ -42,6 +42,16 @@ export async function POST(request: NextRequest) {
         "4. DO NOT invent any extra facts, observations, or numbers that are not in the source text.",
         "5. Output Format: Return ONLY clean HTML (e.g., <ul><li>...</li></ul> or <p>...</p>) suitable for a rich-text report editor.",
       ].join("\n")
+    } else if (action === "translate_ar") {
+      systemPrompt = [
+        "You are a senior civil engineer and construction correspondence consultant.",
+        "Your task is to translate standard construction correspondence or letter text into professional, formal Arabic appropriate for official construction site correspondence (RFI, NCR, MIR, Submittal, Transmittal, Notice, Memorandum).",
+        "CRITICAL REQUIREMENTS:",
+        "1. Professional Arabic: Translate accurately into formal, professional Arabic (Fusha / official business correspondence style).",
+        "2. Exact Details: Keep all numbers, dimensions, dates, axis/grid references, standards, codes, and project names EXACTLY unchanged.",
+        "3. Preserve Structure: Maintain paragraph breaks and bullet point structure (<ul>/<li>) cleanly.",
+        "4. Output Format: Return clean plain text or simple HTML suitable for an Arabic letter section.",
+      ].join("\n")
     } else {
       systemPrompt = [
         "You are a senior construction quality control manager.",

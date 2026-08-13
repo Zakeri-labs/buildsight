@@ -227,11 +227,13 @@ export function DocumentsList({
                 <p className="mt-1 truncate text-xs font-semibold text-foreground/80">{projects[0]}</p>
               ) : null}
             </div>
-            <CreateDocumentDialog
-              projectId={selectedProjectId}
-              triggerLabel="Create"
-              triggerClassName="h-9 shrink-0 rounded-lg px-3 text-xs"
-            />
+            <Link
+              href={selectedProjectId ? `/documents/new?project=${encodeURIComponent(selectedProjectId)}` : "/documents/new"}
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 shadow-xs"
+            >
+              <FilePlus2 className="size-4" />
+              Create
+            </Link>
           </div>
 
           <div className="grid grid-cols-4 gap-1.5">
@@ -412,8 +414,13 @@ export function DocumentsList({
               <p className="mt-0.5 text-sm text-muted-foreground">Create and manage construction letters, reports, details, files and site images.</p>
             </div>
           </div>
-        </div>
-        <CreateDocumentDialog projectId={selectedProjectId} />
+        <Link
+          href={selectedProjectId ? `/documents/new?project=${encodeURIComponent(selectedProjectId)}` : "/documents/new"}
+          className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 font-semibold text-white hover:bg-blue-700 shadow-xs"
+        >
+          <FilePlus2 className="size-4" />
+          Create Letter
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -110,11 +110,13 @@ export function ProjectDocuments({
           5. Project Letters
         </CardTitle>
         <div className={cn("flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end", memberMobile && "max-md:hidden")}>
-          <CreateDocumentDialog
-            projectId={projectId}
-            triggerLabel="Create Letter"
-            triggerClassName="h-9 w-full sm:w-auto"
-          />
+          <Link
+            href={`/documents/new?project=${projectQuery}`}
+            className={cn(buttonVariants({ variant: "default" }), "h-9 w-full bg-blue-600 font-semibold text-white hover:bg-blue-700 sm:w-auto")}
+          >
+            <FileText className="size-4" />
+            Create Letter
+          </Link>
           <Link
             href={`/documents?project=${projectQuery}`}
             className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-9 w-full sm:w-auto")}
@@ -128,11 +130,13 @@ export function ProjectDocuments({
         {memberMobile && mobileOpen ? (
           <div className="border-b px-3 py-2.5 md:hidden">
             <div className="flex gap-2">
-              <CreateDocumentDialog
-                projectId={projectId}
-                triggerLabel="Create Letter"
-                triggerClassName="h-8 flex-1 text-xs"
-              />
+              <Link
+                href={`/documents/new?project=${projectQuery}`}
+                className={cn(buttonVariants({ variant: "default" }), "h-8 flex-1 bg-blue-600 text-xs font-semibold text-white hover:bg-blue-700")}
+              >
+                <FileText className="size-3.5" />
+                Create Letter
+              </Link>
               <Link
                 href={`/documents?project=${projectQuery}`}
                 className={cn(buttonVariants({ variant: "outline" }), "h-8 flex-1 justify-center px-2 text-xs")}
