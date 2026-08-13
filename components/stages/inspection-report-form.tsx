@@ -1739,7 +1739,22 @@ function RichSectionEditor({
     setUploadError(null)
   }
 
-  const [speechLang, setSpeechLang] = useState<string>("fa-IR")
+  const [speechLang, setSpeechLang] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("buildsight_preferred_speech_lang")
+      if (saved && CONSTRUCTION_SPEECH_LANGUAGES.some((l) => l.code === saved)) return saved
+    }
+    return "fa-IR"
+  })
+
+  const handleSpeechLangChange = (newLang: string) => {
+    setSpeechLang(newLang)
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("buildsight_preferred_speech_lang", newLang)
+      } catch {}
+    }
+  }
 
   const toggleRecording = () => {
     if (isRecording) {
