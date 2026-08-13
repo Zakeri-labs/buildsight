@@ -20,6 +20,7 @@ import {
   Trash2,
   Loader2,
   AlertTriangle,
+  ArrowUpDown,
   MapPin,
   SlidersHorizontal,
 } from "lucide-react"
@@ -514,37 +515,62 @@ export function ProjectsList({
             <MobileProjectMetric label={locale === "ar" ? "مكتمل" : "Completed"} value={completedProjects} tone="violet" />
           </div>
 
-          <div className="relative min-w-0">
-            <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder={locale === "ar" ? "بحث في المشاريع..." : "Search projects..."}
-              className="h-10 w-full rounded-lg border-slate-200 bg-white ps-9 text-sm dark:border-slate-800 dark:bg-slate-900"
-            />
-          </div>
+          <div className="flex items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder={locale === "ar" ? "بحث في المشاريع..." : "Search projects..."}
+                className="h-10 w-full rounded-lg border-slate-200 bg-white ps-9 text-sm dark:border-slate-800 dark:bg-slate-900"
+              />
+            </div>
 
-          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => setFiltersOpen(true)}
-              className="inline-flex h-10 min-w-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+              title={locale === "ar" ? "الفلاتر" : "Filters"}
+              aria-label={locale === "ar" ? "الفلاتر" : "Filters"}
+              className="relative flex size-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
             >
               <SlidersHorizontal className="size-4 shrink-0" />
-              <span className="truncate">{locale === "ar" ? "الفلاتر" : "Filters"}{activeFilterCount ? ` (${activeFilterCount})` : ""}</span>
+              {activeFilterCount ? (
+                <span className="absolute -end-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                  {activeFilterCount}
+                </span>
+              ) : null}
             </button>
-            <DropdownFilter
-              label={locale === "ar" ? "ترتيب" : "Sort"}
-              value={sortBy}
-              onChange={setSortBy}
-              className="w-full min-w-0 rounded-lg"
-              options={[
-                { label: locale === "ar" ? "الترتيب الافتراضي" : "Default Sort", value: "default" },
-                { label: locale === "ar" ? "الاسم (أ-ي)" : "Name (A-Z)", value: "name-asc" },
-                { label: locale === "ar" ? "التقدم (الأعلى أولاً)" : "Progress (High to Low)", value: "progress-desc" },
-                { label: locale === "ar" ? "تاريخ البدء (الأحدث)" : "Start Date (Newest)", value: "date-desc" },
-              ]}
-            />
+
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    type="button"
+                    title={locale === "ar" ? "ترتيب" : "Sort"}
+                    aria-label={locale === "ar" ? "ترتيب" : "Sort"}
+                    className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+                  >
+                    <ArrowUpDown className="size-4 shrink-0 text-slate-600 dark:text-slate-400" />
+                  </button>
+                }
+              />
+              <DropdownMenuContent align="end" className="w-48">
+                {[
+                  { label: locale === "ar" ? "الترتيب الافتراضي" : "Default Sort", value: "default" },
+                  { label: locale === "ar" ? "الاسم (أ-ي)" : "Name (A-Z)", value: "name-asc" },
+                  { label: locale === "ar" ? "التقدم (الأعلى أولاً)" : "Progress (High to Low)", value: "progress-desc" },
+                  { label: locale === "ar" ? "تاريخ البدء (الأحدث)" : "Start Date (Newest)", value: "date-desc" },
+                ].map((opt) => (
+                  <DropdownMenuItem
+                    key={opt.value}
+                    onClick={() => setSortBy(opt.value)}
+                    className={cn(sortBy === opt.value && "font-semibold text-primary")}
+                  >
+                    {opt.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           <div className="flex items-center justify-between gap-3 text-[11px] font-medium text-muted-foreground">
