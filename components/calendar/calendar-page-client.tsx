@@ -206,31 +206,42 @@ export function CalendarPageClient({
     />
   )
 
+  const isAdmin = currentUser.role === "org_admin" || currentUser.role === "org_manager"
+
   const pageHeader = (
     <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Calendar</h1>
         <p className="mt-1 text-sm text-muted-foreground">Manage scheduled site visits and client visit requests.</p>
       </div>
-      {isViewer ? (
-        data.requesting.canRequest ? (
+      <div className="flex flex-wrap items-center gap-2">
+        {isAdmin && data.requesting.canRequest ? (
           <SiteVisitRequestDialog
             projects={data.requesting.projects}
-            triggerLabel="Request Site Visit"
+            triggerLabel="Add Request"
+            triggerVariant="outline"
           />
-        ) : null
-      ) : (
-        <Button
-          type="button"
-          size="lg"
-          disabled={!data.scheduling.canSchedule}
-          aria-disabled={!data.scheduling.canSchedule}
-          onClick={() => openScheduleDialog(currentCalendarDateKey())}
-        >
-          <CalendarPlus data-icon="inline-start" aria-hidden="true" />
-          Schedule Visit
-        </Button>
-      )}
+        ) : null}
+        {isViewer ? (
+          data.requesting.canRequest ? (
+            <SiteVisitRequestDialog
+              projects={data.requesting.projects}
+              triggerLabel="Request Site Visit"
+            />
+          ) : null
+        ) : (
+          <Button
+            type="button"
+            size="lg"
+            disabled={!data.scheduling.canSchedule}
+            aria-disabled={!data.scheduling.canSchedule}
+            onClick={() => openScheduleDialog(currentCalendarDateKey())}
+          >
+            <CalendarPlus data-icon="inline-start" aria-hidden="true" />
+            Schedule Visit
+          </Button>
+        )}
+      </div>
     </header>
   )
 

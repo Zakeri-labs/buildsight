@@ -47,7 +47,10 @@ export default async function AppGroupLayout({
     avatarUrl: session.profile?.avatar_url ?? null,
   }
 
-  const projectOptions = projects.map((p) => ({ id: p.id, name: p.name }))
+  const isOrgTeam = session.memberships.some(
+    (m) => m.role === "org_member" || m.role === "org_admin" || m.role === "org_manager",
+  )
+  const canShowSiteVisitsInSidebar = !isOrgTeam && siteVisitAccess.size > 0
 
   return (
     <CurrentUserProvider user={user}>
@@ -55,7 +58,7 @@ export default async function AppGroupLayout({
         projects={projectOptions}
         selectedProjectId={selectedProjectId ?? "all"}
         canManageStages={Boolean(stageManagementOrganization)}
-        canAccessSiteVisits={siteVisitAccess.size > 0}
+        canAccessSiteVisits={canShowSiteVisitsInSidebar}
         notificationFeed={notificationFeed}
       >
         {children}
