@@ -1539,6 +1539,8 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const savedRangeRef = useRef<Range | null>(null)
   const recognitionRef = useRef<any>(null)
+  const baseContentRef = useRef<string>("")
+  const accumulatedFinalRef = useRef<string>("")
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [mobileExpanded, setMobileExpanded] = useState(true)
@@ -1558,16 +1560,24 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
     if (selection && savedRangeRef.current) { selection.removeAllRanges(); selection.addRange(savedRangeRef.current) }
   }
 
+  const command = (name: string, argument?: string) => {
+    restore()
+    document.execCommand(name, false, argument)
+    onChange(editorRef.current?.innerHTML ?? "")
+  }
+
   const toggleRecording = () => {
     if (isRecording) {
-      recognitionRef.current?.stop()
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop() } catch {}
+      }
       setIsRecording(false)
       return
     }
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SpeechRecognition) {
-      setUploadError("مرورگر شما از قابلیت ضبط صوت به متن پشتیبانی نمی‌کند. لطفاً از مرورگر کروم یا سافاری استفاده کنید.")
+      setUploadError("مرورگر شما از قابلیت تبدیل صوت به متن پشتیبانی نمی‌کند. لطفاً از مرورگر کروم، اج یا سافاری استفاده کنید.")
       return
     }
 
@@ -1575,30 +1585,60 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
       const recognition = new SpeechRecognition()
       recognition.continuous = true
       recognition.interimResults = true
-      recognition.lang = "ar-SA"
+      recognition.lang = "fa-IR"
+
+      const currentHtml = editorRef.current?.innerHTML ?? ""
+      const isPlaceholder = !currentHtml || currentHtml.trim() === "<p><br></p>" || currentHtml.trim() === "<br>"
+      baseContentRef.current = isPlaceholder ? "" : currentHtml
+      accumulatedFinalRef.current = ""
 
       recognition.onresult = (event: any) => {
-        let transcript = ""
+        let interimTranscript = ""
+        let newFinalChunk = ""
+
         for (let i = event.resultIndex; i < event.results.length; i++) {
+          const chunk = event.results[i][0].transcript
           if (event.results[i].isFinal) {
-            transcript += event.results[i][0].transcript + " "
+            newFinalChunk += chunk + " "
+          } else {
+            interimTranscript += chunk
           }
         }
-        if (transcript.trim()) {
-          restore()
-          document.execCommand("insertText", false, transcript)
-          onChange(editorRef.current?.innerHTML ?? "")
+
+        if (newFinalChunk) {
+          accumulatedFinalRef.current += newFinalChunk
+        }
+
+        const spokenText = (accumulatedFinalRef.current + interimTranscript).trim()
+        if (spokenText && editorRef.current) {
+          const base = baseContentRef.current
+          if (!base) {
+            editorRef.current.innerHTML = `<p>${escapeHtml(spokenText)}</p>`
+          } else {
+            const cleanBase = base.replace(/<\/p>$/i, "").replace(/<br\s*\/?>$/i, "")
+            editorRef.current.innerHTML = `${cleanBase} ${escapeHtml(spokenText)}</p>`
+          }
+          onChange(editorRef.current.innerHTML)
         }
       }
 
-      recognition.onerror = () => setIsRecording(false)
-      recognition.onend = () => setIsRecording(false)
+      recognition.onerror = (event: any) => {
+        console.warn("Speech recognition error:", event.error)
+        if (event.error !== "no-speech") {
+          setIsRecording(false)
+        }
+      }
+
+      recognition.onend = () => {
+        setIsRecording(false)
+      }
 
       recognitionRef.current = recognition
       recognition.start()
       setIsRecording(true)
     } catch {
       setIsRecording(false)
+      setUploadError("خطایی در اجرای ضبط صوت رخ داد.")
     }
   }
 
@@ -1666,59 +1706,48 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
         </button>
       </div>
       <div className={cn(!mobileExpanded && "hidden md:block")}>
-        <div className={cn("flex flex-wrap items-center justify-between gap-2 border-b bg-slate-50/80 px-2.5 py-2 dark:bg-slate-900/60", disabled && "hidden md:flex")}>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant={isRecording ? "destructive" : "outline"}
-              size="sm"
-              disabled={disabled}
-              onClick={toggleRecording}
-              className={cn("h-8 gap-1.5 rounded-lg px-3 text-xs font-semibold shadow-2xs", isRecording && "animate-pulse")}
-            >
-              <Mic className={cn("size-3.5", isRecording ? "text-white" : "text-rose-600 dark:text-rose-400")} />
-              <span>{isRecording ? "جاري التسجيل..." : "وویس به متن (Voice)"}</span>
-            </Button>
+        <div className={cn("flex flex-wrap items-center gap-0.5 border-b bg-muted/35 px-2 py-1.5 md:gap-1 md:px-3 md:py-2", disabled && "hidden md:flex")}>
+          <EditorButton
+            label={isRecording ? "در حال ضبط صوت زنده..." : "وویس به متن در لحظه (Voice Dictation)"}
+            onClick={toggleRecording}
+            disabled={disabled}
+            className={cn(isRecording && "bg-rose-600 text-white hover:bg-rose-700 animate-pulse")}
+          >
+            <Mic className={cn("size-4", isRecording ? "text-white" : "text-rose-600 dark:text-rose-400")} />
+          </EditorButton>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={disabled || aiLoading !== null}
-              onClick={() => void handleAiAction("translate_en")}
-              className="h-8 gap-1.5 rounded-lg border-blue-200 bg-blue-50/70 px-3 text-xs font-semibold text-blue-900 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-200"
-            >
-              {aiLoading === "translate_en" ? (
-                <Loader2 className="size-3.5 animate-spin text-blue-600" />
-              ) : (
-                <Languages className="size-3.5 text-blue-600 dark:text-blue-400" />
-              )}
-              <span>ترجمه انگلیسی عمران (AI)</span>
-            </Button>
+          <EditorButton
+            label="ترجمه انگلیسی تخصصی عمران (AI Construction English)"
+            onClick={() => void handleAiAction("translate_en")}
+            disabled={disabled || aiLoading !== null}
+          >
+            {aiLoading === "translate_en" ? <Loader2 className="size-4 animate-spin text-blue-600" /> : <Languages className="size-4 text-blue-600 dark:text-blue-400" />}
+          </EditorButton>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={disabled || aiLoading !== null}
-              onClick={() => void handleAiAction("enhance_style")}
-              className="h-8 gap-1.5 rounded-lg border-purple-200 bg-purple-50/70 px-3 text-xs font-semibold text-purple-900 hover:bg-purple-100 dark:border-purple-900 dark:bg-purple-950/50 dark:text-purple-200"
-            >
-              {aiLoading === "enhance_style" ? (
-                <Loader2 className="size-3.5 animate-spin text-purple-600" />
-              ) : (
-                <Sparkles className="size-3.5 text-purple-600 dark:text-purple-400" />
-              )}
-              <span>استایل و توسعه متن (AI)</span>
-            </Button>
-          </div>
+          <EditorButton
+            label="استایل و توسعه متن گزارش (AI Enhance Notes)"
+            onClick={() => void handleAiAction("enhance_style")}
+            disabled={disabled || aiLoading !== null}
+          >
+            {aiLoading === "enhance_style" ? <Loader2 className="size-4 animate-spin text-purple-600" /> : <Sparkles className="size-4 text-purple-600 dark:text-purple-400" />}
+          </EditorButton>
 
-          <div className="flex items-center gap-1">
-            <EditorButton label="Inline image" onClick={() => { saveSelection(); imageInputRef.current?.click() }} disabled={disabled || uploading}>
-              {uploading ? <Loader2 className="animate-spin" /> : <ImagePlus />}
-            </EditorButton>
-            <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={imageSelected} />
-          </div>
+          <span className="mx-0.5 h-5 w-px bg-border md:mx-1" />
+
+          <EditorButton label="Undo" onClick={() => command("undo")} disabled={disabled}>
+            <Undo2 />
+          </EditorButton>
+
+          <EditorButton label="Redo" onClick={() => command("redo")} disabled={disabled}>
+            <Redo2 />
+          </EditorButton>
+
+          <span className="mx-0.5 h-5 w-px bg-border md:mx-1" />
+
+          <EditorButton label="Inline image" onClick={() => { saveSelection(); imageInputRef.current?.click() }} disabled={disabled || uploading}>
+            {uploading ? <Loader2 className="animate-spin" /> : <ImagePlus />}
+          </EditorButton>
+          <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={imageSelected} />
         </div>
         {uploadError ? <div className="border-b bg-red-50 px-4 py-2 text-xs text-red-700">{uploadError}</div> : null}
         <div ref={editorRef} contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-multiline="true" onFocus={saveSelection} onKeyUp={saveSelection} onMouseUp={saveSelection} onInput={() => onChange(editorRef.current?.innerHTML ?? "")} className={cn("inspection-editor bg-background px-3 py-3 text-sm outline-none md:min-h-56 md:px-7 md:py-5", disabled ? "min-h-0" : "min-h-36")} />
@@ -1727,8 +1756,19 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
   )
 }
 
-function EditorButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: ReactNode }) {
-  return <button type="button" title={label} aria-label={label} disabled={disabled} onMouseDown={(event) => { event.preventDefault(); onClick() }} className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-40 [&_svg]:size-4">{children}</button>
+function EditorButton({ label, onClick, disabled, className, children }: { label: string; onClick: () => void; disabled?: boolean; className?: string; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      disabled={disabled}
+      onMouseDown={(event) => { event.preventDefault(); onClick() }}
+      className={cn("inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-40 [&_svg]:size-4", className)}
+    >
+      {children}
+    </button>
+  )
 }
 
 function ApprovalPanel({ canReview, status, comments, onComments, onDecision, busy, approvals, copy, locale }: { canReview: boolean; status: ResponseStatus; comments: string; onComments: (value: string) => void; onDecision: (decision: "approved" | "rejected") => void; busy: string | null; approvals: ProjectStageApproval[]; copy: (typeof COPY)["en"] | (typeof COPY)["ar"]; locale: "en" | "ar" }) {
