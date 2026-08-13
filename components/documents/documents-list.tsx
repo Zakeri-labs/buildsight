@@ -414,6 +414,7 @@ export function DocumentsList({
               <p className="mt-0.5 text-sm text-muted-foreground">Create and manage construction letters, reports, details, files and site images.</p>
             </div>
           </div>
+        </div>
         <Link
           href={selectedProjectId ? `/documents/new?project=${encodeURIComponent(selectedProjectId)}` : "/documents/new"}
           className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 font-semibold text-white hover:bg-blue-700 shadow-xs"
