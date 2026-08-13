@@ -23,16 +23,20 @@ import {
   ListOrdered,
   Loader2,
   MessageSquare,
+  Mic,
+  MicOff,
   Plus,
   Redo2,
   Save,
   Send,
   ShieldCheck,
+  Sparkles,
   Table2,
   Trash2,
   Underline,
   Undo2,
   UploadCloud,
+  Wand2,
   X,
 } from "lucide-react"
 import {
@@ -1551,23 +1555,100 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
   const editorRef = useRef<HTMLDivElement | null>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const savedRangeRef = useRef<Range | null>(null)
+  const recognitionRef = useRef<any>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const [mobileExpanded, setMobileExpanded] = useState(false)
+  const [mobileExpanded, setMobileExpanded] = useState(true)
+  const [isRecording, setIsRecording] = useState(false)
+  const [aiLoading, setAiLoading] = useState<"translate_en" | "enhance_style" | null>(null)
 
   useEffect(() => { if (editorRef.current && editorRef.current.innerHTML !== value) editorRef.current.innerHTML = value || "<p><br></p>" }, [])
+
   const saveSelection = () => {
     const selection = window.getSelection()
     if (selection?.rangeCount && editorRef.current?.contains(selection.anchorNode)) savedRangeRef.current = selection.getRangeAt(0).cloneRange()
   }
+
   const restore = () => {
     editorRef.current?.focus()
     const selection = window.getSelection()
     if (selection && savedRangeRef.current) { selection.removeAllRanges(); selection.addRange(savedRangeRef.current) }
   }
-  const command = (name: string, argument?: string) => { restore(); document.execCommand(name, false, argument); onChange(editorRef.current?.innerHTML ?? "") }
-  const addLink = () => { const href = window.prompt("Enter link URL"); if (href) command("createLink", href) }
-  const addTable = () => command("insertHTML", '<table><tbody><tr><th>Item</th><th>Requirement</th><th>Result</th></tr><tr><td><br></td><td><br></td><td><br></td></tr><tr><td><br></td><td><br></td><td><br></td></tr></tbody></table><p><br></p>')
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      recognitionRef.current?.stop()
+      setIsRecording(false)
+      return
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      setUploadError("مرورگر شما از قابلیت ضبط صوت به متن پشتیبانی نمی‌کند. لطفاً از مرورگر کروم یا سافاری استفاده کنید.")
+      return
+    }
+
+    try {
+      const recognition = new SpeechRecognition()
+      recognition.continuous = true
+      recognition.interimResults = true
+      recognition.lang = "ar-SA"
+
+      recognition.onresult = (event: any) => {
+        let transcript = ""
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            transcript += event.results[i][0].transcript + " "
+          }
+        }
+        if (transcript.trim()) {
+          restore()
+          document.execCommand("insertText", false, transcript)
+          onChange(editorRef.current?.innerHTML ?? "")
+        }
+      }
+
+      recognition.onerror = () => setIsRecording(false)
+      recognition.onend = () => setIsRecording(false)
+
+      recognitionRef.current = recognition
+      recognition.start()
+      setIsRecording(true)
+    } catch {
+      setIsRecording(false)
+    }
+  }
+
+  const handleAiAction = async (action: "translate_en" | "enhance_style") => {
+    const currentText = editorRef.current?.innerText || editorRef.current?.textContent || ""
+    if (!currentText.trim()) {
+      setUploadError(action === "translate_en" ? "لطفاً ابتدا متنی برای ترجمه وارد کنید." : "لطفاً ابتدا متنی برای بهبود و توسعه وارد کنید.")
+      return
+    }
+
+    setUploadError(null)
+    setAiLoading(action)
+    try {
+      const res = await fetch("/api/ai/enhance-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: currentText, action }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.resultText) {
+        throw new Error(data.error || "تولید AI با خطا مواجه شد.")
+      }
+      if (editorRef.current) {
+        editorRef.current.innerHTML = data.resultText
+        onChange(data.resultText)
+      }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "خطایی در فرآیند هوش مصنوعی رخ داد.")
+    } finally {
+      setAiLoading(null)
+    }
+  }
+
   const imageSelected = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ""
@@ -1602,20 +1683,59 @@ function RichSectionEditor({ title, description, value, onChange, allowTable, di
         </button>
       </div>
       <div className={cn(!mobileExpanded && "hidden md:block")}>
-        <div className={cn("flex flex-wrap items-center gap-0.5 border-b bg-muted/35 px-2 py-1.5 md:gap-1 md:px-3 md:py-2", disabled && "hidden md:flex")}>
-          <EditorButton label="Bold" onClick={() => command("bold")} disabled={disabled}><Bold /></EditorButton>
-          <EditorButton label="Italic" onClick={() => command("italic")} disabled={disabled}><Italic /></EditorButton>
-          <EditorButton label="Underline" onClick={() => command("underline")} disabled={disabled}><Underline /></EditorButton>
-          <span className="mx-0.5 h-5 w-px bg-border md:mx-1" />
-          <EditorButton label="Bulleted list" onClick={() => command("insertUnorderedList")} disabled={disabled}><List /></EditorButton>
-          <EditorButton label="Numbered list" onClick={() => command("insertOrderedList")} disabled={disabled}><ListOrdered /></EditorButton>
-          <EditorButton label="Link" onClick={addLink} disabled={disabled}><Link2 /></EditorButton>
-          {allowTable ? <EditorButton label="Insert table" onClick={addTable} disabled={disabled}><Table2 /></EditorButton> : null}
-          <EditorButton label="Inline image" onClick={() => { saveSelection(); imageInputRef.current?.click() }} disabled={disabled || uploading}>{uploading ? <Loader2 className="animate-spin" /> : <ImagePlus />}</EditorButton>
-          <span className="mx-0.5 h-5 w-px bg-border md:mx-1" />
-          <EditorButton label="Undo" onClick={() => command("undo")} disabled={disabled}><Undo2 /></EditorButton>
-          <EditorButton label="Redo" onClick={() => command("redo")} disabled={disabled}><Redo2 /></EditorButton>
-          <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={imageSelected} />
+        <div className={cn("flex flex-wrap items-center justify-between gap-2 border-b bg-slate-50/80 px-2.5 py-2 dark:bg-slate-900/60", disabled && "hidden md:flex")}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant={isRecording ? "destructive" : "outline"}
+              size="sm"
+              disabled={disabled}
+              onClick={toggleRecording}
+              className={cn("h-8 gap-1.5 rounded-lg px-3 text-xs font-semibold shadow-2xs", isRecording && "animate-pulse")}
+            >
+              <Mic className={cn("size-3.5", isRecording ? "text-white" : "text-rose-600 dark:text-rose-400")} />
+              <span>{isRecording ? "جاري التسجيل..." : "وویس به متن (Voice)"}</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={disabled || aiLoading !== null}
+              onClick={() => void handleAiAction("translate_en")}
+              className="h-8 gap-1.5 rounded-lg border-blue-200 bg-blue-50/70 px-3 text-xs font-semibold text-blue-900 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-200"
+            >
+              {aiLoading === "translate_en" ? (
+                <Loader2 className="size-3.5 animate-spin text-blue-600" />
+              ) : (
+                <Languages className="size-3.5 text-blue-600 dark:text-blue-400" />
+              )}
+              <span>ترجمه انگلیسی عمران (AI)</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={disabled || aiLoading !== null}
+              onClick={() => void handleAiAction("enhance_style")}
+              className="h-8 gap-1.5 rounded-lg border-purple-200 bg-purple-50/70 px-3 text-xs font-semibold text-purple-900 hover:bg-purple-100 dark:border-purple-900 dark:bg-purple-950/50 dark:text-purple-200"
+            >
+              {aiLoading === "enhance_style" ? (
+                <Loader2 className="size-3.5 animate-spin text-purple-600" />
+              ) : (
+                <Sparkles className="size-3.5 text-purple-600 dark:text-purple-400" />
+              )}
+              <span>استایل و توسعه متن (AI)</span>
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <EditorButton label="Inline image" onClick={() => { saveSelection(); imageInputRef.current?.click() }} disabled={disabled || uploading}>
+              {uploading ? <Loader2 className="animate-spin" /> : <ImagePlus />}
+            </EditorButton>
+            <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={imageSelected} />
+          </div>
         </div>
         {uploadError ? <div className="border-b bg-red-50 px-4 py-2 text-xs text-red-700">{uploadError}</div> : null}
         <div ref={editorRef} contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-multiline="true" onFocus={saveSelection} onKeyUp={saveSelection} onMouseUp={saveSelection} onInput={() => onChange(editorRef.current?.innerHTML ?? "")} className={cn("inspection-editor bg-background px-3 py-3 text-sm outline-none md:min-h-56 md:px-7 md:py-5", disabled ? "min-h-0" : "min-h-36")} />
