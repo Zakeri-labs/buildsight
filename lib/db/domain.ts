@@ -580,6 +580,7 @@ export type DashboardData = {
     supervisorId: string
     name: string
     completedVisitCount: number
+    totalVisitCount?: number
     projectCount: number
     visits: {
       id: string
@@ -851,10 +852,10 @@ export async function getDashboardData(
       { label: "Approved", value: inspByStatus.get("approved") ?? 0, color: "var(--success)" },
     ]
 
-    // Resolve exactly one Supervisor for each completed Site Visit from the SAME filtered
-    // completed Visit set used by the Visit Completion donut. Historical Visit assignment
-    // is preferred; visit-linked Stage Report responsibility is the legacy fallback; the
-    // current canonical Project Supervisor is used only when neither historical source exists.
+    // Resolve exactly one Supervisor for each Site Visit in the filtered scope.
+    // Historical Visit assignment is preferred; visit-linked Stage Report responsibility
+    // is the legacy fallback; the current canonical Project Supervisor is used only when
+    // neither historical source exists.
     const projectSupervisorById = new Map<string, string>(
       scoped
         .filter((project) => Boolean(project.assignedSupervisorId))
@@ -863,19 +864,19 @@ export async function getDashboardData(
             [project.id, project.assignedSupervisorId as string] as [string, string],
         ),
     )
-    const completedVisitIds = validUuidList(
-      (completedSiteVisits as any[]).map((visit) => visit.id),
+    const allCandidateVisitIds = validUuidList(
+      (dashboardSiteVisits as any[]).map((visit) => visit.id),
     )
-    const { data: completedVisitAssignees, error: completedVisitAssigneesError } = completedVisitIds.length
+    const { data: candidateVisitAssignees, error: candidateVisitAssigneesError } = allCandidateVisitIds.length
       ? await admin
           .from("site_visit_request_assignees")
           .select("request_id, user_id")
-          .in("request_id", completedVisitIds)
+          .in("request_id", allCandidateVisitIds)
       : { data: [] as any[], error: null }
-    if (completedVisitAssigneesError) throw completedVisitAssigneesError
+    if (candidateVisitAssigneesError) throw candidateVisitAssigneesError
 
     const explicitAssigneesByVisitId = new Map<string, Set<string>>()
-    for (const row of completedVisitAssignees ?? []) {
+    for (const row of candidateVisitAssignees ?? []) {
       const visitId = asUuid((row as any).request_id)
       const userId = asUuid((row as any).user_id)
       if (!visitId || !userId) continue
@@ -888,7 +889,7 @@ export async function getDashboardData(
     // longer have a row in site_visit_request_assignees. It never changes the completed
     // Visit dataset itself.
     const recoveredAssigneesByVisitId = new Map<string, string[]>()
-    for (const visit of completedSiteVisits as any[]) {
+    for (const visit of (dashboardSiteVisits as any[])) {
       const visitId = asUuid(visit.id)
       if (!visitId || explicitAssigneesByVisitId.has(visitId)) continue
       const recovered = validUuidList(
@@ -907,7 +908,7 @@ export async function getDashboardData(
     for (const response of termResponses ?? []) {
       const visitId = asUuid((response as any).site_visit_request_id)
       const projectStageId = asUuid((response as any).project_stage_id)
-      if (!visitId || !projectStageId || !completedVisitIds.includes(visitId)) continue
+      if (!visitId || !projectStageId || !allCandidateVisitIds.includes(visitId)) continue
       linkedReportByVisitId.set(visitId, {
         projectStageId,
         visitNumber: Number.isInteger((response as any).visit_number) ? (response as any).visit_number : null,
@@ -934,16 +935,6 @@ export async function getDashboardData(
             profile.full_name?.trim() || profile.email?.trim() || profile.id,
           ] as [string, string],
       ),
-    )
-
-    const completedVisitById = new Map<string, string>(
-      (completedSiteVisits as any[])
-        .map((visit) => {
-          const visitId = asUuid(visit.id)
-          const visitProjectId = asUuid(visit.projectId)
-          return visitId && visitProjectId ? ([visitId, visitProjectId] as [string, string]) : null
-        })
-        .filter((entry): entry is [string, string] => Boolean(entry)),
     )
 
     const linkedStageIds = validUuidList(
@@ -996,7 +987,7 @@ export async function getDashboardData(
       { supervisorId: string; source: SupervisorResolutionSource }
     >()
 
-    for (const visit of completedSiteVisits as any[]) {
+    for (const visit of (dashboardSiteVisits as any[])) {
       const visitId = asUuid(visit.id)
       const visitProjectId = asUuid(visit.projectId)
       if (!visitId || !visitProjectId) continue
@@ -1034,37 +1025,53 @@ export async function getDashboardData(
           supervisorId: projectSupervisorId,
           source: "project_supervisor",
         })
-      } else {
-        console.warn("[dashboard] completed Site Visit has no resolvable Supervisor", {
-          visitId,
-          projectId: visitProjectId,
-        })
       }
     }
 
-    const completedVisitAggregation = new Map<
+    const supervisorAggregation = new Map<
       string,
-      { supervisorId: string; name: string; visitIds: Set<string>; projectIds: Set<string> }
+      {
+        supervisorId: string
+        name: string
+        completedVisitIds: Set<string>
+        totalVisitIds: Set<string>
+        projectIds: Set<string>
+      }
     >()
 
-    for (const [visitId, resolution] of resolvedSupervisorByVisitId) {
-      const visitProjectId = completedVisitById.get(visitId)
-      if (!visitProjectId) continue
+    for (const visit of (dashboardSiteVisits as any[])) {
+      const visitId = asUuid(visit.id)
+      const visitProjectId = asUuid(visit.projectId)
+      if (!visitId || !visitProjectId) continue
+
+      const resolution = resolvedSupervisorByVisitId.get(visitId)
+      if (!resolution) continue
+
       const supervisorId = resolution.supervisorId
-      const existing = completedVisitAggregation.get(supervisorId) ?? {
+      const existing = supervisorAggregation.get(supervisorId) ?? {
         supervisorId,
         name: supervisorNameById.get(supervisorId) ?? "Supervisor",
-        visitIds: new Set<string>(),
+        completedVisitIds: new Set<string>(),
+        totalVisitIds: new Set<string>(),
         projectIds: new Set<string>(),
       }
-      existing.visitIds.add(visitId)
-      existing.projectIds.add(visitProjectId)
-      completedVisitAggregation.set(supervisorId, existing)
+
+      const isCompleted = visit.status === "completed" && Boolean(visit.completedAt)
+      const isScheduled = visit.status === "scheduled"
+      if (!isCompleted && !isScheduled) continue
+
+      existing.totalVisitIds.add(visitId)
+      if (isCompleted) {
+        existing.completedVisitIds.add(visitId)
+        existing.projectIds.add(visitProjectId)
+      }
+      supervisorAggregation.set(supervisorId, existing)
     }
 
-    const completedVisitsBySupervisor = Array.from(completedVisitAggregation.values())
+    const completedVisitsBySupervisor = Array.from(supervisorAggregation.values())
+      .filter((item) => item.completedVisitIds.size > 0)
       .map((item) => {
-        const visits = Array.from(item.visitIds)
+        const visits = Array.from(item.completedVisitIds)
           .map((visitId) => completedVisitDetailById.get(visitId))
           .filter((visit): visit is {
             id: string
@@ -1083,7 +1090,8 @@ export async function getDashboardData(
         return {
           supervisorId: item.supervisorId,
           name: item.name,
-          completedVisitCount: item.visitIds.size,
+          completedVisitCount: item.completedVisitIds.size,
+          totalVisitCount: item.totalVisitIds.size,
           projectCount: item.projectIds.size,
           visits,
         }

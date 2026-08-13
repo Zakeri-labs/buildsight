@@ -27,6 +27,7 @@ export type SupervisorCompletedVisitSummary = {
   supervisorId: string
   name: string
   completedVisitCount: number
+  totalVisitCount?: number
   projectCount: number
   visits: SupervisorCompletedVisitDetail[]
 }
@@ -145,10 +146,6 @@ export function CompletedVisitsBySupervisorCard({
   const scheduled = Math.max(0, completion.scheduled)
   const total = completed + scheduled
   const completionPercent = total > 0 ? Math.round((completed / total) * 100) : 0
-  const maxCompletedVisitCount = supervisors.reduce(
-    (max, item) => Math.max(max, item.completedVisitCount),
-    0,
-  )
 
   return (
     <div className="flex min-h-0 flex-col rounded-xl border border-border bg-card p-5">
@@ -208,9 +205,19 @@ export function CompletedVisitsBySupervisorCard({
             ) : supervisors.length ? (
               <ul className="divide-y divide-border/70">
                 {supervisors.map((supervisor) => {
+                  const supervisorTotal =
+                    supervisor.totalVisitCount && supervisor.totalVisitCount > 0
+                      ? supervisor.totalVisitCount
+                      : supervisor.completedVisitCount
                   const relativeWidth =
-                    maxCompletedVisitCount > 0
-                      ? Math.max(0, Math.min(100, (supervisor.completedVisitCount / maxCompletedVisitCount) * 100))
+                    supervisorTotal > 0
+                      ? Math.max(
+                          0,
+                          Math.min(
+                            100,
+                            Math.round((supervisor.completedVisitCount / supervisorTotal) * 100),
+                          ),
+                        )
                       : 0
 
                   return (
