@@ -101,12 +101,24 @@ export function MemberProjectStagesMobile({ data }: { data: ProjectStageExecutio
           <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
             {visibleStages.length ? (
               <div className="divide-y">
-                {visibleStages.map(({ stage, index, latestReport }) => {
-                  const latestDate = latestReport ? formatShortDate(latestReport.createdAt) : null
+                {visibleStages.map(({ stage, index }) => {
+                  const reportsCount = stage.reports.length
+                  const totalItems = (stage.terms ?? []).reduce((acc, t) => acc + 1 + (t.subterms?.length || 0), 0) || 10
+                  const completedItems = (stage.terms ?? []).reduce((acc, t) => {
+                    let count = t.response || t.status === "completed" ? 1 : 0
+                    if (t.subterms) {
+                      for (const st of t.subterms) {
+                        if (st.response || st.status === "completed") count++
+                      }
+                    }
+                    return acc + count
+                  }, 0)
+                  const percentage = Math.min(100, Math.max(0, Math.round((completedItems / Math.max(1, totalItems)) * 100)))
+
                   return (
                     <div
                       key={stage.id}
-                      className="grid min-h-[3.8rem] grid-cols-[2.25rem_minmax(0,1fr)_4.65rem] items-center gap-2 px-2.5 py-1.5"
+                      className="grid min-h-[3.8rem] grid-cols-[2.25rem_minmax(0,1fr)_4.65rem] items-center gap-2 px-2.5 py-2"
                     >
                       <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold tabular-nums text-primary">
                         {stageNumber(stage.name, stage.sortOrder, index)}
@@ -116,16 +128,17 @@ export function MemberProjectStagesMobile({ data }: { data: ProjectStageExecutio
                         <p className="line-clamp-2 text-[13px] font-semibold leading-[1.15rem] text-foreground">
                           {cleanStageName(stage.name)}
                         </p>
-                        {latestReport ? (
-                          <p className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] leading-4 text-muted-foreground">
-                            <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
-                            <span className="truncate">
-                              Last: Visit No. {latestReport.visitNumber}{latestDate ? ` · ${latestDate}` : ""}
-                            </span>
+                        <div className="mt-1 space-y-1">
+                          <p className="text-[11px] font-medium leading-none text-muted-foreground">
+                            {reportsCount} {reportsCount === 1 ? "Report" : "Reports"} · {completedItems}/{totalItems} · {percentage}%
                           </p>
-                        ) : (
-                          <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">No reports yet</p>
-                        )}
+                          <div className="h-1 w-full max-w-[130px] overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                            <div
+                              className="h-full rounded-full bg-primary transition-all duration-300"
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                        </div>
                       </div>
 
                       <div className="flex flex-col items-stretch gap-1">
