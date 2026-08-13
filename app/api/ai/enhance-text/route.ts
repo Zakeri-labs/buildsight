@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { assertProjectMember, AuthzError } from "@/lib/auth/guards"
+import { stripHtmlToPlainText } from "@/lib/documents/bilingual-details"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
