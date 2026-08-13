@@ -576,10 +576,10 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   const org = getOrganizationProfile()
   const margin = PAGE.margin
 
-  // Light gray background, thin navy top
+  // Light gray background, thin gold top
   doc.setFillColor(248, 250, 252)
   doc.rect(0, 0, pageWidth, headerH, "F")
-  doc.setFillColor(30, 58, 138)
+  doc.setFillColor(180, 138, 32)
   doc.rect(0, 0, pageWidth, 1.5, "F")
 
   // ── 3-COLUMN LAYOUT: [Logo] | [Company Name] | [Date/Doc/Page] ────
@@ -606,7 +606,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     )
   } else {
     setLanguage(doc, false, 10, true)
-    doc.setTextColor(30, 58, 138)
+    doc.setTextColor(180, 138, 32)
     doc.text("BONYAN", col1X + 2.5, headerH / 2 + 2, { align: "left" })
   }
 
@@ -634,7 +634,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     arSize -= 0.3
     setLanguage(doc, true, arSize, true)
   }
-  doc.setTextColor(30, 58, 138)
+  doc.setTextColor(180, 138, 32)
   writePdfText(doc, nameAr, cx, midY + 3.5, { align: "center" }, true)
 
   // ── RIGHT COLUMN: Date / Document No. / Page (Right-aligned, tight vertical center) ──
@@ -783,7 +783,7 @@ function drawCcMetadata(flow: Flow, x: number, y: number, width: number, recipie
 
   for (const entry of entries) {
     setLanguage(doc, false, 8, true)
-    doc.setTextColor(37, 99, 235)
+    doc.setTextColor(180, 138, 32)
     doc.text("•", bulletX, cursorY, { align: rtl ? "right" : "left" })
 
     for (const line of entry.nameLines) {
@@ -1048,7 +1048,7 @@ function drawFirstPageHeader(
       drawField(recipient.name, 7.5, true, 3.4, [15, 23, 42])
       if (recipient.role) drawField(recipient.role, 6.5, false, 3.2, [71, 85, 105])
       if (recipient.company) drawField(recipient.company, 6.5, false, 3.2, [71, 85, 105])
-      if (recipient.email) drawField(recipient.email, 6.2, false, 3.2, [37, 99, 235], true)
+      if (recipient.email) drawField(recipient.email, 6.2, false, 3.2, [180, 138, 32], true)
       currY += 1.2
     })
   }
@@ -1976,10 +1976,10 @@ function renderSectionTitle(flow: Flow, title: string) {
   // Small space above section
   flow.y += 4
 
-  // Blue bookmark icon (filled small square, matching the web UI)
+  // Gold bookmark icon (filled small square)
   const iconSize = 3.5
   const iconX = flow.rtl ? flow.x + flow.width - iconSize : flow.x
-  flow.doc.setFillColor(37, 99, 235)
+  flow.doc.setFillColor(180, 138, 32)
   flow.doc.rect(iconX, flow.y - 3, iconSize, iconSize, "F")
 
   // Section title text – larger, bolder, dark
@@ -2165,7 +2165,7 @@ function captionLinesFromHtml(html: string) {
 
 function drawPreservedSourcePageHeader(flow: Flow, sourcePage: number, totalPages: number) {
   const { doc, template, rtl, pageWidth } = flow
-  doc.setFillColor(29, 78, 216)
+  doc.setFillColor(150, 112, 22)
   doc.rect(0, 0, pageWidth, 3, "F")
   setLanguage(doc, rtl, 9.5, true)
   doc.setTextColor(15, 23, 42)
@@ -2347,7 +2347,7 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     }
 
     // ── Footer Top Accent Line ──────────────────────────────────────────
-    doc.setFillColor(37, 99, 235)
+    doc.setFillColor(180, 138, 32)
     doc.rect(margin, height - 17.5, width - margin * 2, 0.6, "F")
 
     // Left Column: Phones, Social/Website + Email on same line
@@ -3344,7 +3344,7 @@ function drawBilingualHeader(input: {
 }) {
   const { doc, data, margin } = input
   const width = PAGE.portraitWidth
-  doc.setFillColor(29, 78, 216)
+  doc.setFillColor(150, 112, 22)
   doc.rect(0, 0, width, 3, "F")
   const projectNameIsArabic = containsArabic(data.project.name)
   setLanguage(doc, projectNameIsArabic, 11, true)
@@ -3458,9 +3458,9 @@ function bilingualRowAppearance(style: BilingualRowStyle, alternate: boolean) {
       lineHeight: 4.8,
       padding: 2.2,
       minHeight: 9,
-      fill: [30, 58, 138] as const,
+      fill: [180, 138, 32] as const,
       text: [255, 255, 255] as const,
-      border: [30, 58, 138] as const,
+      border: [180, 138, 32] as const,
     }
   }
   if (style === "section") {
@@ -3470,9 +3470,9 @@ function bilingualRowAppearance(style: BilingualRowStyle, alternate: boolean) {
       lineHeight: 5.4,
       padding: 2.6,
       minHeight: 11,
-      fill: [239, 246, 255] as const,
+      fill: [253, 248, 235] as const,
       text: [15, 23, 42] as const,
-      border: [147, 197, 253] as const,
+      border: [225, 200, 140] as const,
     }
   }
   if (style === "heading") {
@@ -3770,7 +3770,7 @@ function renderBilingualTextRow(
 
     // English Header on Left
     if (engStr) {
-      doc.setFillColor(37, 99, 235)
+      doc.setFillColor(180, 138, 32)
       doc.rect(flow.x, flow.y - 2.8, iconSize, iconSize, "F")
       setLanguage(doc, false, 11, true)
       doc.setTextColor(15, 23, 42)
@@ -3780,7 +3780,7 @@ function renderBilingualTextRow(
     // Arabic Header on Right
     if (arStr) {
       const arRightX = flow.x + flow.width
-      doc.setFillColor(37, 99, 235)
+      doc.setFillColor(180, 138, 32)
       doc.rect(arRightX - iconSize, flow.y - 2.8, iconSize, iconSize, "F")
       setLanguage(doc, true, 11, true)
       doc.setTextColor(15, 23, 42)
