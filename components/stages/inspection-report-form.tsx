@@ -1634,11 +1634,11 @@ function DocumentRow({ name, href, progress, onRemove }: { name: string; href?: 
 }
 
 const CONSTRUCTION_SPEECH_LANGUAGES = [
+  { code: "ar-SA", label: "🇸🇦 العربية" },
+  { code: "en-US", label: "🇺🇸 English" },
   { code: "fa-IR", label: "🇮🇷 فارسی" },
   { code: "ur-PK", label: "🇵🇰 اردو (Urdu)" },
   { code: "hi-IN", label: "🇮🇳 हिंदी (Hindi)" },
-  { code: "en-US", label: "🇺🇸 English" },
-  { code: "ar-SA", label: "🇸🇦 العربية" },
   { code: "tl-PH", label: "🇵🇭 Tagalog" },
   { code: "ml-IN", label: "🇮🇳 മലയാളം" },
   { code: "bn-BD", label: "🇧🇩 বাংলা" },
@@ -1746,19 +1746,22 @@ function RichSectionEditor({
     setUploadError(null)
   }
 
-  const [speechLang, setSpeechLang] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("buildsight_preferred_speech_lang")
-      if (saved && CONSTRUCTION_SPEECH_LANGUAGES.some((l) => l.code === saved)) return saved
-    }
-    return "ar-SA"
-  })
+  const [speechLang, setSpeechLang] = useState<string>("ar-SA")
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("buildsight_preferred_speech_lang_v2")
+      if (saved && CONSTRUCTION_SPEECH_LANGUAGES.some((l) => l.code === saved)) {
+        setSpeechLang(saved)
+      }
+    } catch {}
+  }, [])
 
   const handleSpeechLangChange = (newLang: string) => {
     setSpeechLang(newLang)
     if (typeof window !== "undefined") {
       try {
-        localStorage.setItem("buildsight_preferred_speech_lang", newLang)
+        localStorage.setItem("buildsight_preferred_speech_lang_v2", newLang)
       } catch {}
     }
   }
