@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { CompactFieldToolbar } from "@/components/ui/compact-field-toolbar"
 import {
   AlertCircle,
   ArrowLeft,
@@ -782,7 +783,7 @@ export function CreateLetterPage({
             />
           </div>
 
-          {/* Letter Details Section (NCR, RFI, WIR, MIR, Inspection) */}
+          {/* Letter Details Section (NCR, RFI, WIR, MIR, Inspection, IPC, VO, General) */}
           {activeSchema ? (
             <div className="space-y-4 rounded-xl border border-blue-200/80 bg-blue-50/30 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-200/60 pb-3 dark:border-blue-900/40">
@@ -812,14 +813,40 @@ export function CreateLetterPage({
                       </div>
 
                       {field.type === "textarea" ? (
-                        <textarea
-                          id={`letter-field-${field.key}`}
-                          value={fieldValues[field.key] ?? ""}
-                          placeholder={field.placeholder}
-                          disabled={isSubmitting}
-                          onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
-                          className="min-h-20 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-xs leading-5 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:bg-muted/30"
-                        />
+                        <div className="flex flex-col">
+                          <CompactFieldToolbar
+                            value={fieldValues[field.key] ?? ""}
+                            onChange={(val) => handleFieldValueChange(field.key, val)}
+                            disabled={isSubmitting}
+                            fieldName={field.label}
+                          />
+                          <textarea
+                            id={`letter-field-${field.key}`}
+                            value={fieldValues[field.key] ?? ""}
+                            placeholder={field.placeholder}
+                            disabled={isSubmitting}
+                            onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
+                            className="min-h-20 w-full resize-y rounded-b-lg border border-input bg-background px-3 py-2 text-xs leading-5 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:bg-muted/30"
+                          />
+                        </div>
+                      ) : field.type === "text" ? (
+                        <div className="flex flex-col">
+                          <CompactFieldToolbar
+                            value={fieldValues[field.key] ?? ""}
+                            onChange={(val) => handleFieldValueChange(field.key, val)}
+                            disabled={isSubmitting}
+                            fieldName={field.label}
+                          />
+                          <Input
+                            id={`letter-field-${field.key}`}
+                            type="text"
+                            value={fieldValues[field.key] ?? ""}
+                            placeholder={field.placeholder}
+                            disabled={isSubmitting}
+                            onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
+                            className="h-10 rounded-b-lg rounded-t-none text-xs"
+                          />
+                        </div>
                       ) : field.type === "select" ? (
                         <Select
                           value={fieldValues[field.key] || null}
@@ -840,25 +867,34 @@ export function CreateLetterPage({
                           </SelectContent>
                         </Select>
                       ) : field.type === "date" ? (
-                        <Input
-                          id={`letter-field-${field.key}`}
-                          type="date"
-                          value={fieldValues[field.key] ?? ""}
-                          disabled={isSubmitting}
-                          onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
-                          className="h-10 text-xs"
-                        />
-                      ) : (
-                        <Input
-                          id={`letter-field-${field.key}`}
-                          type="text"
-                          value={fieldValues[field.key] ?? ""}
-                          placeholder={field.placeholder}
-                          disabled={isSubmitting}
-                          onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
-                          className="h-10 text-xs"
-                        />
-                      )}
+                        <div className="flex items-center gap-2">
+                          <Input
+                            id={`letter-field-${field.key}`}
+                            type="date"
+                            value={fieldValues[field.key] ?? ""}
+                            disabled={isSubmitting}
+                            onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
+                            className="h-10 text-xs flex-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isSubmitting}
+                            onClick={() => {
+                              const today = new Date()
+                              const yyyy = today.getFullYear()
+                              const mm = String(today.getMonth() + 1).padStart(2, "0")
+                              const dd = String(today.getDate()).padStart(2, "0")
+                              handleFieldValueChange(field.key, `${yyyy}-${mm}-${dd}`)
+                            }}
+                            className="h-10 px-3 text-xs font-semibold shrink-0"
+                            title="Set to today's date"
+                          >
+                            Today
+                          </Button>
+                        </div>
+                      ) : null}
                     </div>
                   )
                 })}
