@@ -420,6 +420,16 @@ export async function updateConstructionDocumentDetailsAction(input: {
   if (details.length > 100_000) return { ok: false, error: "Letter details must be 100,000 characters or fewer." }
 
   const supabase = await createClient()
+  const { data: doc } = await supabase
+    .from("documents")
+    .select("status")
+    .eq("id", input.documentId)
+    .maybeSingle()
+
+  if (doc?.status === "published") {
+    return { ok: false, error: "Published letters are final and cannot be modified." }
+  }
+
   const { data, error } = await supabase
     .from("documents")
     .update({ document_details: details })
@@ -462,11 +472,14 @@ export async function addDocumentAttachmentsAction(input: {
   const supabase = await createClient()
   const { data: document } = await supabase
     .from("documents")
-    .select("id, project_id")
+    .select("id, project_id, status")
     .eq("id", input.documentId)
     .eq("project_id", input.projectId)
     .maybeSingle()
   if (!document) return { ok: false, error: "This letter is unavailable." }
+  if (document.status === "published") {
+    return { ok: false, error: "Published letters are final and cannot be modified." }
+  }
 
   const rows = []
   for (const attachment of input.attachments) {
@@ -526,6 +539,17 @@ export async function removeDocumentAttachmentAction(input: {
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const session = await requireOnboarded()
   const supabase = await createClient()
+
+  const { data: doc } = await supabase
+    .from("documents")
+    .select("status")
+    .eq("id", input.documentId)
+    .maybeSingle()
+
+  if (doc?.status === "published") {
+    return { ok: false, error: "Published letters are final and cannot be modified." }
+  }
+
   const { data: attachment } = await supabase
     .from("document_attachments")
     .select("id, storage_path, project_id, document_id")
