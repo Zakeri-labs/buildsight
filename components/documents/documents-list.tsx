@@ -373,7 +373,11 @@ export function DocumentsList({
                       <DropdownMenu>
                         <DropdownMenuTrigger render={<button type="button" aria-label={`Actions for ${document.title}`} className="inline-flex size-7 items-center justify-center rounded-md bg-white/90 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:bg-slate-900/90 dark:hover:bg-slate-800"><MoreVertical className="size-4" /></button>} />
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem render={<Link href={`/documents/${document.id}`}><Eye className="size-4" />View letter</Link>} />
+                          {document.status === "draft" ? (
+                            <DropdownMenuItem render={<Link href={`/documents/${document.id}/edit`}><Pencil className="size-4" />Edit letter</Link>} />
+                          ) : (
+                            <DropdownMenuItem render={<Link href={`/documents/${document.id}`}><Eye className="size-4" />View letter</Link>} />
+                          )}
                           {document.fileStoragePath ? (
                             <DropdownMenuItem
                               render={
@@ -382,9 +386,7 @@ export function DocumentsList({
                                 </a>
                               }
                             />
-                          ) : (
-                            <DropdownMenuItem render={<Link href={`/documents/${document.id}/edit`}><Pencil className="size-4" />Edit letter</Link>} />
-                          )}
+                          ) : null}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -555,7 +557,11 @@ export function DocumentsList({
                       <DropdownMenu>
                         <DropdownMenuTrigger render={<button type="button" aria-label={`Actions for ${document.title}`} className="inline-flex size-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"><MoreVertical className="size-4" /></button>} />
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem render={<Link href={`/documents/${document.id}`}><Eye className="size-4" />View letter</Link>} />
+                          {document.status === "draft" ? (
+                            <DropdownMenuItem render={<Link href={`/documents/${document.id}/edit`}><Pencil className="size-4" />Edit letter</Link>} />
+                          ) : (
+                            <DropdownMenuItem render={<Link href={`/documents/${document.id}`}><Eye className="size-4" />View letter</Link>} />
+                          )}
                           {document.fileStoragePath ? (
                             <DropdownMenuItem
                               render={
@@ -564,9 +570,7 @@ export function DocumentsList({
                                 </a>
                               }
                             />
-                          ) : (
-                            <DropdownMenuItem render={<Link href={`/documents/${document.id}/edit`}><Pencil className="size-4" />Edit letter</Link>} />
-                          )}
+                          ) : null}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </td>

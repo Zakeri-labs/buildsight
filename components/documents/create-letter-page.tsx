@@ -123,9 +123,11 @@ function formatProjectLabel(project: { name: string; code: string | null }) {
 export function CreateLetterPage({
   initialProjectId = "",
   projectOptions: serverProjectOptions = [],
+  initialDocumentId = null,
 }: {
   initialProjectId?: string
   projectOptions?: ProjectOption[]
+  initialDocumentId?: string | null
 }) {
   const router = useRouter()
   const attachmentInputRef = useRef<HTMLInputElement | null>(null)
@@ -152,6 +154,8 @@ export function CreateLetterPage({
   } | null>(null)
 
   const pointerDownTimeRef = useRef<number>(0)
+  const isHydratedRef = useRef<boolean>(false)
+  const [loadingDraft, setLoadingDraft] = useState<boolean>(Boolean(initialDocumentId))
 
   const handleEyePointerDown = (fieldKey: string) => {
     pointerDownTimeRef.current = Date.now()
@@ -186,8 +190,8 @@ export function CreateLetterPage({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
-  const [savedDocumentId, setSavedDocumentId] = useState<string | null>(null)
-  const [savedDocumentMode, setSavedDocumentMode] = useState<SaveMode | null>(null)
+  const [savedDocumentId, setSavedDocumentId] = useState<string | null>(initialDocumentId)
+  const [savedDocumentMode, setSavedDocumentMode] = useState<SaveMode | null>(initialDocumentId ? "draft" : null)
   const [savingMode, setSavingMode] = useState<SaveMode | null>(null)
 
   // Confirmation & Processing modals
@@ -197,7 +201,7 @@ export function CreateLetterPage({
   const [processingError, setProcessingError] = useState<string | null>(null)
   const [processingComplete, setProcessingComplete] = useState(false)
 
-  const isSubmitting = savingMode !== null || processingOpen
+  const isSubmitting = savingMode !== null || processingOpen || loadingDraft
 
   useEffect(() => {
     pendingAttachmentsRef.current = pendingAttachments
@@ -208,6 +212,91 @@ export function CreateLetterPage({
       if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl)
     }
   }, [])
+
+  // Draft Hydration effect when editing an existing Draft
+  useEffect(() => {
+    if (!initialDocumentId || isHydratedRef.current) return
+
+    let cancelled = false
+    const loadDraft = async () => {
+      setLoadingDraft(true)
+      const supabase = createClient()
+
+      const { data: doc, error: docErr } = await supabase
+        .from("documents")
+        .select("id, project_id, title, document_type, status, document_details, content")
+        .eq("id", initialDocumentId)
+        .maybeSingle()
+
+      if (cancelled) return
+
+      if (docErr || !doc) {
+        setError("Unable to load the requested Draft letter.")
+        setLoadingDraft(false)
+        return
+      }
+
+      const rawType = getConstructionDocumentType(doc.document_type)?.value || ""
+      const docType = rawType as ConstructionDocumentTypeValue | ""
+      const parsed = parseBilingualDocumentDetails(doc.document_details || doc.content)
+      const schema = getLetterDetailsSchema(docType)
+
+      setSelectedProjectId(doc.project_id)
+      setDocumentType(docType)
+      setTitle(doc.title || "")
+      setEnglishText(parsed.englishText || "")
+      setAttachArabic(parsed.attachArabic)
+
+      if (parsed.structuredFields) {
+        setFieldValues(parsed.structuredFields)
+      } else if (schema && schema.parseValuesFromText) {
+        setFieldValues(schema.parseValuesFromText(parsed.englishText || ""))
+      }
+
+      if (schema) {
+        const expectedText = schema.buildText(parsed.structuredFields || {})
+        if (parsed.englishText.trim() !== expectedText.trim()) {
+          setIsManuallyEdited(true)
+        }
+      }
+
+      // Fetch recipients
+      const { data: recipientsData } = await supabase
+        .from("document_recipients")
+        .select("participant_id, recipient_type")
+        .eq("document_id", initialDocumentId)
+
+      if (!cancelled && recipientsData) {
+        const toIds = recipientsData.filter((r) => r.recipient_type === "to").map((r) => r.participant_id)
+        const ccIds = recipientsData.filter((r) => r.recipient_type === "cc").map((r) => r.participant_id)
+        setLetterToRecipientIds(toIds)
+        setCcRecipientIds(ccIds)
+      }
+
+      // Fetch attachments
+      const { data: attachmentsData } = await supabase
+        .from("document_attachments")
+        .select("id, attachment_type, original_filename, storage_path, mime_type, size_bytes")
+        .eq("document_id", initialDocumentId)
+
+      if (!cancelled && attachmentsData) {
+        const loadedAttachments: PendingAttachment[] = attachmentsData.map((att) => ({
+          id: att.id,
+          file: new File([], att.original_filename || "Attachment", { type: att.mime_type }),
+          attachmentType: att.attachment_type === "image" ? "image" : "document",
+        }))
+        setPendingAttachments(loadedAttachments)
+      }
+
+      isHydratedRef.current = true
+      setLoadingDraft(false)
+    }
+
+    void loadDraft()
+    return () => {
+      cancelled = true
+    }
+  }, [initialDocumentId])
 
   // Load project options if not provided
   useEffect(() => {
@@ -248,10 +337,6 @@ export function CreateLetterPage({
 
   // Load recipients whenever selectedProjectId changes
   useEffect(() => {
-    setLetterToRecipientIds([])
-    setCcRecipientIds([])
-    setRecipientOptions([])
-
     if (!selectedProjectId) {
       setLoadingRecipients(false)
       return

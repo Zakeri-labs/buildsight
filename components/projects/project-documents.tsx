@@ -220,14 +220,25 @@ export function ProjectDocuments({
                         }
                       />
                       <DropdownMenuContent align="end" className="w-44">
-                        <DropdownMenuItem
-                          render={
-                            <Link href={`/documents/${document.id}`}>
-                              <Eye className="size-4" />
-                              View letter
-                            </Link>
-                          }
-                        />
+                        {document.status.toLowerCase() === "draft" ? (
+                          <DropdownMenuItem
+                            render={
+                              <Link href={`/documents/${document.id}/edit`}>
+                                <Pencil className="size-4" />
+                                Edit letter
+                              </Link>
+                            }
+                          />
+                        ) : (
+                          <DropdownMenuItem
+                            render={
+                              <Link href={`/documents/${document.id}`}>
+                                <Eye className="size-4" />
+                                View letter
+                              </Link>
+                            }
+                          />
+                        )}
                         {document.fileStoragePath ? (
                           <DropdownMenuItem
                             render={
@@ -235,16 +246,6 @@ export function ProjectDocuments({
                                 <Download className="size-4" />
                                 Download
                               </a>
-                            }
-                          />
-                        ) : null}
-                        {!document.fileStoragePath ? (
-                          <DropdownMenuItem
-                            render={
-                              <Link href={`/documents/${document.id}/edit`}>
-                                <Pencil className="size-4" />
-                                Edit letter
-                              </Link>
                             }
                           />
                         ) : null}
