@@ -108,11 +108,15 @@ export default async function DocumentDetailsPage({
     sizeBytes: Number(attachment.size_bytes),
     createdAt: attachment.created_at,
   }))
+  const hasRealDescription = Boolean(
+    document.short_description?.trim() &&
+    document.short_description.trim() !== "No short description provided."
+  )
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 sm:gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href={`/documents?project=${encodeURIComponent(document.project_id)}`} className="inline-flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+        <Link href={`/documents?project=${encodeURIComponent(document.project_id)}`} className="inline-flex w-fit items-center gap-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground sm:text-sm">
           <ArrowLeft className="size-4" />
           Back to Letters
         </Link>
@@ -122,17 +126,17 @@ export default async function DocumentDetailsPage({
               <Download className="size-4" />
               Download File
             </a>
-          ) : (
+          ) : document.status === "draft" ? (
             <Link href={`/documents/${document.id}/edit`} className={cn(buttonVariants({ variant: "outline" }), "bg-background")}>
               <Pencil className="size-4" />
               Edit Letter
             </Link>
-          )}
+          ) : null}
         </div>
       </div>
 
       {savedState ? (
-        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-xs font-medium text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200 sm:px-4 sm:text-sm">
           <CheckCircle2 className="size-5 shrink-0" />
           {query.created === "construction"
             ? "Letter created successfully. Complete the details and add attachments below."
@@ -143,17 +147,17 @@ export default async function DocumentDetailsPage({
       ) : null}
 
       <Card className="gap-0 overflow-hidden py-0">
-        <CardHeader className="border-b bg-linear-to-r from-blue-950 to-slate-900 px-6 py-6 text-white">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+        <CardHeader className="border-b bg-linear-to-r from-blue-950 to-slate-900 px-4 py-5 text-white sm:px-6 sm:py-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-5">
             <div className="min-w-0">
               <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-blue-200">
                 <span>{document.reference}</span>
                 <span aria-hidden="true">•</span>
                 <span>{displayType}</span>
               </div>
-              <CardTitle className="text-2xl font-bold leading-tight text-white sm:text-3xl">{document.title}</CardTitle>
-              <p className="mt-3 flex items-center gap-2 text-sm text-blue-100/90">
-                <CalendarDays className="size-4" />
+              <CardTitle className="text-xl font-bold leading-tight text-white sm:text-3xl">{document.title}</CardTitle>
+              <p className="mt-2.5 flex items-center gap-2 text-xs text-blue-100/90 sm:mt-3 sm:text-sm">
+                <CalendarDays className="size-3.5 sm:size-4" />
                 Created {formatDate(document.created_at)}
               </p>
             </div>
@@ -165,22 +169,26 @@ export default async function DocumentDetailsPage({
       </Card>
 
       <Card className="gap-0 py-0">
-        <CardHeader className="border-b px-5 py-4 sm:px-6">
-          <CardTitle className="text-lg">Letter Information</CardTitle>
+        <CardHeader className="border-b px-3.5 py-3 sm:px-6 sm:py-4">
+          <CardTitle className="text-base font-bold sm:text-lg">Letter Information</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-x-8 gap-y-5 px-5 py-5 sm:grid-cols-2 lg:grid-cols-3 sm:px-6">
+        <CardContent className="flex flex-col gap-3.5 px-3.5 py-3.5 sm:grid sm:grid-cols-2 sm:gap-x-8 sm:gap-y-5 sm:px-6 sm:py-5 lg:grid-cols-3">
           <InformationItem label="Letter Type" value={displayType} icon={<FileText className="size-4" />} />
           <InformationItem label="Letter Reference" value={document.reference} icon={<FolderLock className="size-4" />} />
           <InformationItem label="Letter Title" value={document.title} icon={<FileText className="size-4" />} />
-          <InformationItem label="Description" value={document.short_description?.trim() || "No short description provided."} icon={<FileText className="size-4" />} />
+          {hasRealDescription ? (
+            <InformationItem label="Description" value={document.short_description!.trim()} icon={<FileText className="size-4" />} />
+          ) : (
+            <InformationItem label="Description" value="No short description provided." icon={<FileText className="size-4" />} className="hidden sm:flex" />
+          )}
           <div className="flex items-start gap-3">
-            <Avatar className="mt-0.5 size-9">
+            <Avatar className="mt-0.5 size-8 shrink-0 sm:size-9">
               {creator?.avatar_url ? <AvatarImage src={creator.avatar_url} alt={creatorName} /> : null}
-              <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">{initials(creatorName)}</AvatarFallback>
+              <AvatarFallback className="bg-primary/10 text-[11px] font-semibold text-primary sm:text-xs">{initials(creatorName)}</AvatarFallback>
             </Avatar>
-            <div className="min-w-0">
-              <span className="block text-xs font-medium text-muted-foreground">Created By</span>
-              <span className="mt-1 block break-words text-sm font-medium">{creatorName}</span>
+            <div className="min-w-0 flex-1">
+              <span className="block text-[11px] font-medium text-muted-foreground sm:text-xs">Created By</span>
+              <span className="mt-0.5 block break-words text-xs font-semibold text-foreground sm:mt-1 sm:text-sm sm:font-medium">{creatorName}</span>
             </div>
           </div>
           <InformationItem label="Created Date" value={formatDateTime(document.created_at)} icon={<CalendarDays className="size-4" />} />
@@ -234,13 +242,13 @@ export default async function DocumentDetailsPage({
   )
 }
 
-function InformationItem({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
+function InformationItem({ label, value, icon, className }: { label: string; value: string; icon: ReactNode; className?: string }) {
   return (
-    <div className="flex items-start gap-3">
-      <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">{icon}</span>
-      <div className="min-w-0">
-        <span className="block text-xs font-medium text-muted-foreground">{label}</span>
-        <span className="mt-1 block whitespace-pre-wrap break-words text-sm font-medium">{value}</span>
+    <div className={cn("flex items-start gap-3", className)}>
+      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted/60 text-muted-foreground sm:size-9 sm:rounded-lg">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <span className="block text-[11px] font-medium text-muted-foreground sm:text-xs">{label}</span>
+        <span className="mt-0.5 block whitespace-pre-wrap break-words text-xs font-semibold text-foreground sm:mt-1 sm:text-sm sm:font-medium">{value}</span>
       </div>
     </div>
   )

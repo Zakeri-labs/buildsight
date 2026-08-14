@@ -36,7 +36,7 @@ export function AppShell({
   const isMemberReportEntry = pathname === "/report-entry" && isMember
   const isMemberSettings = pathname.startsWith("/settings") && isMember
   const isMemberSiteVisits = pathname.startsWith("/site-visits") && isMember
-  const isMemberLetters = pathname === "/documents" && isMember
+  const isMemberLetters = (pathname === "/documents" || pathname.startsWith("/documents/")) && isMember
   const isMemberInitialDocuments = pathname.startsWith("/initial-documents") && isMember
   const isMemberProjectDetail = /^\/projects\/[^/]+\/?$/.test(pathname) && pathname !== "/projects/new" && isMember
   const isMemberProjectStages = /^\/projects\/[^/]+\/stages\/?$/.test(pathname) && isMember
