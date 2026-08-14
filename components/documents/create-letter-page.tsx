@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
+  Eye,
   File as FileIcon,
   FilePlus2,
   Image as ImageIcon,
@@ -20,6 +21,8 @@ import {
   Trash2,
   X,
 } from "lucide-react"
+import { FieldContextPreview } from "@/components/documents/field-context-preview"
+import { getLetterFieldPreviewContext } from "@/lib/documents/field-preview-helper"
 import {
   addDocumentAttachmentsAction,
   createConstructionDocumentAction,
@@ -138,6 +141,36 @@ export function CreateLetterPage({
   // Reusable Structured Letter Details state (Phase 1: NCR)
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
   const [isManuallyEdited, setIsManuallyEdited] = useState(false)
+
+  // Contextual Preview state for structured Letter Details fields
+  const [previewState, setPreviewState] = useState<{
+    fieldKey: string
+    isPinned: boolean
+  } | null>(null)
+
+  const pointerDownTimeRef = useRef<number>(0)
+
+  const handleEyePointerDown = (fieldKey: string) => {
+    pointerDownTimeRef.current = Date.now()
+    setPreviewState({ fieldKey, isPinned: false })
+  }
+
+  const handleEyePointerUp = (fieldKey: string) => {
+    const elapsed = Date.now() - pointerDownTimeRef.current
+    if (elapsed < 350) {
+      // Tap / Click -> Pin Preview
+      setPreviewState((curr) =>
+        curr?.fieldKey === fieldKey && curr.isPinned ? null : { fieldKey, isPinned: true }
+      )
+    } else {
+      // Press & Hold -> Release to close!
+      setPreviewState(null)
+    }
+  }
+
+  const handleEyePointerLeaveOrCancel = (fieldKey: string) => {
+    setPreviewState((curr) => (curr?.fieldKey === fieldKey && !curr.isPinned ? null : curr))
+  }
 
   const activeSchema = getLetterDetailsSchema(documentType)
 
@@ -803,9 +836,26 @@ export function CreateLetterPage({
                   const isFullWidth = field.type === "textarea"
                   return (
                     <div key={field.key} className={cn("space-y-1.5 w-full min-w-0", isFullWidth && "sm:col-span-2")}>
-                      <Label htmlFor={`letter-field-${field.key}`} className="text-xs font-semibold text-foreground">
-                        {field.label}
-                      </Label>
+                      <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor={`letter-field-${field.key}`} className="text-xs font-semibold text-foreground">
+                          {field.label}
+                        </Label>
+                        <button
+                          type="button"
+                          onPointerDown={() => handleEyePointerDown(field.key)}
+                          onPointerUp={() => handleEyePointerUp(field.key)}
+                          onPointerLeave={() => handleEyePointerLeaveOrCancel(field.key)}
+                          onPointerCancel={() => handleEyePointerLeaveOrCancel(field.key)}
+                          title="Preview in Letter"
+                          aria-label={`Preview ${field.label} in Letter`}
+                          className={cn(
+                            "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-amber-100 hover:text-amber-800 dark:hover:bg-amber-950 dark:hover:text-amber-300",
+                            previewState?.fieldKey === field.key && "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-bold",
+                          )}
+                        >
+                          <Eye className="size-3.5" />
+                        </button>
+                      </div>
 
                       {field.type === "textarea" ? (
                         <div className="flex flex-col w-full min-w-0">
@@ -1170,6 +1220,28 @@ export function CreateLetterPage({
           ) : null}
         </DialogContent>
       </Dialog>
+
+      {/* Contextual Letter Field Preview Modal */}
+      {previewState && activeSchema ? (() => {
+        const activePreviewField = activeSchema.fields.find((f) => f.key === previewState.fieldKey)
+        const activePreviewFieldLabel = activePreviewField?.label ?? "Field"
+        const activePreviewContext = getLetterFieldPreviewContext(
+          activeSchema,
+          fieldValues,
+          englishText,
+          previewState.fieldKey,
+          isManuallyEdited
+        )
+        if (!activePreviewContext) return null
+        return (
+          <FieldContextPreview
+            fieldLabel={activePreviewFieldLabel}
+            context={activePreviewContext}
+            isPinned={previewState.isPinned}
+            onClose={() => setPreviewState(null)}
+          />
+        )
+      })() : null}
     </div>
   )
 }
