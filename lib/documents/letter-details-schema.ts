@@ -1021,36 +1021,59 @@ export const GENERAL_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
     },
     {
       key: "details",
+      label: "Document Content / Particulars",
+      description: "Key particulars, transmittal scope, or background details.",
+      type: "textarea",
+      templateToken: "[describe key document particulars / scope]",
+    },
+    {
+      key: "remarks",
+      label: "Distribution / Notes",
+      description: "Distribution list, action required, or follow-up notes.",
+      type: "textarea",
+      templateToken: "[distribution list / notes]",
+    },
+  ],
+  buildText: (values: Record<string, string>) => {
+    const documentSubject = values.documentSubject?.trim() || "[document subject / reference]"
+    const documentDate = values.documentDate?.trim() || "[date]"
+    const details = values.details?.trim() || "[describe key document particulars / scope]"
+    const remarks = values.remarks?.trim() || "[distribution list / notes]"
 
-    return `This document relates to:
+    return `Document Subject / Reference:
+${documentSubject}
 
-${purpose}.
+Date:
+${documentDate}
 
-The document contains information regarding:
+Document Details:
+${details}
 
-${details}.
-
-Additional notes:
-
-${notes}.`
+Distribution / Notes:
+${remarks}`
   },
   parseValuesFromText: (text: string): Record<string, string> => {
     const result: Record<string, string> = {}
     if (!text) return result
 
-    const purpMatch = text.match(/This document relates to:\s*\n\s*(.*?)\s*\n\s*The document contains information regarding:/is)
-    if (purpMatch && purpMatch[1] && !purpMatch[1].includes("[describe")) {
-      result.purpose = purpMatch[1].trim()
+    const subMatch = text.match(/Document Subject \/ Reference:\s*\n(.*?)\s*\n/i)
+    if (subMatch && subMatch[1] && !subMatch[1].includes("[document")) {
+      result.documentSubject = subMatch[1].trim()
     }
 
-    const detMatch = text.match(/The document contains information regarding:\s*\n\s*(.*?)\s*\n\s*Additional notes:/is)
-    if (detMatch && detMatch[1] && !detMatch[1].includes("[write")) {
+    const dateMatch = text.match(/Date:\s*\n(.*?)\s*\n/is)
+    if (dateMatch && dateMatch[1] && !dateMatch[1].includes("[date]")) {
+      result.documentDate = dateMatch[1].trim()
+    }
+
+    const detMatch = text.match(/Document Details:\s*\n(.*?)\s*\n/is)
+    if (detMatch && detMatch[1] && !detMatch[1].includes("[describe")) {
       result.details = detMatch[1].trim()
     }
 
-    const notesMatch = text.match(/Additional notes:\s*\n\s*(.*?)\s*$/is)
-    if (notesMatch && notesMatch[1] && !notesMatch[1].includes("[write")) {
-      result.notes = notesMatch[1].trim()
+    const remMatch = text.match(/Distribution \/ Notes:\s*\n(.*?)$/is)
+    if (remMatch && remMatch[1] && !remMatch[1].includes("[distribution")) {
+      result.remarks = remMatch[1].trim()
     }
 
     return result
