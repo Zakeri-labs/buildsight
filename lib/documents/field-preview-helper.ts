@@ -4,6 +4,7 @@ export type FieldPreviewContext = {
   prevParagraph: string | null
   targetParagraph: string
   nextParagraph: string | null
+  userEnteredValue: string | null
   isManuallyEdited: boolean
 }
 
@@ -69,6 +70,7 @@ export function getLetterFieldPreviewContext(
     prevParagraph,
     targetParagraph,
     nextParagraph,
+    userEnteredValue: rawFieldValue || null,
     isManuallyEdited,
   }
 }
