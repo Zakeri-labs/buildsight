@@ -87,15 +87,19 @@ export function ConstructionDocumentWorkspace({
             {englishText}
           </div>
 
-          {/* Optional Arabic Translation with Green Separator */}
+          {/* Optional Arabic Translation Block */}
           {hasArabic ? (
-            <div className="pt-6 border-t-2 border-emerald-500/80 my-4">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-3">
-                ARABIC TRANSLATION
-              </h4>
+            <div className="mt-6 rounded-2xl border border-emerald-200/90 bg-emerald-50/40 p-5 sm:p-7 dark:border-emerald-900/60 dark:bg-emerald-950/25">
+              <div className="mb-4 flex items-center justify-center gap-3">
+                <span className="h-px w-8 sm:w-12 bg-emerald-300 dark:bg-emerald-800" aria-hidden="true" />
+                <h4 className="text-center text-xs font-extrabold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400">
+                  ARABIC TRANSLATION
+                </h4>
+                <span className="h-px w-8 sm:w-12 bg-emerald-300 dark:bg-emerald-800" aria-hidden="true" />
+              </div>
               <div
                 dir="rtl"
-                className="whitespace-pre-wrap font-sans text-sm sm:text-base leading-relaxed text-right text-slate-900 dark:text-slate-100"
+                className="whitespace-pre-wrap text-right font-sans text-sm leading-relaxed text-slate-900 dark:text-slate-100 sm:text-base"
               >
                 {arabicText}
               </div>
