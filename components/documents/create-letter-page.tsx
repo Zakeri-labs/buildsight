@@ -120,31 +120,53 @@ function formatProjectLabel(project: { name: string; code: string | null }) {
   return project.code?.trim() ? `${project.name} — ${project.code}` : project.name
 }
 
+export type InitialDraftData = {
+  id: string
+  projectId: string
+  documentType: ConstructionDocumentTypeValue | ""
+  title: string
+  englishText: string
+  attachArabic: boolean
+  structuredFields: Record<string, string>
+  isManuallyEdited: boolean
+  letterToRecipientIds: string[]
+  ccRecipientIds: string[]
+  attachments: Array<{
+    id: string
+    originalFilename: string
+    mimeType: string
+    sizeBytes: number
+    attachmentType: "image" | "document"
+  }>
+}
+
 export function CreateLetterPage({
   initialProjectId = "",
   projectOptions: serverProjectOptions = [],
   initialDocumentId = null,
+  initialDraft = null,
 }: {
   initialProjectId?: string
   projectOptions?: ProjectOption[]
   initialDocumentId?: string | null
+  initialDraft?: InitialDraftData | null
 }) {
   const router = useRouter()
   const attachmentInputRef = useRef<HTMLInputElement | null>(null)
   const pendingAttachmentsRef = useRef<PendingAttachment[]>([])
   const submissionRef = useRef(false)
 
-  const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId)
+  const [selectedProjectId, setSelectedProjectId] = useState(initialDraft?.projectId || initialProjectId)
   const [projectOptions, setProjectOptions] = useState<ProjectOption[]>(serverProjectOptions)
   const [loadingProjects, setLoadingProjects] = useState(serverProjectOptions.length === 0)
-  const [title, setTitle] = useState("")
-  const [documentType, setDocumentType] = useState<ConstructionDocumentTypeValue | "">("")
-  const [englishText, setEnglishText] = useState("")
-  const [attachArabic, setAttachArabic] = useState(false)
+  const [title, setTitle] = useState(initialDraft?.title || "")
+  const [documentType, setDocumentType] = useState<ConstructionDocumentTypeValue | "">(initialDraft?.documentType || "")
+  const [englishText, setEnglishText] = useState(initialDraft?.englishText || "")
+  const [attachArabic, setAttachArabic] = useState(initialDraft?.attachArabic || false)
 
   // Reusable Structured Letter Details state (Phase 1: NCR)
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
-  const [isManuallyEdited, setIsManuallyEdited] = useState(false)
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>(initialDraft?.structuredFields || {})
+  const [isManuallyEdited, setIsManuallyEdited] = useState(initialDraft?.isManuallyEdited || false)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(true)
 
   // Contextual Preview state for structured Letter Details fields
@@ -154,8 +176,8 @@ export function CreateLetterPage({
   } | null>(null)
 
   const pointerDownTimeRef = useRef<number>(0)
-  const isHydratedRef = useRef<boolean>(false)
-  const [loadingDraft, setLoadingDraft] = useState<boolean>(Boolean(initialDocumentId))
+  const isHydratedRef = useRef<boolean>(Boolean(initialDraft))
+  const [loadingDraft, setLoadingDraft] = useState<boolean>(Boolean(initialDocumentId && !initialDraft))
 
   const handleEyePointerDown = (fieldKey: string) => {
     pointerDownTimeRef.current = Date.now()
@@ -182,16 +204,22 @@ export function CreateLetterPage({
   const activeSchema = getLetterDetailsSchema(documentType)
 
   const [recipientOptions, setRecipientOptions] = useState<RecipientOption[]>([])
-  const [letterToRecipientIds, setLetterToRecipientIds] = useState<string[]>([])
-  const [ccRecipientIds, setCcRecipientIds] = useState<string[]>([])
+  const [letterToRecipientIds, setLetterToRecipientIds] = useState<string[]>(initialDraft?.letterToRecipientIds || [])
+  const [ccRecipientIds, setCcRecipientIds] = useState<string[]>(initialDraft?.ccRecipientIds || [])
   const [loadingRecipients, setLoadingRecipients] = useState(false)
 
-  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([])
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>(
+    (initialDraft?.attachments || []).map((att) => ({
+      id: att.id,
+      file: new File([], att.originalFilename, { type: att.mimeType }),
+      attachmentType: att.attachmentType,
+    }))
+  )
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
-  const [savedDocumentId, setSavedDocumentId] = useState<string | null>(initialDocumentId)
-  const [savedDocumentMode, setSavedDocumentMode] = useState<SaveMode | null>(initialDocumentId ? "draft" : null)
+  const [savedDocumentId, setSavedDocumentId] = useState<string | null>(initialDraft?.id || initialDocumentId)
+  const [savedDocumentMode, setSavedDocumentMode] = useState<SaveMode | null>(initialDraft || initialDocumentId ? "draft" : null)
   const [savingMode, setSavingMode] = useState<SaveMode | null>(null)
 
   // Confirmation & Processing modals
