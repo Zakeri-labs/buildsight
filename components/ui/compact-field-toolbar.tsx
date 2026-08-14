@@ -1,21 +1,21 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Check, Copy, Languages, Loader2, Mic, Redo2, Sparkles, Undo2 } from "lucide-react"
+import { Languages, Loader2, Mic, Redo2, Sparkles, Undo2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export const CONSTRUCTION_SPEECH_LANGUAGES = [
-  { code: "ar-SA", label: "SA العربية" },
-  { code: "en-US", label: "US English" },
-  { code: "fa-IR", label: "IR فارسی" },
-  { code: "ur-PK", label: "PK اردو" },
-  { code: "hi-IN", label: "IN हिंदी" },
-  { code: "tl-PH", label: "PH Tagalog" },
-  { code: "ml-IN", label: "IN മലയാളം" },
-  { code: "bn-BD", label: "BD বাংলা" },
-  { code: "ta-IN", label: "IN தமிழ்" },
-  { code: "pa-IN", label: "PK Punjabi" },
-  { code: "ps-AF", label: "AF پشتو" },
+  { code: "ar-SA", label: "العربية" },
+  { code: "en-US", label: "English" },
+  { code: "fa-IR", label: "فارسی" },
+  { code: "ur-PK", label: "اردو" },
+  { code: "hi-IN", label: "हिंदी" },
+  { code: "tl-PH", label: "Tagalog" },
+  { code: "ml-IN", label: "മലയാളം" },
+  { code: "bn-BD", label: "বাংলা" },
+  { code: "ta-IN", label: "தமிழ்" },
+  { code: "pa-IN", label: "Punjabi" },
+  { code: "ps-AF", label: "پشتو" },
 ]
 
 export function CompactFieldToolbar({
@@ -38,7 +38,6 @@ export function CompactFieldToolbar({
   const [isRecording, setIsRecording] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [aiLoading, setAiLoading] = useState<"translate_en" | "enhance_style" | null>(null)
-  const [copiedText, setCopiedText] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   // Undo / Redo history stack for this specific field
@@ -99,17 +98,6 @@ export function CompactFieldToolbar({
       isUpdatingFromHistory.current = true
       setHistoryIndex(historyIndex + 1)
       onChange(nextVal)
-    }
-  }
-
-  const handleCopy = async () => {
-    if (!value.trim()) return
-    try {
-      await navigator.clipboard.writeText(value.trim())
-      setCopiedText(true)
-      setTimeout(() => setCopiedText(false), 2500)
-    } catch {
-      // fallback
     }
   }
 
@@ -236,49 +224,48 @@ export function CompactFieldToolbar({
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex flex-wrap items-center gap-1 rounded-t-lg border border-b-0 bg-muted/40 px-2 py-1 text-xs">
-        {/* Voice Input & Language Selector */}
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={toggleRecording}
-            disabled={disabled}
-            title={
-              isRecording
-                ? "Recording and transcribing live (click to stop)..."
-                : countdown !== null
-                  ? `Get ready: ${countdown} ...`
-                  : `Voice Input for ${fieldName}`
-            }
-            aria-label={`Voice Input for ${fieldName}`}
-            className={cn(
-              "inline-flex h-7 items-center justify-center rounded-md px-2 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50",
-              isRecording && "bg-rose-600 text-white hover:bg-rose-700 animate-pulse",
-              countdown !== null && "bg-amber-500 text-white hover:bg-amber-600 animate-bounce",
-            )}
-          >
-            {countdown !== null ? (
-              <span className="font-bold tabular-nums">{countdown}</span>
-            ) : (
-              <Mic className={cn("size-3.5", isRecording ? "text-white" : "text-rose-600 dark:text-rose-400")} />
-            )}
-          </button>
+      <div className="flex flex-nowrap items-center gap-0.5 rounded-t-lg border border-b-0 bg-muted/40 px-1.5 py-1 text-xs overflow-hidden">
+        {/* Voice Input */}
+        <button
+          type="button"
+          onClick={toggleRecording}
+          disabled={disabled}
+          title={
+            isRecording
+              ? "Recording and transcribing live (click to stop)..."
+              : countdown !== null
+                ? `Get ready: ${countdown} ...`
+                : `Voice Input for ${fieldName}`
+          }
+          aria-label={`Voice Input for ${fieldName}`}
+          className={cn(
+            "inline-flex h-7 shrink-0 items-center justify-center rounded-md px-1.5 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50",
+            isRecording && "bg-rose-600 text-white hover:bg-rose-700 animate-pulse",
+            countdown !== null && "bg-amber-500 text-white hover:bg-amber-600 animate-bounce",
+          )}
+        >
+          {countdown !== null ? (
+            <span className="font-bold tabular-nums text-xs">{countdown}</span>
+          ) : (
+            <Mic className={cn("size-3.5", isRecording ? "text-white" : "text-rose-600 dark:text-rose-400")} />
+          )}
+        </button>
 
-          <select
-            value={speechLang}
-            onChange={(e) => handleSpeechLangChange(e.target.value)}
-            disabled={disabled || isRecording || countdown !== null}
-            title="Speech language for voice input"
-            aria-label="Speech Language"
-            className="h-7 max-w-[105px] rounded-md border border-input bg-background px-1 text-[11px] font-semibold text-foreground outline-none hover:bg-accent cursor-pointer truncate"
-          >
-            {CONSTRUCTION_SPEECH_LANGUAGES.map((item) => (
-              <option key={item.code} value={item.code}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Compact Language Selector */}
+        <select
+          value={speechLang}
+          onChange={(e) => handleSpeechLangChange(e.target.value)}
+          disabled={disabled || isRecording || countdown !== null}
+          title="Speech language for voice input"
+          aria-label="Speech Language"
+          className="h-7 w-[68px] sm:w-[85px] shrink-0 rounded-md border border-input bg-background px-1 text-[11px] font-semibold text-foreground outline-none hover:bg-accent cursor-pointer truncate"
+        >
+          {CONSTRUCTION_SPEECH_LANGUAGES.map((item) => (
+            <option key={item.code} value={item.code}>
+              {item.label}
+            </option>
+          ))}
+        </select>
 
         {/* AI Construction English */}
         <button
@@ -287,7 +274,7 @@ export function CompactFieldToolbar({
           disabled={disabled || aiLoading !== null}
           title={`AI Construction English for ${fieldName}`}
           aria-label={`AI Construction English for ${fieldName}`}
-          className="inline-flex h-7 items-center justify-center rounded-md px-1.5 hover:bg-accent disabled:opacity-50"
+          className="inline-flex h-7 shrink-0 items-center justify-center rounded-md px-1.5 hover:bg-accent disabled:opacity-50"
         >
           {aiLoading === "translate_en" ? (
             <Loader2 className="size-3.5 animate-spin text-blue-600" />
@@ -303,7 +290,7 @@ export function CompactFieldToolbar({
           disabled={disabled || aiLoading !== null}
           title={`AI Enhance Notes for ${fieldName}`}
           aria-label={`AI Enhance Notes for ${fieldName}`}
-          className="inline-flex h-7 items-center justify-center rounded-md px-1.5 hover:bg-accent disabled:opacity-50"
+          className="inline-flex h-7 shrink-0 items-center justify-center rounded-md px-1.5 hover:bg-accent disabled:opacity-50"
         >
           {aiLoading === "enhance_style" ? (
             <Loader2 className="size-3.5 animate-spin text-purple-600" />
@@ -312,7 +299,7 @@ export function CompactFieldToolbar({
           )}
         </button>
 
-        <span className="mx-0.5 h-4 w-px bg-border" />
+        <span className="mx-0.5 h-3.5 w-px shrink-0 bg-border" />
 
         {/* Undo */}
         <button
@@ -321,7 +308,7 @@ export function CompactFieldToolbar({
           disabled={disabled || historyIndex <= 0}
           title="Undo"
           aria-label="Undo"
-          className="inline-flex h-7 items-center justify-center rounded-md px-1.5 hover:bg-accent disabled:opacity-40"
+          className="inline-flex h-7 shrink-0 items-center justify-center rounded-md px-1.5 hover:bg-accent disabled:opacity-40"
         >
           <Undo2 className="size-3.5" />
         </button>
@@ -333,25 +320,9 @@ export function CompactFieldToolbar({
           disabled={disabled || historyIndex >= history.length - 1}
           title="Redo"
           aria-label="Redo"
-          className="inline-flex h-7 items-center justify-center rounded-md px-1.5 hover:bg-accent disabled:opacity-40"
+          className="inline-flex h-7 shrink-0 items-center justify-center rounded-md px-1.5 hover:bg-accent disabled:opacity-40"
         >
           <Redo2 className="size-3.5" />
-        </button>
-
-        {/* Copy */}
-        <button
-          type="button"
-          onClick={handleCopy}
-          disabled={disabled || !value.trim()}
-          title={copiedText ? "Copied!" : "Copy text"}
-          aria-label="Copy text"
-          className="inline-flex h-7 items-center justify-center rounded-md px-1.5 hover:bg-accent disabled:opacity-40"
-        >
-          {copiedText ? (
-            <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-          ) : (
-            <Copy className="size-3.5" />
-          )}
         </button>
       </div>
 

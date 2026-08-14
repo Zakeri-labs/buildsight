@@ -803,14 +803,9 @@ export function CreateLetterPage({
                   const isFullWidth = field.type === "textarea"
                   return (
                     <div key={field.key} className={cn("space-y-1.5", isFullWidth && "sm:col-span-2")}>
-                      <div className="space-y-0.5">
-                        <Label htmlFor={`letter-field-${field.key}`} className="text-xs font-semibold text-foreground">
-                          {field.label}
-                        </Label>
-                        {field.description ? (
-                          <p className="text-[11px] leading-tight text-muted-foreground">{field.description}</p>
-                        ) : null}
-                      </div>
+                      <Label htmlFor={`letter-field-${field.key}`} className="text-xs font-semibold text-foreground">
+                        {field.label}
+                      </Label>
 
                       {field.type === "textarea" ? (
                         <div className="flex flex-col">
