@@ -646,7 +646,7 @@ export function CreateLetterPage({
     : "/documents"
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 py-4">
+    <div className="mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-4 py-3 sm:gap-6 sm:py-4">
       {/* Top Bar with Back Link */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
@@ -663,17 +663,17 @@ export function CreateLetterPage({
       </div>
 
       {/* Main Card Form */}
-      <Card className="gap-0 overflow-hidden py-0 shadow-sm">
-        <CardHeader className="border-b bg-muted/20 px-6 py-5">
-          <CardTitle className="text-xl font-bold tracking-tight">Create Letter</CardTitle>
+      <Card className="w-full min-w-0 gap-0 overflow-hidden py-0 shadow-sm">
+        <CardHeader className="border-b bg-muted/20 px-3.5 py-4 sm:px-6 sm:py-5">
+          <CardTitle className="text-lg font-bold tracking-tight sm:text-xl">Create Letter</CardTitle>
           <p className="mt-1 text-xs text-muted-foreground">
             Fill in the letter details, target project, recipients, and content below.
           </p>
         </CardHeader>
 
-        <CardContent className="space-y-6 px-6 py-6">
+        <CardContent className="space-y-4 px-3.5 py-4 sm:space-y-6 sm:px-6 sm:py-6">
           {/* Project Selection */}
-          <div className="space-y-2">
+          <div className="space-y-2 min-w-0">
             <Label htmlFor="create-letter-project" className="text-xs font-semibold text-foreground">
               Project <span className="text-destructive">*</span>
             </Label>
@@ -685,7 +685,7 @@ export function CreateLetterPage({
               }}
               disabled={isSubmitting || Boolean(savedDocumentId) || loadingProjects}
             >
-              <SelectTrigger id="create-letter-project" className="h-11 w-full rounded-lg px-3 text-sm">
+              <SelectTrigger id="create-letter-project" className="h-11 w-full min-w-0 rounded-lg px-3 text-sm">
                 <SelectValue placeholder={loadingProjects ? "Loading projects..." : "Select project"}>
                   {(value) => {
                     const option = projectOptions.find((p) => p.id === value)
@@ -704,8 +704,8 @@ export function CreateLetterPage({
           </div>
 
           {/* Letter Type & Subject */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
+          <div className="grid gap-4 sm:grid-cols-2 min-w-0">
+            <div className="space-y-2 min-w-0">
               <Label htmlFor="create-letter-type" className="text-xs font-semibold text-foreground">
                 Letter Type <span className="text-destructive">*</span>
               </Label>
@@ -714,7 +714,7 @@ export function CreateLetterPage({
                 onValueChange={handleDocumentTypeChange}
                 disabled={isSubmitting || Boolean(savedDocumentId)}
               >
-                <SelectTrigger id="create-letter-type" className="h-11 w-full rounded-lg px-3 text-sm">
+                <SelectTrigger id="create-letter-type" className="h-11 w-full min-w-0 rounded-lg px-3 text-sm">
                   <SelectValue placeholder="Select letter type">
                     {(value) => getConstructionDocumentTypeLabel(value) ?? "Select letter type"}
                   </SelectValue>
@@ -729,7 +729,7 @@ export function CreateLetterPage({
               </Select>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 min-w-0">
               <Label htmlFor="create-letter-subject" className="text-xs font-semibold text-foreground">
                 Subject <span className="text-destructive">*</span>
               </Label>
@@ -740,13 +740,13 @@ export function CreateLetterPage({
                 disabled={isSubmitting || Boolean(savedDocumentId)}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Enter subject"
-                className="h-11 text-sm"
+                className="h-11 text-sm min-w-0"
               />
             </div>
           </div>
 
           {/* Letter To & CC Recipients */}
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 min-w-0">
             <RecipientPicker
               id="create-letter-to"
               label="Letter To"
@@ -785,7 +785,7 @@ export function CreateLetterPage({
 
           {/* Letter Details Section (NCR, RFI, WIR, MIR, Inspection, IPC, VO, General) */}
           {activeSchema ? (
-            <div className="space-y-4 rounded-xl border border-blue-200/80 bg-blue-50/30 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">
+            <div className="space-y-4 rounded-xl border border-blue-200/80 bg-blue-50/30 p-2.5 sm:p-4 dark:border-blue-900/50 dark:bg-blue-950/20 w-full min-w-0 overflow-hidden">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-200/60 pb-3 dark:border-blue-900/40">
                 <div>
                   <div className="flex items-center gap-2">
@@ -798,17 +798,17 @@ export function CreateLetterPage({
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 w-full min-w-0">
                 {activeSchema.fields.map((field) => {
                   const isFullWidth = field.type === "textarea"
                   return (
-                    <div key={field.key} className={cn("space-y-1.5", isFullWidth && "sm:col-span-2")}>
+                    <div key={field.key} className={cn("space-y-1.5 w-full min-w-0", isFullWidth && "sm:col-span-2")}>
                       <Label htmlFor={`letter-field-${field.key}`} className="text-xs font-semibold text-foreground">
                         {field.label}
                       </Label>
 
                       {field.type === "textarea" ? (
-                        <div className="flex flex-col">
+                        <div className="flex flex-col w-full min-w-0">
                           <CompactFieldToolbar
                             value={fieldValues[field.key] ?? ""}
                             onChange={(val) => handleFieldValueChange(field.key, val)}
@@ -821,11 +821,11 @@ export function CreateLetterPage({
                             placeholder={field.placeholder}
                             disabled={isSubmitting}
                             onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
-                            className="min-h-20 w-full resize-y rounded-b-lg border border-input bg-background px-3 py-2 text-xs leading-5 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:bg-muted/30"
+                            className="min-h-20 w-full min-w-0 resize-y rounded-b-lg border border-input bg-background px-3 py-2 text-xs leading-5 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:bg-muted/30"
                           />
                         </div>
                       ) : field.type === "text" ? (
-                        <div className="flex flex-col">
+                        <div className="flex flex-col w-full min-w-0">
                           <CompactFieldToolbar
                             value={fieldValues[field.key] ?? ""}
                             onChange={(val) => handleFieldValueChange(field.key, val)}
@@ -839,7 +839,7 @@ export function CreateLetterPage({
                             placeholder={field.placeholder}
                             disabled={isSubmitting}
                             onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
-                            className="h-10 rounded-b-lg rounded-t-none text-xs"
+                            className="h-10 w-full min-w-0 rounded-b-lg rounded-t-none text-xs"
                           />
                         </div>
                       ) : field.type === "select" ? (
@@ -848,7 +848,7 @@ export function CreateLetterPage({
                           onValueChange={(val) => handleFieldValueChange(field.key, val ?? "")}
                           disabled={isSubmitting}
                         >
-                          <SelectTrigger id={`letter-field-${field.key}`} className="h-10 w-full rounded-lg px-3 text-xs">
+                          <SelectTrigger id={`letter-field-${field.key}`} className="h-10 w-full min-w-0 rounded-lg px-3 text-xs">
                             <SelectValue placeholder="Select status">
                               {(val) => field.options?.find((o) => o.value === val)?.label ?? "Select status"}
                             </SelectValue>
@@ -862,14 +862,14 @@ export function CreateLetterPage({
                           </SelectContent>
                         </Select>
                       ) : field.type === "date" ? (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2 w-full min-w-0">
                           <Input
                             id={`letter-field-${field.key}`}
                             type="date"
                             value={fieldValues[field.key] ?? ""}
                             disabled={isSubmitting}
                             onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
-                            className="h-10 text-xs flex-1"
+                            className="h-10 text-xs flex-1 min-w-0"
                           />
                           <Button
                             type="button"
@@ -883,7 +883,7 @@ export function CreateLetterPage({
                               const dd = String(today.getDate()).padStart(2, "0")
                               handleFieldValueChange(field.key, `${yyyy}-${mm}-${dd}`)
                             }}
-                            className="h-10 px-3 text-xs font-semibold shrink-0"
+                            className="h-10 px-2.5 sm:px-3 text-xs font-semibold shrink-0"
                             title="Set to today's date"
                           >
                             Today
@@ -898,7 +898,7 @@ export function CreateLetterPage({
           ) : null}
 
           {/* English Text & Attach Arabic Translation Option */}
-          <div className="space-y-4">
+          <div className="space-y-4 min-w-0">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Label htmlFor="create-letter-text" className="text-xs font-semibold text-foreground">
@@ -949,12 +949,12 @@ export function CreateLetterPage({
               disabled={isSubmitting || !documentType}
               onChange={(e) => handleEnglishTextChange(e.target.value)}
               placeholder={documentType ? "Enter English letter text..." : "Select a letter type to load its template"}
-              className="min-h-48 w-full resize-y rounded-xl border border-input bg-background px-4 py-3 font-mono text-sm leading-6 outline-none transition-shadow placeholder:font-sans placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-muted/30 disabled:opacity-70"
+              className="min-h-48 w-full min-w-0 resize-y rounded-xl border border-input bg-background px-4 py-3 font-mono text-sm leading-6 outline-none transition-shadow placeholder:font-sans placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-muted/30 disabled:opacity-70"
             />
           </div>
 
           {/* Add Attachments Section */}
-          <div className="space-y-3 pt-2">
+          <div className="space-y-3 pt-2 min-w-0">
             <input
               ref={attachmentInputRef}
               type="file"
@@ -975,7 +975,7 @@ export function CreateLetterPage({
             </Button>
 
             {pendingAttachments.length ? (
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-2 min-w-0">
                 {pendingAttachments.map((attachment) => (
                   <div
                     key={attachment.id}
@@ -1030,36 +1030,34 @@ export function CreateLetterPage({
       </Card>
 
       {/* Sticky Bottom Action Footer (Cancel | Save Draft | Send) */}
-      <div className="sticky bottom-0 z-10 flex items-center justify-between gap-3 rounded-2xl border bg-background/95 p-4 shadow-lg backdrop-blur">
+      <div className="sticky bottom-0 z-10 flex w-full min-w-0 items-center justify-between gap-1.5 sm:gap-3 rounded-2xl border bg-background/95 p-2 sm:p-4 shadow-lg backdrop-blur">
         <Link
           href={backHref}
-          className={cn(buttonVariants({ variant: "outline" }), "h-10 px-4")}
+          className={cn(buttonVariants({ variant: "outline" }), "h-10 flex-1 min-w-0 px-2 sm:px-4 text-xs sm:text-sm font-semibold truncate justify-center text-center")}
         >
           Cancel
         </Link>
 
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isSubmitting}
-            onClick={() => void handleSaveDraft()}
-            className="h-10 gap-2 px-4 font-semibold"
-          >
-            {savingMode === "draft" ? <Loader2 className="size-4 animate-spin" /> : null}
-            Save Draft
-          </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={isSubmitting}
+          onClick={() => void handleSaveDraft()}
+          className="h-10 flex-1 min-w-0 px-2 sm:px-4 text-xs sm:text-sm font-semibold truncate justify-center text-center"
+        >
+          {savingMode === "draft" ? <Loader2 className="size-3.5 animate-spin" /> : null}
+          <span>Save Draft</span>
+        </Button>
 
-          <Button
-            type="button"
-            disabled={isSubmitting}
-            onClick={handleOpenSendConfirmation}
-            className="h-10 gap-2 bg-blue-600 px-5 font-bold text-white hover:bg-blue-700 shadow-sm"
-          >
-            <Send className="size-4" />
-            Send
-          </Button>
-        </div>
+        <Button
+          type="button"
+          disabled={isSubmitting}
+          onClick={handleOpenSendConfirmation}
+          className="h-10 flex-[1.1] min-w-0 gap-1.5 bg-blue-600 px-2.5 sm:px-5 text-xs sm:text-sm font-bold text-white hover:bg-blue-700 shadow-sm truncate justify-center text-center"
+        >
+          <Send className="size-3.5 shrink-0" />
+          <span>Send</span>
+        </Button>
       </div>
 
       {/* Send Confirmation Dialog */}

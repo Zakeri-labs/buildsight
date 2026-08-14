@@ -223,8 +223,8 @@ export function CompactFieldToolbar({
   }
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex flex-nowrap items-center gap-0.5 rounded-t-lg border border-b-0 bg-muted/40 px-1.5 py-1 text-xs overflow-hidden">
+    <div className="flex flex-col gap-1 w-full min-w-0">
+      <div className="flex flex-nowrap items-center justify-between gap-0.5 rounded-t-lg border border-b-0 bg-muted/40 px-1 py-1 text-xs w-full min-w-0 overflow-hidden">
         {/* Voice Input */}
         <button
           type="button"
