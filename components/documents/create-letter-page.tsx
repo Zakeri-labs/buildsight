@@ -813,11 +813,8 @@ export function CreateLetterPage({
 
       {/* Main Card Form */}
       <Card className="w-full min-w-0 gap-0 overflow-hidden py-0 shadow-sm">
-        <CardHeader className="border-b bg-muted/20 px-3.5 py-4 sm:px-6 sm:py-5">
+        <CardHeader className="border-b bg-muted/20 px-3.5 py-3.5 sm:px-6 sm:py-4">
           <CardTitle className="text-lg font-bold tracking-tight sm:text-xl">Create Letter</CardTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Fill in the letter details, target project, recipients, and content below.
-          </p>
         </CardHeader>
 
         <CardContent className="space-y-4 px-3.5 py-4 sm:space-y-6 sm:px-6 sm:py-6">
@@ -941,7 +938,7 @@ export function CreateLetterPage({
                   isDetailsExpanded && "border-b border-blue-200/60 pb-3 dark:border-blue-900/40",
                 )}
               >
-                <h3 className="text-sm font-bold text-foreground min-w-0 truncate">{activeSchema.title}</h3>
+                <h3 className="text-sm font-bold text-foreground min-w-0 truncate">Letter Details</h3>
                 <button
                   type="button"
                   onClick={() => setIsDetailsExpanded((prev) => !prev)}
