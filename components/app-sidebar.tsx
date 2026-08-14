@@ -191,8 +191,10 @@ export function AppSidebar({
         icon: FolderKanban,
       }
 
+  const homeLabel = homeHref === "/memberhomepage" ? (locale === "ar" ? "الرئيسية" : "Home") : t.nav.dashboard
+
   const moduleItems = [
-    { label: t.nav.dashboard, href: homeHref, icon: Home },
+    { label: homeLabel, href: homeHref, icon: Home },
     projectNavigationItem,
     ...(stageNavigationItem ? [stageNavigationItem] : []),
     {
@@ -218,25 +220,28 @@ export function AppSidebar({
           icon: MapPinned,
         }]
       : []),
+    {
+      label: t.nav.calendar,
+      href: contextProjectId
+        ? `/calendar?project=${encodeURIComponent(contextProjectId)}`
+        : "/calendar",
+      icon: CalendarDays,
+    },
     ...(contextProjectId ? [{ label: t.nav.aiSummary, href: "/ai-summary", icon: Sparkles }] : []),
-    { label: t.nav.calendar, href: "/calendar", icon: CalendarDays },
   ]
 
   const adminItems = [
-    { label: t.settings.tabAccess, href: "/users", icon: Users },
+    { label: t.nav.team, href: "/users", icon: Users },
     { label: t.nav.settings, href: "/settings", icon: Settings },
   ]
 
-  const allProjectsLabel = t.projects.allProjects
-  const activeProject = projects.find((p) => p.id === project)
-  const activeProjectLabel = project === "all" ? allProjectsLabel : activeProject?.name ?? t.projects.title
   const filteredProjects = useMemo(() => {
     const query = projectSearch.trim().toLocaleLowerCase(locale)
     if (!query) return projects
     return projects.filter((item) => item.name.toLocaleLowerCase(locale).includes(query))
   }, [locale, projectSearch, projects])
 
-  function handleSelect(value: string) {
+  async function handleSelectProject(value: string) {
     if (!value || value === project) return
 
     const targetPath = value === "all" ? "/projects" : `/projects/${encodeURIComponent(value)}`
@@ -269,7 +274,7 @@ export function AppSidebar({
       </div>
 
       <div className="px-4 pb-2">
-        <SectionLabel>{t.nav.projects ?? "Projects"}</SectionLabel>
+        <SectionLabel>{t.projects.title ?? "Projects"}</SectionLabel>
         <DropdownMenu
           open={projectMenuOpen}
           onOpenChange={(open) => {
@@ -278,59 +283,48 @@ export function AppSidebar({
           }}
         >
           <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                aria-label={`${t.nav.projects}: ${activeProjectLabel}`}
-                className={cn(
-                  "flex w-full min-w-0 items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-sidebar-foreground transition-colors",
-                  project === "all"
-                    ? "border-sidebar-primary/45 bg-sidebar-primary/15 shadow-sm hover:bg-sidebar-primary/20"
-                    : "border-sidebar-border bg-sidebar-accent/40 hover:bg-sidebar-accent",
-                )}
-              >
-                {project === "all" ? (
-                  <Building2 className="size-4 shrink-0 text-sidebar-primary" />
-                ) : (
-                  <HardHat className="size-4 shrink-0 text-sidebar-foreground/65" />
-                )}
-                <span className="flex-1 truncate text-start">{activeProjectLabel}</span>
-                <ChevronDown className="size-4 shrink-0 text-sidebar-foreground/60" />
-              </button>
-            }
-          />
-          <DropdownMenuContent
-            align="start"
-            className="flex max-h-[min(26rem,var(--available-height))] w-56 max-w-[calc(100vw-2rem)] flex-col overflow-hidden p-0"
+            disabled={projects.length === 0}
+            className="flex w-full items-center justify-between gap-2 rounded-xl border border-sidebar-border bg-sidebar-accent/50 px-3 py-2.5 text-left text-sm font-semibold transition-colors hover:bg-sidebar-accent disabled:opacity-50"
           >
-            <div className="sticky top-0 z-10 border-b bg-popover p-2">
+            <span className="flex items-center gap-2.5 min-w-0">
+              <Building2 className="size-4 shrink-0 text-sidebar-primary" />
+              <span className="truncate">
+                {optimisticSelection === "all"
+                  ? "All Projects"
+                  : contextProjectId
+                    ? (projects.find((item) => item.id === contextProjectId)?.name ?? "Select project")
+                    : "All Projects"}
+              </span>
+            </span>
+            <ChevronDown className="size-4 shrink-0 text-sidebar-foreground/50" />
+          </DropdownMenuTrigger>
+
+          <DropdownMenuContent align="start" className="w-[224px] p-0" sideOffset={6}>
+            <div className="p-2 border-b">
               <div className="relative">
-                <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                 <Input
-                  autoFocus
                   value={projectSearch}
-                  onChange={(event) => setProjectSearch(event.target.value)}
-                  onKeyDown={(event) => event.stopPropagation()}
-                  placeholder={t.projects.projectSearchPlaceholder}
-                  aria-label={t.projects.projectSearchPlaceholder}
-                  className="h-9 ps-8"
+                  onChange={(e) => setProjectSearch(e.target.value)}
+                  placeholder={t.projects.searchProjects}
+                  className="h-9 pl-8 text-xs"
                 />
               </div>
             </div>
 
-            <div className="min-h-0 overflow-y-auto p-1.5">
-              <DropdownMenuRadioGroup value={project} onValueChange={handleSelect}>
+            <div className="max-h-60 overflow-y-auto p-1">
+              <DropdownMenuRadioGroup value={project} onValueChange={handleSelectProject}>
                 <DropdownMenuRadioItem
                   value="all"
                   className={cn(
-                    "min-h-10 gap-2 px-2.5 py-2 pe-8 font-medium",
+                    "min-h-10 gap-2 px-2.5 py-2 pe-8",
                     project === "all" && "bg-accent text-accent-foreground",
                   )}
                 >
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                    <Building2 className="size-4" />
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                    <FolderKanban className="size-4" />
                   </span>
-                  <span className="truncate">{allProjectsLabel}</span>
+                  <span className="truncate">All Projects</span>
                 </DropdownMenuRadioItem>
 
                 {filteredProjects.length > 0 ? (
@@ -370,7 +364,9 @@ export function AppSidebar({
             icon={item.icon}
             active={
               item.href === homeHref
-                ? pathname === homeHref
+                ? homeHref === "/memberhomepage"
+                  ? pathname === "/memberhomepage" || pathname === "/"
+                  : pathname === "/"
                 : item.href.split("?", 1)[0] === "/projects"
                   ? pathname === "/projects" || pathname === "/projects/new"
                   : contextProjectId && item.href.split("?", 1)[0] === `/projects/${contextProjectId}`
