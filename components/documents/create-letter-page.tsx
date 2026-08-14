@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react"
 import { FieldContextPreview } from "@/components/documents/field-context-preview"
+import { PlaceholderHighlightedTextarea } from "@/components/documents/placeholder-highlighted-textarea"
 import { getLetterFieldPreviewContext } from "@/lib/documents/field-preview-helper"
 import {
   addDocumentAttachmentsAction,
@@ -1097,7 +1098,7 @@ export function CreateLetterPage({
               </div>
             </div>
 
-            {/* Primary English Text Area with Smart Writing Toolbar */}
+            {/* Primary English Text Area with Smart Writing Toolbar & Live Placeholder Highlighting */}
             <div className="flex flex-col w-full min-w-0">
               <CompactFieldToolbar
                 value={englishText}
@@ -1105,14 +1106,14 @@ export function CreateLetterPage({
                 disabled={isSubmitting || !documentType}
                 fieldName="Primary English Content"
               />
-              <textarea
+              <PlaceholderHighlightedTextarea
                 id="create-letter-text"
                 value={englishText}
                 maxLength={100000}
                 disabled={isSubmitting || !documentType}
                 onChange={(e) => handleEnglishTextChange(e.target.value)}
                 placeholder={documentType ? "Enter English letter text..." : "Select a letter type to load its template"}
-                className="min-h-48 w-full min-w-0 resize-y rounded-b-xl rounded-t-none border border-t-0 border-input bg-background px-4 py-3 font-mono text-sm leading-6 outline-none transition-shadow placeholder:font-sans placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-muted/30 disabled:opacity-70"
+                className="rounded-b-xl rounded-t-none border border-t-0 border-input"
               />
             </div>
           </div>
