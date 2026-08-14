@@ -959,9 +959,26 @@ export function CreateLetterPage({
                     const isFullWidth = field.type === "textarea"
                     return (
                       <div key={field.key} className={cn("space-y-1.5 w-full min-w-0", isFullWidth && "sm:col-span-2")}>
-                        <Label htmlFor={`letter-field-${field.key}`} className="text-xs font-semibold text-foreground">
-                          {field.label}
-                        </Label>
+                        <div className="flex items-center justify-between gap-2">
+                          <Label htmlFor={`letter-field-${field.key}`} className="text-xs font-semibold text-foreground">
+                            {field.label}
+                          </Label>
+                          <button
+                            type="button"
+                            onPointerDown={() => handleEyePointerDown(field.key)}
+                            onPointerUp={() => handleEyePointerUp(field.key)}
+                            onPointerLeave={() => handleEyePointerLeaveOrCancel(field.key)}
+                            onPointerCancel={() => handleEyePointerLeaveOrCancel(field.key)}
+                            title="Preview in Letter"
+                            aria-label={`Preview ${field.label} in Letter`}
+                            className={cn(
+                              "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-amber-100 hover:text-amber-800 dark:hover:bg-amber-950 dark:hover:text-amber-300",
+                              previewState?.fieldKey === field.key && "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-bold",
+                            )}
+                          >
+                            <Eye className="size-3.5" />
+                          </button>
+                        </div>
 
                         {field.type === "textarea" ? (
                           <textarea
