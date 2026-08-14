@@ -22,7 +22,7 @@ export async function uploadStorageAsset(
   file: File,
   path: string,
   accessToken: string,
-  onProgress: (progress: number) => void,
+  onProgress?: (progress: number) => void,
   bucket = DOCUMENT_ASSET_BUCKET,
   upsert = false,
   timeoutMs = DEFAULT_UPLOAD_TIMEOUT_MS,
@@ -53,10 +53,10 @@ export async function uploadStorageAsset(
     request.setRequestHeader("Content-Type", file.type || "application/octet-stream")
     request.setRequestHeader("x-upsert", upsert ? "true" : "false")
 
-    request.upload.onloadstart = () => onProgress(1)
+    request.upload.onloadstart = () => onProgress?.(1)
     request.upload.onprogress = (event) => {
       if (!event.lengthComputable || event.total <= 0) return
-      onProgress(Math.max(1, Math.min(99, Math.round((event.loaded / event.total) * 100))))
+      onProgress?.(Math.max(1, Math.min(99, Math.round((event.loaded / event.total) * 100))))
     }
 
     request.onerror = () => finish(() => reject(new Error("The upload failed. Check your connection and try again.")))
@@ -65,7 +65,7 @@ export async function uploadStorageAsset(
     request.onload = () => {
       if (request.status >= 200 && request.status < 300) {
         finish(() => {
-          onProgress(100)
+          onProgress?.(100)
           resolve()
         })
         return
@@ -86,7 +86,7 @@ export async function uploadDocumentAsset(
   file: File,
   path: string,
   accessToken: string,
-  onProgress: (progress: number) => void,
+  onProgress?: (progress: number) => void,
   timeoutMs = DEFAULT_UPLOAD_TIMEOUT_MS,
 ): Promise<void> {
   return uploadStorageAsset(file, path, accessToken, onProgress, DOCUMENT_ASSET_BUCKET, false, timeoutMs)

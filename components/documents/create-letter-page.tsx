@@ -707,7 +707,7 @@ export function CreateLetterPage({
           setSavedDocumentId(docId)
         }
 
-        const attachmentsToUpload = [...pendingAttachments]
+        const attachmentsToUpload = pendingAttachments.filter((pending) => pending.file && pending.file.size > 0)
         for (const pending of attachmentsToUpload) {
           const folder = pending.attachmentType === "image" ? "images" : "files"
           const safeName = pending.file.name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "attachment"
