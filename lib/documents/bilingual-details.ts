@@ -3,6 +3,7 @@ export type ParsedBilingualDetails = {
   arabicText: string | null
   attachArabic: boolean
   hasArabic: boolean
+  structuredFields?: Record<string, string> | null
 }
 
 export function stripHtmlToPlainText(rawText: string | null | undefined): string {
@@ -15,7 +16,12 @@ export function stripHtmlToPlainText(rawText: string | null | undefined): string
     text = text.replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim()
   }
 
-  // 2. Strip HTML elements if present
+  // 2. Remove HTML comments e.g. <!-- STRUCTURED_FIELDS: ... -->
+  if (text.includes("<!--")) {
+    text = text.replace(/<!--[\s\S]*?-->/g, "").trim()
+  }
+
+  // 3. Strip HTML elements if present
   if (/<[a-z][\s\S]*>/i.test(text)) {
     // Replace block closing tags and break tags with plain text line breaks
     text = text
@@ -41,47 +47,65 @@ export function stripHtmlToPlainText(rawText: string | null | undefined): string
       .replaceAll("&#39;", "'")
   }
 
-  // 3. Normalize excessive consecutive empty lines (max 2 newlines)
+  // 4. Normalize excessive consecutive empty lines (max 2 newlines)
   return text.replace(/\n{3,}/g, "\n\n").trim()
 }
 
 export function parseBilingualDocumentDetails(rawDetails: string | null | undefined): ParsedBilingualDetails {
   if (!rawDetails) {
-    return { englishText: "", arabicText: null, attachArabic: false, hasArabic: false }
+    return { englishText: "", arabicText: null, attachArabic: false, hasArabic: false, structuredFields: null }
+  }
+
+  let textToParse = rawDetails
+  let extractedStructuredFields: Record<string, string> | null = null
+
+  // Extract structured fields metadata comment if present
+  const structuredFieldsMatch = textToParse.match(/<!--\s*STRUCTURED_FIELDS:\s*([\s\S]*?)\s*-->/)
+  if (structuredFieldsMatch && structuredFieldsMatch[1]) {
+    try {
+      extractedStructuredFields = JSON.parse(structuredFieldsMatch[1].trim())
+    } catch {
+      extractedStructuredFields = null
+    }
+    // Remove the comment from textToParse
+    textToParse = textToParse.replace(/<!--\s*STRUCTURED_FIELDS:\s*[\s\S]*?\s*-->/g, "").trim()
   }
 
   const attachMarkerRegex = /\n\s*(?:---|───|\+\+\+)\s*(?:ATTACH ARABIC TRANSLATION|ATTACH_ARABIC)\s*(?:---|───|\+\+\+)?\s*$/i
   const separatorRegex = /\n\s*(?:---|───|\+\+\+)\s*(?:ARABIC TRANSLATION|ARABIC_TRANSLATION|الترجمة العربية)\s*(?:---|───|\+\+\+)?\s*\n/i
 
-  const attachMatch = rawDetails.match(attachMarkerRegex)
+  const attachMatch = textToParse.match(attachMarkerRegex)
   if (attachMatch && attachMatch.index !== undefined) {
-    const englishText = rawDetails.slice(0, attachMatch.index).trimEnd()
+    const englishText = textToParse.slice(0, attachMatch.index).trimEnd()
     return {
       englishText,
       arabicText: null,
       attachArabic: true,
       hasArabic: false,
+      structuredFields: extractedStructuredFields,
     }
   }
 
-  const match = rawDetails.match(separatorRegex)
+  const match = textToParse.match(separatorRegex)
   if (match && match.index !== undefined) {
-    const englishText = rawDetails.slice(0, match.index).trimEnd()
-    const rawArabic = rawDetails.slice(match.index + match[0].length).trim()
+    const englishText = textToParse.slice(0, match.index).trimEnd()
+    const rawArabic = textToParse.slice(match.index + match[0].length).trim()
     const cleanArabic = stripHtmlToPlainText(rawArabic)
     return {
       englishText,
       arabicText: cleanArabic || null,
       attachArabic: true,
       hasArabic: Boolean(cleanArabic),
+      structuredFields: extractedStructuredFields,
     }
   }
 
   return {
-    englishText: rawDetails,
+    englishText: textToParse,
     arabicText: null,
     attachArabic: false,
     hasArabic: false,
+    structuredFields: extractedStructuredFields,
   }
 }
 
@@ -89,9 +113,15 @@ export function formatBilingualDocumentDetails(
   englishText: string,
   arabicText?: string | null,
   attachArabic?: boolean,
+  structuredFields?: Record<string, string> | null,
 ): string {
-  const cleanEnglish = (englishText || "").trimEnd()
+  let cleanEnglish = (englishText || "").trimEnd()
   const cleanArabic = stripHtmlToPlainText(arabicText)
+
+  // Append structuredFields as a clean HTML comment if present
+  if (structuredFields && Object.keys(structuredFields).length > 0) {
+    cleanEnglish = `${cleanEnglish}\n\n<!-- STRUCTURED_FIELDS: ${JSON.stringify(structuredFields)} -->`
+  }
 
   if (cleanArabic) {
     return `${cleanEnglish}\n\n--- ARABIC TRANSLATION ---\n\n${cleanArabic}`

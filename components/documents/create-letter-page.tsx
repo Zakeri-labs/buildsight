@@ -14,6 +14,7 @@ import {
   Languages,
   Loader2,
   Paperclip,
+  RotateCcw,
   Send,
   Trash2,
   X,
@@ -35,6 +36,10 @@ import {
   parseBilingualDocumentDetails,
   stripHtmlToPlainText,
 } from "@/lib/documents/bilingual-details"
+import {
+  getLetterDetailsSchema,
+  type LetterDetailsSchema,
+} from "@/lib/documents/letter-details-schema"
 import { uploadDocumentAsset } from "@/lib/documents/storage-upload"
 import {
   SIMPLE_UPLOAD_ACCEPT,
@@ -128,6 +133,12 @@ export function CreateLetterPage({
   const [documentType, setDocumentType] = useState<ConstructionDocumentTypeValue | "">("")
   const [englishText, setEnglishText] = useState("")
   const [attachArabic, setAttachArabic] = useState(false)
+
+  // Reusable Structured Letter Details state (Phase 1: NCR)
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
+  const [isManuallyEdited, setIsManuallyEdited] = useState(false)
+
+  const activeSchema = getLetterDetailsSchema(documentType)
 
   const [recipientOptions, setRecipientOptions] = useState<RecipientOption[]>([])
   const [letterToRecipientIds, setLetterToRecipientIds] = useState<string[]>([])
@@ -252,15 +263,50 @@ export function CreateLetterPage({
     if (!isConstructionDocumentType(value)) {
       setDocumentType("")
       setEnglishText("")
+      setFieldValues({})
+      setIsManuallyEdited(false)
       return
     }
 
     setDocumentType(value)
+    const schema = getLetterDetailsSchema(value)
     const templateText = getDocumentDetailsTemplate(value)
     const parsed = parseBilingualDocumentDetails(templateText)
-    setEnglishText(parsed.englishText)
+
+    if (schema) {
+      const initialFields = parsed.structuredFields || (schema.parseValuesFromText ? schema.parseValuesFromText(parsed.englishText) : {})
+      setFieldValues(initialFields)
+      setIsManuallyEdited(false)
+      setEnglishText(schema.buildText(initialFields))
+    } else {
+      setFieldValues({})
+      setIsManuallyEdited(false)
+      setEnglishText(parsed.englishText)
+    }
+
     if (parsed.attachArabic) setAttachArabic(true)
     setError(null)
+  }
+
+  const handleFieldValueChange = (key: string, val: string) => {
+    const updated = { ...fieldValues, [key]: val }
+    setFieldValues(updated)
+    if (activeSchema && !isManuallyEdited) {
+      setEnglishText(activeSchema.buildText(updated))
+    }
+  }
+
+  const handleEnglishTextChange = (val: string) => {
+    setEnglishText(val)
+    if (activeSchema) {
+      setIsManuallyEdited(true)
+    }
+  }
+
+  const handleRebuildFromDetails = () => {
+    if (!activeSchema) return
+    setEnglishText(activeSchema.buildText(fieldValues))
+    setIsManuallyEdited(false)
   }
 
   const addAttachments = (event: ChangeEvent<HTMLInputElement>) => {
@@ -317,7 +363,12 @@ export function CreateLetterPage({
     submissionRef.current = true
 
     try {
-      const finalDetails = formatBilingualDocumentDetails(englishText, null, attachArabic)
+      const finalDetails = formatBilingualDocumentDetails(
+        englishText,
+        null,
+        attachArabic,
+        activeSchema ? fieldValues : null,
+      )
       let docId = savedDocumentId
 
       if (!docId) {
@@ -473,11 +524,12 @@ export function CreateLetterPage({
         updateStepStatus("integrate", "completed")
       }
 
-      // Format combined details
+      // Format combined details with structuredFields
       const finalDetails = formatBilingualDocumentDetails(
         englishText,
         generatedArabicText,
         attachArabic,
+        activeSchema ? fieldValues : null,
       )
 
       // Step 4: Process attachments if any
@@ -730,27 +782,132 @@ export function CreateLetterPage({
             />
           </div>
 
+          {/* Letter Details Section (Phase 1: NCR) */}
+          {activeSchema ? (
+            <div className="space-y-4 rounded-xl border border-blue-200/80 bg-blue-50/30 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-200/60 pb-3 dark:border-blue-900/40">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-foreground">{activeSchema.title}</h3>
+                    <span className="rounded-md bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-800 dark:bg-blue-900/60 dark:text-blue-200">
+                      Structured Form
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{activeSchema.description}</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                {activeSchema.fields.map((field) => {
+                  const isFullWidth = field.type === "textarea"
+                  return (
+                    <div key={field.key} className={cn("space-y-1.5", isFullWidth && "sm:col-span-2")}>
+                      <div className="space-y-0.5">
+                        <Label htmlFor={`letter-field-${field.key}`} className="text-xs font-semibold text-foreground">
+                          {field.label}
+                        </Label>
+                        {field.description ? (
+                          <p className="text-[11px] leading-tight text-muted-foreground">{field.description}</p>
+                        ) : null}
+                      </div>
+
+                      {field.type === "textarea" ? (
+                        <textarea
+                          id={`letter-field-${field.key}`}
+                          value={fieldValues[field.key] ?? ""}
+                          placeholder={field.placeholder}
+                          disabled={isSubmitting}
+                          onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
+                          className="min-h-20 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-xs leading-5 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:bg-muted/30"
+                        />
+                      ) : field.type === "select" ? (
+                        <Select
+                          value={fieldValues[field.key] || null}
+                          onValueChange={(val) => handleFieldValueChange(field.key, val ?? "")}
+                          disabled={isSubmitting}
+                        >
+                          <SelectTrigger id={`letter-field-${field.key}`} className="h-10 w-full rounded-lg px-3 text-xs">
+                            <SelectValue placeholder="Select status">
+                              {(val) => field.options?.find((o) => o.value === val)?.label ?? "Select status"}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent align="start">
+                            {field.options?.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : field.type === "date" ? (
+                        <Input
+                          id={`letter-field-${field.key}`}
+                          type="date"
+                          value={fieldValues[field.key] ?? ""}
+                          disabled={isSubmitting}
+                          onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
+                          className="h-10 text-xs"
+                        />
+                      ) : (
+                        <Input
+                          id={`letter-field-${field.key}`}
+                          type="text"
+                          value={fieldValues[field.key] ?? ""}
+                          placeholder={field.placeholder}
+                          disabled={isSubmitting}
+                          onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
+                          className="h-10 text-xs"
+                        />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
+
           {/* English Text & Attach Arabic Translation Option */}
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <Label htmlFor="create-letter-text" className="text-xs font-semibold text-foreground">
-                Text <span className="text-muted-foreground font-normal">(Primary English Content)</span>
-              </Label>
-              <label
-                htmlFor="attach-arabic-translation"
-                className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-1.5 text-xs font-semibold text-slate-800 transition-colors hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-200"
-              >
-                <input
-                  type="checkbox"
-                  id="attach-arabic-translation"
-                  checked={attachArabic}
-                  disabled={isSubmitting}
-                  onChange={(e) => setAttachArabic(e.target.checked)}
-                  className="size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-700"
-                />
-                <Languages className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Attach Arabic Translation</span>
-              </label>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="create-letter-text" className="text-xs font-semibold text-foreground">
+                  Text <span className="text-muted-foreground font-normal">(Primary English Content)</span>
+                </Label>
+                {isManuallyEdited ? (
+                  <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                    Manually edited
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {isManuallyEdited && activeSchema ? (
+                  <button
+                    type="button"
+                    onClick={handleRebuildFromDetails}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 dark:border-slate-800 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                  >
+                    <RotateCcw className="size-3" />
+                    <span>Rebuild from Letter Details</span>
+                  </button>
+                ) : null}
+
+                <label
+                  htmlFor="attach-arabic-translation"
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-1.5 text-xs font-semibold text-slate-800 transition-colors hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-200"
+                >
+                  <input
+                    type="checkbox"
+                    id="attach-arabic-translation"
+                    checked={attachArabic}
+                    disabled={isSubmitting}
+                    onChange={(e) => setAttachArabic(e.target.checked)}
+                    className="size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-700"
+                  />
+                  <Languages className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Attach Arabic Translation</span>
+                </label>
+              </div>
             </div>
 
             {/* Primary English Text Area */}
@@ -759,7 +916,7 @@ export function CreateLetterPage({
               value={englishText}
               maxLength={100000}
               disabled={isSubmitting || !documentType}
-              onChange={(e) => setEnglishText(e.target.value)}
+              onChange={(e) => handleEnglishTextChange(e.target.value)}
               placeholder={documentType ? "Enter English letter text..." : "Select a letter type to load its template"}
               className="min-h-48 w-full resize-y rounded-xl border border-input bg-background px-4 py-3 font-mono text-sm leading-6 outline-none transition-shadow placeholder:font-sans placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-muted/30 disabled:opacity-70"
             />
