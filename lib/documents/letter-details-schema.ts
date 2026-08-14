@@ -24,7 +24,7 @@ export type LetterDetailsSchema = {
   parseValuesFromText?: (text: string) => Record<string, string>
 }
 
-// 1. NCR Schema (Phase 1)
+// 1. NCR Schema (Non-Conformance Report)
 export const NCR_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
   documentType: "ncr",
   title: "Letter Details — Non-Conformance Report",
@@ -798,6 +798,335 @@ ${additionalComments}`
   },
 }
 
+// 6. IPC Schema (Interim Payment Certificate)
+export const IPC_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
+  documentType: "ipc",
+  title: "Letter Details — Interim Payment Certificate (IPC)",
+  description: "Fill in the payment certificate details below to automatically update the IPC letter text.",
+  fields: [
+    {
+      key: "period",
+      label: "Payment Period",
+      description: "Specify the billing or payment period (e.g. Month / Year or Date Range).",
+      placeholder: "e.g. 01 Aug 2026 – 31 Aug 2026 (IPC No. 05)",
+      type: "text",
+      templateToken: "[period]",
+    },
+    {
+      key: "submittedAmount",
+      label: "Submitted Amount",
+      description: "Total valuation amount submitted by the contractor.",
+      placeholder: "e.g. USD 150,000.00",
+      type: "text",
+      templateToken: "[amount]",
+    },
+    {
+      key: "certifiedAmount",
+      label: "Certified Amount",
+      description: "Net certified payment amount approved by the engineer/consultant.",
+      placeholder: "e.g. USD 142,500.00",
+      type: "text",
+      templateToken: "[amount]",
+    },
+    {
+      key: "completedWorks",
+      label: "Completed Works Description",
+      description: "Summary of major construction milestones and completed work packages during this period.",
+      placeholder: "e.g. Completion of Ground Floor structural slabs and MEP rough-ins...",
+      type: "textarea",
+      templateToken: "[describe completed works]",
+    },
+    {
+      key: "status",
+      label: "Certification Status",
+      description: "Current approval status of this Interim Payment Certificate.",
+      type: "select",
+      options: [
+        { value: "Approved", label: "Approved" },
+        { value: "Under Review", label: "Under Review" },
+        { value: "Rejected", label: "Rejected" },
+      ],
+      templateToken: "[Approved / Under Review / Rejected]",
+    },
+    {
+      key: "remarks",
+      label: "Additional Remarks",
+      description: "Notes regarding retainage, deductions, advance recovery, or payment conditions.",
+      placeholder: "e.g. Subject to 5% retention deduction per contract clause 14.2...",
+      type: "textarea",
+      templateToken: "[write remarks]",
+    },
+  ],
+  buildText: (values: Record<string, string>) => {
+    const period = values.period?.trim() || "[period]"
+    const submittedAmount = values.submittedAmount?.trim() || "[amount]"
+    const certifiedAmount = values.certifiedAmount?.trim() || "[amount]"
+    const completedWorks = values.completedWorks?.trim() || "[describe completed works]"
+    const status = values.status?.trim() || "[Approved / Under Review / Rejected]"
+    const remarks = values.remarks?.trim() || "[write remarks]"
+
+    return `This Interim Payment Certificate relates to payment period:
+
+${period}.
+
+Submitted amount:
+
+${submittedAmount}.
+
+Certified amount:
+
+${certifiedAmount}.
+
+The completed works during this period include:
+
+${completedWorks}.
+
+Certification status:
+
+${status}.
+
+Additional remarks:
+
+${remarks}.`
+  },
+  parseValuesFromText: (text: string): Record<string, string> => {
+    const result: Record<string, string> = {}
+    if (!text) return result
+
+    const periodMatch = text.match(/This Interim Payment Certificate relates to payment period:\s*\n\s*(.*?)\s*\n\s*Submitted amount:/is)
+    if (periodMatch && periodMatch[1] && !periodMatch[1].includes("[period")) {
+      result.period = periodMatch[1].trim()
+    }
+
+    const subAmountMatch = text.match(/Submitted amount:\s*\n\s*(.*?)\s*\n\s*Certified amount:/is)
+    if (subAmountMatch && subAmountMatch[1] && !subAmountMatch[1].includes("[amount")) {
+      result.submittedAmount = subAmountMatch[1].trim()
+    }
+
+    const certAmountMatch = text.match(/Certified amount:\s*\n\s*(.*?)\s*\n\s*The completed works during this period include:/is)
+    if (certAmountMatch && certAmountMatch[1] && !certAmountMatch[1].includes("[amount")) {
+      result.certifiedAmount = certAmountMatch[1].trim()
+    }
+
+    const worksMatch = text.match(/The completed works during this period include:\s*\n\s*(.*?)\s*\n\s*Certification status:/is)
+    if (worksMatch && worksMatch[1] && !worksMatch[1].includes("[describe")) {
+      result.completedWorks = worksMatch[1].trim()
+    }
+
+    const statusMatch = text.match(/Certification status:\s*\n\s*(.*?)\s*\n\s*Additional remarks:/is)
+    if (statusMatch && statusMatch[1] && !statusMatch[1].includes("[Approved")) {
+      result.status = statusMatch[1].trim()
+    }
+
+    const remarksMatch = text.match(/Additional remarks:\s*\n\s*(.*?)\s*$/is)
+    if (remarksMatch && remarksMatch[1] && !remarksMatch[1].includes("[write")) {
+      result.remarks = remarksMatch[1].trim()
+    }
+
+    return result
+  },
+}
+
+// 7. VO Schema (Variation Order)
+export const VO_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
+  documentType: "variation_order",
+  title: "Letter Details — Variation Order (VO)",
+  description: "Fill in the variation order details below to automatically update the VO letter text.",
+  fields: [
+    {
+      key: "variationDescription",
+      label: "Variation Description / Scope",
+      description: "Describe the scope of work added, omitted, or modified.",
+      placeholder: "e.g. Modification of entrance canopy structural steel design",
+      type: "text",
+      templateToken: "[describe variation]",
+    },
+    {
+      key: "reason",
+      label: "Reason for Variation",
+      description: "Explain the technical, site condition, or client request reason for this variation.",
+      placeholder: "e.g. Requested by Client Representative to accommodate architectural lighting...",
+      type: "textarea",
+      templateToken: "[explain reason]",
+    },
+    {
+      key: "costImpact",
+      label: "Project Cost Impact",
+      description: "Describe the estimated or agreed financial cost impact (+/- amount or No Cost).",
+      placeholder: "e.g. Additional cost of USD 24,500.00",
+      type: "text",
+      templateToken: "[describe cost impact]",
+    },
+    {
+      key: "timeImpact",
+      label: "Project Schedule Impact",
+      description: "Describe the impact on project duration or completion date (+/- days or No Time Impact).",
+      placeholder: "e.g. Extension of time by 7 calendar days",
+      type: "text",
+      templateToken: "[describe time impact]",
+    },
+    {
+      key: "status",
+      label: "Approval Status",
+      description: "Current approval status of this Variation Order.",
+      type: "select",
+      options: [
+        { value: "Approved", label: "Approved" },
+        { value: "Pending", label: "Pending" },
+        { value: "Rejected", label: "Rejected" },
+      ],
+      templateToken: "[Approved / Pending / Rejected]",
+    },
+    {
+      key: "remarks",
+      label: "Additional Remarks",
+      description: "Additional notes, reference drawings, or site instruction numbers.",
+      placeholder: "e.g. Formal variation agreement signed under Site Instruction SI-014.",
+      type: "textarea",
+      templateToken: "[write remarks]",
+    },
+  ],
+  buildText: (values: Record<string, string>) => {
+    const variationDescription = values.variationDescription?.trim() || "[describe variation]"
+    const reason = values.reason?.trim() || "[explain reason]"
+    const costImpact = values.costImpact?.trim() || "[describe cost impact]"
+    const timeImpact = values.timeImpact?.trim() || "[describe time impact]"
+    const status = values.status?.trim() || "[Approved / Pending / Rejected]"
+    const remarks = values.remarks?.trim() || "[write remarks]"
+
+    return `This Variation Order relates to:
+
+${variationDescription}.
+
+The reason for this variation is:
+
+${reason}.
+
+The impact on project cost is:
+
+${costImpact}.
+
+The impact on project schedule is:
+
+${timeImpact}.
+
+Approval status:
+
+${status}.
+
+Additional remarks:
+
+${remarks}.`
+  },
+  parseValuesFromText: (text: string): Record<string, string> => {
+    const result: Record<string, string> = {}
+    if (!text) return result
+
+    const varMatch = text.match(/This Variation Order relates to:\s*\n\s*(.*?)\s*\n\s*The reason for this variation is:/is)
+    if (varMatch && varMatch[1] && !varMatch[1].includes("[describe")) {
+      result.variationDescription = varMatch[1].trim()
+    }
+
+    const reasonMatch = text.match(/The reason for this variation is:\s*\n\s*(.*?)\s*\n\s*The impact on project cost is:/is)
+    if (reasonMatch && reasonMatch[1] && !reasonMatch[1].includes("[explain")) {
+      result.reason = reasonMatch[1].trim()
+    }
+
+    const costMatch = text.match(/The impact on project cost is:\s*\n\s*(.*?)\s*\n\s*The impact on project schedule is:/is)
+    if (costMatch && costMatch[1] && !costMatch[1].includes("[describe")) {
+      result.costImpact = costMatch[1].trim()
+    }
+
+    const timeMatch = text.match(/The impact on project schedule is:\s*\n\s*(.*?)\s*\n\s*Approval status:/is)
+    if (timeMatch && timeMatch[1] && !timeMatch[1].includes("[describe")) {
+      result.timeImpact = timeMatch[1].trim()
+    }
+
+    const statusMatch = text.match(/Approval status:\s*\n\s*(.*?)\s*\n\s*Additional remarks:/is)
+    if (statusMatch && statusMatch[1] && !statusMatch[1].includes("[Approved")) {
+      result.status = statusMatch[1].trim()
+    }
+
+    const remarksMatch = text.match(/Additional remarks:\s*\n\s*(.*?)\s*$/is)
+    if (remarksMatch && remarksMatch[1] && !remarksMatch[1].includes("[write")) {
+      result.remarks = remarksMatch[1].trim()
+    }
+
+    return result
+  },
+}
+
+// 8. General Documents Schema (Other)
+export const GENERAL_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
+  documentType: "other",
+  title: "Letter Details — General Document",
+  description: "Fill in the general document details below to automatically update the letter text.",
+  fields: [
+    {
+      key: "purpose",
+      label: "Document Purpose",
+      description: "State the general purpose or intent of this document.",
+      placeholder: "e.g. Formal transmittal of project submittals and progress logs",
+      type: "text",
+      templateToken: "[describe document purpose]",
+    },
+    {
+      key: "details",
+      label: "Document Details & Content",
+      description: "Write the main content, detailed summary, or correspondence notes.",
+      placeholder: "e.g. Transmitting weekly site progress report for week 32...",
+      type: "textarea",
+      templateToken: "[write document details]",
+    },
+    {
+      key: "notes",
+      label: "Additional Notes",
+      description: "Any extra notes, reference attachments, or distribution instructions.",
+      placeholder: "e.g. Copies distributed to Project Management and Supervision Consultant.",
+      type: "textarea",
+      templateToken: "[write notes]",
+    },
+  ],
+  buildText: (values: Record<string, string>) => {
+    const purpose = values.purpose?.trim() || "[describe document purpose]"
+    const details = values.details?.trim() || "[write document details]"
+    const notes = values.notes?.trim() || "[write notes]"
+
+    return `This document relates to:
+
+${purpose}.
+
+The document contains information regarding:
+
+${details}.
+
+Additional notes:
+
+${notes}.`
+  },
+  parseValuesFromText: (text: string): Record<string, string> => {
+    const result: Record<string, string> = {}
+    if (!text) return result
+
+    const purpMatch = text.match(/This document relates to:\s*\n\s*(.*?)\s*\n\s*The document contains information regarding:/is)
+    if (purpMatch && purpMatch[1] && !purpMatch[1].includes("[describe")) {
+      result.purpose = purpMatch[1].trim()
+    }
+
+    const detMatch = text.match(/The document contains information regarding:\s*\n\s*(.*?)\s*\n\s*Additional notes:/is)
+    if (detMatch && detMatch[1] && !detMatch[1].includes("[write")) {
+      result.details = detMatch[1].trim()
+    }
+
+    const notesMatch = text.match(/Additional notes:\s*\n\s*(.*?)\s*$/is)
+    if (notesMatch && notesMatch[1] && !notesMatch[1].includes("[write")) {
+      result.notes = notesMatch[1].trim()
+    }
+
+    return result
+  },
+}
+
 export const LETTER_DETAILS_SCHEMAS: Record<string, LetterDetailsSchema> = {
   ncr: NCR_LETTER_DETAILS_SCHEMA,
   non_conformance_report: NCR_LETTER_DETAILS_SCHEMA,
@@ -813,6 +1142,15 @@ export const LETTER_DETAILS_SCHEMAS: Record<string, LetterDetailsSchema> = {
 
   inspection_report: INSPECTION_LETTER_DETAILS_SCHEMA,
   inspection: INSPECTION_LETTER_DETAILS_SCHEMA,
+
+  ipc: IPC_LETTER_DETAILS_SCHEMA,
+  interim_payment_certificate: IPC_LETTER_DETAILS_SCHEMA,
+
+  variation_order: VO_LETTER_DETAILS_SCHEMA,
+  vo: VO_LETTER_DETAILS_SCHEMA,
+
+  other: GENERAL_LETTER_DETAILS_SCHEMA,
+  general_document: GENERAL_LETTER_DETAILS_SCHEMA,
 }
 
 export function getLetterDetailsSchema(documentType: string | null | undefined): LetterDetailsSchema | null {
