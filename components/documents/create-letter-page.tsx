@@ -782,7 +782,7 @@ export function CreateLetterPage({
             />
           </div>
 
-          {/* Letter Details Section (Phase 1: NCR) */}
+          {/* Letter Details Section (NCR, RFI, WIR, MIR, Inspection) */}
           {activeSchema ? (
             <div className="space-y-4 rounded-xl border border-blue-200/80 bg-blue-50/30 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-200/60 pb-3 dark:border-blue-900/40">
