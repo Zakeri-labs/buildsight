@@ -959,60 +959,27 @@ export function CreateLetterPage({
                     const isFullWidth = field.type === "textarea"
                     return (
                       <div key={field.key} className={cn("space-y-1.5 w-full min-w-0", isFullWidth && "sm:col-span-2")}>
-                        <div className="flex items-center justify-between gap-2">
-                          <Label htmlFor={`letter-field-${field.key}`} className="text-xs font-semibold text-foreground">
-                            {field.label}
-                          </Label>
-                          <button
-                            type="button"
-                            onPointerDown={() => handleEyePointerDown(field.key)}
-                            onPointerUp={() => handleEyePointerUp(field.key)}
-                            onPointerLeave={() => handleEyePointerLeaveOrCancel(field.key)}
-                            onPointerCancel={() => handleEyePointerLeaveOrCancel(field.key)}
-                            title="Preview in Letter"
-                            aria-label={`Preview ${field.label} in Letter`}
-                            className={cn(
-                              "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-amber-100 hover:text-amber-800 dark:hover:bg-amber-950 dark:hover:text-amber-300",
-                              previewState?.fieldKey === field.key && "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-bold",
-                            )}
-                          >
-                            <Eye className="size-3.5" />
-                          </button>
-                        </div>
+                        <Label htmlFor={`letter-field-${field.key}`} className="text-xs font-semibold text-foreground">
+                          {field.label}
+                        </Label>
 
                         {field.type === "textarea" ? (
-                          <div className="flex flex-col w-full min-w-0">
-                            <CompactFieldToolbar
-                              value={fieldValues[field.key] ?? ""}
-                              onChange={(val) => handleFieldValueChange(field.key, val)}
-                              disabled={isSubmitting}
-                              fieldName={field.label}
-                            />
-                            <textarea
-                              id={`letter-field-${field.key}`}
-                              value={fieldValues[field.key] ?? ""}
-                              disabled={isSubmitting}
-                              onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
-                              className="min-h-20 w-full min-w-0 resize-y rounded-b-lg border border-input bg-background px-3 py-2 text-xs leading-5 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:bg-muted/30"
-                            />
-                          </div>
+                          <textarea
+                            id={`letter-field-${field.key}`}
+                            value={fieldValues[field.key] ?? ""}
+                            disabled={isSubmitting}
+                            onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
+                            className="min-h-20 w-full min-w-0 resize-y rounded-lg border border-input bg-background px-3 py-2 text-xs leading-5 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:bg-muted/30"
+                          />
                         ) : field.type === "text" ? (
-                          <div className="flex flex-col w-full min-w-0">
-                            <CompactFieldToolbar
-                              value={fieldValues[field.key] ?? ""}
-                              onChange={(val) => handleFieldValueChange(field.key, val)}
-                              disabled={isSubmitting}
-                              fieldName={field.label}
-                            />
-                            <Input
-                              id={`letter-field-${field.key}`}
-                              type="text"
-                              value={fieldValues[field.key] ?? ""}
-                              disabled={isSubmitting}
-                              onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
-                              className="h-10 w-full min-w-0 rounded-b-lg rounded-t-none text-xs"
-                            />
-                          </div>
+                          <Input
+                            id={`letter-field-${field.key}`}
+                            type="text"
+                            value={fieldValues[field.key] ?? ""}
+                            disabled={isSubmitting}
+                            onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
+                            className="h-10 w-full min-w-0 rounded-lg text-xs"
+                          />
                         ) : field.type === "select" ? (
                           <Select
                             value={fieldValues[field.key] || null}
