@@ -147,23 +147,18 @@ export default async function DocumentDetailsPage({
       ) : null}
 
       <Card className="gap-0 overflow-hidden py-0">
-        <CardHeader className="border-b bg-linear-to-r from-blue-950 to-slate-900 px-4 py-5 text-white sm:px-6 sm:py-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-5">
-            <div className="min-w-0">
-              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-blue-200">
-                <span>{document.reference}</span>
-                <span aria-hidden="true">•</span>
-                <span>{displayType}</span>
-              </div>
-              <CardTitle className="text-xl font-bold leading-tight text-white sm:text-3xl">{document.title}</CardTitle>
-              <p className="mt-2.5 flex items-center gap-2 text-xs text-blue-100/90 sm:mt-3 sm:text-sm">
-                <CalendarDays className="size-3.5 sm:size-4" />
-                Created {formatDate(document.created_at)}
-              </p>
+        <CardHeader className="border-b bg-linear-to-r from-blue-950 to-slate-900 px-4 py-4 text-white sm:px-6 sm:py-6">
+          <div className="min-w-0">
+            <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-blue-200 sm:mb-2 sm:gap-2">
+              <span>{document.reference}</span>
+              <span aria-hidden="true" className="hidden sm:inline">•</span>
+              <span className="hidden sm:inline">{displayType}</span>
             </div>
-            <span className="inline-flex w-fit rounded-full bg-emerald-400/15 px-3 py-1.5 text-xs font-semibold text-emerald-200 ring-1 ring-emerald-300/25">
-              {workflowStatusLabel(document.workflow_status)}
-            </span>
+            <CardTitle className="text-lg font-bold leading-tight text-white sm:text-3xl">{document.title}</CardTitle>
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-blue-100/90 sm:mt-3 sm:text-sm">
+              <CalendarDays className="size-3.5 sm:size-4" />
+              Created {formatDate(document.created_at)}
+            </p>
           </div>
         </CardHeader>
       </Card>
