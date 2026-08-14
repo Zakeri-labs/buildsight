@@ -424,7 +424,10 @@ export function CreateLetterPage({
     const parsed = parseBilingualDocumentDetails(templateText)
 
     if (schema) {
-      const initialFields = parsed.structuredFields || (schema.parseValuesFromText ? schema.parseValuesFromText(parsed.englishText) : {})
+      const initialFields: Record<string, string> = {}
+      for (const field of schema.fields) {
+        initialFields[field.key] = ""
+      }
       setFieldValues(initialFields)
       setIsManuallyEdited(false)
       setEnglishText(schema.buildText(initialFields))
