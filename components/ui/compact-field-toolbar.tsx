@@ -222,6 +222,18 @@ export function CompactFieldToolbar({
     }
   }
 
+  // Cleanup timer and recognition on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop()
+        } catch {}
+      }
+    }
+  }, [])
+
   return (
     <div className="flex flex-col gap-1 w-full min-w-0">
       <div className="flex flex-nowrap items-center justify-start gap-0.5 sm:gap-1 rounded-t-lg border border-b-0 bg-muted/40 px-1.5 py-1 text-xs w-full min-w-0 overflow-hidden">
@@ -325,6 +337,19 @@ export function CompactFieldToolbar({
           <Redo2 className="size-3.5" />
         </button>
       </div>
+
+      {countdown !== null ? (
+        <div className="relative z-30 my-1 flex flex-col items-center justify-center rounded-xl bg-background/90 p-4 backdrop-blur-xs border border-rose-200/80 shadow-md dark:border-rose-900/50 animate-in fade-in zoom-in-95">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <div className="flex size-14 items-center justify-center rounded-2xl bg-rose-600 text-white shadow-xl shadow-rose-600/30 animate-pulse">
+              <span className="text-2xl font-black tabular-nums">{countdown}</span>
+            </div>
+            <p className="text-xs font-bold text-rose-600 dark:text-rose-400">
+              Get ready... Speak now!
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {errorMsg ? (
         <div className="bg-rose-50 px-2.5 py-1 text-[11px] text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
