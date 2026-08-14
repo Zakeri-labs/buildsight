@@ -886,7 +886,7 @@ export function CreateLetterPage({
                 id="create-letter-subject"
                 value={title}
                 maxLength={180}
-                disabled={isSubmitting || Boolean(savedDocumentId)}
+                disabled={isSubmitting}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Enter subject"
                 className="h-11 text-sm min-w-0"
@@ -905,7 +905,7 @@ export function CreateLetterPage({
               selectedIds={letterToRecipientIds}
               excludedIds={ccRecipientIds}
               loading={loadingRecipients}
-              disabled={isSubmitting || Boolean(savedDocumentId) || !selectedProjectId}
+              disabled={isSubmitting || !selectedProjectId}
               onAdd={(id) => {
                 setLetterToRecipientIds((curr) => (curr.includes(id) ? curr : [...curr, id]))
                 setCcRecipientIds((curr) => curr.filter((i) => i !== id))
@@ -922,7 +922,7 @@ export function CreateLetterPage({
               selectedIds={ccRecipientIds}
               excludedIds={letterToRecipientIds}
               loading={loadingRecipients}
-              disabled={isSubmitting || Boolean(savedDocumentId) || !selectedProjectId}
+              disabled={isSubmitting || !selectedProjectId}
               onAdd={(id) => {
                 setCcRecipientIds((curr) => (curr.includes(id) ? curr : [...curr, id]))
                 setLetterToRecipientIds((curr) => curr.filter((i) => i !== id))
