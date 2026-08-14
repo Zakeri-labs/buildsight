@@ -34,7 +34,6 @@ export const NCR_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
       key: "issue",
       label: "Non-Conformance Issue",
       description: "Briefly describe what does not comply with the approved drawing, specification, or requirement.",
-      placeholder: "e.g. Concrete compressive strength below specified requirement",
       type: "text",
       templateToken: "[describe the non-conformance issue]",
     },
@@ -42,7 +41,6 @@ export const NCR_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
       key: "location",
       label: "Location / Area",
       description: "Where was the issue identified?",
-      placeholder: "e.g. Ground Floor – Grid A4",
       type: "text",
       templateToken: "[location / area]",
     },
@@ -57,7 +55,6 @@ export const NCR_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
       key: "activity",
       label: "Affected Work Activity",
       description: "Describe the work activity related to the issue.",
-      placeholder: "e.g. Pouring of Ground Floor Columns",
       type: "text",
       templateToken: "[describe activity]",
     },
@@ -65,7 +62,6 @@ export const NCR_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
       key: "observedIssue",
       label: "Observed Issue",
       description: "Describe what was actually observed on site.",
-      placeholder: "e.g. Honeycombing observed at the base of column C2 after formwork removal...",
       type: "textarea",
       templateToken: "[describe the observed issue]",
     },
@@ -73,7 +69,6 @@ export const NCR_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
       key: "correctiveAction",
       label: "Required Corrective Action",
       description: "Describe the action required to resolve the issue.",
-      placeholder: "e.g. Chipping loose concrete, clean with air blower, apply structural epoxy mortar...",
       type: "textarea",
       templateToken: "[describe required corrective action]",
     },
@@ -81,7 +76,6 @@ export const NCR_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
       key: "responsibleParty",
       label: "Responsible Party",
       description: "Company or person responsible for corrective action.",
-      placeholder: "e.g. Main Contractor / Concrete Team",
       type: "text",
       templateToken: "[company / person]",
     },
@@ -198,49 +192,45 @@ export const RFI_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
   fields: [
     {
       key: "subject",
-      label: "RFI Subject / Topic",
-      description: "Briefly describe the subject or topic requiring clarification.",
-      placeholder: "e.g. Structural drawing ambiguity at Grid B3",
+      label: "Information Subject",
+      description: "Main topic or subject of the request for information.",
       type: "text",
-      templateToken: "[describe the subject]",
+      templateToken: "[subject / topic of request]",
     },
     {
       key: "question",
-      label: "Clarification / Question",
-      description: "State the specific question or details needing clarification from the consultant/engineer.",
-      placeholder: "e.g. Please clarify the required rebar lap length for MEP penetration through beam B2...",
+      label: "Question / Clarification Requested",
+      description: "Detailed description of the technical or design question.",
       type: "textarea",
-      templateToken: "[write the question or required information]",
+      templateToken: "[describe the technical or design question]",
     },
     {
       key: "submittedBy",
       label: "Submitted By",
-      description: "Name or company submitting this Request for Information.",
-      placeholder: "e.g. Main Contractor / Engineering Department",
+      description: "Company, department, or engineer submitting the RFI.",
       type: "text",
-      templateToken: "[name / company]",
+      templateToken: "[company / department]",
     },
     {
       key: "submissionDate",
       label: "Submission Date",
-      description: "Date when this RFI is officially submitted.",
+      description: "Date when the RFI was formally submitted.",
       type: "date",
       templateToken: "[date]",
     },
     {
       key: "requiredResponseDate",
       label: "Required Response Date",
-      description: "Target date for receiving the required clarification.",
+      description: "Target response date required to prevent site delay.",
       type: "date",
       templateToken: "[date]",
     },
     {
       key: "receivedResponse",
-      label: "Received Response / Clarification",
-      description: "Official response or clarification received from the consultant or engineer.",
-      placeholder: "e.g. Refer to revised structural detail drawing ST-204 Rev B for rebar lap length...",
+      label: "Engineer / Consultant Response",
+      description: "Official response, instruction, or clarification provided by the Consultant.",
       type: "textarea",
-      templateToken: "[write response]",
+      templateToken: "[details of the consultant's response]",
     },
     {
       key: "status",
@@ -256,12 +246,12 @@ export const RFI_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
     },
   ],
   buildText: (values: Record<string, string>) => {
-    const subject = values.subject?.trim() || "[describe the subject]"
-    const question = values.question?.trim() || "[write the question or required information]"
-    const submittedBy = values.submittedBy?.trim() || "[name / company]"
+    const subject = values.subject?.trim() || "[subject / topic of request]"
+    const question = values.question?.trim() || "[describe the technical or design question]"
+    const submittedBy = values.submittedBy?.trim() || "[company / department]"
     const submissionDate = values.submissionDate?.trim() || "[date]"
     const requiredResponseDate = values.requiredResponseDate?.trim() || "[date]"
-    const receivedResponse = values.receivedResponse?.trim() || "[write response]"
+    const receivedResponse = values.receivedResponse?.trim() || "[details of the consultant's response]"
     const status = values.status?.trim() || "[Open / Answered / Closed]"
 
     return `This Request for Information (RFI) has been raised regarding:
@@ -292,17 +282,17 @@ ${status}.`
     if (!text) return result
 
     const subjectMatch = text.match(/This Request for Information \(RFI\) has been raised regarding:\s*\n(.*?)\.\s*\n/i)
-    if (subjectMatch && subjectMatch[1] && !subjectMatch[1].includes("[describe")) {
+    if (subjectMatch && subjectMatch[1] && !subjectMatch[1].includes("[subject")) {
       result.subject = subjectMatch[1].trim()
     }
 
     const questionMatch = text.match(/The clarification required is:\s*\n\s*(.*?)\s*\n\s*This request was submitted by:/is)
-    if (questionMatch && questionMatch[1] && !questionMatch[1].includes("[write")) {
+    if (questionMatch && questionMatch[1] && !questionMatch[1].includes("[describe")) {
       result.question = questionMatch[1].trim()
     }
 
     const submittedByMatch = text.match(/This request was submitted by:\s*\n(.*?)\.\s*\n/i)
-    if (submittedByMatch && submittedByMatch[1] && !submittedByMatch[1].includes("[name")) {
+    if (submittedByMatch && submittedByMatch[1] && !submittedByMatch[1].includes("[company")) {
       result.submittedBy = submittedByMatch[1].trim()
     }
 
@@ -317,7 +307,7 @@ ${status}.`
     }
 
     const respMatch = text.match(/Received response \/ clarification:\s*\n\s*(.*?)\s*\n\s*Current status:/is)
-    if (respMatch && respMatch[1] && !respMatch[1].includes("[write")) {
+    if (respMatch && respMatch[1] && !respMatch[1].includes("[details")) {
       result.receivedResponse = respMatch[1].trim()
     }
 
@@ -338,34 +328,31 @@ export const WIR_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
   fields: [
     {
       key: "activity",
-      label: "Work Activity",
-      description: "Describe the specific work activity submitted for inspection.",
-      placeholder: "e.g. Formwork and rebar installation for slab S1",
+      label: "Inspection Work Activity",
+      description: "Description of the work activity or element ready for inspection.",
       type: "text",
-      templateToken: "[describe work activity]",
+      templateToken: "[describe work activity / element]",
     },
     {
       key: "location",
-      label: "Inspection Location",
-      description: "Where on site the inspection is taking place.",
-      placeholder: "e.g. First Floor – Sector B",
+      label: "Location / Area",
+      description: "Exact site location, floor level, or grid reference.",
       type: "text",
-      templateToken: "[location]",
+      templateToken: "[location / floor / grid]",
     },
     {
       key: "inspectionDate",
-      label: "Inspection Date",
-      description: "Scheduled or actual date of the work inspection.",
+      label: "Requested Inspection Date",
+      description: "Date when site inspection was performed or requested.",
       type: "date",
       templateToken: "[date]",
     },
     {
       key: "inspectedWorks",
-      label: "Inspected Works Scope",
-      description: "Detailed description of elements, materials, or items being inspected.",
-      placeholder: "e.g. Reinforcement steel spacing, cover blocks, formwork alignment...",
+      label: "Inspected Works Details",
+      description: "Specific details of items presented for inspection.",
       type: "textarea",
-      templateToken: "[describe inspected works]",
+      templateToken: "[describe inspected items / elements]",
     },
     {
       key: "inspectionResult",
@@ -374,18 +361,18 @@ export const WIR_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
       type: "select",
       options: [
         { value: "Approved", label: "Approved" },
-        { value: "Approved with Comments", label: "Approved with Comments" },
+        { value: "Approved as Noted", label: "Approved as Noted" },
         { value: "Rejected", label: "Rejected" },
+        { value: "Pending Resubmission", label: "Pending Resubmission" },
       ],
-      templateToken: "[Approved / Rejected / Approved with Comments]",
+      templateToken: "[Approved / Approved as Noted / Rejected]",
     },
     {
       key: "comments",
-      label: "Inspection Comments",
-      description: "Notes, site observations, or conditions attached to the inspection result.",
-      placeholder: "e.g. Approved subject to cleaning formwork before concrete pour...",
+      label: "Inspector Remarks / Conditions",
+      description: "Specific observations, conditions of approval, or required rectifications.",
       type: "textarea",
-      templateToken: "[write comments]",
+      templateToken: "[remarks / conditions / required actions]",
     },
     {
       key: "status",
@@ -403,12 +390,12 @@ export const WIR_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
     },
   ],
   buildText: (values: Record<string, string>) => {
-    const activity = values.activity?.trim() || "[describe work activity]"
-    const location = values.location?.trim() || "[location]"
+    const activity = values.activity?.trim() || "[describe work activity / element]"
+    const location = values.location?.trim() || "[location / floor / grid]"
     const inspectionDate = values.inspectionDate?.trim() || "[date]"
-    const inspectedWorks = values.inspectedWorks?.trim() || "[describe inspected works]"
-    const inspectionResult = values.inspectionResult?.trim() || "[Approved / Rejected / Approved with Comments]"
-    const comments = values.comments?.trim() || "[write comments]"
+    const inspectedWorks = values.inspectedWorks?.trim() || "[describe inspected items / elements]"
+    const inspectionResult = values.inspectionResult?.trim() || "[Approved / Approved as Noted / Rejected]"
+    const comments = values.comments?.trim() || "[remarks / conditions / required actions]"
     const status = values.status?.trim() || "[status]"
 
     return `This Work Inspection Request is submitted for inspection of:
@@ -465,7 +452,7 @@ ${status}.`
     }
 
     const commMatch = text.match(/Inspection comments:\s*\n\s*(.*?)\s*\n\s*Current status:/is)
-    if (commMatch && commMatch[1] && !commMatch[1].includes("[write")) {
+    if (commMatch && commMatch[1] && !commMatch[1].includes("[remarks")) {
       result.comments = commMatch[1].trim()
     }
 
@@ -486,63 +473,59 @@ export const MIR_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
   fields: [
     {
       key: "materialName",
-      label: "Material Name",
-      description: "Name and description of the delivered material submitted for inspection.",
-      placeholder: "e.g. High-density polyethylene (HDPE) drainage pipes 110mm",
+      label: "Material Name & Specification",
+      description: "Full description, brand, or grade of the material.",
       type: "text",
-      templateToken: "[material name]",
+      templateToken: "[material name / specification / grade]",
     },
     {
       key: "supplier",
       label: "Supplier / Manufacturer",
-      description: "Company or manufacturer providing the material.",
-      placeholder: "e.g. Al Bawardi Building Materials Co.",
+      description: "Name of supplier, vendor, or manufacturer.",
       type: "text",
-      templateToken: "[company name]",
+      templateToken: "[supplier / manufacturer]",
     },
     {
       key: "materialDetails",
-      label: "Material Specifications & Details",
-      description: "Technical specifications, batch numbers, compliance certificates, or quantities.",
-      placeholder: "e.g. Grade A pipes conforming to BS EN 1329 with mill test certificates...",
+      label: "Delivery Details & Compliance",
+      description: "Quantity, batch numbers, mill certificates, or compliance standards.",
       type: "textarea",
-      templateToken: "[write material details]",
+      templateToken: "[delivery details / mill certificates / standards]",
     },
     {
       key: "deliveryDate",
       label: "Delivery Date",
-      description: "Date when materials were delivered to the site.",
+      description: "Date when material arrived on site.",
       type: "date",
       templateToken: "[date]",
     },
     {
       key: "inspectionResult",
-      label: "Inspection Result",
-      description: "Official material approval decision.",
+      label: "Inspection Status",
+      description: "Outcome of physical inspection on site.",
       type: "select",
       options: [
-        { value: "Approved", label: "Approved" },
-        { value: "Approved with Comments", label: "Approved with Comments" },
+        { value: "Accepted", label: "Accepted" },
+        { value: "Accepted with Comments", label: "Accepted with Comments" },
         { value: "Rejected", label: "Rejected" },
       ],
-      templateToken: "[Approved / Rejected / Approved with Comments]",
+      templateToken: "[Accepted / Accepted with Comments / Rejected]",
     },
     {
       key: "remarks",
-      label: "Additional Remarks",
-      description: "Additional notes regarding storage, sample testing, or conditional approval.",
-      placeholder: "e.g. Material approved for installation in Basement Level 1 only...",
+      label: "Inspection Remarks",
+      description: "Observations on material condition, storage requirements, or test requirements.",
       type: "textarea",
-      templateToken: "[write remarks]",
+      templateToken: "[inspection observations / storage conditions]",
     },
   ],
   buildText: (values: Record<string, string>) => {
-    const materialName = values.materialName?.trim() || "[material name]"
-    const supplier = values.supplier?.trim() || "[company name]"
-    const materialDetails = values.materialDetails?.trim() || "[write material details]"
+    const materialName = values.materialName?.trim() || "[material name / specification / grade]"
+    const supplier = values.supplier?.trim() || "[supplier / manufacturer]"
+    const materialDetails = values.materialDetails?.trim() || "[delivery details / mill certificates / standards]"
     const deliveryDate = values.deliveryDate?.trim() || "[date]"
-    const inspectionResult = values.inspectionResult?.trim() || "[Approved / Rejected / Approved with Comments]"
-    const remarks = values.remarks?.trim() || "[write remarks]"
+    const inspectionResult = values.inspectionResult?.trim() || "[Accepted / Accepted with Comments / Rejected]"
+    const remarks = values.remarks?.trim() || "[inspection observations / storage conditions]"
 
     return `This Material Inspection Request is submitted for approval of:
 
@@ -578,12 +561,12 @@ ${remarks}.`
     }
 
     const supMatch = text.match(/Supplier \/ Manufacturer:\s*\n\s*(.*?)\s*\n\s*Material details and specifications:/is)
-    if (supMatch && supMatch[1] && !supMatch[1].includes("[company")) {
+    if (supMatch && supMatch[1] && !supMatch[1].includes("[supplier")) {
       result.supplier = supMatch[1].trim()
     }
 
     const detMatch = text.match(/Material details and specifications:\s*\n\s*(.*?)\s*\n\s*Delivery date:/is)
-    if (detMatch && detMatch[1] && !detMatch[1].includes("[write")) {
+    if (detMatch && detMatch[1] && !detMatch[1].includes("[delivery")) {
       result.materialDetails = detMatch[1].trim()
     }
 
@@ -593,12 +576,12 @@ ${remarks}.`
     }
 
     const resMatch = text.match(/Inspection result:\s*\n\s*(.*?)\s*\n\s*Additional remarks:/is)
-    if (resMatch && resMatch[1] && !resMatch[1].includes("[Approved")) {
+    if (resMatch && resMatch[1] && !resMatch[1].includes("[Accepted")) {
       result.inspectionResult = resMatch[1].trim()
     }
 
     const remMatch = text.match(/Additional remarks:\s*\n\s*(.*?)\s*$/is)
-    if (remMatch && remMatch[1] && !remMatch[1].includes("[write")) {
+    if (remMatch && remMatch[1] && !remMatch[1].includes("[inspection")) {
       result.remarks = remMatch[1].trim()
     }
 
@@ -614,99 +597,92 @@ export const INSPECTION_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
   fields: [
     {
       key: "location",
-      label: "Project / Location",
-      description: "Specific site location or project area inspected.",
-      placeholder: "e.g. Building A – Roof Level",
+      label: "Inspection Location / Area",
+      description: "Exact site area, zone, or structural element inspected.",
       type: "text",
-      templateToken: "[Enter project name or location]",
+      templateToken: "[location / zone / element]",
     },
     {
       key: "inspectionDate",
       label: "Inspection Date",
-      description: "Date on which the inspection was conducted.",
+      description: "Date of site inspection.",
       type: "date",
-      templateToken: "[Enter inspection date]",
+      templateToken: "[date]",
     },
     {
-      key: "inspectionType",
-      label: "Inspection Type",
-      description: "Category of inspection (e.g. Structural, MEP, Safety, Architectural).",
-      placeholder: "e.g. Structural Steel Welding Inspection",
+      key: "activity",
+      label: "Inspected Activity / Trade",
+      description: "Construction trade or activity inspected.",
       type: "text",
-      templateToken: "[Enter type of inspection]",
+      templateToken: "[trade / activity]",
     },
     {
       key: "inspectorName",
-      label: "Inspected By",
-      description: "Name and title of the inspector conducting the site visit.",
-      placeholder: "e.g. Eng. Ahmed Al-Mansoor (Senior QA/QC)",
+      label: "Inspector / Engineer Name",
+      description: "Supervising engineer or QA/QC inspector name.",
       type: "text",
-      templateToken: "[Enter inspector name]",
+      templateToken: "[inspector / engineer name]",
     },
     {
-      key: "findings",
-      label: "Inspection Findings",
-      description: "Detailed observations, test results, or general condition of inspected elements.",
-      placeholder: "e.g. All main beam welds inspected visually and via NDT. Full penetration achieved...",
+      key: "observations",
+      label: "Key Observations & Findings",
+      description: "Detailed site findings, workmanship quality, or technical notes.",
       type: "textarea",
-      templateToken: "[Describe inspection observations and findings]",
+      templateToken: "[describe site findings / workmanship / observations]",
     },
     {
-      key: "nonConformities",
-      label: "Non-Conformities Identified",
-      description: "Any defects, deviations, or non-conformance identified during inspection.",
-      placeholder: "e.g. Minor undercut observed on beam joint B-12 weld seam...",
+      key: "defects",
+      label: "Identified Defects / Deficiencies",
+      description: "Any observed defects, omissions, or non-compliant items.",
       type: "textarea",
-      templateToken: "[Describe any non-conformance or issues found]",
+      templateToken: "[describe defects / non-compliant items]",
     },
     {
-      key: "requiredActions",
-      label: "Required Actions",
-      description: "Corrective steps required to address identified findings or defects.",
-      placeholder: "e.g. Grind back defective weld section and re-weld per WPS-04...",
+      key: "rectification",
+      label: "Required Rectification / Instructions",
+      description: "Immediate corrective action or instructions issued to site team.",
       type: "textarea",
-      templateToken: "[Describe required corrective actions]",
+      templateToken: "[describe corrective action / instructions]",
     },
     {
       key: "recommendations",
-      label: "Recommendations",
-      description: "Inspector recommendations for quality assurance or preventive measures.",
-      placeholder: "e.g. Increase pre-heating temperature for outdoor welding during high wind...",
+      label: "Engineering Recommendations",
+      description: "Preventative recommendations or follow-up site requirements.",
       type: "textarea",
-      templateToken: "[Enter recommendations]",
+      templateToken: "[describe preventative recommendations]",
     },
     {
-      key: "status",
-      label: "Inspection Status",
-      description: "Overall status of the inspection report.",
+      key: "inspectionStatus",
+      label: "Overall Inspection Status",
+      description: "Overall evaluation outcome for this inspection.",
       type: "select",
       options: [
-        { value: "Open", label: "Open" },
-        { value: "Under Review", label: "Under Review" },
-        { value: "Closed", label: "Closed" },
+        { value: "Satisfactory", label: "Satisfactory" },
+        { value: "Satisfactory with Comments", label: "Satisfactory with Comments" },
+        { value: "Unsatisfactory", label: "Unsatisfactory" },
+        { value: "Re-inspection Required", label: "Re-inspection Required" },
       ],
-      templateToken: "[Open / Under Review / Closed]",
+      templateToken: "[Satisfactory / Satisfactory with Comments / Unsatisfactory]",
     },
     {
-      key: "additionalComments",
-      label: "Additional Comments",
-      description: "Any extra notes, reference standards, or attached test logs.",
-      placeholder: "e.g. NDT ultrasonic inspection report attached under document ref UT-882.",
-      type: "textarea",
-      templateToken: "[Add any additional notes]",
+      key: "attachmentsNote",
+      label: "Attachments / References",
+      description: "Reference to attached photos, site sketches, or lab test reports.",
+      type: "text",
+      templateToken: "[photo / sketch / report references]",
     },
   ],
   buildText: (values: Record<string, string>) => {
-    const location = values.location?.trim() || "[Enter project name or location]"
-    const inspectionDate = values.inspectionDate?.trim() || "[Enter inspection date]"
-    const inspectionType = values.inspectionType?.trim() || "[Enter type of inspection]"
-    const inspectorName = values.inspectorName?.trim() || "[Enter inspector name]"
-    const findings = values.findings?.trim() || "[Describe inspection observations and findings]"
-    const nonConformities = values.nonConformities?.trim() || "[Describe any non-conformance or issues found]"
-    const requiredActions = values.requiredActions?.trim() || "[Describe required corrective actions]"
-    const recommendations = values.recommendations?.trim() || "[Enter recommendations]"
-    const status = values.status?.trim() || "[Open / Under Review / Closed]"
-    const additionalComments = values.additionalComments?.trim() || "[Add any additional notes]"
+    const location = values.location?.trim() || "[location / zone / element]"
+    const inspectionDate = values.inspectionDate?.trim() || "[date]"
+    const activity = values.activity?.trim() || "[trade / activity]"
+    const inspectorName = values.inspectorName?.trim() || "[inspector / engineer name]"
+    const observations = values.observations?.trim() || "[describe site findings / workmanship / observations]"
+    const defects = values.defects?.trim() || "[describe defects / non-compliant items]"
+    const rectification = values.rectification?.trim() || "[describe corrective action / instructions]"
+    const recommendations = values.recommendations?.trim() || "[describe preventative recommendations]"
+    const inspectionStatus = values.inspectionStatus?.trim() || "[Satisfactory / Satisfactory with Comments / Unsatisfactory]"
+    const attachmentsNote = values.attachmentsNote?.trim() || "[photo / sketch / report references]"
 
     return `Inspection Report
 
@@ -716,82 +692,82 @@ ${location}
 Inspection Date:
 ${inspectionDate}
 
-Inspection Type:
-${inspectionType}
+Activity / Trade:
+${activity}
 
 Inspected By:
 ${inspectorName}
 
-Inspection Findings:
-${findings}
+Key Observations:
+${observations}
 
-Non-Conformities Identified:
-${nonConformities}
+Identified Defects:
+${defects}
 
-Required Actions:
-${requiredActions}
+Required Rectification:
+${rectification}
 
-Recommendations:
+Engineering Recommendations:
 ${recommendations}
 
-Inspection Status:
-${status}
+Overall Status:
+${inspectionStatus}
 
-Additional Comments:
-${additionalComments}`
+Attachments / References:
+${attachmentsNote}`
   },
   parseValuesFromText: (text: string): Record<string, string> => {
     const result: Record<string, string> = {}
     if (!text) return result
 
     const locMatch = text.match(/Project \/ Location:\s*\n(.*?)\s*\n/i)
-    if (locMatch && locMatch[1] && !locMatch[1].includes("[Enter")) {
+    if (locMatch && locMatch[1] && !locMatch[1].includes("[location")) {
       result.location = locMatch[1].trim()
     }
 
     const dateMatch = text.match(/Inspection Date:\s*\n(.*?)\s*\n/i)
-    if (dateMatch && dateMatch[1] && !dateMatch[1].includes("[Enter")) {
+    if (dateMatch && dateMatch[1] && !dateMatch[1].includes("[date]")) {
       result.inspectionDate = dateMatch[1].trim()
     }
 
-    const typeMatch = text.match(/Inspection Type:\s*\n(.*?)\s*\n/i)
-    if (typeMatch && typeMatch[1] && !typeMatch[1].includes("[Enter")) {
-      result.inspectionType = typeMatch[1].trim()
+    const actMatch = text.match(/Activity \/ Trade:\s*\n(.*?)\s*\n/i)
+    if (actMatch && actMatch[1] && !actMatch[1].includes("[trade")) {
+      result.activity = actMatch[1].trim()
     }
 
     const inspMatch = text.match(/Inspected By:\s*\n(.*?)\s*\n/i)
-    if (inspMatch && inspMatch[1] && !inspMatch[1].includes("[Enter")) {
+    if (inspMatch && inspMatch[1] && !inspMatch[1].includes("[inspector")) {
       result.inspectorName = inspMatch[1].trim()
     }
 
-    const findMatch = text.match(/Inspection Findings:\s*\n\s*(.*?)\s*\n\s*Non-Conformities Identified:/is)
-    if (findMatch && findMatch[1] && !findMatch[1].includes("[Describe")) {
-      result.findings = findMatch[1].trim()
+    const obsMatch = text.match(/Key Observations:\s*\n(.*?)\s*\n/is)
+    if (obsMatch && obsMatch[1] && !obsMatch[1].includes("[describe")) {
+      result.observations = obsMatch[1].trim()
     }
 
-    const nonConfMatch = text.match(/Non-Conformities Identified:\s*\n\s*(.*?)\s*\n\s*Required Actions:/is)
-    if (nonConfMatch && nonConfMatch[1] && !nonConfMatch[1].includes("[Describe")) {
-      result.nonConformities = nonConfMatch[1].trim()
+    const defMatch = text.match(/Identified Defects:\s*\n(.*?)\s*\n/is)
+    if (defMatch && defMatch[1] && !defMatch[1].includes("[describe")) {
+      result.defects = defMatch[1].trim()
     }
 
-    const reqActMatch = text.match(/Required Actions:\s*\n\s*(.*?)\s*\n\s*Recommendations:/is)
-    if (reqActMatch && reqActMatch[1] && !reqActMatch[1].includes("[Describe")) {
-      result.requiredActions = reqActMatch[1].trim()
+    const rectMatch = text.match(/Required Rectification:\s*\n(.*?)\s*\n/is)
+    if (rectMatch && rectMatch[1] && !rectMatch[1].includes("[describe")) {
+      result.rectification = rectMatch[1].trim()
     }
 
-    const recMatch = text.match(/Recommendations:\s*\n\s*(.*?)\s*\n\s*Inspection Status:/is)
-    if (recMatch && recMatch[1] && !recMatch[1].includes("[Enter")) {
+    const recMatch = text.match(/Engineering Recommendations:\s*\n(.*?)\s*\n/is)
+    if (recMatch && recMatch[1] && !recMatch[1].includes("[describe")) {
       result.recommendations = recMatch[1].trim()
     }
 
-    const statMatch = text.match(/Inspection Status:\s*\n(.*?)\s*\n/i)
-    if (statMatch && statMatch[1] && !statMatch[1].includes("[Open")) {
-      result.status = statMatch[1].trim()
+    const statMatch = text.match(/Overall Status:\s*\n(.*?)\s*\n/i)
+    if (statMatch && statMatch[1] && !statMatch[1].includes("[Satisfactory")) {
+      result.inspectionStatus = statMatch[1].trim()
     }
 
-    const commMatch = text.match(/Additional Comments:\s*\n\s*(.*?)\s*$/is)
-    if (commMatch && commMatch[1] && !commMatch[1].includes("[Add")) {
-      result.additionalComments = commMatch[1].trim()
+    const attMatch = text.match(/Attachments \/ References:\s*\n(.*?)$/is)
+    if (attMatch && attMatch[1] && !attMatch[1].includes("[photo")) {
+      result.attachmentsNote = attMatch[1].trim()
     }
 
     return result
@@ -805,122 +781,106 @@ export const IPC_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
   description: "Fill in the payment certificate details below to automatically update the IPC letter text.",
   fields: [
     {
-      key: "period",
-      label: "Payment Period",
-      description: "Specify the billing or payment period (e.g. Month / Year or Date Range).",
-      placeholder: "e.g. 01 Aug 2026 – 31 Aug 2026 (IPC No. 05)",
+      key: "ipcPeriod",
+      label: "Certificate Period / Reference",
+      description: "Billing period, milestone, or certificate reference.",
       type: "text",
-      templateToken: "[period]",
+      templateToken: "[billing period / certificate reference]",
     },
     {
-      key: "submittedAmount",
-      label: "Submitted Amount",
-      description: "Total valuation amount submitted by the contractor.",
-      placeholder: "e.g. USD 150,000.00",
+      key: "claimedAmount",
+      label: "Gross Amount Claimed",
+      description: "Gross valuation claimed by Contractor for works completed.",
       type: "text",
-      templateToken: "[amount]",
+      templateToken: "[claimed amount]",
     },
     {
       key: "certifiedAmount",
-      label: "Certified Amount",
-      description: "Net certified payment amount approved by the engineer/consultant.",
-      placeholder: "e.g. USD 142,500.00",
+      label: "Net Certified Amount Payable",
+      description: "Net certified amount recommended for payment after deductions.",
       type: "text",
-      templateToken: "[amount]",
+      templateToken: "[certified amount]",
     },
     {
-      key: "completedWorks",
-      label: "Completed Works Description",
-      description: "Summary of major construction milestones and completed work packages during this period.",
-      placeholder: "e.g. Completion of Ground Floor structural slabs and MEP rough-ins...",
+      key: "summaryOfWorks",
+      label: "Summary of Certified Works",
+      description: "Brief breakdown of main construction activities certified in this IPC.",
       type: "textarea",
-      templateToken: "[describe completed works]",
+      templateToken: "[summary of certified works / milestones]",
     },
     {
-      key: "status",
-      label: "Certification Status",
-      description: "Current approval status of this Interim Payment Certificate.",
-      type: "select",
-      options: [
-        { value: "Approved", label: "Approved" },
-        { value: "Under Review", label: "Under Review" },
-        { value: "Rejected", label: "Rejected" },
-      ],
-      templateToken: "[Approved / Under Review / Rejected]",
+      key: "certificateDate",
+      label: "Certificate Issue Date",
+      description: "Formal date of IPC certification.",
+      type: "date",
+      templateToken: "[date]",
     },
     {
       key: "remarks",
-      label: "Additional Remarks",
-      description: "Notes regarding retainage, deductions, advance recovery, or payment conditions.",
-      placeholder: "e.g. Subject to 5% retention deduction per contract clause 14.2...",
+      label: "Certification Conditions / Notes",
+      description: "Retention deductions, advance recovery, or payment terms.",
       type: "textarea",
-      templateToken: "[write remarks]",
+      templateToken: "[retention / deductions / payment conditions]",
     },
   ],
   buildText: (values: Record<string, string>) => {
-    const period = values.period?.trim() || "[period]"
-    const submittedAmount = values.submittedAmount?.trim() || "[amount]"
-    const certifiedAmount = values.certifiedAmount?.trim() || "[amount]"
-    const completedWorks = values.completedWorks?.trim() || "[describe completed works]"
-    const status = values.status?.trim() || "[Approved / Under Review / Rejected]"
-    const remarks = values.remarks?.trim() || "[write remarks]"
+    const ipcPeriod = values.ipcPeriod?.trim() || "[billing period / certificate reference]"
+    const claimedAmount = values.claimedAmount?.trim() || "[claimed amount]"
+    const certifiedAmount = values.certifiedAmount?.trim() || "[certified amount]"
+    const summaryOfWorks = values.summaryOfWorks?.trim() || "[summary of certified works / milestones]"
+    const certificateDate = values.certificateDate?.trim() || "[date]"
+    const remarks = values.remarks?.trim() || "[retention / deductions / payment conditions]"
 
-    return `This Interim Payment Certificate relates to payment period:
+    return `Interim Payment Certificate
+Period: ${ipcPeriod}
 
-${period}.
+Gross Amount Claimed:
+${claimedAmount}
 
-Submitted amount:
+Net Certified Amount:
+${certifiedAmount}
 
-${submittedAmount}.
+Summary of Works:
+${summaryOfWorks}
 
-Certified amount:
+Date:
+${certificateDate}
 
-${certifiedAmount}.
-
-The completed works during this period include:
-
-${completedWorks}.
-
-Certification status:
-
-${status}.
-
-Additional remarks:
-
-${remarks}.`
+Certification Notes:
+${remarks}`
   },
   parseValuesFromText: (text: string): Record<string, string> => {
     const result: Record<string, string> = {}
     if (!text) return result
 
-    const periodMatch = text.match(/This Interim Payment Certificate relates to payment period:\s*\n\s*(.*?)\s*\n\s*Submitted amount:/is)
-    if (periodMatch && periodMatch[1] && !periodMatch[1].includes("[period")) {
-      result.period = periodMatch[1].trim()
+    const periodMatch = text.match(/Period: (.*?)\n/i)
+    if (periodMatch && periodMatch[1] && !periodMatch[1].includes("[billing")) {
+      result.ipcPeriod = periodMatch[1].trim()
     }
 
-    const subAmountMatch = text.match(/Submitted amount:\s*\n\s*(.*?)\s*\n\s*Certified amount:/is)
-    if (subAmountMatch && subAmountMatch[1] && !subAmountMatch[1].includes("[amount")) {
-      result.submittedAmount = subAmountMatch[1].trim()
+    const claimMatch = text.match(/Gross Amount Claimed:\s*\n(.*?)\s*\n/is)
+    if (claimMatch && claimMatch[1] && !claimMatch[1].includes("[claimed")) {
+      result.claimedAmount = claimMatch[1].trim()
     }
 
-    const certAmountMatch = text.match(/Certified amount:\s*\n\s*(.*?)\s*\n\s*The completed works during this period include:/is)
-    if (certAmountMatch && certAmountMatch[1] && !certAmountMatch[1].includes("[amount")) {
-      result.certifiedAmount = certAmountMatch[1].trim()
+    const certMatch = text.match(/Net Certified Amount:\s*\n(.*?)\s*\n/is)
+    if (certMatch && certMatch[1] && !certMatch[1].includes("[certified")) {
+      result.certifiedAmount = certMatch[1].trim()
     }
 
-    const worksMatch = text.match(/The completed works during this period include:\s*\n\s*(.*?)\s*\n\s*Certification status:/is)
-    if (worksMatch && worksMatch[1] && !worksMatch[1].includes("[describe")) {
-      result.completedWorks = worksMatch[1].trim()
+    const worksMatch = text.match(/Summary of Works:\s*\n(.*?)\s*\n/is)
+    if (worksMatch && worksMatch[1] && !worksMatch[1].includes("[summary")) {
+      result.summaryOfWorks = worksMatch[1].trim()
     }
 
-    const statusMatch = text.match(/Certification status:\s*\n\s*(.*?)\s*\n\s*Additional remarks:/is)
-    if (statusMatch && statusMatch[1] && !statusMatch[1].includes("[Approved")) {
-      result.status = statusMatch[1].trim()
+    const dateMatch = text.match(/Date:\s*\n(.*?)\s*\n/is)
+    if (dateMatch && dateMatch[1] && !dateMatch[1].includes("[date]")) {
+      result.certificateDate = dateMatch[1].trim()
     }
 
-    const remarksMatch = text.match(/Additional remarks:\s*\n\s*(.*?)\s*$/is)
-    if (remarksMatch && remarksMatch[1] && !remarksMatch[1].includes("[write")) {
-      result.remarks = remarksMatch[1].trim()
+    const remMatch = text.match(/Certification Notes:\s*\n(.*)$/is)
+    if (remMatch && remMatch[1] && !remMatch[1].includes("[retention")) {
+      result.remarks = remMatch[1].trim()
     }
 
     return result
@@ -934,122 +894,105 @@ export const VO_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
   description: "Fill in the variation order details below to automatically update the VO letter text.",
   fields: [
     {
-      key: "variationDescription",
-      label: "Variation Description / Scope",
-      description: "Describe the scope of work added, omitted, or modified.",
-      placeholder: "e.g. Modification of entrance canopy structural steel design",
+      key: "voSubject",
+      label: "Variation Subject / Title",
+      description: "Main title or description of the variation scope change.",
       type: "text",
-      templateToken: "[describe variation]",
+      templateToken: "[variation subject / scope description]",
     },
     {
-      key: "reason",
-      label: "Reason for Variation",
-      description: "Explain the technical, site condition, or client request reason for this variation.",
-      placeholder: "e.g. Requested by Client Representative to accommodate architectural lighting...",
+      key: "justification",
+      label: "Reason & Justification",
+      description: "Why this variation is required (client request, site condition, design change).",
       type: "textarea",
-      templateToken: "[explain reason]",
+      templateToken: "[reason / justification for change]",
     },
     {
       key: "costImpact",
-      label: "Project Cost Impact",
-      description: "Describe the estimated or agreed financial cost impact (+/- amount or No Cost).",
-      placeholder: "e.g. Additional cost of USD 24,500.00",
+      label: "Financial / Cost Impact",
+      description: "Net cost addition or omission resulting from this Variation Order.",
       type: "text",
-      templateToken: "[describe cost impact]",
+      templateToken: "[cost impact / amount]",
     },
     {
       key: "timeImpact",
-      label: "Project Schedule Impact",
-      description: "Describe the impact on project duration or completion date (+/- days or No Time Impact).",
-      placeholder: "e.g. Extension of time by 7 calendar days",
+      label: "Time Impact / Extension of Time",
+      description: "Approved schedule impact or calendar days extension.",
       type: "text",
-      templateToken: "[describe time impact]",
+      templateToken: "[time impact / calendar days]",
     },
     {
-      key: "status",
-      label: "Approval Status",
-      description: "Current approval status of this Variation Order.",
-      type: "select",
-      options: [
-        { value: "Approved", label: "Approved" },
-        { value: "Pending", label: "Pending" },
-        { value: "Rejected", label: "Rejected" },
-      ],
-      templateToken: "[Approved / Pending / Rejected]",
+      key: "orderDate",
+      label: "Variation Order Issue Date",
+      description: "Date when this Variation Order was issued.",
+      type: "date",
+      templateToken: "[date]",
     },
     {
       key: "remarks",
-      label: "Additional Remarks",
-      description: "Additional notes, reference drawings, or site instruction numbers.",
-      placeholder: "e.g. Formal variation agreement signed under Site Instruction SI-014.",
+      label: "Approval Terms & References",
+      description: "Reference to Site Instructions, commercial approvals, or conditions.",
       type: "textarea",
-      templateToken: "[write remarks]",
+      templateToken: "[approval terms / instruction references]",
     },
   ],
   buildText: (values: Record<string, string>) => {
-    const variationDescription = values.variationDescription?.trim() || "[describe variation]"
-    const reason = values.reason?.trim() || "[explain reason]"
-    const costImpact = values.costImpact?.trim() || "[describe cost impact]"
-    const timeImpact = values.timeImpact?.trim() || "[describe time impact]"
-    const status = values.status?.trim() || "[Approved / Pending / Rejected]"
-    const remarks = values.remarks?.trim() || "[write remarks]"
+    const voSubject = values.voSubject?.trim() || "[variation subject / scope description]"
+    const justification = values.justification?.trim() || "[reason / justification for change]"
+    const costImpact = values.costImpact?.trim() || "[cost impact / amount]"
+    const timeImpact = values.timeImpact?.trim() || "[time impact / calendar days]"
+    const orderDate = values.orderDate?.trim() || "[date]"
+    const remarks = values.remarks?.trim() || "[approval terms / instruction references]"
 
-    return `This Variation Order relates to:
+    return `Variation Order: ${voSubject}
 
-${variationDescription}.
+Justification:
+${justification}
 
-The reason for this variation is:
+Cost Impact:
+${costImpact}
 
-${reason}.
+Time Impact:
+${timeImpact}
 
-The impact on project cost is:
+Date:
+${orderDate}
 
-${costImpact}.
-
-The impact on project schedule is:
-
-${timeImpact}.
-
-Approval status:
-
-${status}.
-
-Additional remarks:
-
-${remarks}.`
+Approval Terms & Refs:
+${remarks}`
   },
   parseValuesFromText: (text: string): Record<string, string> => {
     const result: Record<string, string> = {}
     if (!text) return result
 
-    const varMatch = text.match(/This Variation Order relates to:\s*\n\s*(.*?)\s*\n\s*The reason for this variation is:/is)
-    if (varMatch && varMatch[1] && !varMatch[1].includes("[describe")) {
-      result.variationDescription = varMatch[1].trim()
+    const subMatch = text.match(/Variation Order: (.*?)\n/i)
+    if (subMatch && subMatch[1] && !subMatch[1].includes("[variation")) {
+      result.voSubject = subMatch[1].trim()
     }
 
-    const reasonMatch = text.match(/The reason for this variation is:\s*\n\s*(.*?)\s*\n\s*The impact on project cost is:/is)
-    if (reasonMatch && reasonMatch[1] && !reasonMatch[1].includes("[explain")) {
-      result.reason = reasonMatch[1].trim()
+    const justMatch = text.match(/Justification:\s*\n(.*?)\s*\n/is)
+    if (justMatch && justMatch[1] && !justMatch[1].includes("[reason")) {
+      result.justification = justMatch[1].trim()
     }
 
-    const costMatch = text.match(/The impact on project cost is:\s*\n\s*(.*?)\s*\n\s*The impact on project schedule is:/is)
-    if (costMatch && costMatch[1] && !costMatch[1].includes("[describe")) {
+    const costMatch = text.match(/Cost Impact:\s*\n(.*?)\s*\n/is)
+    if (costMatch && costMatch[1] && !costMatch[1].includes("[cost")) {
       result.costImpact = costMatch[1].trim()
     }
 
-    const timeMatch = text.match(/The impact on project schedule is:\s*\n\s*(.*?)\s*\n\s*Approval status:/is)
-    if (timeMatch && timeMatch[1] && !timeMatch[1].includes("[describe")) {
+    const timeMatch = text.match(/Time Impact:\s*\n(.*?)\s*\n/is)
+    if (timeMatch && timeMatch[1] && !timeMatch[1].includes("[time")) {
       result.timeImpact = timeMatch[1].trim()
     }
 
-    const statusMatch = text.match(/Approval status:\s*\n\s*(.*?)\s*\n\s*Additional remarks:/is)
-    if (statusMatch && statusMatch[1] && !statusMatch[1].includes("[Approved")) {
-      result.status = statusMatch[1].trim()
+    const dateMatch = text.match(/Date:\s*\n(.*?)\s*\n/is)
+    if (dateMatch && dateMatch[1] && !dateMatch[1].includes("[date]")) {
+      result.orderDate = dateMatch[1].trim()
     }
 
-    const remarksMatch = text.match(/Additional remarks:\s*\n\s*(.*?)\s*$/is)
-    if (remarksMatch && remarksMatch[1] && !remarksMatch[1].includes("[write")) {
-      result.remarks = remarksMatch[1].trim()
+    const remMatch = text.match(/Approval Terms & Refs:\s*\n(.*)$/is)
+    if (remMatch && remMatch[1] && !remMatch[1].includes("[approval")) {
+      result.remarks = remMatch[1].trim()
     }
 
     return result
@@ -1063,34 +1006,21 @@ export const GENERAL_LETTER_DETAILS_SCHEMA: LetterDetailsSchema = {
   description: "Fill in the general document details below to automatically update the letter text.",
   fields: [
     {
-      key: "purpose",
-      label: "Document Purpose",
-      description: "State the general purpose or intent of this document.",
-      placeholder: "e.g. Formal transmittal of project submittals and progress logs",
+      key: "documentSubject",
+      label: "Document Subject / Reference",
+      description: "Main subject or reference description for this document.",
       type: "text",
-      templateToken: "[describe document purpose]",
+      templateToken: "[document subject / reference]",
+    },
+    {
+      key: "documentDate",
+      label: "Document Date",
+      description: "Formal date of the document.",
+      type: "date",
+      templateToken: "[date]",
     },
     {
       key: "details",
-      label: "Document Details & Content",
-      description: "Write the main content, detailed summary, or correspondence notes.",
-      placeholder: "e.g. Transmitting weekly site progress report for week 32...",
-      type: "textarea",
-      templateToken: "[write document details]",
-    },
-    {
-      key: "notes",
-      label: "Additional Notes",
-      description: "Any extra notes, reference attachments, or distribution instructions.",
-      placeholder: "e.g. Copies distributed to Project Management and Supervision Consultant.",
-      type: "textarea",
-      templateToken: "[write notes]",
-    },
-  ],
-  buildText: (values: Record<string, string>) => {
-    const purpose = values.purpose?.trim() || "[describe document purpose]"
-    const details = values.details?.trim() || "[write document details]"
-    const notes = values.notes?.trim() || "[write notes]"
 
     return `This document relates to:
 

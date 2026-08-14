@@ -9,6 +9,8 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Eye,
   File as FileIcon,
   FilePlus2,
@@ -141,6 +143,7 @@ export function CreateLetterPage({
   // Reusable Structured Letter Details state (Phase 1: NCR)
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({})
   const [isManuallyEdited, setIsManuallyEdited] = useState(false)
+  const [isDetailsExpanded, setIsDetailsExpanded] = useState(true)
 
   // Contextual Preview state for structured Letter Details fields
   const [previewState, setPreviewState] = useState<{
@@ -818,132 +821,138 @@ export function CreateLetterPage({
 
           {/* Letter Details Section (NCR, RFI, WIR, MIR, Inspection, IPC, VO, General) */}
           {activeSchema ? (
-            <div className="space-y-4 rounded-xl border border-blue-200/80 bg-blue-50/30 p-2.5 sm:p-4 dark:border-blue-900/50 dark:bg-blue-950/20 w-full min-w-0 overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-200/60 pb-3 dark:border-blue-900/40">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-foreground">{activeSchema.title}</h3>
-                    <span className="rounded-md bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-800 dark:bg-blue-900/60 dark:text-blue-200">
-                      Structured Form
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{activeSchema.description}</p>
-                </div>
+            <div className="space-y-3 rounded-xl border border-blue-200/80 bg-blue-50/30 p-2.5 sm:p-4 dark:border-blue-900/50 dark:bg-blue-950/20 w-full min-w-0 overflow-hidden">
+              <div
+                className={cn(
+                  "flex items-center justify-between gap-2 w-full min-w-0",
+                  isDetailsExpanded && "border-b border-blue-200/60 pb-3 dark:border-blue-900/40",
+                )}
+              >
+                <h3 className="text-sm font-bold text-foreground min-w-0 truncate">{activeSchema.title}</h3>
+                <button
+                  type="button"
+                  onClick={() => setIsDetailsExpanded((prev) => !prev)}
+                  title={isDetailsExpanded ? "Collapse Letter Details" : "Expand Letter Details"}
+                  aria-label={isDetailsExpanded ? "Collapse Letter Details" : "Expand Letter Details"}
+                  className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-blue-200/80 bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground dark:border-blue-900/60"
+                >
+                  {isDetailsExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                </button>
               </div>
 
-              <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 w-full min-w-0">
-                {activeSchema.fields.map((field) => {
-                  const isFullWidth = field.type === "textarea"
-                  return (
-                    <div key={field.key} className={cn("space-y-1.5 w-full min-w-0", isFullWidth && "sm:col-span-2")}>
-                      <div className="flex items-center justify-between gap-2">
-                        <Label htmlFor={`letter-field-${field.key}`} className="text-xs font-semibold text-foreground">
-                          {field.label}
-                        </Label>
-                        <button
-                          type="button"
-                          onPointerDown={() => handleEyePointerDown(field.key)}
-                          onPointerUp={() => handleEyePointerUp(field.key)}
-                          onPointerLeave={() => handleEyePointerLeaveOrCancel(field.key)}
-                          onPointerCancel={() => handleEyePointerLeaveOrCancel(field.key)}
-                          title="Preview in Letter"
-                          aria-label={`Preview ${field.label} in Letter`}
-                          className={cn(
-                            "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-amber-100 hover:text-amber-800 dark:hover:bg-amber-950 dark:hover:text-amber-300",
-                            previewState?.fieldKey === field.key && "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-bold",
-                          )}
-                        >
-                          <Eye className="size-3.5" />
-                        </button>
-                      </div>
-
-                      {field.type === "textarea" ? (
-                        <div className="flex flex-col w-full min-w-0">
-                          <CompactFieldToolbar
-                            value={fieldValues[field.key] ?? ""}
-                            onChange={(val) => handleFieldValueChange(field.key, val)}
-                            disabled={isSubmitting}
-                            fieldName={field.label}
-                          />
-                          <textarea
-                            id={`letter-field-${field.key}`}
-                            value={fieldValues[field.key] ?? ""}
-                            placeholder={field.placeholder}
-                            disabled={isSubmitting}
-                            onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
-                            className="min-h-20 w-full min-w-0 resize-y rounded-b-lg border border-input bg-background px-3 py-2 text-xs leading-5 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:bg-muted/30"
-                          />
-                        </div>
-                      ) : field.type === "text" ? (
-                        <div className="flex flex-col w-full min-w-0">
-                          <CompactFieldToolbar
-                            value={fieldValues[field.key] ?? ""}
-                            onChange={(val) => handleFieldValueChange(field.key, val)}
-                            disabled={isSubmitting}
-                            fieldName={field.label}
-                          />
-                          <Input
-                            id={`letter-field-${field.key}`}
-                            type="text"
-                            value={fieldValues[field.key] ?? ""}
-                            placeholder={field.placeholder}
-                            disabled={isSubmitting}
-                            onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
-                            className="h-10 w-full min-w-0 rounded-b-lg rounded-t-none text-xs"
-                          />
-                        </div>
-                      ) : field.type === "select" ? (
-                        <Select
-                          value={fieldValues[field.key] || null}
-                          onValueChange={(val) => handleFieldValueChange(field.key, val ?? "")}
-                          disabled={isSubmitting}
-                        >
-                          <SelectTrigger id={`letter-field-${field.key}`} className="h-10 w-full min-w-0 rounded-lg px-3 text-xs">
-                            <SelectValue placeholder="Select status">
-                              {(val) => field.options?.find((o) => o.value === val)?.label ?? "Select status"}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent align="start">
-                            {field.options?.map((opt) => (
-                              <SelectItem key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : field.type === "date" ? (
-                        <div className="flex items-center gap-1.5 sm:gap-2 w-full min-w-0">
-                          <Input
-                            id={`letter-field-${field.key}`}
-                            type="date"
-                            value={fieldValues[field.key] ?? ""}
-                            disabled={isSubmitting}
-                            onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
-                            className="h-10 text-xs flex-1 min-w-0"
-                          />
-                          <Button
+              {isDetailsExpanded ? (
+                <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 w-full min-w-0">
+                  {activeSchema.fields.map((field) => {
+                    const isFullWidth = field.type === "textarea"
+                    return (
+                      <div key={field.key} className={cn("space-y-1.5 w-full min-w-0", isFullWidth && "sm:col-span-2")}>
+                        <div className="flex items-center justify-between gap-2">
+                          <Label htmlFor={`letter-field-${field.key}`} className="text-xs font-semibold text-foreground">
+                            {field.label}
+                          </Label>
+                          <button
                             type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={isSubmitting}
-                            onClick={() => {
-                              const today = new Date()
-                              const yyyy = today.getFullYear()
-                              const mm = String(today.getMonth() + 1).padStart(2, "0")
-                              const dd = String(today.getDate()).padStart(2, "0")
-                              handleFieldValueChange(field.key, `${yyyy}-${mm}-${dd}`)
-                            }}
-                            className="h-10 px-2.5 sm:px-3 text-xs font-semibold shrink-0"
-                            title="Set to today's date"
+                            onPointerDown={() => handleEyePointerDown(field.key)}
+                            onPointerUp={() => handleEyePointerUp(field.key)}
+                            onPointerLeave={() => handleEyePointerLeaveOrCancel(field.key)}
+                            onPointerCancel={() => handleEyePointerLeaveOrCancel(field.key)}
+                            title="Preview in Letter"
+                            aria-label={`Preview ${field.label} in Letter`}
+                            className={cn(
+                              "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-amber-100 hover:text-amber-800 dark:hover:bg-amber-950 dark:hover:text-amber-300",
+                              previewState?.fieldKey === field.key && "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-bold",
+                            )}
                           >
-                            Today
-                          </Button>
+                            <Eye className="size-3.5" />
+                          </button>
                         </div>
-                      ) : null}
-                    </div>
-                  )
-                })}
-              </div>
+
+                        {field.type === "textarea" ? (
+                          <div className="flex flex-col w-full min-w-0">
+                            <CompactFieldToolbar
+                              value={fieldValues[field.key] ?? ""}
+                              onChange={(val) => handleFieldValueChange(field.key, val)}
+                              disabled={isSubmitting}
+                              fieldName={field.label}
+                            />
+                            <textarea
+                              id={`letter-field-${field.key}`}
+                              value={fieldValues[field.key] ?? ""}
+                              disabled={isSubmitting}
+                              onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
+                              className="min-h-20 w-full min-w-0 resize-y rounded-b-lg border border-input bg-background px-3 py-2 text-xs leading-5 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:bg-muted/30"
+                            />
+                          </div>
+                        ) : field.type === "text" ? (
+                          <div className="flex flex-col w-full min-w-0">
+                            <CompactFieldToolbar
+                              value={fieldValues[field.key] ?? ""}
+                              onChange={(val) => handleFieldValueChange(field.key, val)}
+                              disabled={isSubmitting}
+                              fieldName={field.label}
+                            />
+                            <Input
+                              id={`letter-field-${field.key}`}
+                              type="text"
+                              value={fieldValues[field.key] ?? ""}
+                              disabled={isSubmitting}
+                              onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
+                              className="h-10 w-full min-w-0 rounded-b-lg rounded-t-none text-xs"
+                            />
+                          </div>
+                        ) : field.type === "select" ? (
+                          <Select
+                            value={fieldValues[field.key] || null}
+                            onValueChange={(val) => handleFieldValueChange(field.key, val ?? "")}
+                            disabled={isSubmitting}
+                          >
+                            <SelectTrigger id={`letter-field-${field.key}`} className="h-10 w-full min-w-0 rounded-lg px-3 text-xs">
+                              <SelectValue placeholder="Select status">
+                                {(val) => field.options?.find((o) => o.value === val)?.label ?? "Select status"}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent align="start">
+                              {field.options?.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : field.type === "date" ? (
+                          <div className="flex items-center gap-1.5 sm:gap-2 w-full min-w-0">
+                            <Input
+                              id={`letter-field-${field.key}`}
+                              type="date"
+                              value={fieldValues[field.key] ?? ""}
+                              disabled={isSubmitting}
+                              onChange={(e) => handleFieldValueChange(field.key, e.target.value)}
+                              className="h-10 text-xs flex-1 min-w-0"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={isSubmitting}
+                              onClick={() => {
+                                const today = new Date()
+                                const yyyy = today.getFullYear()
+                                const mm = String(today.getMonth() + 1).padStart(2, "0")
+                                const dd = String(today.getDate()).padStart(2, "0")
+                                handleFieldValueChange(field.key, `${yyyy}-${mm}-${dd}`)
+                              }}
+                              className="h-10 px-2.5 sm:px-3 text-xs font-semibold shrink-0"
+                              title="Set to today's date"
+                            >
+                              Today
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : null}
             </div>
           ) : null}
 
