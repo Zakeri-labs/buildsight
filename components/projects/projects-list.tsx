@@ -451,16 +451,7 @@ export function ProjectsList({
     ],
     [locale],
   )
-  const desktopPageCount = Math.max(1, Math.ceil(desktopProjects.length / pageSize))
-  const safeCurrentPage = Math.min(currentPage, desktopPageCount)
-  const desktopPageStart = (safeCurrentPage - 1) * pageSize
-  const paginatedDesktopProjects = desktopProjects.slice(desktopPageStart, desktopPageStart + pageSize)
-  const desktopPageWindowStart = Math.max(1, Math.min(safeCurrentPage - 2, Math.max(1, desktopPageCount - 4)))
-  const desktopPageNumbers = Array.from(
-    { length: Math.min(5, desktopPageCount - desktopPageWindowStart + 1) },
-    (_, index) => desktopPageWindowStart + index,
-  )
-  const createdProject = createdProjectId ? projectRows.find((project) => project.id === createdProjectId) : undefined
+
 
   useEffect(() => {
     setCurrentPage(1)
