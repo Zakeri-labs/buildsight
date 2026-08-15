@@ -330,22 +330,6 @@ export function ProjectsList({
     })
   }, [filteredProjects, selectedSupervisor, selectedAreaDistrict])
 
-  const mobileProjects = useMemo(() => {
-    const rows = [...filteredProjects]
-    if (sortBy === "name-asc") rows.sort((left, right) => left.name.localeCompare(right.name))
-    if (sortBy === "progress-desc") rows.sort((left, right) => right.progress - left.progress || left.name.localeCompare(right.name))
-    if (sortBy === "date-desc") {
-      rows.sort((left, right) => {
-        const leftTime = Date.parse(left.startDate)
-        const rightTime = Date.parse(right.startDate)
-        const leftValue = Number.isNaN(leftTime) ? Number.NEGATIVE_INFINITY : leftTime
-        const rightValue = Number.isNaN(rightTime) ? Number.NEGATIVE_INFINITY : rightTime
-        return rightValue - leftValue || left.name.localeCompare(right.name)
-      })
-    }
-    return rows
-  }, [filteredProjects, sortBy])
-
   const desktopProjects = useMemo(() => {
     const rows = [...desktopFilteredProjects]
     const compareNullableText = (leftValue: string | null | undefined, rightValue: string | null | undefined, direction: "asc" | "desc") => {
@@ -375,6 +359,8 @@ export function ProjectsList({
     return rows
   }, [desktopFilteredProjects, sortBy])
 
+  const mobileProjects = desktopProjects
+
   const totalProjects = projectRows.length
   const activeProjects = projectRows.filter((project) => project.status === "active").length
   const stoppedProjects = projectRows.filter((project) => project.status === "stopped").length
@@ -399,9 +385,72 @@ export function ProjectsList({
   ).sort((left, right) => left.localeCompare(right))
   const hasUnassignedSupervisor = projectRows.some((project) => !project.assignedSupervisorId)
   const hasUnspecifiedArea = projectRows.some((project) => !project.areaDistrict?.trim())
-  const activeFilterCount = [selectedStatus, selectedType, selectedOwner].filter((value) => value !== "all").length
-  const desktopActiveFilterCount = activeFilterCount + [selectedSupervisor, selectedAreaDistrict].filter((value) => value !== "all").length
-  const hasSearchOrFilters = Boolean(searchQuery.trim()) || desktopActiveFilterCount > 0 || sortBy !== "default"
+  const activeFilterCount = [selectedStatus, selectedType, selectedSupervisor, selectedAreaDistrict, selectedOwner].filter((value) => value !== "all").length
+  const desktopActiveFilterCount = activeFilterCount
+  const hasSearchOrFilters = Boolean(searchQuery.trim()) || activeFilterCount > 0 || sortBy !== "default"
+  const desktopPageCount = Math.max(1, Math.ceil(desktopProjects.length / pageSize))
+  const safeCurrentPage = Math.min(currentPage, desktopPageCount)
+  const desktopPageStart = (safeCurrentPage - 1) * pageSize
+  const paginatedDesktopProjects = desktopProjects.slice(desktopPageStart, desktopPageStart + pageSize)
+  const desktopPageWindowStart = Math.max(1, Math.min(safeCurrentPage - 2, Math.max(1, desktopPageCount - 4)))
+  const desktopPageNumbers = Array.from(
+    { length: Math.min(5, desktopPageCount - desktopPageWindowStart + 1) },
+    (_, index) => desktopPageWindowStart + index,
+  )
+  const createdProject = createdProjectId ? projectRows.find((project) => project.id === createdProjectId) : undefined
+
+  const [draftStatus, setDraftStatus] = useState(selectedStatus)
+  const [draftType, setDraftType] = useState(selectedType)
+  const [draftSupervisor, setDraftSupervisor] = useState(selectedSupervisor)
+  const [draftAreaDistrict, setDraftAreaDistrict] = useState(selectedAreaDistrict)
+  const [draftOwner, setDraftOwner] = useState(selectedOwner)
+  const [draftSortBy, setDraftSortBy] = useState(sortBy)
+
+  useEffect(() => {
+    if (filtersOpen) {
+      setDraftStatus(selectedStatus)
+      setDraftType(selectedType)
+      setDraftSupervisor(selectedSupervisor)
+      setDraftAreaDistrict(selectedAreaDistrict)
+      setDraftOwner(selectedOwner)
+      setDraftSortBy(sortBy)
+    }
+  }, [filtersOpen, selectedStatus, selectedType, selectedSupervisor, selectedAreaDistrict, selectedOwner, sortBy])
+
+  function handleMobileClear() {
+    setDraftStatus("all")
+    setDraftType("all")
+    setDraftSupervisor("all")
+    setDraftAreaDistrict("all")
+    setDraftOwner("all")
+    setDraftSortBy("default")
+    clearAllProjectListFilters()
+  }
+
+  function handleMobileApply() {
+    setSelectedStatus(draftStatus)
+    setSelectedType(draftType)
+    setSelectedSupervisor(draftSupervisor)
+    setSelectedAreaDistrict(draftAreaDistrict)
+    setSelectedOwner(draftOwner)
+    setSortBy(draftSortBy)
+    setCurrentPage(1)
+    setFiltersOpen(false)
+  }
+
+  const sortOptionsList = useMemo(
+    () => [
+      { label: locale === "ar" ? "الترتيب الافتراضي" : "Default Sort", value: "default" },
+      { label: locale === "ar" ? "الاسم (أ-ي)" : "Name (A-Z)", value: "name-asc" },
+      { label: locale === "ar" ? "التقدم (الأعلى أولاً)" : "Progress (High to Low)", value: "progress-desc" },
+      { label: locale === "ar" ? "تاريخ البدء (الأحدث)" : "Start Date (Newest)", value: "date-desc" },
+      { label: locale === "ar" ? "المشرف (أ-ي)" : "Supervisor A–Z", value: "supervisor-asc" },
+      { label: locale === "ar" ? "المشرف (ي-أ)" : "Supervisor Z–A", value: "supervisor-desc" },
+      { label: locale === "ar" ? "المنطقة (أ-ي)" : "Area / District A–Z", value: "area-asc" },
+      { label: locale === "ar" ? "المنطقة (ي-أ)" : "Area / District Z–A", value: "area-desc" },
+    ],
+    [locale],
+  )
   const desktopPageCount = Math.max(1, Math.ceil(desktopProjects.length / pageSize))
   const safeCurrentPage = Math.min(currentPage, desktopPageCount)
   const desktopPageStart = (safeCurrentPage - 1) * pageSize
@@ -535,12 +584,7 @@ export function ProjectsList({
                 }
               />
               <DropdownMenuContent align="end" className="w-48">
-                {[
-                  { label: locale === "ar" ? "الترتيب الافتراضي" : "Default Sort", value: "default" },
-                  { label: locale === "ar" ? "الاسم (أ-ي)" : "Name (A-Z)", value: "name-asc" },
-                  { label: locale === "ar" ? "التقدم (الأعلى أولاً)" : "Progress (High to Low)", value: "progress-desc" },
-                  { label: locale === "ar" ? "تاريخ البدء (الأحدث)" : "Start Date (Newest)", value: "date-desc" },
-                ].map((opt) => (
+                {sortOptionsList.map((opt) => (
                   <DropdownMenuItem
                     key={opt.value}
                     onClick={() => setSortBy(opt.value)}
@@ -595,16 +639,16 @@ export function ProjectsList({
           )}
 
           <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
-            <SheetContent side="bottom" className="max-h-[82dvh] rounded-t-2xl pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden">
+            <SheetContent side="bottom" className="flex max-h-[85dvh] flex-col rounded-t-2xl pb-[calc(1rem+env(safe-area-inset-bottom))] md:hidden">
               <SheetHeader className="pb-2">
                 <SheetTitle>{locale === "ar" ? "الفلاتر" : "Filters"}</SheetTitle>
               </SheetHeader>
-              <div className="grid gap-4 overflow-y-auto px-4 pb-2">
+              <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto px-4 pb-2">
                 <MobileFilterField label={locale === "ar" ? "الحالة" : "Status"}>
                   <DropdownFilter
                     label={locale === "ar" ? "كل الحالات" : "All Statuses"}
-                    value={selectedStatus}
-                    onChange={setSelectedStatus}
+                    value={draftStatus}
+                    onChange={setDraftStatus}
                     className="w-full"
                     options={[
                       { label: locale === "ar" ? "جميع الحالات" : "All Statuses", value: "all" },
@@ -618,8 +662,8 @@ export function ProjectsList({
                 <MobileFilterField label={locale === "ar" ? "نوع المشروع" : "Project Type"}>
                   <DropdownFilter
                     label={locale === "ar" ? "كل الأنواع" : "All Types"}
-                    value={selectedType}
-                    onChange={setSelectedType}
+                    value={draftType}
+                    onChange={setDraftType}
                     className="w-full"
                     options={[
                       { label: locale === "ar" ? "كل الأنواع" : "All Types", value: "all" },
@@ -627,11 +671,37 @@ export function ProjectsList({
                     ]}
                   />
                 </MobileFilterField>
+                <MobileFilterField label={locale === "ar" ? "المشرف" : "Supervisor"}>
+                  <DropdownFilter
+                    label={locale === "ar" ? "كل المشرفين" : "All Supervisors"}
+                    value={draftSupervisor}
+                    onChange={setDraftSupervisor}
+                    className="w-full"
+                    options={[
+                      { label: locale === "ar" ? "كل المشرفين" : "All Supervisors", value: "all" },
+                      ...supervisorOptionsForFilter.map((supervisor) => ({ label: supervisor, value: supervisor })),
+                      ...(hasUnassignedSupervisor ? [{ label: locale === "ar" ? "غير معين" : "Unassigned", value: "__unassigned__" }] : []),
+                    ]}
+                  />
+                </MobileFilterField>
+                <MobileFilterField label={locale === "ar" ? "المنطقة / الحي" : "Area / District"}>
+                  <DropdownFilter
+                    label={locale === "ar" ? "كل المناطق" : "All Areas"}
+                    value={draftAreaDistrict}
+                    onChange={setDraftAreaDistrict}
+                    className="w-full"
+                    options={[
+                      { label: locale === "ar" ? "كل المناطق" : "All Areas", value: "all" },
+                      ...areaDistrictOptions.map((area) => ({ label: area, value: area })),
+                      ...(hasUnspecifiedArea ? [{ label: locale === "ar" ? "غير محدد" : "Unspecified", value: "__unspecified__" }] : []),
+                    ]}
+                  />
+                </MobileFilterField>
                 <MobileFilterField label={locale === "ar" ? "المالك / العميل" : "Owner / Client"}>
                   <DropdownFilter
                     label={locale === "ar" ? "كل العملاء" : "All Clients"}
-                    value={selectedOwner}
-                    onChange={setSelectedOwner}
+                    value={draftOwner}
+                    onChange={setDraftOwner}
                     className="w-full"
                     options={[
                       { label: locale === "ar" ? "كل العملاء" : "All Clients", value: "all" },
@@ -639,12 +709,21 @@ export function ProjectsList({
                     ]}
                   />
                 </MobileFilterField>
+                <MobileFilterField label={locale === "ar" ? "الترتيب" : "Sort"}>
+                  <DropdownFilter
+                    label={locale === "ar" ? "الترتيب الافتراضي" : "Default Sort"}
+                    value={draftSortBy}
+                    onChange={setDraftSortBy}
+                    className="w-full"
+                    options={sortOptionsList}
+                  />
+                </MobileFilterField>
               </div>
               <SheetFooter className="grid grid-cols-2 border-t pt-3">
-                <Button type="button" variant="outline" className="h-10" onClick={clearAllProjectListFilters}>
+                <Button type="button" variant="outline" className="h-10" onClick={handleMobileClear}>
                   {locale === "ar" ? "مسح" : "Clear"}
                 </Button>
-                <Button type="button" className="h-10" onClick={() => setFiltersOpen(false)}>
+                <Button type="button" className="h-10" onClick={handleMobileApply}>
                   {locale === "ar" ? "تطبيق" : "Apply"}
                 </Button>
               </SheetFooter>
@@ -814,16 +893,7 @@ export function ProjectsList({
           label="Sort By"
           value={sortBy}
           onChange={setSortBy}
-          options={[
-            { label: "Default Sort", value: "default" },
-            { label: "Name (A-Z)", value: "name-asc" },
-            { label: "Progress (High to Low)", value: "progress-desc" },
-            { label: "Start Date (Newest)", value: "date-desc" },
-            { label: "Supervisor A–Z", value: "supervisor-asc" },
-            { label: "Supervisor Z–A", value: "supervisor-desc" },
-            { label: "Area / District A–Z", value: "area-asc" },
-            { label: "Area / District Z–A", value: "area-desc" },
-          ]}
+          options={sortOptionsList}
         />
 
         <Button
