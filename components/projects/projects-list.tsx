@@ -479,34 +479,13 @@ export function ProjectsList({
 
       {isMember ? (
         <section className="flex min-w-0 flex-col gap-3 md:hidden" aria-label="Projects under your supervision">
-          <div className="flex min-w-0 items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold tracking-tight text-slate-950 dark:text-white">
-                {locale === "ar" ? "المشاريع" : "Projects"}
-              </h1>
-              <p className="mt-0.5 text-xs leading-4 text-muted-foreground">
-                {locale === "ar" ? "المشاريع تحت إشرافك" : "Projects under your supervision"}
-              </p>
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label={locale === "ar" ? "إجراءات المشاريع" : "Project actions"}
-                    className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
-                  >
-                    <MoreVertical className="size-4" />
-                  </button>
-                }
-              />
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem>
-                  <Upload className="size-4" />
-                  {locale === "ar" ? "تصدير" : "Export"}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold tracking-tight text-slate-950 dark:text-white">
+              {locale === "ar" ? "المشاريع" : "Projects"}
+            </h1>
+            <p className="mt-0.5 text-xs leading-4 text-muted-foreground">
+              {locale === "ar" ? "المشاريع تحت إشرافك" : "Projects under your supervision"}
+            </p>
           </div>
 
           <div className="grid grid-cols-4 gap-1.5">
