@@ -1,4 +1,5 @@
 import "server-only"
+import nodemailer from "nodemailer"
 
 import type { OrganizationRole } from "@/lib/db/types"
 import { roleLabel } from "@/lib/db/types"
@@ -43,10 +44,6 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#039;")
 }
 
-function isValidProviderMessageId(value: unknown): value is string {
-  return typeof value === "string" && /^[A-Za-z0-9_-]{6,}$/.test(value.trim())
-}
-
 function isSafeInvitationUrl(value: string): boolean {
   try {
     const url = new URL(value)
@@ -68,14 +65,6 @@ function isSafeInvitationUrl(value: string): boolean {
   }
 }
 
-type ProviderPayload = {
-  id?: unknown
-  name?: unknown
-  message?: unknown
-  error?: unknown
-  statusCode?: unknown
-}
-
 function sanitizeProviderText(value: unknown): string | null {
   if (typeof value !== "string") return null
   const trimmed = value.trim()
@@ -87,26 +76,6 @@ function sanitizeProviderText(value: unknown): string | null {
     .replace(/https?:\/\/\S+/gi, "[redacted-url]")
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]")
     .slice(0, 300)
-}
-
-function safeProviderErrorDetails(payload: ProviderPayload | null, rawBody: string): Record<string, string | number> | null {
-  const nestedError = payload?.error && typeof payload.error === "object"
-    ? (payload.error as { name?: unknown; message?: unknown })
-    : null
-  const details: Record<string, string | number> = {}
-  const name = sanitizeProviderText(payload?.name ?? nestedError?.name)
-  const message = sanitizeProviderText(
-    payload?.message ??
-      nestedError?.message ??
-      (typeof payload?.error === "string" ? payload.error : null) ??
-      rawBody,
-  )
-
-  if (name) details.name = name
-  if (message) details.message = message
-  if (typeof payload?.statusCode === "number") details.statusCode = payload.statusCode
-
-  return Object.keys(details).length ? details : null
 }
 
 function logInvitationEmailFailure(input: {
@@ -128,10 +97,8 @@ function logInvitationEmailFailure(input: {
 }
 
 /**
- * Submit an organization invitation email through the project's existing
- * server-side Resend delivery architecture. "sent" means Resend accepted
- * the API request and returned a provider message id; it does not prove inbox
- * delivery.
+ * Submit an organization invitation email through Zoho SMTP using Nodemailer.
+ * "sent" means SMTP transport accepted the message and returned a messageId.
  */
 export async function sendInvitationEmail(input: InvitationEmailInput): Promise<InvitationEmailResult> {
   const configuration = resolveInvitationEmailConfiguration()
@@ -154,7 +121,7 @@ export async function sendInvitationEmail(input: InvitationEmailInput): Promise<
     return { status: "provider_error", category: "invalid_sender" }
   }
 
-  const { apiKey, from } = configuration
+  const { host, port, secure, user, pass, from } = configuration
 
   if (!isSafeInvitationUrl(input.invitationUrl)) {
     logInvitationEmailFailure({
@@ -216,63 +183,47 @@ export async function sendInvitationEmail(input: InvitationEmailInput): Promise<
 </html>`
 
   try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: {
+        user,
+        pass,
       },
-      body: JSON.stringify({
-        from,
-        to: [input.to.trim().toLowerCase()],
-        subject: `Invitation to join ${input.organizationName} on BuildSight`,
-        text,
-        html,
-      }),
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 15000,
     })
 
-    const rawBody = await response.text().catch(() => "")
-    let payload: ProviderPayload | null = null
-    if (rawBody) {
-      try {
-        payload = JSON.parse(rawBody) as ProviderPayload
-      } catch {
-        payload = null
-      }
-    }
+    const info = await transporter.sendMail({
+      from,
+      to: input.to.trim().toLowerCase(),
+      subject: `Invitation to join ${input.organizationName} on BuildSight`,
+      text,
+      html,
+    })
 
-    if (!response.ok) {
+    if (!info.messageId) {
       logInvitationEmailFailure({
-        message: "Invitation email provider rejected request",
-        configuration,
-        category: "provider_rejected",
-        providerStatus: response.status,
-        providerDetails: safeProviderErrorDetails(payload, rawBody),
-      })
-      return { status: "provider_error", category: "provider_rejected", providerStatus: response.status }
-    }
-
-    if (payload?.error || !isValidProviderMessageId(payload?.id)) {
-      logInvitationEmailFailure({
-        message: "Invitation email provider response did not contain a valid message id",
+        message: "Invitation email SMTP response did not contain a messageId",
         configuration,
         category: "provider_missing_id",
-        providerStatus: response.status,
-        providerDetails: safeProviderErrorDetails(payload, rawBody),
       })
-      return { status: "provider_error", category: "provider_missing_id", providerStatus: response.status }
+      return { status: "provider_error", category: "provider_missing_id" }
     }
 
-    return { status: "sent", providerMessageId: payload.id.trim() }
+    return { status: "sent", providerMessageId: String(info.messageId).trim() }
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
     logInvitationEmailFailure({
-      message: "Invitation email request failed",
+      message: "Invitation email SMTP send failed",
       configuration,
-      category: "network_error",
+      category: "provider_rejected",
       providerDetails: {
-        message: sanitizeProviderText(error instanceof Error ? error.message : "Unknown error") ?? "Unknown error",
+        message: sanitizeProviderText(errorMessage) ?? "SMTP send failure",
       },
     })
-    return { status: "provider_error", category: "network_error" }
+    return { status: "provider_error", category: "provider_rejected" }
   }
 }

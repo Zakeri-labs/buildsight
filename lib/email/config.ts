@@ -2,6 +2,7 @@ import "server-only"
 
 export type InvitationSenderVariableName =
   | "INVITATION_FROM_EMAIL"
+  | "ZOHO_SMTP_USER"
   | "RESEND_FROM_EMAIL"
   | "EMAIL_FROM"
   | "NOTIFICATION_FROM_EMAIL"
@@ -10,7 +11,11 @@ export type InvitationSenderVariableName =
   | "FROM_EMAIL"
 
 export type InvitationEmailEnvironmentPresence = {
-  RESEND_API_KEY: boolean
+  ZOHO_SMTP_HOST: boolean
+  ZOHO_SMTP_PORT: boolean
+  ZOHO_SMTP_SECURE: boolean
+  ZOHO_SMTP_USER: boolean
+  ZOHO_SMTP_PASSWORD: boolean
   INVITATION_FROM_EMAIL: boolean
   RESEND_FROM_EMAIL: boolean
   EMAIL_FROM: boolean
@@ -27,7 +32,11 @@ type ConfigurationDiagnostics = {
 export type InvitationEmailConfiguration =
   | (ConfigurationDiagnostics & {
       status: "configured"
-      apiKey: string
+      host: string
+      port: number
+      secure: boolean
+      user: string
+      pass: string
       from: string
       senderVariable: InvitationSenderVariableName
     })
@@ -63,16 +72,26 @@ function extractSenderAddress(value: string): string | null {
 }
 
 function readEnvironment(): {
-  apiKey: string | undefined
+  host: string
+  port: number
+  secure: boolean
+  user: string | undefined
+  pass: string | undefined
   senderCandidates: SenderCandidate[]
   presence: InvitationEmailEnvironmentPresence
 } {
-  // Keep every server-only environment access explicit. Existing email features
-  // use direct process.env reads, and explicit reads also remain reliable when
-  // Next.js/Vercel bundles server actions.
-  const apiKey = process.env.RESEND_API_KEY?.trim()
+  const host = process.env.ZOHO_SMTP_HOST?.trim() || "smtppro.zoho.com"
+  const portRaw = process.env.ZOHO_SMTP_PORT?.trim() || "465"
+  const port = Number(portRaw) || 465
+  const secureRaw = process.env.ZOHO_SMTP_SECURE?.trim()
+  const secure = secureRaw !== undefined ? secureRaw.toLowerCase() === "true" : port === 465
+
+  const user = process.env.ZOHO_SMTP_USER?.trim()
+  const pass = process.env.ZOHO_SMTP_PASSWORD?.trim()
+
   const senderCandidates: SenderCandidate[] = [
     { variable: "INVITATION_FROM_EMAIL", value: process.env.INVITATION_FROM_EMAIL?.trim() },
+    { variable: "ZOHO_SMTP_USER", value: process.env.ZOHO_SMTP_USER?.trim() },
     { variable: "RESEND_FROM_EMAIL", value: process.env.RESEND_FROM_EMAIL?.trim() },
     { variable: "EMAIL_FROM", value: process.env.EMAIL_FROM?.trim() },
     { variable: "NOTIFICATION_FROM_EMAIL", value: process.env.NOTIFICATION_FROM_EMAIL?.trim() },
@@ -82,10 +101,18 @@ function readEnvironment(): {
   ]
 
   return {
-    apiKey,
+    host,
+    port,
+    secure,
+    user,
+    pass,
     senderCandidates,
     presence: {
-      RESEND_API_KEY: Boolean(apiKey),
+      ZOHO_SMTP_HOST: Boolean(process.env.ZOHO_SMTP_HOST?.trim()),
+      ZOHO_SMTP_PORT: Boolean(process.env.ZOHO_SMTP_PORT?.trim()),
+      ZOHO_SMTP_SECURE: Boolean(process.env.ZOHO_SMTP_SECURE?.trim()),
+      ZOHO_SMTP_USER: Boolean(user),
+      ZOHO_SMTP_PASSWORD: Boolean(pass),
       INVITATION_FROM_EMAIL: Boolean(process.env.INVITATION_FROM_EMAIL?.trim()),
       RESEND_FROM_EMAIL: Boolean(process.env.RESEND_FROM_EMAIL?.trim()),
       EMAIL_FROM: Boolean(process.env.EMAIL_FROM?.trim()),
@@ -98,18 +125,16 @@ function readEnvironment(): {
 }
 
 /**
- * Resolve invitation email configuration at server-action execution time.
- * The invitation path deliberately reuses the same RESEND_API_KEY and existing
- * verified sender variables already used by the project's other server emails.
+ * Resolve invitation email configuration for Zoho SMTP at server-action execution time.
  */
 export function resolveInvitationEmailConfiguration(): InvitationEmailConfiguration {
-  const { apiKey, senderCandidates, presence } = readEnvironment()
+  const { host, port, secure, user, pass, senderCandidates, presence } = readEnvironment()
   const populatedCandidates = senderCandidates.filter(
     (candidate): candidate is SenderCandidate & { value: string } => Boolean(candidate.value),
   )
   const validCandidate = populatedCandidates.find((candidate) => extractSenderAddress(candidate.value))
 
-  if (!apiKey) {
+  if (!user || !pass) {
     return {
       status: "not_configured",
       category: "missing_api_key",
@@ -122,7 +147,11 @@ export function resolveInvitationEmailConfiguration(): InvitationEmailConfigurat
   if (validCandidate) {
     return {
       status: "configured",
-      apiKey,
+      host,
+      port,
+      secure,
+      user,
+      pass,
       from: validCandidate.value,
       senderVariable: validCandidate.variable,
       environmentPresence: presence,
