@@ -161,7 +161,7 @@ export async function getProjectParticipantUserOptions(projectId: string): Promi
       .filter((id): id is string => Boolean(id)),
   )
   const membershipRows = (membershipsResult.data ?? []) as MembershipRow[]
-  const availableMemberships = membershipRows.filter((membership) => !existingUserIds.has(membership.user_id))
+  const availableMemberships = membershipRows
   const userIds = Array.from(new Set(availableMemberships.map((membership) => membership.user_id)))
   const organizationIds = Array.from(new Set(availableMemberships.map((membership) => membership.organization_id)))
   if (userIds.length === 0 || organizationIds.length === 0) return []

@@ -445,15 +445,43 @@ export async function addProjectParticipantAction(input: AddParticipantInput): P
     const roleSlug = mappedRole.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")
     const targetSourceKey = `user:${userId}:${roleSlug}`
 
-    const { data: existingParticipant, error: duplicateError } = await admin
-      .from("project_participants")
-      .select("id, status")
-      .eq("project_id", input.projectId)
-      .eq("key_contact_user_id", userId)
-      .eq("participant_role_label", mappedRole.label)
-      .maybeSingle()
-    if (duplicateError) throw duplicateError
-    if (existingParticipant?.status === "active") {
+    let isDuplicate = false
+
+    if (mappedRole.label === "Supervisor" && project.assigned_supervisor_id === userId) {
+      isDuplicate = true
+    }
+
+    if (!isDuplicate) {
+      const { data: existingParticipants, error: duplicateError } = await admin
+        .from("project_participants")
+        .select("id, status, participant_role_label, participant_type, source_key")
+        .eq("project_id", input.projectId)
+        .eq("key_contact_user_id", userId)
+        .eq("status", "active")
+
+      if (duplicateError) throw duplicateError
+
+      if (existingParticipants && existingParticipants.length > 0) {
+        for (const row of existingParticipants) {
+          if (row.participant_role_label === mappedRole.label) {
+            isDuplicate = true
+            break
+          }
+          if (
+            mappedRole.label === "Supervisor" &&
+            (row.participant_role_label === "Supervisor" ||
+              row.source_key === "consultant" ||
+              row.participant_type === "consultancy" ||
+              row.participant_type === "supervisor")
+          ) {
+            isDuplicate = true
+            break
+          }
+        }
+      }
+    }
+
+    if (isDuplicate) {
       return { ok: false, error: `This user is already assigned as a ${mappedRole.label}.` }
     }
 
@@ -486,14 +514,12 @@ export async function addProjectParticipantAction(input: AddParticipantInput): P
       sort_order: sortOrder,
       updated_at: new Date().toISOString(),
     }
-    const participantWrite = existingParticipant
-      ? admin.from("project_participants").update(participantPayload).eq("id", existingParticipant.id).eq("project_id", input.projectId)
-      : admin.from("project_participants").insert({
-          project_id: input.projectId,
-          ...participantPayload,
-          source_key: targetSourceKey,
-          created_by: actorId,
-        })
+    const participantWrite = admin.from("project_participants").insert({
+      project_id: input.projectId,
+      ...participantPayload,
+      source_key: targetSourceKey,
+      created_by: actorId,
+    })
     const { error: insertError } = await participantWrite
     if (insertError) {
       if (createdAccessMembershipId) {
