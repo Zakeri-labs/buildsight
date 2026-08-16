@@ -1,6 +1,7 @@
 import "server-only"
 
 import { AuthzError, getUserIdOrThrow } from "@/lib/auth/guards"
+import { isUserProjectSupervisor } from "@/lib/auth/project-access"
 import { createAdminClient } from "@/lib/supabase/admin"
 import type { SiteVisitProjectAccess } from "@/lib/site-visits/types"
 
@@ -265,8 +266,11 @@ export async function assertSiteVisitManager(projectId: string): Promise<string>
     .maybeSingle()
   if (membershipError) throw membershipError
 
-  if (membership?.role === "org_member" && project.assigned_supervisor_id !== userId) {
-    throw new AuthzError("Only the assigned Project Supervisor can manage Site Visit Requests for this project")
+  if (membership?.role === "org_member") {
+    const isSupervisor = await isUserProjectSupervisor(userId, projectId)
+    if (!isSupervisor) {
+      throw new AuthzError("Only an assigned Project Supervisor can manage Site Visit Requests for this project")
+    }
   }
 
   return userId

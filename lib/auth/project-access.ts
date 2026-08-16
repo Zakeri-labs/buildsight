@@ -21,6 +21,39 @@ export function isProjectUuid(value: unknown): value is string {
 }
 
 /**
+ * Check authoritatively if a user is assigned as a Project Supervisor
+ * (either through assigned_supervisor_id or an active project_participants row).
+ */
+export async function isUserProjectSupervisor(userId: string, projectId: string): Promise<boolean> {
+  if (!isProjectUuid(userId) || !isProjectUuid(projectId)) return false
+
+  const admin = createAdminClient()
+  const [{ data: project, error: pError }, { data: participant, error: partError }] = await Promise.all([
+    admin
+      .from("projects")
+      .select("id")
+      .eq("id", projectId)
+      .eq("assigned_supervisor_id", userId)
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from("project_participants")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("key_contact_user_id", userId)
+      .eq("status", "active")
+      .in("participant_type", ["consultancy", "supervisor"])
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  if (pError) throw pError
+  if (partError) throw partError
+
+  return Boolean(project || participant)
+}
+
+/**
  * Canonical server-side project read authorization.
  *
  * Existing non-Viewer access paths are preserved. An authenticated user whose

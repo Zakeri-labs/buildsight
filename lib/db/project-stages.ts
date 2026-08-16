@@ -1,7 +1,7 @@
 import "server-only"
 
 import { createAdminClient } from "@/lib/supabase/admin"
-import { isProjectUuid, resolveProjectReadAccessForUser } from "@/lib/auth/project-access"
+import { isProjectUuid, isUserProjectSupervisor, resolveProjectReadAccessForUser } from "@/lib/auth/project-access"
 import {
   EMPTY_TERM_RESPONSE_CONTENT,
   sanitizeReportHtml,
@@ -190,16 +190,8 @@ async function projectAccess(projectId: string, userId: string) {
   // Keep the existing access model for all other roles, but do not let a
   // general organization membership expose another project's Stage workflow.
   if (access.supervisingOrganizationRole === "org_member") {
-    const admin = createAdminClient()
-    const { data: supervisedProject, error: supervisorError } = await admin
-      .from("projects")
-      .select("id")
-      .eq("id", projectId)
-      .eq("assigned_supervisor_id", userId)
-      .limit(1)
-      .maybeSingle()
-    if (supervisorError) throw supervisorError
-    if (!supervisedProject) return null
+    const isSupervisor = await isUserProjectSupervisor(userId, projectId)
+    if (!isSupervisor) return null
   }
 
   const stageCreationRestricted =

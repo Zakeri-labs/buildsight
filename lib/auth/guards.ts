@@ -1,7 +1,7 @@
 import "server-only"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { resolveProjectReadAccessForUser } from "@/lib/auth/project-access"
+import { isUserProjectSupervisor, resolveProjectReadAccessForUser } from "@/lib/auth/project-access"
 
 export const PROJECT_REVIEW_ACCESS_ROLES = ["project_admin", "project_manager", "reviewer", "approver"] as const
 export const ORGANIZATION_REVIEW_ROLES = ["org_admin", "org_manager"] as const
@@ -69,8 +69,7 @@ export async function assertProjectMember(projectId: string): Promise<string> {
 /**
  * Confirm the current user may create/save Stage Reports for `projectId`.
  * Organization Members are intentionally narrower than general project read
- * access: they must be the project's canonical assigned Supervisor. Existing
- * authorization behavior for other roles is preserved.
+ * access: they must be one of the project's canonical assigned Supervisors.
  */
 export async function assertProjectStageReportAccess(projectId: string): Promise<string> {
   const userId = await getUserIdOrThrow()
@@ -78,16 +77,8 @@ export async function assertProjectStageReportAccess(projectId: string): Promise
   if (!access) throw new AuthzError("You do not have access to this project")
 
   if (access.supervisingOrganizationRole === "org_member") {
-    const admin = createAdminClient()
-    const { data: supervisedProject, error } = await admin
-      .from("projects")
-      .select("id")
-      .eq("id", projectId)
-      .eq("assigned_supervisor_id", userId)
-      .limit(1)
-      .maybeSingle()
-    if (error) throw error
-    if (!supervisedProject) throw new AuthzError("Only the assigned Project Supervisor can create Stage Reports")
+    const isSupervisor = await isUserProjectSupervisor(userId, projectId)
+    if (!isSupervisor) throw new AuthzError("Only an assigned Project Supervisor can create Stage Reports")
   }
 
   return userId

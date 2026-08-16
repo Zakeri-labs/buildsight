@@ -141,14 +141,44 @@ export async function resolveExplicitSupervisorProjectScope(userId: string): Pro
   if (!isValidCalendarUuid(userId)) return []
 
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from("projects")
-    .select("id, name, code, latitude, longitude, assigned_supervisor_id, supervising_organization_id")
-    .eq("assigned_supervisor_id", userId)
+  const [projectResult, participantResult] = await Promise.all([
+    admin
+      .from("projects")
+      .select("id, name, code, latitude, longitude, assigned_supervisor_id, supervising_organization_id")
+      .eq("assigned_supervisor_id", userId),
+    admin
+      .from("project_participants")
+      .select("project_id")
+      .eq("key_contact_user_id", userId)
+      .eq("status", "active")
+      .in("participant_type", ["consultancy", "supervisor"]),
+  ])
 
-  if (error) throw error
+  if (projectResult.error) throw projectResult.error
+  if (participantResult.error) throw participantResult.error
 
-  return (data ?? [])
+  const directProjects = (projectResult.data ?? []) as any[]
+  const participantProjectIds = (participantResult.data ?? [])
+    .map((row: any) => row.project_id)
+    .filter((id): id is string => isValidCalendarUuid(id))
+
+  const missingProjectIds = participantProjectIds.filter(
+    (id) => !directProjects.some((p: any) => p.id === id),
+  )
+
+  let additionalProjects: any[] = []
+  if (missingProjectIds.length > 0) {
+    const { data: additionalData, error: additionalError } = await admin
+      .from("projects")
+      .select("id, name, code, latitude, longitude, assigned_supervisor_id, supervising_organization_id")
+      .in("id", missingProjectIds)
+    if (additionalError) throw additionalError
+    additionalProjects = (additionalData ?? []) as any[]
+  }
+
+  const allProjects = [...directProjects, ...additionalProjects]
+
+  return allProjects
     .map((row: any) => normalizeProjectRow(row, "supervisor"))
     .filter((project): project is CalendarProjectScopeRow => Boolean(project))
     .sort((left, right) => left.name.localeCompare(right.name))

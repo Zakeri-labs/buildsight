@@ -217,17 +217,42 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
         data = result.data
       }
     } else if (effectiveRole === "org_member") {
-      // Members use the canonical explicit Project Supervisor assignment only.
+      // Members use canonical explicit Project Supervisor assignments (via assigned_supervisor_id or project_participants).
       // Keeping this server-side prevents unrelated organization projects from
       // reaching Member lists, aggregate counts, shell project options, or
       // direct project detail lookups.
-      const result = await admin
+      const { data: participantProjects, error: participantError } = await admin
+        .from("project_participants")
+        .select("project_id")
+        .eq("key_contact_user_id", userId)
+        .eq("status", "active")
+        .in("participant_type", ["consultancy", "supervisor"])
+
+      if (participantError) throw participantError
+
+      const participantProjectIds = Array.from(
+        new Set(
+          (participantProjects ?? [])
+            .map((row: any) => row.project_id)
+            .filter((id): id is string => typeof id === "string" && id.length > 0),
+        ),
+      )
+
+      let query = admin
         .from("projects")
         .select(projectColumns)
         .eq("supervising_organization_id", orgId)
-        .eq("assigned_supervisor_id", userId)
+
+      if (participantProjectIds.length > 0) {
+        query = query.or(`assigned_supervisor_id.eq.${userId},id.in.(${participantProjectIds.join(",")})`)
+      } else {
+        query = query.eq("assigned_supervisor_id", userId)
+      }
+
+      const result = await query
         .order("sort_order", { ascending: true })
         .order("name", { ascending: true })
+
       if (result.error) throw result.error
       data = result.data
     } else {

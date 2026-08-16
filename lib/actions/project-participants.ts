@@ -405,7 +405,7 @@ export async function addProjectParticipantAction(input: AddParticipantInput): P
       return { ok: true }
     }
 
-    if (input.participantType === "supervisor" && mappedRole.label === "Supervisor") {
+    if (input.participantType === "supervisor" || mappedRole.label === "Supervisor") {
       const supervisorMembership = memberships.find(
         (membership) =>
           membership.organization_id === project.supervising_organization_id &&
@@ -415,23 +415,13 @@ export async function addProjectParticipantAction(input: AddParticipantInput): P
         return { ok: false, error: "Select an active Admin, Manager, or Member from the supervising organization as Project Supervisor." }
       }
 
-      await setProjectSupervisorAssignment({
-        projectId: input.projectId,
-        supervisorId: profile.id,
-        actorId,
-      })
-
-      await audit({
-        actorId,
-        action: "project.supervisor_assigned",
-        entityType: "project",
-        organizationId: project.supervising_organization_id,
-        projectId: input.projectId,
-        metadata: { supervisorId: profile.id, source: "project_participant_supervisor" },
-      })
-      revalidateParticipantViews(input.projectId)
-      revalidatePath("/calendar")
-      return { ok: true }
+      if (!project.assigned_supervisor_id) {
+        await setProjectSupervisorAssignment({
+          projectId: input.projectId,
+          supervisorId: profile.id,
+          actorId,
+        })
+      }
     }
 
     const projectOrganizationIds = new Set<string>([
@@ -452,14 +442,20 @@ export async function addProjectParticipantAction(input: AddParticipantInput): P
     if (organizationError) throw organizationError
     if (!organization) return { ok: false, error: "The selected user's organization could not be found." }
 
+    const roleSlug = mappedRole.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")
+    const targetSourceKey = `user:${userId}:${roleSlug}`
+
     const { data: existingParticipant, error: duplicateError } = await admin
       .from("project_participants")
       .select("id, status")
       .eq("project_id", input.projectId)
-      .eq("source_key", `user:${userId}`)
+      .eq("key_contact_user_id", userId)
+      .eq("participant_role_label", mappedRole.label)
       .maybeSingle()
     if (duplicateError) throw duplicateError
-    if (existingParticipant?.status === "active") return { ok: false, error: "This user is already a project participant." }
+    if (existingParticipant?.status === "active") {
+      return { ok: false, error: `This user is already assigned as a ${mappedRole.label}.` }
+    }
 
     let createdAccessMembershipId: string | null = null
     if (input.participantType === "contractor") {
@@ -495,7 +491,7 @@ export async function addProjectParticipantAction(input: AddParticipantInput): P
       : admin.from("project_participants").insert({
           project_id: input.projectId,
           ...participantPayload,
-          source_key: `user:${profile.id}`,
+          source_key: targetSourceKey,
           created_by: actorId,
         })
     const { error: insertError } = await participantWrite
@@ -503,8 +499,45 @@ export async function addProjectParticipantAction(input: AddParticipantInput): P
       if (createdAccessMembershipId) {
         await admin.from("project_user_memberships").delete().eq("id", createdAccessMembershipId)
       }
-      if (insertError.code === "23505") return { ok: false, error: "This user is already a project participant." }
+      if (insertError.code === "23505") return { ok: false, error: `This user is already assigned as a ${mappedRole.label}.` }
       throw insertError
+    }
+
+    if (project.assigned_supervisor_id && project.assigned_supervisor_id !== profile.id) {
+      const { data: existingPrimaryParticipant } = await admin
+        .from("project_participants")
+        .select("id")
+        .eq("project_id", input.projectId)
+        .eq("key_contact_user_id", project.assigned_supervisor_id)
+        .limit(1)
+        .maybeSingle()
+
+      if (!existingPrimaryParticipant) {
+        const { data: primaryProfile } = await admin
+          .from("profiles")
+          .select("id, full_name, email")
+          .eq("id", project.assigned_supervisor_id)
+          .maybeSingle()
+
+        if (primaryProfile) {
+          const primaryName = primaryProfile.full_name?.trim() || primaryProfile.email?.trim() || "Supervisor"
+          await admin.from("project_participants").insert({
+            project_id: input.projectId,
+            organization_id: project.supervising_organization_id,
+            organization_name: organization.name,
+            participant_type: "consultancy",
+            project_role: "consultant",
+            participant_role_label: "Supervisor",
+            key_contact_user_id: primaryProfile.id,
+            key_contact_name: primaryName,
+            key_contact_email: primaryProfile.email?.trim() || null,
+            status: "active",
+            source_key: `user:${primaryProfile.id}:supervisor`,
+            sort_order: sortOrder - 1,
+            created_by: actorId,
+          }).catch(() => undefined)
+        }
+      }
     }
 
     await audit({
@@ -522,6 +555,7 @@ export async function addProjectParticipantAction(input: AddParticipantInput): P
     })
 
     revalidateParticipantViews(input.projectId)
+    revalidatePath("/calendar")
     return { ok: true }
   } catch (error) {
     if (error instanceof AuthzError) return { ok: false, error: error.message }
@@ -670,6 +704,31 @@ export async function removeProjectParticipantAction(input: {
       if (membershipError) throw membershipError
     }
 
+    if (participant.key_contact_user_id) {
+      const { data: project } = await admin
+        .from("projects")
+        .select("assigned_supervisor_id")
+        .eq("id", input.projectId)
+        .maybeSingle()
+
+      if (project?.assigned_supervisor_id === participant.key_contact_user_id) {
+        const { data: nextSupervisor } = await admin
+          .from("project_participants")
+          .select("key_contact_user_id")
+          .eq("project_id", input.projectId)
+          .eq("status", "active")
+          .in("participant_type", ["consultancy", "supervisor"])
+          .not("key_contact_user_id", "is", null)
+          .limit(1)
+          .maybeSingle()
+
+        await admin
+          .from("projects")
+          .update({ assigned_supervisor_id: nextSupervisor?.key_contact_user_id ?? null })
+          .eq("id", input.projectId)
+      }
+    }
+
     await audit({
       actorId,
       action: "project_participant.removed",
@@ -679,6 +738,7 @@ export async function removeProjectParticipantAction(input: {
       metadata: { participantId: input.participantId, userId: participant.key_contact_user_id ?? null },
     })
     revalidateParticipantViews(input.projectId)
+    revalidatePath("/calendar")
     return { ok: true }
   } catch (error) {
     if (error instanceof AuthzError) return { ok: false, error: error.message }
