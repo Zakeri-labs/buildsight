@@ -670,9 +670,9 @@ function RemoveParticipantDialog({
     <Dialog open={open} onOpenChange={(nextOpen) => { setError(null); onOpenChange(nextOpen) }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Remove Participant</DialogTitle>
+          <DialogTitle>Remove participant?</DialogTitle>
           <DialogDescription>
-            Remove {currentParticipant.organization} from this project? Contact records will be hidden. Access is revoked only when it was granted by this participant workflow.
+            Are you sure you want to remove {currentParticipant.keyContact.name || currentParticipant.organization} ({currentParticipant.projectRole}) from this project? Their project access provided by this assignment will also be removed.
           </DialogDescription>
         </DialogHeader>
         {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
@@ -783,7 +783,7 @@ export function ProjectParticipants({
                     {group.participants.map((participant) => {
                       const avatar = participantAvatar(participant)
                       const isContractor = participantGroup(participant) === "contractors"
-                      const removable = isContractor
+                      const removable = true
                       const hasActions = Boolean(participant.keyContact.userId || participant.organizationId || canManageParticipants || canManageAvatars)
                       return (
                         <tr key={participant.id} className="transition-colors hover:bg-muted/30">
@@ -879,7 +879,7 @@ export function ProjectParticipants({
                         {group.participants.map((participant) => {
                           const avatar = participantAvatar(participant)
                           const isContractor = participantGroup(participant) === "contractors"
-                          const removable = isContractor
+                          const removable = true
                           const hasActions = canManageParticipants || canManageAvatars
 
                           return (

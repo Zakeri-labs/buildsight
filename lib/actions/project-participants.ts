@@ -672,7 +672,18 @@ export async function removeProjectParticipantAction(input: {
     if (participantError) throw participantError
     if (!participant) return { ok: false, error: "Participant not found." }
     if (participant.source_key === "consultant") {
-      return { ok: false, error: "The supervising consultant is managed through Edit Project and cannot be removed here." }
+      const { data: otherSupervisors } = await admin
+        .from("project_participants")
+        .select("id")
+        .eq("project_id", input.projectId)
+        .eq("status", "active")
+        .not("id", "eq", input.participantId)
+        .in("participant_type", ["consultancy", "supervisor"])
+        .limit(1)
+
+      if (!otherSupervisors || otherSupervisors.length === 0) {
+        return { ok: false, error: "Projects must have at least one Supervisor. Add another Supervisor before removing this one." }
+      }
     }
 
     const { error: updateError } = await admin
@@ -681,6 +692,13 @@ export async function removeProjectParticipantAction(input: {
       .eq("id", input.participantId)
       .eq("project_id", input.projectId)
     if (updateError) throw updateError
+
+    if (participant.source_key.startsWith("owner:")) {
+      const ownerId = participant.source_key.replace("owner:", "")
+      await admin.from("project_owners").delete().eq("id", ownerId).eq("project_id", input.projectId)
+    } else if (participant.key_contact_user_id) {
+      await admin.from("project_owners").delete().eq("viewer_user_id", participant.key_contact_user_id).eq("project_id", input.projectId)
+    }
 
     if (participant.source_key === "contractor") {
       const { error: projectUpdateError } = await admin
