@@ -416,11 +416,7 @@ export async function addProjectParticipantAction(input: AddParticipantInput): P
       }
 
       if (!project.assigned_supervisor_id) {
-        await setProjectSupervisorAssignment({
-          projectId: input.projectId,
-          supervisorId: profile.id,
-          actorId,
-        })
+        await admin.from("projects").update({ assigned_supervisor_id: profile.id, updated_at: new Date().toISOString() }).eq("id", input.projectId)
       }
     }
 
