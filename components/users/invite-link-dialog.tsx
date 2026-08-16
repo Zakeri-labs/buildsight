@@ -20,27 +20,33 @@ export type InviteResult = {
   emailErrorCategory?: InvitationDeliveryErrorCategory
 }
 
-function deliveryCopy(result: InviteResult): { title: string; description: string } {
+type DeliveryCopy = {
+  title: string
+  description: string
+  secondaryDescription?: string
+}
+
+function deliveryCopy(result: InviteResult): DeliveryCopy {
   if (result.emailStatus === "sent") {
     return {
       title: "Invitation email sent",
-      description: `Invitation email sent to ${result.email}.`,
+      description: `The invitation email has been sent successfully to ${result.email}.`,
+      secondaryDescription: "You can also copy and share the secure invitation link below if needed.",
     }
   }
 
   if (result.emailStatus === "not_configured") {
     return {
       title: "Invitation created",
-      description: "Invitation email is not configured. The secure invitation link was created and can be shared manually.",
+      description: "Automatic email delivery is not currently available. You can share the secure invitation link below manually.",
     }
   }
 
-  const description =
-    result.emailErrorCategory === "site_origin_unavailable"
-      ? "The invitation was created, but email was not sent because a trusted public site URL could not be resolved."
-      : "The invitation was created, but the email provider rejected the message. Check the configured sender and email service settings, then retry."
-
-  return { title: "Invitation created — email not sent", description }
+  return {
+    title: "Invitation created",
+    description: "The invitation was created, but the email could not be sent.",
+    secondaryDescription: "You can share the secure invitation link below manually.",
+  }
 }
 
 export function InviteLinkDialog({
@@ -99,22 +105,34 @@ export function InviteLinkDialog({
 
   return (
     <Dialog open={current != null} onOpenChange={(open: boolean) => !open && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{copy?.title ?? "Invitation"}</DialogTitle>
-          <DialogDescription className="text-pretty">{copy?.description}</DialogDescription>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader className="space-y-2">
+          <div className="flex items-center gap-2">
+            {current?.emailStatus === "sent" && (
+              <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">
+                <Check className="size-4" />
+              </div>
+            )}
+            <DialogTitle className="text-lg font-bold">{copy?.title ?? "Invitation"}</DialogTitle>
+          </div>
+          <DialogDescription className="text-sm text-foreground text-pretty">
+            {copy?.description}
+          </DialogDescription>
+          {copy?.secondaryDescription && (
+            <p className="text-xs text-muted-foreground">{copy.secondaryDescription}</p>
+          )}
         </DialogHeader>
 
-        {!manualShareOnly && current?.emailStatus !== "sent" && (
-          <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+        {current?.emailStatus === "provider_error" && (
+          <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
             <AlertCircle className="mt-0.5 size-4 shrink-0" />
             <p>The invitation remains pending. No membership has been created or accepted.</p>
           </div>
         )}
 
         {current?.invitationUrl ? (
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Secure manual sharing link</p>
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground">Secure invitation link</p>
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
                 <Mail className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -137,7 +155,7 @@ export function InviteLinkDialog({
           </p>
         )}
 
-        {!manualShareOnly && current?.userExists && (
+        {current?.userExists && (
           <p className="text-xs text-muted-foreground">
             This email already has an account. The invitation link will use the existing sign-in flow and will not create a duplicate user.
           </p>
@@ -145,22 +163,21 @@ export function InviteLinkDialog({
 
         {retryError && <p className="text-sm text-destructive">{retryError}</p>}
 
-        <DialogFooter className={manualShareOnly ? undefined : "sm:justify-between"}>
-          {!manualShareOnly &&
-            (current && current.emailStatus !== "sent" ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={retryEmail}
-                disabled={pending}
-                className="bg-transparent"
-              >
-                {pending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                Retry email
-              </Button>
-            ) : (
-              <span />
-            ))}
+        <DialogFooter className="sm:justify-between">
+          {current && current.emailStatus !== "sent" ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={retryEmail}
+              disabled={pending}
+              className="bg-transparent"
+            >
+              {pending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              Retry email
+            </Button>
+          ) : (
+            <span />
+          )}
           <Button onClick={onClose}>Done</Button>
         </DialogFooter>
       </DialogContent>

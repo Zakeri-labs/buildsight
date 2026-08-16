@@ -163,7 +163,6 @@ export function MembersTab({
       <InviteLinkDialog
         result={inviteResult}
         onClose={() => setInviteResult(null)}
-        manualShareOnly
       />
     </div>
   )

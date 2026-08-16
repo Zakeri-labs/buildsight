@@ -132,13 +132,15 @@ export async function sendInvitationEmail(input: InvitationEmailInput): Promise<
     return { status: "provider_error", category: "invalid_invitation_url" }
   }
 
+  const siteOrigin = new URL(input.invitationUrl).origin
   const role = roleLabel(input.organizationRole)
   const expiry = new Date(input.expiresAt).toUTCString()
   const projectLine = input.projectName ? `Project: ${input.projectName}` : null
   const text = [
     "Hello,",
     "",
-    `You have been invited to join ${input.organizationName} on BuildSight.`,
+    "You have been invited to join BONYAN Construction Supervision / BuildSight.",
+    `Organization: ${input.organizationName}`,
     `Organization role: ${role}`,
     projectLine,
     `This invitation expires on ${expiry}.`,
@@ -149,7 +151,7 @@ export async function sendInvitationEmail(input: InvitationEmailInput): Promise<
     "If you were not expecting this invitation, you can ignore this email.",
     "",
     "Regards,",
-    "BuildSight",
+    "BONYAN Construction Engineering Consultancy",
   ]
     .filter((line): line is string => line !== null)
     .join("\n")
@@ -157,28 +159,87 @@ export async function sendInvitationEmail(input: InvitationEmailInput): Promise<
   const organizationName = escapeHtml(input.organizationName)
   const roleName = escapeHtml(role)
   const projectHtml = input.projectName
-    ? `<p style="margin:4px 0"><strong>Project:</strong> ${escapeHtml(input.projectName)}</p>`
+    ? `<tr><td style="padding:3px 0;"><strong>Project:</strong> ${escapeHtml(input.projectName)}</td></tr>`
     : ""
   const invitationUrl = escapeHtml(input.invitationUrl)
   const html = `<!doctype html>
 <html lang="en">
-  <body style="margin:0;background:#f6f7f9;font-family:Arial,Helvetica,sans-serif;color:#172033">
-    <div style="max-width:600px;margin:0 auto;padding:32px 16px">
-      <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:28px">
-        <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3">You&apos;re invited to BuildSight</h1>
-        <p style="margin:0 0 18px;line-height:1.6">You have been invited to join <strong>${organizationName}</strong>.</p>
-        <div style="margin:0 0 22px;padding:14px 16px;background:#f8fafc;border-radius:8px;font-size:14px;line-height:1.5">
-          <p style="margin:4px 0"><strong>Organization role:</strong> ${roleName}</p>
-          ${projectHtml}
-          <p style="margin:4px 0"><strong>Expires:</strong> ${escapeHtml(expiry)}</p>
-        </div>
-        <p style="margin:0 0 22px">
-          <a href="${invitationUrl}" style="display:inline-block;background:#0f766e;color:#ffffff;text-decoration:none;font-weight:600;padding:12px 18px;border-radius:8px">Accept invitation</a>
-        </p>
-        <p style="margin:0 0 8px;font-size:13px;color:#64748b;line-height:1.5">If the button does not work, copy and paste this secure link into your browser:</p>
-        <p style="margin:0;word-break:break-all;font-size:13px;line-height:1.5"><a href="${invitationUrl}">${invitationUrl}</a></p>
-      </div>
-    </div>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>You're invited to join BONYAN</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#f4f6fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;-webkit-font-smoothing:antialiased;">
+    <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#f4f6fb;padding:40px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:580px;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:36px 32px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <!-- Logo Header -->
+            <tr>
+              <td align="center" style="padding-bottom:24px;">
+                <img src="${siteOrigin}/LogoB.png" alt="BONYAN" width="180" style="max-width:180px;height:auto;display:block;border:0;outline:none;" />
+              </td>
+            </tr>
+            <!-- Blue Accent Line -->
+            <tr>
+              <td style="padding-bottom:24px;">
+                <div style="height:3px;background:linear-gradient(90deg, #1d4ed8 0%, #3b82f6 100%);border-radius:2px;"></div>
+              </td>
+            </tr>
+            <!-- Title -->
+            <tr>
+              <td style="padding-bottom:16px;">
+                <h1 style="margin:0;font-size:22px;font-weight:700;color:#0f172a;line-height:1.3;text-align:left;">You&apos;re invited to join BONYAN</h1>
+              </td>
+            </tr>
+            <!-- Greeting & Explanation -->
+            <tr>
+              <td style="padding-bottom:20px;font-size:15px;line-height:1.6;color:#334155;">
+                <p style="margin:0 0 12px;">Hello,</p>
+                <p style="margin:0;">You have been invited to join <strong>BONYAN Construction Supervision / BuildSight</strong>.</p>
+              </td>
+            </tr>
+            <!-- Details Card -->
+            <tr>
+              <td style="padding-bottom:24px;">
+                <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 20px;font-size:14px;line-height:1.6;color:#334155;">
+                  <tr>
+                    <td style="padding:3px 0;"><strong>Organization:</strong> ${organizationName}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:3px 0;"><strong>Role:</strong> ${roleName}</td>
+                  </tr>
+                  ${projectHtml}
+                  <tr>
+                    <td style="padding:3px 0;"><strong>Expires:</strong> ${escapeHtml(expiry)}</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <!-- Primary Blue CTA Button -->
+            <tr>
+              <td align="center" style="padding-bottom:28px;">
+                <a href="${invitationUrl}" style="display:inline-block;background-color:#1d4ed8;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:14px 32px;border-radius:8px;text-align:center;box-shadow:0 2px 4px rgba(29,78,216,0.2);">Accept Invitation</a>
+              </td>
+            </tr>
+            <!-- Plain Text Fallback Link -->
+            <tr>
+              <td style="padding-bottom:28px;border-top:1px solid #f1f5f9;padding-top:20px;font-size:13px;color:#64748b;line-height:1.5;">
+                <p style="margin:0 0 8px;">If the button does not work, copy and paste the link below into your browser:</p>
+                <p style="margin:0;word-break:break-all;font-size:13px;"><a href="${invitationUrl}" style="color:#1d4ed8;text-decoration:underline;">${invitationUrl}</a></p>
+              </td>
+            </tr>
+            <!-- Professional Footer -->
+            <tr>
+              <td align="center" style="border-top:1px solid #f1f5f9;padding-top:20px;font-size:12px;color:#94a3b8;line-height:1.5;">
+                <strong style="color:#64748b;">BONYAN Construction Engineering Consultancy</strong><br>
+                BuildSight Platform
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
   </body>
 </html>`
 
@@ -199,7 +260,7 @@ export async function sendInvitationEmail(input: InvitationEmailInput): Promise<
     const info = await transporter.sendMail({
       from,
       to: input.to.trim().toLowerCase(),
-      subject: `Invitation to join ${input.organizationName} on BuildSight`,
+      subject: `Invitation to join BONYAN (${input.organizationName})`,
       text,
       html,
     })
