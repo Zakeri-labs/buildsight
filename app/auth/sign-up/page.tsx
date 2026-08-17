@@ -15,7 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 function SignUpCard() {
   const router = useRouter()
   const params = useSearchParams()
-  const next = safeNextPath(params.get("next"), "/onboarding")
+  const next = safeNextPath(params.get("next"), "/")
   const prefillEmail = params.get("email")?.trim().toLowerCase() ?? ""
   const invitationFlow = isInvitationPath(next) && Boolean(prefillEmail)
   const loginHref = invitationFlow

@@ -8,6 +8,7 @@ import { UpcomingSiteVisitsCard } from "@/components/dashboard/upcoming-site-vis
 import { ProjectsOverview } from "@/components/dashboard/projects-overview"
 import { MyTasks } from "@/components/dashboard/my-tasks"
 import { requireOnboarded } from "@/lib/auth/session"
+import { resolveUserEffectiveRole } from "@/lib/auth/effective-role"
 import { canAdministerOrganization } from "@/lib/auth/guards"
 import { getSelectedProjectId } from "@/lib/project-scope"
 import { getDashboardData, type DashboardData } from "@/lib/db/domain"
@@ -48,13 +49,14 @@ export default async function DashboardPage({
   const dateRange = resolveDashboardDateRange(query)
   const activityDateFilter = dashboardActivityDateFilter(dateRange)
 
-  // Keep Admin precedence identical to the default landing resolver while
-  // making the authenticated Member landing deterministic if middleware is bypassed.
-  const hasAdminRole = session.memberships.some((membership) => membership.role === "org_admin")
-  const hasMemberRole = session.memberships.some((membership) => membership.role === "org_member")
-  if (!hasAdminRole && hasMemberRole) {
+  const roleResolution = await resolveUserEffectiveRole(session.userId, session.email)
+  if (roleResolution.role === "member") {
     redirect("/memberhomepage")
   }
+  if (roleResolution.role === "viewer") {
+    redirect("/projects")
+  }
+  const hasAdminRole = roleResolution.role === "admin"
 
   const projectId = await getSelectedProjectId()
   const orgId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id ?? null

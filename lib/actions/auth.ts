@@ -8,7 +8,7 @@ import { buildAuthCallbackUrl } from "@/lib/auth/site-origin"
 export async function getSignUpEmailRedirect(
   nextPath: string,
 ): Promise<{ url: string | null; error: string | null }> {
-  const next = safeNextPath(nextPath, "/onboarding")
+  const next = safeNextPath(nextPath, "/")
   const url = await buildAuthCallbackUrl(next)
 
   if (!url) {

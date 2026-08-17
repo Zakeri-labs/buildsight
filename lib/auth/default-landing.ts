@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+import { resolveUserEffectiveRole } from "@/lib/auth/effective-role"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 
@@ -60,34 +61,8 @@ export async function resolveDefaultLandingDestination(userId: string): Promise<
   const normalizedUserId = typeof userId === "string" ? userId.trim() : ""
   if (!UUID_PATTERN.test(normalizedUserId)) return { destination: "/", mode: "fallback" }
 
-  const admin = createLandingLookupClient()
-  if (!admin) return { destination: "/", mode: "fallback" }
-
-  const membershipResult = await admin
-    .from("organization_memberships")
-    .select("role")
-    .eq("user_id", normalizedUserId)
-    .eq("status", "active")
-
-  if (membershipResult.error) {
-    logLandingLookupError("resolve organization role for default landing", membershipResult.error)
-    return { destination: "/", mode: "fallback" }
-  }
-
-  const roles = new Set<string>()
-  for (const row of membershipResult.data ?? []) {
-    if (typeof row.role === "string") roles.add(row.role)
-  }
-
-  // Admin takes precedence even when the same user is also an assigned Supervisor.
-  if (roles.has("org_admin")) return { destination: "/", mode: "admin" }
-
-  // Every organization Member uses the dedicated Member homepage as the
-  // default landing destination. Explicit Supervisor assignments must not
-  // override the Member home route.
-  if (roles.has("org_member")) {
-    return { destination: "/memberhomepage", mode: "member" }
-  }
-
+  const effective = await resolveUserEffectiveRole(normalizedUserId)
+  if (effective.role === "admin") return { destination: "/", mode: "admin" }
+  if (effective.role === "member") return { destination: "/memberhomepage", mode: "member" }
   return { destination: "/", mode: "fallback" }
 }

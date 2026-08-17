@@ -2,6 +2,7 @@ import "server-only"
 import { cache } from "react"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { resolveUserEffectiveRole } from "@/lib/auth/effective-role"
 import type { Organization, OrganizationRole, Profile } from "@/lib/db/types"
 
 export type OrgMembership = {
@@ -77,10 +78,13 @@ export async function requireSession(): Promise<SessionContext> {
   return session
 }
 
-/** Require the user to belong to at least one org, else send to onboarding. */
+/** Require the user to belong to an org or invitation/project role, else send to onboarding. */
 export async function requireOnboarded(): Promise<SessionContext> {
   const session = await requireSession()
-  if (session.memberships.length === 0) redirect("/onboarding")
+  const resolution = await resolveUserEffectiveRole(session.userId, session.email)
+  if (resolution.role === "unonboarded_creator") {
+    redirect("/onboarding")
+  }
   return session
 }
 
