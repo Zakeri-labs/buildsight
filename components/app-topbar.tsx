@@ -45,7 +45,7 @@ export function AppTopbar({
 }) {
   const pathname = usePathname()
   const currentUser = useCurrentUser()
-  const userRoleLabel = currentUser.role ? roleLabel(currentUser.role) : "Admin"
+  const userRoleLabel = currentUser.role ? roleLabel(currentUser.role) : ""
   const { t } = useI18n()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 

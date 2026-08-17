@@ -337,7 +337,7 @@ export async function loadProjectStageExecution(
       name: profile.full_name?.trim() || profile.email || "Project member",
       email: profile.email,
       avatarUrl: profile.avatar_url,
-      role: rawRole ? roleLabel(rawRole) : "Admin",
+      role: rawRole ? roleLabel(rawRole) : "",
     }]
   }))
   const orgs = new Map<string, ProjectStageOrganization>((organizations ?? []).map((organization: any) => [organization.id, { id: organization.id, name: organization.name }]))

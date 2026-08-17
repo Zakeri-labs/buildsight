@@ -1,4 +1,6 @@
 import { requireOnboarded } from "@/lib/auth/session"
+import { resolveUserEffectiveRole } from "@/lib/auth/effective-role"
+import type { OrganizationRole } from "@/lib/db/types"
 import { AppShell } from "@/components/app-shell"
 import { CurrentUserProvider, type CurrentUser } from "@/components/current-user-provider"
 import { getOrgProjects } from "@/lib/db/domain"
@@ -37,12 +39,22 @@ export default async function AppGroupLayout({
     projectId: selectedProjectId,
   })
 
+  const effectiveRes = await resolveUserEffectiveRole(session.userId, session.email)
+  const resolvedRole: OrganizationRole | null =
+    effectiveRes.role === "admin"
+      ? (primary?.role === "org_manager" ? "org_manager" : "org_admin")
+      : effectiveRes.role === "member"
+        ? "org_member"
+        : effectiveRes.role === "viewer"
+          ? "viewer"
+          : primary?.role ?? null
+
   const user: CurrentUser = {
     id: session.userId,
     name: fullName,
     email: session.email,
     initials: initials(fullName, session.email).toUpperCase(),
-    role: primary?.role ?? null,
+    role: resolvedRole,
     organizationName: session.supervisingOrg?.name ?? primary?.organization?.name ?? null,
     avatarUrl: session.profile?.avatar_url ?? null,
   }
