@@ -9,25 +9,27 @@ const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000
 
 function renderExpiredHtml() {
   return `<!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="utf-8">
-  <title>لینک منقضی شده است | BuildSight</title>
+  <title>Link Expired | BuildSight</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 1rem; color: #0f172a; }
-    .card { background: white; border: 1px solid #e2e8f0; border-radius: 1.25rem; padding: 2.5rem 2rem; max-width: 440px; width: 100%; text-align: center; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
+    .card { background: white; border: 1px solid #e2e8f0; border-radius: 1.25rem; padding: 2.5rem 2rem; max-width: 460px; width: 100%; text-align: center; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
     .icon-box { width: 64px; height: 64px; background: #fef2f2; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; font-size: 1.75rem; color: #ef4444; }
     h1 { font-size: 1.25rem; font-weight: 700; margin: 0 0 0.75rem; color: #0f172a; }
-    p { font-size: 0.875rem; color: #64748b; line-height: 1.6; margin: 0; }
+    p { font-size: 0.875rem; color: #64748b; line-height: 1.6; margin: 0 0 0.75rem; }
+    .ar-text { font-size: 0.85rem; color: #94a3b8; line-height: 1.6; margin: 0; direction: rtl; }
     .badge { display: inline-block; background: #f1f5f9; color: #475569; font-size: 0.75rem; font-weight: 600; padding: 0.25rem 0.75rem; border-radius: 9999px; margin-top: 1.5rem; }
   </style>
 </head>
 <body>
   <div class="card">
     <div class="icon-box">⏳</div>
-    <h1>مهلت ۵ روزه این لینک به پایان رسیده است</h1>
-    <p>لینک‌های اشتراک‌گذاری گزارش‌ها به دلایل امنیتی تنها تا <b>۵ روز</b> معتبر هستند. لطفاً جهت دریافت نسخه جدید، با فرستنده تماس بگیرید.</p>
+    <h1>Share Link Expired</h1>
+    <p>This shared report download link has expired after the 5-day security limit. Please ask the sender to generate a new share link.</p>
+    <p class="ar-text">انتهت صلاحية رابط هذا التقرير بعد مرور 5 أيام. يرجى التواصل مع المرسل للحصول على رابط جديد.</p>
     <div class="badge">BuildSight Document System</div>
   </div>
 </body>
