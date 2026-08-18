@@ -36,9 +36,14 @@ function renderExpiredHtml() {
 </html>`
 }
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } | Promise<{ id: string }> },
+) {
   try {
-    const id = params.id
+    const resolvedParams = await Promise.resolve(params)
+    const id = resolvedParams?.id?.trim() || ""
+
     if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
       return NextResponse.json({ error: "Invalid report ID format." }, { status: 400 })
     }

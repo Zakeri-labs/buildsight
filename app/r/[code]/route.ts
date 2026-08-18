@@ -36,47 +36,64 @@ function renderExpiredHtml() {
 </html>`
 }
 
-export async function GET(request: NextRequest, { params }: { params: { code: string } }) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { code: string } | Promise<{ code: string }> },
+) {
   try {
-    const rawCode = params.code?.trim() || ""
-    if (!rawCode || rawCode.length < 6 || !/^[0-9a-f-]+$/i.test(rawCode)) {
+    const resolvedParams = await Promise.resolve(params)
+    const rawCode = resolvedParams?.code?.trim() || ""
+
+    if (!rawCode || rawCode.length < 4) {
       return NextResponse.json({ error: "Invalid report code." }, { status: 400 })
     }
 
-    const admin = createAdminClient()
     const cleanCode = rawCode.toLowerCase().replace(/[^0-9a-f]/g, "")
+    if (!cleanCode) {
+      return NextResponse.json({ error: "Invalid report code format." }, { status: 400 })
+    }
 
-    // 1. Search in translation_documents table using ilike prefix on response_id or id
-    const { data: translation } = await admin
+    const admin = createAdminClient()
+
+    // 1. Fetch recent translation documents to perform clean UUID prefix matching
+    const { data: translationRows } = await admin
       .from("translation_documents")
       .select("id, project_id, response_id, bilingual_pdf_url, original_pdf_url, created_at")
-      .or(`response_id.ilike.${cleanCode}%,id.ilike.${cleanCode}%`)
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .limit(300)
 
-    let storagePath = translation?.bilingual_pdf_url || translation?.original_pdf_url
-    let createdAtStr = translation?.created_at
+    let matchedTranslation = (translationRows || []).find((item) => {
+      const responseClean = (item.response_id || "").toLowerCase().replace(/[^0-9a-f]/g, "")
+      const idClean = (item.id || "").toLowerCase().replace(/[^0-9a-f]/g, "")
+      return responseClean.startsWith(cleanCode) || idClean.startsWith(cleanCode)
+    })
 
-    // 2. If translation record was not found or has no storagePath yet, search term_responses
+    let storagePath = matchedTranslation?.bilingual_pdf_url || matchedTranslation?.original_pdf_url
+    let createdAtStr = matchedTranslation?.created_at
+
+    // 2. Fallback: Search term_responses if not found in recent translation_documents
     if (!storagePath) {
-      const { data: responseRow } = await admin
+      const { data: responseRows } = await admin
         .from("term_responses")
         .select("id, project_id, project_stage_id, created_at")
-        .ilike("id", `${cleanCode}%`)
         .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
+        .limit(300)
 
-      if (responseRow) {
-        if (!createdAtStr) createdAtStr = responseRow.created_at
+      const matchedResponse = (responseRows || []).find((item) => {
+        const resClean = (item.id || "").toLowerCase().replace(/[^0-9a-f]/g, "")
+        return resClean.startsWith(cleanCode)
+      })
+
+      if (matchedResponse) {
+        if (!createdAtStr) createdAtStr = matchedResponse.created_at
         const { data: fallbackTrans } = await admin
           .from("translation_documents")
           .select("bilingual_pdf_url, original_pdf_url, created_at")
-          .eq("response_id", responseRow.id)
+          .eq("response_id", matchedResponse.id)
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle()
+
         storagePath = fallbackTrans?.bilingual_pdf_url || fallbackTrans?.original_pdf_url
         if (fallbackTrans?.created_at) createdAtStr = fallbackTrans.created_at
       }
@@ -86,7 +103,7 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
       return NextResponse.json({ error: "Report PDF has not been generated or is missing." }, { status: 404 })
     }
 
-    // 3. Enforce 5-day expiration window from creation
+    // 3. Enforce 5-day expiration window
     if (createdAtStr) {
       const createdAtTime = new Date(createdAtStr).getTime()
       if (!Number.isNaN(createdAtTime) && Date.now() - createdAtTime > FIVE_DAYS_MS) {
@@ -99,7 +116,7 @@ export async function GET(request: NextRequest, { params }: { params: { code: st
 
     const downloadName = storagePath.split("/").pop()?.replace(/^.*?-\d+-/, "") || "bilingual-report.pdf"
 
-    // Create 5-day signed download URL (432,000 seconds)
+    // Create 5-day signed download URL
     const { data: signed, error: signedError } = await admin.storage
       .from(BUCKET)
       .createSignedUrl(storagePath, 60 * 60 * 24 * 5, { download: downloadName })
