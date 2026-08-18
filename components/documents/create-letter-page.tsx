@@ -33,6 +33,7 @@ import {
 } from "@/lib/actions/documents"
 import {
   CONSTRUCTION_DOCUMENT_TYPES,
+  getConstructionDocumentType,
   getConstructionDocumentTypeLabel,
   getDocumentDetailsTemplate,
   isConstructionDocumentType,
