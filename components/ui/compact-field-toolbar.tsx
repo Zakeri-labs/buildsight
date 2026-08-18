@@ -43,6 +43,7 @@ export function CompactFieldToolbar({
   // Undo / Redo history stack for this specific field
   const [history, setHistory] = useState<string[]>([value])
   const [historyIndex, setHistoryIndex] = useState<number>(0)
+  const isUpdatingFromHistory = useRef(false)
   const debounceTimerRef = useRef<any>(null)
 
   // Load preferred speech language from localStorage (defaults to ar-SA)
