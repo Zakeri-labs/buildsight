@@ -1848,6 +1848,7 @@ function RichSectionEditor({
   const recognitionRef = useRef<any>(null)
   const baseContentRef = useRef<string>("")
   const accumulatedFinalRef = useRef<string>("")
+  const mobileFinalResultsRef = useRef<Map<number, string>>(new Map())
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [mobileExpanded, setMobileExpanded] = useState(true)
@@ -2019,17 +2020,48 @@ function RichSectionEditor({
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (SpeechRecognition) {
       try {
+        const isMobile = typeof navigator !== "undefined" && Boolean((navigator as any).userAgentData?.mobile || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
         const recognition = new SpeechRecognition()
         recognition.continuous = true
-        recognition.interimResults = true
+        recognition.interimResults = isMobile ? false : true
         recognition.lang = speechLang
 
         const currentHtml = editorRef.current?.innerHTML ?? ""
         const isPlaceholder = !currentHtml || currentHtml.trim() === "<p><br></p>" || currentHtml.trim() === "<br>"
         baseContentRef.current = isPlaceholder ? "" : currentHtml
         accumulatedFinalRef.current = ""
+        mobileFinalResultsRef.current.clear()
 
         recognition.onresult = (event: any) => {
+          if (isMobile) {
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              const res = event.results[i]
+              if (!res.isFinal) continue
+              const txt = res[0]?.transcript?.trim() ?? ""
+              if (!txt) continue
+              mobileFinalResultsRef.current.set(i, txt)
+            }
+
+            const spokenText = Array.from(mobileFinalResultsRef.current.entries())
+              .sort(([a], [b]) => a - b)
+              .map(([, txt]) => txt)
+              .filter(Boolean)
+              .join(" ")
+              .trim()
+
+            if (spokenText && editorRef.current) {
+              const base = baseContentRef.current
+              if (!base) {
+                editorRef.current.innerHTML = `<p>${escapeHtml(spokenText)}</p>`
+              } else {
+                const cleanBase = base.replace(/<\/p>$/i, "").replace(/<br\s*\/?>$/i, "")
+                editorRef.current.innerHTML = `${cleanBase} ${escapeHtml(spokenText)}</p>`
+              }
+              onChange(editorRef.current.innerHTML)
+            }
+            return
+          }
+
           let finalTranscript = ""
           let interimTranscript = ""
 
