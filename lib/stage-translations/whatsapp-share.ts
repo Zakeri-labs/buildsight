@@ -12,9 +12,10 @@ export function buildShareMessage(options: {
 }) {
   const origin = typeof window !== "undefined" ? window.location.origin : "https://app.bonyanec.com"
   const reportId = options.responseId || options.translationId
+  const microCode = reportId ? reportId.split("-")[0] : null
 
-  const shortUrl = reportId
-    ? `${origin}/d/${reportId}`
+  const shortUrl = microCode
+    ? `${origin}/r/${microCode}`
     : `${origin}/api/stage-translations/pdf?projectId=${options.projectId}&kind=bilingual&share=1`
 
   const visitFormatted = options.visitNumber ? String(options.visitNumber).padStart(3, "0") : ""
