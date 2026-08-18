@@ -1433,39 +1433,60 @@ export function InspectionReportForm({
                     : "Your report has been submitted and all PDF documents are ready for instant download."}
                 </DialogDescription>
               </DialogHeader>
-              <div className="mt-4 grid grid-cols-2 gap-2">
+              <div className="mt-4 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (readyPdfs?.original) {
+                        downloadPdfBlob(readyPdfs.original.blob, readyPdfs.original.filename)
+                      } else {
+                        window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&translationId=${translation?.id}&kind=original`)
+                      }
+                    }}
+                    className="h-10 gap-2 rounded-lg font-semibold shadow-xs"
+                  >
+                    <Download className="size-4 text-primary" />
+                    <span>English PDF</span>
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={() => {
+                      if (readyPdfs?.bilingual) {
+                        downloadPdfBlob(readyPdfs.bilingual.blob, readyPdfs.bilingual.filename)
+                      } else {
+                        window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&translationId=${translation?.id}&kind=bilingual`)
+                      }
+                    }}
+                    className="h-10 gap-2 rounded-lg font-semibold shadow-xs"
+                  >
+                    <Download className="size-4" />
+                    <span>Bilingual PDF</span>
+                  </Button>
+                </div>
+
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    if (readyPdfs?.original) {
-                      downloadPdfBlob(readyPdfs.original.blob, readyPdfs.original.filename)
-                    } else {
-                      window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&translationId=${translation?.id}&kind=original`)
-                    }
+                    const defaultPhone = "96891451613"
+                    const projectName = project?.name || "Project"
+                    const reportUrl = typeof window !== "undefined" && submitResult
+                      ? `${window.location.origin}/projects/${project.id}/stages/${submitResult.stageId}/reports/${submitResult.responseId}`
+                      : ""
+                    const text = `🏗️ *BuildSight Inspection Report*\n*Project:* ${projectName}\nThis report has been prepared for project ${projectName}.\n${reportUrl ? `\n🔗 *Report Link:*\n${reportUrl}` : ""}`
+                    window.open(`https://wa.me/${defaultPhone}?text=${encodeURIComponent(text)}`, "_blank")
                   }}
-                  className="h-10 gap-2 rounded-lg font-semibold shadow-xs"
+                  className="h-10 w-full gap-2 rounded-lg border-emerald-500/40 bg-emerald-50/50 font-semibold text-emerald-700 hover:bg-emerald-100/80 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60 shadow-xs"
                 >
-                  <Download className="size-4 text-primary" />
-                  <span>English PDF</span>
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  onClick={() => {
-                    if (readyPdfs?.bilingual) {
-                      downloadPdfBlob(readyPdfs.bilingual.blob, readyPdfs.bilingual.filename)
-                    } else {
-                      window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&translationId=${translation?.id}&kind=bilingual`)
-                    }
-                  }}
-                  className="h-10 gap-2 rounded-lg font-semibold shadow-xs"
-                >
-                  <Download className="size-4" />
-                  <span>Bilingual PDF</span>
+                  <Share2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>{locale === "ar" ? "مشاركة عبر واتساب" : "Share via WhatsApp"}</span>
                 </Button>
               </div>
               <DialogFooter className="mt-4">
@@ -1696,7 +1717,91 @@ function RichSectionEditor({
   const [countdown, setCountdown] = useState<number | null>(null)
   const countdownTimerRef = useRef<any>(null)
 
-  useEffect(() => { if (editorRef.current && editorRef.current.innerHTML !== value) editorRef.current.innerHTML = value || "<p><br></p>" }, [])
+  const [history, setHistory] = useState<string[]>([value || "<p><br></p>"])
+  const [historyIndex, setHistoryIndex] = useState<number>(0)
+  const isUpdatingFromHistory = useRef(false)
+  const debounceTimerRef = useRef<any>(null)
+
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.innerHTML !== value) {
+      editorRef.current.innerHTML = value || "<p><br></p>"
+    }
+  }, [])
+
+  const pushHistorySnapshot = useCallback((newHtml: string, immediate = false) => {
+    if (isUpdatingFromHistory.current) {
+      isUpdatingFromHistory.current = false
+      return
+    }
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+
+    const saveSnapshot = () => {
+      setHistory((prev) => {
+        if (prev[historyIndex] === newHtml) return prev
+        const updated = [...prev.slice(0, historyIndex + 1), newHtml]
+        if (updated.length > 50) updated.shift()
+        setHistoryIndex(updated.length - 1)
+        return updated
+      })
+    }
+
+    if (immediate) {
+      saveSnapshot()
+    } else {
+      debounceTimerRef.current = setTimeout(saveSnapshot, 350)
+    }
+  }, [historyIndex])
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const prevIndex = historyIndex - 1
+      const prevSnapshot = history[prevIndex]
+      isUpdatingFromHistory.current = true
+      setHistoryIndex(prevIndex)
+      if (editorRef.current) {
+        editorRef.current.innerHTML = prevSnapshot
+      }
+      onChange(prevSnapshot)
+    }
+  }
+
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+      const nextIndex = historyIndex + 1
+      const nextSnapshot = history[nextIndex]
+      isUpdatingFromHistory.current = true
+      setHistoryIndex(nextIndex)
+      if (editorRef.current) {
+        editorRef.current.innerHTML = nextSnapshot
+      }
+      onChange(nextSnapshot)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    saveSelection()
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+      e.preventDefault()
+      if (e.shiftKey) {
+        handleRedo()
+      } else {
+        handleUndo()
+      }
+      return
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+      e.preventDefault()
+      handleRedo()
+      return
+    }
+  }
+
+  const handleInput = () => {
+    saveSelection()
+    const html = editorRef.current?.innerHTML ?? ""
+    pushHistorySnapshot(html, false)
+    onChange(html)
+  }
 
   const saveSelection = () => {
     const selection = window.getSelection()
@@ -1884,6 +1989,7 @@ function RichSectionEditor({
       }
       if (editorRef.current) {
         editorRef.current.innerHTML = data.resultText
+        pushHistorySnapshot(data.resultText, true)
         onChange(data.resultText)
       }
     } catch (err) {
@@ -1903,7 +2009,9 @@ function RichSectionEditor({
       const safeName = escapeHtml(file.name)
       restore()
       document.execCommand("insertHTML", false, `<figure contenteditable="false"><img src="${escapeHtml(src)}" alt="${safeName}"><figcaption>${safeName}</figcaption></figure><p><br></p>`)
-      onChange(editorRef.current?.innerHTML ?? "")
+      const currentHtml = editorRef.current?.innerHTML ?? ""
+      pushHistorySnapshot(currentHtml, true)
+      onChange(currentHtml)
     }
     catch (error) { setUploadError(error instanceof Error ? error.message : "Unable to upload inline image.") }
     finally { setUploading(false) }
@@ -1985,11 +2093,11 @@ function RichSectionEditor({
 
           <span className="mx-0.5 h-5 w-px bg-border md:mx-1" />
 
-          <EditorButton label="Undo" onClick={() => command("undo")} disabled={disabled}>
+          <EditorButton label="Undo" onClick={handleUndo} disabled={disabled || historyIndex <= 0}>
             <Undo2 />
           </EditorButton>
 
-          <EditorButton label="Redo" onClick={() => command("redo")} disabled={disabled}>
+          <EditorButton label="Redo" onClick={handleRedo} disabled={disabled || historyIndex >= history.length - 1}>
             <Redo2 />
           </EditorButton>
 
@@ -2025,7 +2133,19 @@ function RichSectionEditor({
             </div>
           ) : null}
 
-          <div ref={editorRef} contentEditable={!disabled} suppressContentEditableWarning role="textbox" aria-multiline="true" onFocus={saveSelection} onKeyUp={saveSelection} onMouseUp={saveSelection} onInput={() => onChange(editorRef.current?.innerHTML ?? "")} className={cn("inspection-editor bg-background px-3 py-3 text-sm outline-none md:min-h-56 md:px-7 md:py-5", disabled ? "min-h-0" : "min-h-36")} />
+          <div
+            ref={editorRef}
+            contentEditable={!disabled}
+            suppressContentEditableWarning
+            role="textbox"
+            aria-multiline="true"
+            onFocus={saveSelection}
+            onKeyUp={saveSelection}
+            onMouseUp={saveSelection}
+            onKeyDown={handleKeyDown}
+            onInput={handleInput}
+            className={cn("inspection-editor bg-background px-3 py-3 text-sm outline-none md:min-h-56 md:px-7 md:py-5", disabled ? "min-h-0" : "min-h-36")}
+          />
         </div>
       </div>
 

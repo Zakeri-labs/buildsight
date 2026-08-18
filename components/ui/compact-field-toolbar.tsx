@@ -43,7 +43,7 @@ export function CompactFieldToolbar({
   // Undo / Redo history stack for this specific field
   const [history, setHistory] = useState<string[]>([value])
   const [historyIndex, setHistoryIndex] = useState<number>(0)
-  const isUpdatingFromHistory = useRef(false)
+  const debounceTimerRef = useRef<any>(null)
 
   // Load preferred speech language from localStorage (defaults to ar-SA)
   useEffect(() => {
@@ -61,14 +61,17 @@ export function CompactFieldToolbar({
       isUpdatingFromHistory.current = false
       return
     }
-    setHistory((prev) => {
-      if (prev[historyIndex] === value) return prev
-      const updated = [...prev.slice(0, historyIndex + 1), value]
-      if (updated.length > 30) updated.shift()
-      setHistoryIndex(updated.length - 1)
-      return updated
-    })
-  }, [value])
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    debounceTimerRef.current = setTimeout(() => {
+      setHistory((prev) => {
+        if (prev[historyIndex] === value) return prev
+        const updated = [...prev.slice(0, historyIndex + 1), value]
+        if (updated.length > 50) updated.shift()
+        setHistoryIndex(updated.length - 1)
+        return updated
+      })
+    }, 350)
+  }, [value, historyIndex])
 
   const handleSpeechLangChange = (newLang: string) => {
     setSpeechLang(newLang)
@@ -80,6 +83,14 @@ export function CompactFieldToolbar({
   }
 
   const pushValue = (newVal: string) => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    setHistory((prev) => {
+      if (prev[historyIndex] === newVal) return prev
+      const updated = [...prev.slice(0, historyIndex + 1), newVal]
+      if (updated.length > 50) updated.shift()
+      setHistoryIndex(updated.length - 1)
+      return updated
+    })
     onChange(newVal)
   }
 
