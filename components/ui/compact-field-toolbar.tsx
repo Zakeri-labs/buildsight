@@ -212,8 +212,17 @@ export function CompactFieldToolbar({
       if (!res.ok || !data.resultText) {
         throw new Error(data.error || "AI generation failed.")
       }
-      // Strip HTML if plain text result returned
-      const cleanResult = data.resultText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
+      const cleanResult = data.resultText
+        .replace(/<p[^>]*>/gi, "")
+        .replace(/<\/p>/gi, "\n")
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<li[^>]*>/gi, "• ")
+        .replace(/<\/li>/gi, "\n")
+        .replace(/<h[1-6][^>]*>/gi, "")
+        .replace(/<\/h[1-6]>/gi, "\n")
+        .replace(/<[^>]*>/g, "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim()
       pushValue(cleanResult)
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "An error occurred during AI processing.")
