@@ -1005,13 +1005,51 @@ export function InspectionReportForm({
   const currentVisitNo = typeof visitNumber === "number" && visitNumber > 0 ? visitNumber : (response?.visitNumber ?? suggestedVisitNumber ?? 1)
   const formattedVisitNo = String(currentVisitNo).padStart(3, "0")
   const projectCode = project.code?.trim() || "PROJ"
-  const displayReportNo = `${projectCode}/${formattedVisitNo}`
   const creatorPerson = response?.createdBy ?? currentUserPerson ?? {
     id: currentUserId ?? "",
     name: "Project member",
     email: null,
     avatarUrl: null,
   }
+
+  const handleTranslateAllSections = useCallback(async () => {
+    const sectionsToTranslate: Array<{ key: ReportSectionKey; html: string; text: string }> = []
+
+    if (content.observation && plainResponseText(content.observation)) {
+      sectionsToTranslate.push({ key: "observation", html: content.observation, text: plainResponseText(content.observation) })
+    }
+    if (content.recommendations && plainResponseText(content.recommendations)) {
+      sectionsToTranslate.push({ key: "recommendations", html: content.recommendations, text: plainResponseText(content.recommendations) })
+    }
+    if (content.feedback && plainResponseText(content.feedback) && !sectionsToTranslate.some((s) => s.key === "feedback")) {
+      sectionsToTranslate.push({ key: "feedback", html: content.feedback, text: plainResponseText(content.feedback) })
+    }
+
+    if (sectionsToTranslate.length === 0) {
+      throw new Error(locale === "ar" ? "يرجى كتابة نص في أحد الكادرين أولاً قبل الترجمة." : "Please enter text in at least one box before translating.")
+    }
+
+    setError(null)
+    const updates: Partial<TermResponseContent> = {}
+
+    for (const item of sectionsToTranslate) {
+      const res = await fetch("/api/ai/enhance-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ html: item.html, text: item.text, action: "translate_en" }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.resultText) {
+        throw new Error(data.error || "AI translation failed.")
+      }
+      updates[item.key] = data.resultText
+    }
+
+    setContent((current) => ({
+      ...current,
+      ...updates,
+    }))
+  }, [content, locale])
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 pb-28 md:gap-5 md:pb-24">
@@ -1343,6 +1381,7 @@ export function InspectionReportForm({
         </Card>
       ) : null}
 
+
       {reportDefinition.responseType === "combined" ? SECTION_META.map((section) => (
         <RichSectionEditor
           key={section.key}
@@ -1357,6 +1396,7 @@ export function InspectionReportForm({
               ...(rec ? { recommendations: rec } : {}),
             }))
           }}
+          onTranslateAllSections={handleTranslateAllSections}
           allowTable={section.key === "feedback"}
           disabled={isLocked}
           uploadInlineImage={uploadInlineImage}
@@ -1364,9 +1404,9 @@ export function InspectionReportForm({
           ccCandidates={ccCandidates}
         />
       )) : reportDefinition.responseType === "inspection_checklist" ? (
-        <RichSectionEditor title="Overall Notes" description="Add overall inspection observations or follow-up notes." value={content.feedback} onChange={(value) => updateSection("feedback", value)} allowTable={false} disabled={isLocked} uploadInlineImage={uploadInlineImage} project={project} ccCandidates={ccCandidates} />
+        <RichSectionEditor title="Overall Notes" description="Add overall inspection observations or follow-up notes." value={content.feedback} onChange={(value) => updateSection("feedback", value)} onTranslateAllSections={handleTranslateAllSections} allowTable={false} disabled={isLocked} uploadInlineImage={uploadInlineImage} project={project} ccCandidates={ccCandidates} />
       ) : reportDefinition.responseType === "text" ? null : (
-        <RichSectionEditor title="Comments / Notes" description="Add context, observations, or supporting notes." value={content.feedback} onChange={(value) => updateSection("feedback", value)} allowTable={false} disabled={isLocked} uploadInlineImage={uploadInlineImage} project={project} ccCandidates={ccCandidates} />
+        <RichSectionEditor title="Comments / Notes" description="Add context, observations, or supporting notes." value={content.feedback} onChange={(value) => updateSection("feedback", value)} onTranslateAllSections={handleTranslateAllSections} allowTable={false} disabled={isLocked} uploadInlineImage={uploadInlineImage} project={project} ccCandidates={ccCandidates} />
       )}
 
       {responseId && (status === "submitted" || status === "under_review" || status === "rejected" || status === "approved") ? (
@@ -1781,6 +1821,7 @@ function RichSectionEditor({
   value,
   onChange,
   onSplitSections,
+  onTranslateAllSections,
   allowTable,
   disabled,
   uploadInlineImage,
@@ -1792,6 +1833,7 @@ function RichSectionEditor({
   value: string
   onChange: (value: string) => void
   onSplitSections?: (obs: string, rec: string) => void
+  onTranslateAllSections?: () => Promise<void>
   allowTable: boolean
   disabled: boolean
   uploadInlineImage: (file: File) => Promise<string>
@@ -1825,7 +1867,7 @@ function RichSectionEditor({
     if (editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value || "<p><br></p>"
     }
-  }, [])
+  }, [value])
 
   const pushHistorySnapshot = useCallback((newHtml: string, immediate = false) => {
     if (isUpdatingFromHistory.current) {
@@ -2067,6 +2109,19 @@ function RichSectionEditor({
   }
 
   const handleAiAction = async (action: "translate_en" | "enhance_style") => {
+    if (action === "translate_en" && onTranslateAllSections) {
+      setAiLoading("translate_en")
+      setUploadError(null)
+      try {
+        await onTranslateAllSections()
+      } catch (err) {
+        setUploadError(err instanceof Error ? err.message : "Translation failed.")
+      } finally {
+        setAiLoading(null)
+      }
+      return
+    }
+
     const currentHtml = editorRef.current?.innerHTML || ""
     const currentText = editorRef.current?.innerText || editorRef.current?.textContent || ""
     if (!currentText.trim()) {

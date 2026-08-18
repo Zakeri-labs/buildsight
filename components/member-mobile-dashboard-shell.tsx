@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { CalendarDays, FileText, FolderKanban, Home, Plus, User } from "lucide-react"
+import { CalendarDays, FileText, FolderKanban, Home, MapPinned, Plus, User } from "lucide-react"
 import { useState } from "react"
 
 import { AppSidebar } from "@/components/app-sidebar"
@@ -123,7 +123,13 @@ function BottomNavItem({
   )
 }
 
-export function MemberMobileBottomNavigation({ compact = false }: { compact?: boolean }) {
+export function MemberMobileBottomNavigation({
+  compact = false,
+  isMember = true,
+}: {
+  compact?: boolean
+  isMember?: boolean
+}) {
   const pathname = usePathname()
 
   return (
@@ -137,7 +143,13 @@ export function MemberMobileBottomNavigation({ compact = false }: { compact?: bo
           compact ? "h-[3.75rem]" : "h-[4.5rem]",
         )}
       >
-        <BottomNavItem label="Home" icon={Home} href="/memberhomepage" active={pathname === "/memberhomepage"} compact={compact} />
+        <BottomNavItem
+          label={isMember ? "Home" : "Dashboard"}
+          icon={Home}
+          href={isMember ? "/memberhomepage" : "/"}
+          active={isMember ? pathname === "/memberhomepage" : pathname === "/"}
+          compact={compact}
+        />
         <BottomNavItem
           label="Projects"
           icon={FolderKanban}
@@ -162,7 +174,12 @@ export function MemberMobileBottomNavigation({ compact = false }: { compact?: bo
         </div>
 
         <BottomNavItem label="Calendar" icon={CalendarDays} href="/calendar" active={pathname.startsWith("/calendar")} compact={compact} />
-        <BottomNavItem label="Reports" icon={FileText} href="/my-reports" active={pathname.startsWith("/my-reports")} compact={compact} />
+
+        {isMember ? (
+          <BottomNavItem label="Reports" icon={FileText} href="/my-reports" active={pathname.startsWith("/my-reports")} compact={compact} />
+        ) : (
+          <BottomNavItem label="Site Visits" icon={MapPinned} href="/site-visits" active={pathname.startsWith("/site-visits")} compact={compact} />
+        )}
       </div>
     </nav>
   )

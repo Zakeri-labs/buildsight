@@ -49,7 +49,9 @@ export function AppShell({
     isMemberDashboard || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberInitialDocuments || isMemberProjectDetail || isMemberProjectStages || isMemberStageReportsList || isMemberStageReport || isMemberReportTranslation || isMemberMyReports
   const isCompactMemberMobileShell =
     isMemberHomepage || isMemberProjects || isMemberCalendar || isMemberReportEntry || isMemberSettings || isMemberSiteVisits || isMemberLetters || isMemberInitialDocuments || isMemberProjectDetail || isMemberProjectStages || isMemberStageReportsList || isMemberStageReport || isMemberReportTranslation || isMemberMyReports
-  const showMemberBottomNavigation = isMemberMobileShell && !isMemberStageReport && !isMemberReportTranslation
+  const isStageReport = /^\/projects\/[^/]+\/stages\/[^/]+\/reports\/(?:new|[^/]+)\/?$/.test(pathname)
+  const isReportTranslation = /^\/projects\/[^/]+\/stages\/[^/]+\/reports\/[^/]+\/translate\/?$/.test(pathname)
+  const showMobileBottomNavigation = !isStageReport && !isReportTranslation
 
   const activeProjectName =
     selectedProjectId === "all" ? null : projects.find((project) => project.id === selectedProjectId)?.name ?? null
@@ -102,20 +104,18 @@ export function AppShell({
         )}
         <main
           className={
-            isMemberStageReport
+            isStageReport
               ? "flex-1 px-2 py-3 md:px-8 md:py-6"
-              : isMemberReportTranslation
+              : isReportTranslation
                 ? "flex-1 px-3 py-3 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
-              : showMemberBottomNavigation
-                ? isCompactMemberMobileShell
-                  ? "flex-1 px-4 py-4 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
-                  : "flex-1 px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
+              : showMobileBottomNavigation
+                ? "flex-1 px-4 py-4 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:px-8 md:py-6 md:pb-6"
                 : "flex-1 px-4 py-5 md:px-8 md:py-6"
           }
         >
           {children}
         </main>
-        {showMemberBottomNavigation ? <MemberMobileBottomNavigation compact={isCompactMemberMobileShell} /> : null}
+        {showMobileBottomNavigation ? <MemberMobileBottomNavigation isMember={isMember} compact={isCompactMemberMobileShell} /> : null}
       </div>
     </div>
   )

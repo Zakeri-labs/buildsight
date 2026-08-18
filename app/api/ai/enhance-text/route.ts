@@ -6,7 +6,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
-const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
+const OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
 const OPENAI_MODEL = process.env.OPENAI_TRANSLATION_MODEL?.trim() || "gpt-4o-mini"
 
 export async function POST(request: NextRequest) {
@@ -93,20 +93,22 @@ export async function POST(request: NextRequest) {
       ].join("\n")
     }
 
-    const response = await fetch(OPENAI_RESPONSES_URL, {
+    const resolvedModel = OPENAI_MODEL.startsWith("gpt-5") ? "gpt-4o-mini" : OPENAI_MODEL
+
+    const response = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: OPENAI_MODEL,
-        store: false,
-        max_output_tokens: 4000,
-        input: [
-          { role: "developer", content: [{ type: "input_text", text: systemPrompt }] },
-          { role: "user", content: [{ type: "input_text", text: `INPUT HTML / TEXT:\n${inputContent}` }] },
+        model: resolvedModel,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `INPUT HTML / TEXT:\n${inputContent}` },
         ],
+        temperature: 0.2,
+        max_tokens: 4000,
       }),
       signal: AbortSignal.timeout(45_000),
     })
@@ -117,7 +119,9 @@ export async function POST(request: NextRequest) {
     }
 
     let resultText = ""
-    if (typeof payload?.output_text === "string" && payload.output_text.trim()) {
+    if (typeof payload?.choices?.[0]?.message?.content === "string") {
+      resultText = payload.choices[0].message.content.trim()
+    } else if (typeof payload?.output_text === "string" && payload.output_text.trim()) {
       resultText = payload.output_text.trim()
     } else for (const item of payload?.output ?? []) {
       for (const content of item?.content ?? []) {
