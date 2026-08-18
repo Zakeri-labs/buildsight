@@ -295,22 +295,6 @@ export function CompactFieldToolbar({
           ))}
         </select>
 
-        {/* AI Construction English */}
-        <button
-          type="button"
-          onClick={() => void handleAiAction("translate_en")}
-          disabled={disabled || aiLoading !== null}
-          title={`AI Construction English for ${fieldName}`}
-          aria-label={`AI Construction English for ${fieldName}`}
-          className="inline-flex h-7 shrink-0 items-center justify-center rounded-md px-1.5 hover:bg-accent disabled:opacity-50"
-        >
-          {aiLoading === "translate_en" ? (
-            <Loader2 className="size-3.5 animate-spin text-blue-600" />
-          ) : (
-            <Languages className="size-3.5 text-blue-600 dark:text-blue-400" />
-          )}
-        </button>
-
         {/* AI Enhance Notes */}
         <button
           type="button"
@@ -324,6 +308,22 @@ export function CompactFieldToolbar({
             <Loader2 className="size-3.5 animate-spin text-purple-600" />
           ) : (
             <Sparkles className="size-3.5 text-purple-600 dark:text-purple-400" />
+          )}
+        </button>
+
+        {/* AI Construction English */}
+        <button
+          type="button"
+          onClick={() => void handleAiAction("translate_en")}
+          disabled={disabled || aiLoading !== null}
+          title={`AI Construction English for ${fieldName}`}
+          aria-label={`AI Construction English for ${fieldName}`}
+          className="inline-flex h-7 shrink-0 items-center justify-center rounded-md px-1.5 hover:bg-accent disabled:opacity-50"
+        >
+          {aiLoading === "translate_en" ? (
+            <Loader2 className="size-3.5 animate-spin text-blue-600" />
+          ) : (
+            <Languages className="size-3.5 text-blue-600 dark:text-blue-400" />
           )}
         </button>
 

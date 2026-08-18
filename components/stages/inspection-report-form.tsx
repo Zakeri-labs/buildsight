@@ -2142,12 +2142,23 @@ function RichSectionEditor({
         throw new Error(data.error || "AI generation failed.")
       }
 
-      if (action === "enhance_style" && onSplitSections && (data.observations || data.recommendations)) {
-        onSplitSections(data.observations || data.resultText, data.recommendations || "")
-      } else if (editorRef.current) {
-        editorRef.current.innerHTML = data.resultText
-        pushHistorySnapshot(data.resultText, true)
-        onChange(data.resultText)
+      const resultText = data.resultText || ""
+      const obsText = data.observations || resultText
+      const recText = data.recommendations || ""
+
+      if (action === "enhance_style" && onSplitSections && recText) {
+        onSplitSections(obsText, recText)
+      }
+
+      const lowerTitle = title.toLowerCase()
+      const textToSet = (action === "enhance_style" && recText && onSplitSections)
+        ? (lowerTitle.includes("recommendation") || lowerTitle.includes("توصیه") || lowerTitle.includes("دستورالعمل") ? recText : obsText)
+        : resultText
+
+      if (editorRef.current) {
+        editorRef.current.innerHTML = textToSet
+        pushHistorySnapshot(textToSet, true)
+        onChange(textToSet)
       }
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "An error occurred during AI processing.")
@@ -2233,19 +2244,19 @@ function RichSectionEditor({
           </div>
 
           <EditorButton
-            label="AI Construction English"
-            onClick={() => void handleAiAction("translate_en")}
-            disabled={disabled || aiLoading !== null}
-          >
-            {aiLoading === "translate_en" ? <Loader2 className="size-4 animate-spin text-blue-600" /> : <Languages className="size-4 text-blue-600 dark:text-blue-400" />}
-          </EditorButton>
-
-          <EditorButton
             label="AI Enhance Notes"
             onClick={() => void handleAiAction("enhance_style")}
             disabled={disabled || aiLoading !== null}
           >
             {aiLoading === "enhance_style" ? <Loader2 className="size-4 animate-spin text-purple-600" /> : <Sparkles className="size-4 text-purple-600 dark:text-purple-400" />}
+          </EditorButton>
+
+          <EditorButton
+            label="AI Construction English"
+            onClick={() => void handleAiAction("translate_en")}
+            disabled={disabled || aiLoading !== null}
+          >
+            {aiLoading === "translate_en" ? <Loader2 className="size-4 animate-spin text-blue-600" /> : <Languages className="size-4 text-blue-600 dark:text-blue-400" />}
           </EditorButton>
 
           <span className="mx-0.5 h-5 w-px bg-border md:mx-1" />
