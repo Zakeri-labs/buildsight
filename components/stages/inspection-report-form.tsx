@@ -1940,6 +1940,21 @@ function RichSectionEditor({
         setSpeechLang(saved)
       }
     } catch {}
+
+    return () => {
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current)
+      }
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.onresult = null
+          recognitionRef.current.onerror = null
+          recognitionRef.current.onend = null
+          recognitionRef.current.stop()
+        } catch {}
+        recognitionRef.current = null
+      }
+    }
   }, [])
 
   const handleSpeechLangChange = (newLang: string) => {
@@ -1952,6 +1967,16 @@ function RichSectionEditor({
   }
 
   const startActualRecording = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onresult = null
+        recognitionRef.current.onerror = null
+        recognitionRef.current.onend = null
+        recognitionRef.current.stop()
+      } catch {}
+      recognitionRef.current = null
+    }
+
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (SpeechRecognition) {
       try {
@@ -1966,19 +1991,32 @@ function RichSectionEditor({
         accumulatedFinalRef.current = ""
 
         recognition.onresult = (event: any) => {
-          let finalTranscript = ""
           let interimTranscript = ""
 
-          for (let i = 0; i < event.results.length; i++) {
+          const startIndex = typeof event.resultIndex === "number" ? event.resultIndex : 0
+          for (let i = startIndex; i < event.results.length; i++) {
             const chunk = event.results[i][0]?.transcript || ""
             if (event.results[i].isFinal) {
-              finalTranscript += chunk + " "
+              if (chunk.trim()) {
+                const currentFinal = accumulatedFinalRef.current.trim()
+                accumulatedFinalRef.current = currentFinal
+                  ? `${currentFinal} ${chunk.trim()}`
+                  : chunk.trim()
+              }
             } else {
-              interimTranscript += chunk
+              interimTranscript = chunk
             }
           }
 
-          const spokenText = (finalTranscript + interimTranscript).trim()
+          const finalPart = accumulatedFinalRef.current.trim()
+          const interimPart = interimTranscript.trim()
+          let spokenText = ""
+          if (finalPart && interimPart) {
+            spokenText = `${finalPart} ${interimPart}`
+          } else {
+            spokenText = finalPart || interimPart
+          }
+
           if (spokenText && editorRef.current) {
             const base = baseContentRef.current
             if (!base) {
@@ -2018,7 +2056,12 @@ function RichSectionEditor({
   const toggleRecording = () => {
     if (isRecording) {
       if (recognitionRef.current) {
-        try { recognitionRef.current.stop() } catch {}
+        try {
+          recognitionRef.current.onresult = null
+          recognitionRef.current.onerror = null
+          recognitionRef.current.onend = null
+          recognitionRef.current.stop()
+        } catch {}
         recognitionRef.current = null
       }
       setIsRecording(false)
