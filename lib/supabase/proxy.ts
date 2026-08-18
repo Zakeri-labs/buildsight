@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { resolveDefaultLandingDestination } from "@/lib/auth/default-landing"
 import { ALL_PROJECTS_SCOPE_VALUE, SELECTED_PROJECT_COOKIE } from "@/lib/project-scope-constants"
 
-const PUBLIC_PATHS = ["/auth", "/invite", "/_next", "/favicon", "/api/health"]
+const PUBLIC_PATHS = ["/auth", "/invite", "/_next", "/favicon", "/api/health", "/d", "/api/stage-translations/pdf"]
 
 function preserveResponseCookies(source: NextResponse, target: NextResponse) {
   source.cookies.getAll().forEach((cookie) => target.cookies.set(cookie))
