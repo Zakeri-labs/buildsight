@@ -1303,17 +1303,20 @@ export async function getDashboardData(
     }
 
     const projectRows = scoped.map((p) => {
-      const pStageReportsCount = (termResponses ?? []).filter((r: any) => r.project_id === p.id).length
-      let demoReportsCount = 0
-      if (DEMO_STAGE_MANAGEMENT_DATA?.stages) {
-        for (const st of DEMO_STAGE_MANAGEMENT_DATA.stages) {
-          demoReportsCount += (st.reports ?? []).length
+      const pStageReports = (termResponses ?? []).filter((r: any) => r.project_id === p.id)
+      const pStageReportsCount = pStageReports.length
+      let latestReportAt = 0
+      for (const r of pStageReports) {
+        const ts = (r as any).submitted_at || (r as any).updated_at || (r as any).created_at
+        if (ts) {
+          const t = new Date(ts).getTime()
+          if (t > latestReportAt) latestReportAt = t
         }
       }
+
       const pInsps = Math.max(
         inspections.filter((r) => r.project_id === p.id).length,
         pStageReportsCount,
-        demoReportsCount
       )
       const pRfis = rfis.filter((r) => r.project_id === p.id).length
       const pVos = vos.filter((r) => r.project_id === p.id).length
@@ -1336,6 +1339,7 @@ export async function getDashboardData(
         vos: pVos,
         progress: p.progressActual,
         canEdit,
+        latestReportAt,
         edit: canEdit
           ? {
               code: p.code,
@@ -1366,6 +1370,11 @@ export async function getDashboardData(
           : null,
       }
     })
+
+    const recentProjectsWithReports = projectRows
+      .filter((p) => p.inspections > 0 || p.latestReportAt > 0)
+      .sort((a, b) => b.latestReportAt - a.latestReportAt)
+      .slice(0, 5)
 
     const reviewTasks: TaskRow[] = reviewFeed.items.map((item) => ({
       id: `review:${item.id}`,
@@ -1450,7 +1459,7 @@ export async function getDashboardData(
       completedVisitsBySupervisor,
       visitCompliance,
       recentSupervisorReports,
-      projects: projectRows,
+      projects: recentProjectsWithReports,
       tasks: taskRows,
       scopeName: selectedProjectId && scoped.length === 1 ? scoped[0].name : null,
     }
