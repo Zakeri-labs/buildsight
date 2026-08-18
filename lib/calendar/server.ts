@@ -141,7 +141,7 @@ export async function resolveExplicitSupervisorProjectScope(userId: string): Pro
   if (!isValidCalendarUuid(userId)) return []
 
   const admin = createAdminClient()
-  const [projectResult, participantResult] = await Promise.all([
+  const [projectResult, participantResult, assignedUserProjectsResult, userMembershipResult] = await Promise.all([
     admin
       .from("projects")
       .select("id, name, code, latitude, longitude, assigned_supervisor_id, supervising_organization_id")
@@ -150,19 +150,33 @@ export async function resolveExplicitSupervisorProjectScope(userId: string): Pro
       .from("project_participants")
       .select("project_id")
       .eq("key_contact_user_id", userId)
-      .eq("status", "active")
-      .in("participant_type", ["consultancy", "supervisor"]),
+      .eq("status", "active"),
+    admin
+      .from("projects")
+      .select("id, name, code, latitude, longitude, assigned_supervisor_id, supervising_organization_id")
+      .eq("assigned_user_id", userId),
+    admin
+      .from("project_user_memberships")
+      .select("project_id")
+      .eq("user_id", userId)
+      .eq("status", "active"),
   ])
 
   if (projectResult.error) throw projectResult.error
   if (participantResult.error) throw participantResult.error
+  if (assignedUserProjectsResult.error) throw assignedUserProjectsResult.error
+  if (userMembershipResult.error) throw userMembershipResult.error
 
-  const directProjects = (projectResult.data ?? []) as any[]
-  const participantProjectIds = (participantResult.data ?? [])
-    .map((row: any) => row.project_id)
-    .filter((id): id is string => isValidCalendarUuid(id))
+  const directProjects = [
+    ...((projectResult.data ?? []) as any[]),
+    ...((assignedUserProjectsResult.data ?? []) as any[]),
+  ]
+  const memberProjectIds = [
+    ...(participantResult.data ?? []).map((row: any) => row.project_id),
+    ...(userMembershipResult.data ?? []).map((row: any) => row.project_id),
+  ].filter((id): id is string => isValidCalendarUuid(id))
 
-  const missingProjectIds = participantProjectIds.filter(
+  const missingProjectIds = memberProjectIds.filter(
     (id) => !directProjects.some((p: any) => p.id === id),
   )
 
@@ -176,9 +190,12 @@ export async function resolveExplicitSupervisorProjectScope(userId: string): Pro
     additionalProjects = (additionalData ?? []) as any[]
   }
 
-  const allProjects = [...directProjects, ...additionalProjects]
+  const projectMap = new Map<string, any>()
+  for (const p of [...directProjects, ...additionalProjects]) {
+    if (p?.id) projectMap.set(p.id, p)
+  }
 
-  return allProjects
+  return Array.from(projectMap.values())
     .map((row: any) => normalizeProjectRow(row, "supervisor"))
     .filter((project): project is CalendarProjectScopeRow => Boolean(project))
     .sort((left, right) => left.name.localeCompare(right.name))

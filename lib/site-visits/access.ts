@@ -35,13 +35,26 @@ export async function getAssignedSiteVisitSupervisorProjectIds(userId: string): 
   if (!UUID_PATTERN.test(userId)) return new Set()
 
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from("projects")
-    .select("id")
-    .eq("assigned_supervisor_id", userId)
+  const [assignedSupervisorResult, assignedUserResult, participantResult, membershipResult] = await Promise.all([
+    admin.from("projects").select("id").eq("assigned_supervisor_id", userId),
+    admin.from("projects").select("id").eq("assigned_user_id", userId),
+    admin.from("project_participants").select("project_id").eq("key_contact_user_id", userId).eq("status", "active"),
+    admin.from("project_user_memberships").select("project_id").eq("user_id", userId).eq("status", "active"),
+  ])
 
-  if (error) throw error
-  return new Set((data ?? []).map((row: any) => row.id as string).filter((id) => UUID_PATTERN.test(id)))
+  if (assignedSupervisorResult.error) throw assignedSupervisorResult.error
+  if (assignedUserResult.error) throw assignedUserResult.error
+  if (participantResult.error) throw participantResult.error
+  if (membershipResult.error) throw membershipResult.error
+
+  const ids = [
+    ...(assignedSupervisorResult.data ?? []).map((row: any) => row.id as string),
+    ...(assignedUserResult.data ?? []).map((row: any) => row.id as string),
+    ...(participantResult.data ?? []).map((row: any) => row.project_id as string),
+    ...(membershipResult.data ?? []).map((row: any) => row.project_id as string),
+  ].filter((id) => UUID_PATTERN.test(id))
+
+  return new Set(ids)
 }
 
 export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVisitAccessMap> {

@@ -217,25 +217,39 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
         data = result.data
       }
     } else if (effectiveRole === "org_member") {
-      // Members use canonical explicit Project Supervisor assignments (via assigned_supervisor_id or project_participants).
+      // Members use canonical explicit Project Supervisor/User assignments
+      // (via assigned_supervisor_id, assigned_user_id, project_participants, or project_user_memberships).
       // Keeping this server-side prevents unrelated organization projects from
       // reaching Member lists, aggregate counts, shell project options, or
       // direct project detail lookups.
-      const { data: participantProjects, error: participantError } = await admin
-        .from("project_participants")
-        .select("project_id")
-        .eq("key_contact_user_id", userId)
-        .eq("status", "active")
-        .in("participant_type", ["consultancy", "supervisor"])
+      const [participantResult, membershipResult, assignedUserResult] = await Promise.all([
+        admin
+          .from("project_participants")
+          .select("project_id")
+          .eq("key_contact_user_id", userId)
+          .eq("status", "active"),
+        admin
+          .from("project_user_memberships")
+          .select("project_id")
+          .eq("user_id", userId)
+          .eq("status", "active"),
+        admin
+          .from("projects")
+          .select("id")
+          .eq("assigned_user_id", userId)
+          .eq("supervising_organization_id", orgId),
+      ])
 
-      if (participantError) throw participantError
+      if (participantResult.error) throw participantResult.error
+      if (membershipResult.error) throw membershipResult.error
+      if (assignedUserResult.error) throw assignedUserResult.error
 
-      const participantProjectIds = Array.from(
-        new Set(
-          (participantProjects ?? [])
-            .map((row: any) => row.project_id)
-            .filter((id): id is string => typeof id === "string" && id.length > 0),
-        ),
+      const memberProjectIds = Array.from(
+        new Set([
+          ...(participantResult.data ?? []).map((row: any) => row.project_id),
+          ...(membershipResult.data ?? []).map((row: any) => row.project_id),
+          ...(assignedUserResult.data ?? []).map((row: any) => row.id),
+        ].filter((id): id is string => typeof id === "string" && id.length > 0)),
       )
 
       let query = admin
@@ -243,8 +257,8 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
         .select(projectColumns)
         .eq("supervising_organization_id", orgId)
 
-      if (participantProjectIds.length > 0) {
-        query = query.or(`assigned_supervisor_id.eq.${userId},id.in.(${participantProjectIds.join(",")})`)
+      if (memberProjectIds.length > 0) {
+        query = query.or(`assigned_supervisor_id.eq.${userId},id.in.(${memberProjectIds.join(",")})`)
       } else {
         query = query.eq("assigned_supervisor_id", userId)
       }
