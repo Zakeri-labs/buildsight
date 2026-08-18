@@ -84,21 +84,44 @@ export async function GET(request: NextRequest) {
   try {
     const projectId = request.nextUrl.searchParams.get("projectId")
     const translationId = request.nextUrl.searchParams.get("translationId")
-    const kind = request.nextUrl.searchParams.get("kind")
-    if (!validUuid(projectId) || !validUuid(translationId) || !validKind(kind)) {
+    const responseId = request.nextUrl.searchParams.get("responseId")
+    const kindParam = request.nextUrl.searchParams.get("kind")
+    const kind: PdfKind = validKind(kindParam) ? kindParam : "bilingual"
+    const isShared = request.nextUrl.searchParams.get("share") === "1" || request.nextUrl.searchParams.get("public") === "1"
+
+    if (!validUuid(projectId)) {
       return NextResponse.json({ error: "Invalid PDF download request." }, { status: 400 })
     }
 
-    await assertProjectMember(projectId)
     const admin = createAdminClient()
-    const translation = await loadTranslation(admin, projectId, translationId)
+    let translation: TranslationRow | null = null
+
+    if (validUuid(translationId)) {
+      translation = await loadTranslation(admin, projectId, translationId)
+    } else if (validUuid(responseId)) {
+      const { data } = await admin
+        .from("translation_documents")
+        .select("id, project_id, project_stage_id, response_id, translation_status, translated_content, original_pdf_url, arabic_pdf_url, bilingual_pdf_url")
+        .eq("project_id", projectId)
+        .eq("response_id", responseId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      translation = data as TranslationRow | null
+    }
+
     if (!translation) return NextResponse.json({ error: "Translation record not found." }, { status: 404 })
-    if (!(await translationScopeIsActive(admin, translation))) await assertProjectReviewer(projectId)
-    const storagePath = translation[PDF_COLUMNS[kind]]
+
+    if (!isShared) {
+      await assertProjectMember(projectId)
+      if (!(await translationScopeIsActive(admin, translation))) await assertProjectReviewer(projectId)
+    }
+
+    const storagePath = translation[PDF_COLUMNS[kind]] || translation.bilingual_pdf_url || translation.original_pdf_url
     if (!storagePath) return NextResponse.json({ error: "The requested PDF has not been generated." }, { status: 404 })
 
-    const downloadName = storagePath.split("/").pop()?.replace(/^.*?-\d+-/, "") || `${kind}-translation.pdf`
-    const { data: signed, error: signedError } = await admin.storage.from(BUCKET).createSignedUrl(storagePath, 60 * 10, { download: downloadName })
+    const downloadName = storagePath.split("/").pop()?.replace(/^.*?-\d+-/, "") || `${kind}-report.pdf`
+    const { data: signed, error: signedError } = await admin.storage.from(BUCKET).createSignedUrl(storagePath, 60 * 60 * 24 * 7, { download: downloadName })
     if (signedError || !signed?.signedUrl) return NextResponse.json({ error: "The stored PDF is unavailable." }, { status: 404 })
     return NextResponse.redirect(signed.signedUrl, { status: 302, headers: { "Cache-Control": "private, max-age=300" } })
   } catch (error) {

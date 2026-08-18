@@ -56,6 +56,7 @@ import { saveReportCcRecipientsAction } from "@/lib/actions/report-cc"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto-generation"
 import { exportTranslationPdf, storeTranslationPdf, downloadPdfBlob } from "@/lib/stage-translations/client-pdf"
+import { buildWhatsAppShareUrl } from "@/lib/stage-translations/whatsapp-share"
 import { StageTranslationActions } from "@/components/stages/stage-translation-actions"
 import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
 import { ReportDownloadSection } from "@/components/stages/report-download-section"
@@ -1438,37 +1439,10 @@ export function InspectionReportForm({
             </div>
 
             <div className="flex w-full flex-wrap items-center justify-end gap-1.5 md:w-auto md:gap-3 shrink-0">
-              {canRenderReviewerActions && pendingReview ? (
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="lg"
-                    disabled={busy !== null}
-                    className="border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
-                    onClick={() => void decide("rejected")}
-                  >
-                    {busy === "reject" ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
-                    {locale === "ar" ? "رفض التقرير" : "Reject Report"}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="lg"
-                    disabled={busy !== null}
-                    className="bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600"
-                    onClick={() => void decide("approved")}
-                  >
-                    {busy === "approve" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-                    {locale === "ar" ? "اعتماد التقرير" : "Approve Report"}
-                  </Button>
-                </div>
-              ) : null}
+              {/* Temporarily hidden Approve / Reject actions per admin request */}
               {workflowActive && isEditable ? (
-                <div className="grid w-full grid-cols-3 gap-1.5 md:flex md:w-auto md:items-center md:gap-3">
-                  <Button variant="outline" size="lg" className="min-w-0 px-1.5 text-[10px] md:px-2.5 md:text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-300" disabled={busy !== null} onClick={() => setCancelDialogOpen(true)}>
-                    <X className="size-3.5 md:size-4" />
-                    <span>{locale === "ar" ? "إلغاء" : "Cancel"}</span>
-                  </Button>
+                <div className="grid w-full grid-cols-2 gap-1.5 md:flex md:w-auto md:items-center md:gap-3">
+                  {/* Temporarily hidden Cancel button per admin request */}
                   <Button variant="outline" size="lg" className="min-w-0 px-1.5 text-[10px] md:px-2.5 md:text-sm" disabled={busy !== null} onClick={() => void save("draft")}>
                     {busy === "draft" ? <Loader2 className="size-3.5 animate-spin md:size-4" /> : <Save className="size-3.5 md:size-4" />}
                     <span className="md:hidden">{status !== "draft" && status !== "in_progress" ? (locale === "ar" ? "حفظ" : "Save") : "Draft"}</span>
@@ -1606,13 +1580,17 @@ export function InspectionReportForm({
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    const defaultPhone = "96891451613"
-                    const projectName = project?.name || "Project"
-                    const reportUrl = typeof window !== "undefined" && submitResult
-                      ? `${window.location.origin}/projects/${project.id}/stages/${submitResult.stageId}/reports/${submitResult.responseId}`
-                      : ""
-                    const text = `🏗️ *BuildSight Inspection Report*\n*Project:* ${projectName}\nThis report has been prepared for project ${projectName}.\n${reportUrl ? `\n🔗 *Report Link:*\n${reportUrl}` : ""}`
-                    window.open(`https://wa.me/${defaultPhone}?text=${encodeURIComponent(text)}`, "_blank")
+                    const url = buildWhatsAppShareUrl({
+                      projectName: project?.name || "Project",
+                      reportTitle: reportTitle || "Inspection Report",
+                      visitNumber: currentVisitNo,
+                      projectId: project.id,
+                      stageId: submitResult?.stageId || stageId,
+                      responseId: submitResult?.responseId || responseId,
+                      translationId: translation?.id,
+                      phone: "96891451613",
+                    })
+                    window.open(url, "_blank")
                   }}
                   className="h-10 w-full gap-2 rounded-lg border-emerald-500/40 bg-emerald-50/50 font-semibold text-emerald-700 hover:bg-emerald-100/80 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60 shadow-xs"
                 >

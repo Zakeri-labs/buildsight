@@ -34,37 +34,39 @@ export async function POST(request: NextRequest) {
     let systemPrompt = ""
     if (action === "translate_en") {
       systemPrompt = [
-        "You are a senior civil engineer and site inspection consultant.",
-        "Your task is to translate site inspection notes (which may contain HTML tags, bullet points <ul>/<li>, or informal Persian/Arabic text) into professional, standard civil engineering English.",
+        "You are an automated civil engineering document processing utility for construction site supervision.",
+        "Your sole task is to translate site inspection notes (which may contain HTML tags, bullet points <ul>/<li>, or informal Persian/Arabic text) into professional, standard civil engineering English.",
         "CRITICAL REQUIREMENTS:",
-        "1. PRESERVE STRUCTURE: If the input contains bullet points <ul>/<li> or list items, maintain them as <ul><li>...</li></ul> in the output. Do NOT flatten list items into a single paragraph.",
-        "2. Professional Terminology: Use exact civil engineering and construction site terminology (e.g. formwork, rebar, shuttering, beam level, concrete pour, slump test, compaction, honeycomb, expansion joint, curing).",
-        "3. Exact Details: Keep all numbers, dimensions, dates, axis/grid references, and factual observations EXACTLY as provided.",
-        "4. DO NOT invent any extra facts, observations, or numbers that are not in the source text.",
-        "5. Output Format: Return ONLY clean HTML (e.g., <ul><li>...</li></ul> or <p>...</p>) suitable for a rich-text report editor.",
+        "1. Direct Execution: Always translate the input text into professional civil engineering English. Never output conversational commentary, meta-disclaimers, or refusal statements.",
+        "2. PRESERVE STRUCTURE: If the input contains bullet points <ul>/<li> or list items, maintain them as <ul><li>...</li></ul> in the output. Do NOT flatten list items into a single paragraph.",
+        "3. Professional Terminology: Use exact civil engineering and construction site terminology (e.g. formwork, rebar, shuttering, beam level, concrete pour, slump test, compaction, honeycomb, expansion joint, curing).",
+        "4. Exact Details: Keep all numbers, dimensions, dates, axis/grid references, and factual observations EXACTLY as provided.",
+        "5. Output Format: Return ONLY clean HTML (e.g., <ul><li>...</li></ul> or <p>...</p>) suitable for direct rich-text insertion.",
       ].join("\n")
     } else if (action === "translate_ar") {
       systemPrompt = [
-        "You are a senior civil engineer and construction correspondence consultant.",
+        "You are an automated civil engineering document processing utility for official site correspondence.",
         "Your task is to translate standard construction correspondence or letter text into professional, formal Arabic appropriate for official construction site correspondence (RFI, NCR, MIR, Submittal, Transmittal, Notice, Memorandum).",
         "CRITICAL REQUIREMENTS:",
-        "1. ARABIC PLAIN TEXT ONLY: Return ONLY clean Arabic plain text. ABSOLUTELY NO HTML TAGS (do NOT use <div>, <p>, <h2>, <h1>, <br>, <span>, <strong>, etc.) and NO Markdown code fences (```).",
+        "1. ARABIC PLAIN TEXT ONLY: Return ONLY clean Arabic plain text. ABSOLUTELY NO HTML TAGS and NO Markdown code fences (```).",
         "2. NO RTL WRAPPER TAGS: Do NOT wrap output in <div dir=\"rtl\"> or any HTML attributes. Text direction is handled by the application UI.",
-        "3. PRESERVE STRUCTURE WITH LINE BREAKS: Maintain paragraph structure, section headers, and line breaks using plain newlines (\\n). Use double line breaks between paragraphs or sections.",
-        "4. PRESERVE PLACEHOLDERS & VALUES: Keep all bracketed placeholders (e.g. [Enter project or site name] -> [أدخل اسم المشروع أو الموقع]), numbers, dates, grid references, standards, and codes intact with their original bracket formatting.",
+        "3. PRESERVE STRUCTURE WITH LINE BREAKS: Maintain paragraph structure, section headers, and line breaks using plain newlines (\\n).",
+        "4. PRESERVE PLACEHOLDERS & VALUES: Keep all bracketed placeholders, numbers, dates, grid references, standards, and codes intact.",
         "5. Output Format: Start directly with the translated Arabic plain text content.",
       ].join("\n")
     } else {
       systemPrompt = [
-        "You are a senior civil engineer, chief site inspector, and construction quality management consultant.",
+        "You are an automated civil engineering site inspection report assistant for construction quality management.",
         "Your task is to transform informal, draft, or voice-recorded site inspection notes into a comprehensive, highly professional, standard civil engineering inspection report.",
         "",
         "CRITICAL REQUIREMENTS:",
-        "1. STRICT SAME LANGUAGE REQUIREMENT: ALWAYS output the enhanced report in the EXACT SAME LANGUAGE as the input text (e.g. if input is in Persian/Farsi, output in formal professional Persian; if input is in Arabic, output in formal Arabic; if English, output in English). DO NOT translate the input into another language unless explicitly requested.",
+        "1. Direct Execution: Always process and expand the input notes into formal site inspection statements. Never output conversational responses, politeness phrases, or refusal statements.",
         "",
-        "2. EXPAND AND ELABORATE: Fully expand and elaborate the raw inspection notes into detailed, technical, and comprehensive engineering statements. Elaborate on the site findings, structural implications, quality assurance requirements, and corrective actions using precise civil engineering terminology in the SAME input language.",
+        "2. STRICT SAME LANGUAGE REQUIREMENT: ALWAYS output the enhanced report in the EXACT SAME LANGUAGE as the input text (e.g. if input is in Persian/Farsi, output in formal professional Persian; if input is in Arabic, output in formal Arabic; if English, output in English).",
         "",
-        "3. SECTION DIVISION & MARKERS: Divide the report into EXACTLY TWO distinct sections wrapped in explicit HTML comments:",
+        "3. EXPAND AND ELABORATE: Fully expand raw inspection notes into detailed technical engineering statements using precise civil engineering terminology in the SAME input language.",
+        "",
+        "4. SECTION DIVISION & MARKERS: Divide the report into EXACTLY TWO distinct sections wrapped in explicit HTML comments:",
         "   <!-- SECTION: OBSERVATIONS -->",
         "   <p><strong>Observations / مشاهدات و ملاحظات / الملاحظات:</strong></p>",
         "   <p>(A) ...</p>",
@@ -77,19 +79,17 @@ export async function POST(request: NextRequest) {
         "   </ul>",
         "   <!-- END: DIRECTIVES -->",
         "",
-        "4. SECTION 1 - OBSERVATIONS FORMATTING:",
-        "   - Title: Observations header in the input language (using <p><strong>Observations:</strong></p> in English, <p><strong>الملاحظات:</strong></p> / <p><strong>مشاهدات و ملاحظات:</strong></p> in Arabic/Persian).",
+        "5. SECTION 1 - OBSERVATIONS FORMATTING:",
+        "   - Title: Observations header in the input language.",
         "   - List each individual observation on its own paragraph.",
         "   - Prefix each item with uppercase letter indicators in parentheses: (A), (B), (C), (D)... (or (أ), (ب), (ج), (د)... if in Arabic/Persian).",
-        "   - Expand each observation into a complete, formal technical statement describing what was observed on site, its location/component, and technical context.",
         "",
-        "5. SECTION 2 - DIRECTIVES FORMATTING:",
-        "   - Title: Directives header in the input language (using <p><strong>Directives:</strong></p> in English, <p><strong>التوجيهات:</strong></p> / <p><strong>دستورالعمل‌ها و ابلاغیه‌ها:</strong></p> in Arabic/Persian).",
+        "6. SECTION 2 - DIRECTIVES FORMATTING:",
+        "   - Title: Directives header in the input language.",
         "   - List the actionable corrective instructions as a bulleted list (<ul><li>...</li></ul> in HTML).",
-        "   - Formulate each directive as a clear, comprehensive, and imperative instruction for the contractor or site engineering team to rectify the issue and comply with approved specifications before proceeding.",
         "",
-        "6. ACCURACY & INTEGRITY:",
-        "   - Do NOT change numbers, grid axes, or factual measurements provided in the input, but thoroughly expand the description and technical context.",
+        "7. ACCURACY & INTEGRITY:",
+        "   - Do NOT change numbers, grid axes, or factual measurements provided in the input.",
       ].join("\n")
     }
 
@@ -119,8 +119,9 @@ export async function POST(request: NextRequest) {
     }
 
     let resultText = ""
-    if (typeof payload?.choices?.[0]?.message?.content === "string") {
-      resultText = payload.choices[0].message.content.trim()
+    const messageObj = payload?.choices?.[0]?.message
+    if (typeof messageObj?.content === "string") {
+      resultText = messageObj.content.trim()
     } else if (typeof payload?.output_text === "string" && payload.output_text.trim()) {
       resultText = payload.output_text.trim()
     } else for (const item of payload?.output ?? []) {
@@ -134,6 +135,15 @@ export async function POST(request: NextRequest) {
     resultText = resultText.trim()
     if (!resultText) {
       throw new Error("AI service returned empty result.")
+    }
+
+    if (
+      messageObj?.refusal ||
+      /I'm sorry, but I cannot assist/i.test(resultText) ||
+      /as an AI language model, I cannot/i.test(resultText) ||
+      /I cannot fulfill this request/i.test(resultText)
+    ) {
+      throw new Error("AI service refused processing for this input. Please provide valid site inspection notes.")
     }
 
     if (action === "translate_ar") {
