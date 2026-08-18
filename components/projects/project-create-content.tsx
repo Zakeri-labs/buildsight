@@ -110,6 +110,7 @@ export async function ProjectCreateContent() {
       users={userOptions}
       supervisors={supervisorOptions}
       existingProjectCodes={existingProjectCodes}
+      currentUserId={session.userId}
     />
   )
 }

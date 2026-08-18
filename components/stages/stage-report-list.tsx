@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
-import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, ClipboardList, FilePlus2, Search } from "lucide-react"
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, ClipboardList, FilePlus2, Pencil, Search } from "lucide-react"
 import { useCurrentUser } from "@/components/current-user-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -223,11 +223,79 @@ export function StageReportList({ project, stage, workflowActive }: { project: {
             <>
               <div className="hidden md:block">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Report Title</TableHead><TableHead>Status</TableHead><TableHead>Created Date</TableHead><TableHead>Responsible User</TableHead><TableHead>Review Status</TableHead><TableHead className="w-16"><span className="sr-only">Open</span></TableHead></TableRow></TableHeader>
-                  <TableBody>{reports.map((report) => <TableRow key={report.id}><TableCell className="max-w-80"><Link href={`${baseHref}/reports/${report.id}`} className="block truncate font-medium hover:text-primary" title={report.reportTitle}>{report.reportTitle}</Link><p className="truncate font-mono text-xs text-muted-foreground">{report.reportNumber}</p></TableCell><TableCell><Badge variant="outline" className={statusTone(report.status)}>{statusLabel(report.status)}</Badge></TableCell><TableCell>{formatDate(report.createdAt)}</TableCell><TableCell>{report.responsibleUser?.name ?? report.createdBy.name}</TableCell><TableCell>{reviewLabel(report.status, report.approvalRequired)}</TableCell><TableCell><Link href={`${baseHref}/reports/${report.id}`} aria-label={`Open ${report.reportTitle}`} className={buttonVariants({ variant: "ghost", size: "icon-sm" })}><ArrowRight className="size-4" /></Link></TableCell></TableRow>)}</TableBody>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Report Title</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Created Date</TableHead>
+                      <TableHead>Responsible User</TableHead>
+                      <TableHead>Review Status</TableHead>
+                      <TableHead className="w-28 text-end">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {reports.map((report) => (
+                      <TableRow key={report.id}>
+                        <TableCell className="max-w-80">
+                          <Link href={`${baseHref}/reports/${report.id}`} className="block truncate font-medium hover:text-primary" title={report.reportTitle}>
+                            {report.reportTitle}
+                          </Link>
+                          <p className="truncate font-mono text-xs text-muted-foreground">{report.reportNumber}</p>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={statusTone(report.status)}>{statusLabel(report.status)}</Badge>
+                        </TableCell>
+                        <TableCell>{formatDate(report.createdAt)}</TableCell>
+                        <TableCell>{report.responsibleUser?.name ?? report.createdBy.name}</TableCell>
+                        <TableCell>{reviewLabel(report.status, report.approvalRequired)}</TableCell>
+                        <TableCell className="text-end">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {report.status !== "completed" ? (
+                              <Link
+                                href={`${baseHref}/reports/${report.id}`}
+                                className={cn(buttonVariants({ variant: "outline", size: "icon-sm" }), "h-7 gap-1 px-2 text-xs font-medium text-slate-700 hover:border-primary/50 hover:text-primary dark:text-slate-200")}
+                                title="Edit Report"
+                              >
+                                <Pencil className="size-3" />
+                                <span className="hidden lg:inline">Edit</span>
+                              </Link>
+                            ) : null}
+                            <Link href={`${baseHref}/reports/${report.id}`} aria-label={`Open ${report.reportTitle}`} className={buttonVariants({ variant: "ghost", size: "icon-sm" })}>
+                              <ArrowRight className="size-4" />
+                            </Link>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
                 </Table>
               </div>
-              <div className="divide-y md:hidden">{reports.map((report) => <Link key={report.id} href={`${baseHref}/reports/${report.id}`} className="block space-y-2 p-4 hover:bg-muted/30"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-medium">{report.reportTitle}</p><p className="mt-0.5 font-mono text-xs text-muted-foreground">{report.reportNumber}</p></div><Badge variant="outline" className={statusTone(report.status)}>{statusLabel(report.status)}</Badge></div><div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground"><span>{formatDate(report.createdAt)}</span><span>{report.responsibleUser?.name ?? report.createdBy.name}</span><span>{reviewLabel(report.status, report.approvalRequired)}</span></div></Link>)}</div>
+              <div className="divide-y md:hidden">
+                {reports.map((report) => (
+                  <Link key={report.id} href={`${baseHref}/reports/${report.id}`} className="block space-y-2 p-4 hover:bg-muted/30">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{report.reportTitle}</p>
+                        <p className="mt-0.5 font-mono text-xs text-muted-foreground">{report.reportNumber}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {report.status !== "completed" ? (
+                          <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                            <Pencil className="size-3" />
+                            Edit
+                          </span>
+                        ) : null}
+                        <Badge variant="outline" className={statusTone(report.status)}>{statusLabel(report.status)}</Badge>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <span>{formatDate(report.createdAt)}</span>
+                      <span>{report.responsibleUser?.name ?? report.createdBy.name}</span>
+                      <span>{reviewLabel(report.status, report.approvalRequired)}</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
               {totalPages > 1 ? <div className="flex items-center justify-between border-t px-4 py-3"><p className="text-xs text-muted-foreground">Page {currentPage} of {totalPages} · {filteredReports.length} reports</p><div className="flex gap-2"><Button type="button" size="icon-sm" variant="outline" aria-label="Previous reports page" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft className="size-4" /></Button><Button type="button" size="icon-sm" variant="outline" aria-label="Next reports page" disabled={currentPage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}><ChevronRight className="size-4" /></Button></div></div> : null}
             </>
           ) : (

@@ -23,8 +23,10 @@ import {
   MapPin,
   Star,
   Trash2,
+  User,
   UsersRound,
 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -171,12 +173,14 @@ export function ProjectCreateForm({
   users,
   supervisors,
   existingProjectCodes = [],
+  currentUserId,
 }: {
   supervisingOrg: { id: string; name: string }
   contractorOrganizations: ContractorOrganization[]
   users: UserOption[]
   supervisors: UserOption[]
   existingProjectCodes?: string[]
+  currentUserId?: string
 }) {
   const router = useRouter()
   const { locale } = useI18n()
@@ -199,7 +203,15 @@ export function ProjectCreateForm({
   const [includedFinishingVisits, setIncludedFinishingVisits] = useState("")
   const [description, setDescription] = useState("")
   const [projectImages, setProjectImages] = useState<ProjectImageDraft[]>([])
-  const [assignedUserId, setAssignedUserId] = useState("")
+
+  const defaultAssignedUser = useMemo(() => {
+    if (currentUserId && users.some((u) => u.id === currentUserId)) {
+      return currentUserId
+    }
+    return users[0]?.id ?? ""
+  }, [currentUserId, users])
+
+  const [assignedUserId, setAssignedUserId] = useState(defaultAssignedUser)
   const [assignedSupervisorId, setAssignedSupervisorId] = useState("")
   const [owners, setOwners] = useState<OwnerDetails[]>([emptyOwner()])
   const [selectedOwnerViewers, setSelectedOwnerViewers] = useState<(ProjectOwnerViewerOption | null)[]>([null])
@@ -1229,29 +1241,19 @@ export function ProjectCreateForm({
                 />
 
                 <div className="grid gap-5 md:grid-cols-2">
-                  <Field label={copy.assignUser} required>
-                    <Select
-                      value={assignedUserId || null}
-                      onValueChange={(value) => setAssignedUserId(value == null ? "" : String(value))}
-                      disabled={pending}
-                    >
-                      <SelectTrigger className="h-10 w-full">
-                        <SelectValue placeholder={copy.assignUserPlaceholder}>
-                          {(value) => {
-                            if (!value) return copy.assignUserPlaceholder
-                            const user = users.find((item) => item.id === String(value))
-                            return user ? userOptionLabel(user) : (isArabic ? "مستخدم محدد" : "Selected user")
-                          }}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {users.map((user) => (
-                          <SelectItem key={user.id} value={user.id}>
-                            {user.name}{user.email && user.email !== user.name ? ` — ${user.email}` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <Field label={copy.assignUser}>
+                    <div className="flex h-10 w-full items-center gap-2 rounded-md border border-input bg-muted/40 px-3 py-2 text-sm text-foreground select-none cursor-not-allowed opacity-90">
+                      <User className="size-4 shrink-0 text-muted-foreground" />
+                      <span className="truncate font-medium">
+                        {(() => {
+                          const option = users.find((item) => item.id === (assignedUserId || currentUserId))
+                          return option ? userOptionLabel(option) : (isArabic ? "منشئ المشروع" : "Project Creator")
+                        })()}
+                      </span>
+                      <Badge variant="outline" className="ms-auto shrink-0 border-slate-300 text-[10px] font-normal text-muted-foreground dark:border-slate-700">
+                        {isArabic ? "منشئ المشروع" : "Project Creator"}
+                      </Badge>
+                    </div>
                   </Field>
                   <Field label={copy.assignSupervisor} required>
                     <Select

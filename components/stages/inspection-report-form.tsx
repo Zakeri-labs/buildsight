@@ -526,10 +526,11 @@ export function InspectionReportForm({
   const documentAttachments = existingAttachments.filter((item) => item.attachmentKind === "document")
   const statusLocked = status === "approved" || status === "completed"
   const pendingReview = status === "submitted" || status === "under_review"
-  const isEditable = canEdit && !statusLocked && !pendingReview
+  const isSupervisorOrAdmin = Boolean(canManage || canReview || canEdit)
+  const isEditable = isSupervisorOrAdmin ? !statusLocked : (canEdit && !statusLocked && !pendingReview)
   const isLocked = !isEditable || !workflowActive
   const isMemberExistingReport = isMember && Boolean(response)
-  const isMemberReadOnlyReport = isMemberExistingReport && (pendingReview || statusLocked)
+  const isMemberReadOnlyReport = isMemberExistingReport && (!isSupervisorOrAdmin && (pendingReview || statusLocked))
   const canRenderReviewerActions = canReview && !isMember
   const directTranslationAvailable = !isDirectStageReport || ["submitted", "under_review", "rejected", "approved", "completed"].includes(status)
 

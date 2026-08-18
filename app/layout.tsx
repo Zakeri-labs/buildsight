@@ -45,15 +45,17 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
+      { url: "/app-icons-bonyan/favicon/favicon.ico", type: "image/x-icon" },
       { url: "/app-icons-bonyan/favicon/favicon-16x16.png", sizes: "16x16", type: "image/png" },
       { url: "/app-icons-bonyan/favicon/favicon-32x32.png", sizes: "32x32", type: "image/png" },
-      { url: "/app-icons-bonyan/favicon/favicon-48x48.png", sizes: "48x48", type: "image/png" },
-      { url: "/app-icons-bonyan/favicon/favicon.ico", rel: "shortcut icon" },
+      { url: "/app-icons-bonyan/android/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/app-icons-bonyan/android/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
+    shortcut: "/app-icons-bonyan/favicon/favicon.ico",
     apple: [
-      { url: "/app-icons-bonyan/iphone/apple-touch-icon.png", sizes: "180x180" },
-      { url: "/app-icons-bonyan/iphone/apple-touch-icon-152.png", sizes: "152x152" },
-      { url: "/app-icons-bonyan/iphone/apple-touch-icon-167.png", sizes: "167x167" },
+      { url: "/app-icons-bonyan/iphone/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+      { url: "/app-icons-bonyan/iphone/apple-touch-icon-152.png", sizes: "152x152", type: "image/png" },
+      { url: "/app-icons-bonyan/iphone/apple-touch-icon-167.png", sizes: "167x167", type: "image/png" },
     ],
   },
 }
@@ -81,11 +83,14 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Bonyan" />
         <link rel="apple-touch-icon" href="/app-icons-bonyan/iphone/apple-touch-icon.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/app-icons-bonyan/iphone/apple-touch-icon.png" />
         <link rel="apple-touch-icon" sizes="152x152" href="/app-icons-bonyan/iphone/apple-touch-icon-152.png" />
         <link rel="apple-touch-icon" sizes="167x167" href="/app-icons-bonyan/iphone/apple-touch-icon-167.png" />
         <link rel="icon" type="image/x-icon" href="/app-icons-bonyan/favicon/favicon.ico" />
         <link rel="icon" type="image/png" sizes="16x16" href="/app-icons-bonyan/favicon/favicon-16x16.png" />
         <link rel="icon" type="image/png" sizes="32x32" href="/app-icons-bonyan/favicon/favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/app-icons-bonyan/pwa/android-chrome-192x192.png" />
+        <link rel="icon" type="image/png" sizes="512x512" href="/app-icons-bonyan/pwa/android-chrome-512x512.png" />
         <link rel="manifest" href="/manifest.webmanifest" />
       </head>
       <body className="font-sans antialiased">

@@ -498,9 +498,6 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
     if (existing && ["approved", "completed"].includes(existing.status)) {
       return { ok: false, error: "This report is finalized and cannot be modified." }
     }
-    if (existing && ["submitted", "under_review"].includes(existing.status)) {
-      return { ok: false, error: "This report is awaiting review and cannot be edited or resubmitted." }
-    }
 
     const nextStatus = input.submit
       ? approvalRequired ? "submitted" : "completed"
@@ -715,8 +712,8 @@ export async function registerResponseAttachmentsAction(input: {
       assertActiveStageScope(scope)
       if (response.created_by !== actorId) await assertProjectAdmin(input.projectId)
     }
-    if (["submitted", "under_review", "approved", "completed"].includes(response.status)) {
-      return { ok: false, error: "Attachments cannot be changed while this report is awaiting review or finalized." }
+    if (["approved", "completed"].includes(response.status)) {
+      return { ok: false, error: "Attachments cannot be changed while this report is finalized." }
     }
 
     const prefix = `${input.projectId}/${input.responseId}/`
@@ -784,8 +781,8 @@ export async function deleteResponseAttachmentAction(input: {
     } else if (response.project_stage_id) {
       assertActiveStageScope(await stageScope(input.projectId, response.project_stage_id))
     }
-    if (["submitted", "under_review", "approved", "completed"].includes(response.status)) {
-      return { ok: false, error: "Attachments cannot be changed while this report is awaiting review or finalized." }
+    if (["approved", "completed"].includes(response.status)) {
+      return { ok: false, error: "Attachments cannot be changed while this report is finalized." }
     }
     if (attachment.uploaded_by !== actorId) await assertProjectAdmin(input.projectId)
     const { error } = await admin.from("response_attachments").delete().eq("id", input.attachmentId)
