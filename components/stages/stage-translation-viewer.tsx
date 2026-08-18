@@ -63,7 +63,7 @@ const COPY = {
     sourcePdf: "Original Uploaded PDF",
     arabic: "Arabic Translation",
     projectInformation: "Project Information",
-    reportDetails: "Report Details",
+    reportDetails: "Report Information",
     inspectionContent: "Inspection Content",
     attachmentsGroup: "Attachments",
     project: "Project Name",
@@ -71,6 +71,7 @@ const COPY = {
     stage: "Stage",
     term: "Term Name",
     document: "Document",
+    reportTitle: "Report Title",
     documentNumber: "Report Number",
     visitNumber: "Visit Number",
     date: "Date",
@@ -110,7 +111,7 @@ const COPY = {
     sourcePdf: "ملف PDF الإنجليزي الأصلي",
     arabic: "الترجمة العربية",
     projectInformation: "معلومات المشروع",
-    reportDetails: "تفاصيل التقرير",
+    reportDetails: "معلومات التقرير",
     inspectionContent: "محتوى التفتيش",
     attachmentsGroup: "المرفقات والصور",
     project: "اسم المشروع",
@@ -118,6 +119,7 @@ const COPY = {
     stage: "المرحلة",
     term: "اسم البند",
     document: "المستند",
+    reportTitle: "عنوان التقرير",
     documentNumber: "رقم التقرير",
     visitNumber: "رقم الزيارة",
     date: "التاريخ",
@@ -1028,11 +1030,11 @@ function ProjectInformationBody({
 }
 
 function ReportDetailsBody({ content, labels, mobileCompact = false }: { content: TranslationReportContent; labels: ReportLabels; mobileCompact?: boolean }) {
+  const hasSubject = Boolean(content.subject?.trim() && content.subject.trim() !== "—" && content.subject.trim() !== labels.noContent)
   return (
-    <dl className={cn("grid gap-3 text-sm sm:grid-cols-2", mobileCompact && "max-md:grid-cols-2 max-md:gap-2 max-md:text-xs")}>
-      <ReportMeta label={labels.document} value={content.reportTitle} empty={labels.noContent} />
-      <ReportMeta label={labels.subject} value={content.subject} empty={labels.noContent} />
-      <ReportMeta label={labels.type} value={content.reportType} empty={labels.noContent} />
+    <dl className={cn("grid gap-3 text-sm", hasSubject ? "sm:grid-cols-2" : "grid-cols-1", mobileCompact && "max-md:grid-cols-1 max-md:gap-2 max-md:text-xs")}>
+      <ReportMeta label={labels.reportTitle} value={content.reportTitle} empty={labels.noContent} />
+      {hasSubject ? <ReportMeta label={labels.subject} value={content.subject} empty={labels.noContent} /> : null}
     </dl>
   )
 }

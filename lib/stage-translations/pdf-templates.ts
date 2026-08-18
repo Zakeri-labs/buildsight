@@ -166,7 +166,7 @@ const LABELS = {
   en: {
     title: "English Original Document",
     projectInformation: "Project Information",
-    reportDetails: "Report Details",
+    reportDetails: "Report Information",
     attachments: "Attachments",
     checklist: "Inspection Checklist",
     approvals: "Approval Information",
@@ -184,6 +184,7 @@ const LABELS = {
     reportDate: "Date",
     reportStatus: "Status",
     reportType: "Type",
+    reportTitle: "Report Title",
     subject: "Subject",
     noContent: "No content recorded.",
     noAttachments: "No related attachments.",
@@ -199,7 +200,7 @@ const LABELS = {
   ar: {
     title: "الترجمة العربية",
     projectInformation: "معلومات المشروع",
-    reportDetails: "تفاصيل التقرير",
+    reportDetails: "معلومات التقرير",
     attachments: "المرفقات والصور",
     checklist: "قائمة فحص التفتيش",
     approvals: "معلومات الاعتماد",
@@ -217,6 +218,7 @@ const LABELS = {
     reportDate: "التاريخ",
     reportStatus: "الحالة",
     reportType: "النوع",
+    reportTitle: "عنوان التقرير",
     subject: "الموضوع",
     noContent: "لا يوجد محتوى مسجل.",
     noAttachments: "لا توجد مرفقات مرتبطة.",
@@ -264,15 +266,23 @@ function reportDetailsSection(
   language: "en" | "ar",
 ): PdfSectionTemplate {
   const labels = LABELS[language]
+  const titleVal = content.reportTitle || data.response.reportTitle || "—"
+  const rawSubject = (content.subject || data.response.subject || "").trim()
+
+  const rows: string[][] = [
+    [labels.reportTitle, titleVal],
+  ]
+
+  if (rawSubject && rawSubject !== "—" && rawSubject !== labels.noContent) {
+    rows.push([labels.subject, rawSubject])
+  }
+
   return {
     key: "reportDetails",
     title: labels.reportDetails,
     table: {
       headers: [labels.field, labels.value],
-      rows: [
-        [labels.reportType, content.reportType || data.response.reportType || "—"],
-        [labels.subject, content.subject || data.response.subject || labels.noContent],
-      ],
+      rows,
     },
   }
 }
@@ -690,7 +700,7 @@ export function buildLanguagePdfTemplate(input: {
     projectAddress: optionalProjectPdfValue(data.project.location),
     projectPhase: optionalProjectPdfValue(data.project.phase),
     projectPlotNo: optionalProjectPdfValue(data.project.plotNo),
-    stageName: content.stageName || data.stage.name,
+    stageName: (content.stageName || data.stage.name).replace(/^\d+[\.\s\-]+/, "").trim(),
     termName: content.termName || data.term.name,
     reportNumber: data.response.reportNumber,
     visitNumber: String(data.response.visitNumber),
