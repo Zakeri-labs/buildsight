@@ -1781,23 +1781,19 @@ function RichSectionEditor({
         accumulatedFinalRef.current = ""
 
         recognition.onresult = (event: any) => {
+          let finalTranscript = ""
           let interimTranscript = ""
-          let newFinalChunk = ""
 
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const chunk = event.results[i][0].transcript
+          for (let i = 0; i < event.results.length; i++) {
+            const chunk = event.results[i][0]?.transcript || ""
             if (event.results[i].isFinal) {
-              newFinalChunk += chunk + " "
+              finalTranscript += chunk + " "
             } else {
               interimTranscript += chunk
             }
           }
 
-          if (newFinalChunk) {
-            accumulatedFinalRef.current += newFinalChunk
-          }
-
-          const spokenText = (accumulatedFinalRef.current + interimTranscript).trim()
+          const spokenText = (finalTranscript + interimTranscript).trim()
           if (spokenText && editorRef.current) {
             const base = baseContentRef.current
             if (!base) {
