@@ -500,9 +500,13 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       return { ok: false, error: "This report is finalized and cannot be modified." }
     }
 
+    const isAlreadyPublished = existing && ["submitted", "under_review", "approved", "completed"].includes(existing.status)
+
     const nextStatus = input.submit
       ? approvalRequired ? "submitted" : "completed"
-      : input.saveStatus === "in_progress" ? "in_progress" : "draft"
+      : isAlreadyPublished
+        ? existing.status
+        : input.saveStatus === "in_progress" ? "in_progress" : "draft"
     const now = new Date().toISOString()
     const userVisitNumber = typeof input.visitNumber === "number" && Number.isInteger(input.visitNumber) && input.visitNumber > 0
       ? input.visitNumber

@@ -1405,8 +1405,8 @@ export function InspectionReportForm({
                   </Button>
                   <Button variant="outline" size="lg" className="min-w-0 px-1.5 text-[10px] md:px-2.5 md:text-sm" disabled={busy !== null} onClick={() => void save("draft")}>
                     {busy === "draft" ? <Loader2 className="size-3.5 animate-spin md:size-4" /> : <Save className="size-3.5 md:size-4" />}
-                    <span className="md:hidden">Draft</span>
-                    <span className="hidden md:inline">{copy.saveDraft}</span>
+                    <span className="md:hidden">{status !== "draft" && status !== "in_progress" ? (locale === "ar" ? "حفظ" : "Save") : "Draft"}</span>
+                    <span className="hidden md:inline">{status !== "draft" && status !== "in_progress" ? (locale === "ar" ? "حفظ التغييرات" : "Save Changes") : copy.saveDraft}</span>
                   </Button>
                   <Button size="lg" className="min-w-0 px-1.5 text-[10px] md:px-2.5 md:text-sm" disabled={busy !== null} onClick={() => void save("submit")}>
                     {busy === "submit" ? <Loader2 className="size-3.5 animate-spin md:size-4" /> : <Send className="size-3.5 md:size-4" />}
