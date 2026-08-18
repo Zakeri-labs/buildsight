@@ -836,27 +836,63 @@ function drawFirstPageHeader(
   drawHeaderColumns(doc, flow, headerH)
 
   // ── TITLE BLOCK (below the 3-column header) ───────────────────────────────
-  const reportMainTitle = template.termName || template.title
-  setLanguage(doc, rtl, 16, true)
+  const visitFormatted = String(template.visitNumber || 1).padStart(3, "0")
+  let cleanTitle = (template.termName || template.title || template.stageName || "Report")
+    .replace(/^\d+[\.\s\-]+/, "")
+    .trim()
+
+  const visitRegex = /^(?:Visit|زيارة)\s*[\d٠-٩]+\s*[-–—:]\s*/i
+  if (visitRegex.test(cleanTitle)) {
+    cleanTitle = cleanTitle.replace(visitRegex, "").trim()
+  }
+
+  const visitPrefix = rtl ? `زيارة ${visitFormatted}` : `Visit ${visitFormatted}`
+  const reportMainTitle = `${visitPrefix} - ${cleanTitle}`
+
+  const rawSubject = (template.subject || "").trim()
+  const hasSubject = Boolean(
+    rawSubject &&
+      rawSubject !== "—" &&
+      rawSubject !== "No content recorded." &&
+      rawSubject !== "لا يوجد محتوى مسجل.",
+  )
+
+  setLanguage(doc, rtl, 15, true)
   doc.setTextColor(15, 23, 42)
   writePdfText(
-    doc, reportMainTitle,
+    doc,
+    reportMainTitle,
     rtl ? pageWidth - margin : margin,
-    headerH + 9,
+    headerH + 8,
     { align: rtl ? "right" : "left" },
     rtl,
   )
 
+  let titleBlockOffset = 13
+  if (hasSubject) {
+    setLanguage(doc, rtl, 9.5, false)
+    doc.setTextColor(71, 85, 105)
+    writePdfText(
+      doc,
+      rawSubject,
+      rtl ? pageWidth - margin : margin,
+      headerH + 13.5,
+      { align: rtl ? "right" : "left" },
+      rtl,
+    )
+    titleBlockOffset = 18.5
+  }
+
   // Thin rule below title
   doc.setDrawColor(226, 232, 240)
   doc.setLineWidth(0.3)
-  doc.line(margin, headerH + 13, pageWidth - margin, headerH + 13)
+  doc.line(margin, headerH + titleBlockOffset, pageWidth - margin, headerH + titleBlockOffset)
   doc.setLineWidth(0.2)
 
   // ── UNIFIED EXECUTIVE METADATA CARD (Recipients + 8 Metadata Cells) ──────
   const cardX = margin
   const cardWidth = pageWidth - margin * 2
-  const gridTop = headerH + 15
+  const gridTop = headerH + titleBlockOffset + 2
   const useBilingualLocationCell = true
 
   const reportTo = template.reportToRecipients || []

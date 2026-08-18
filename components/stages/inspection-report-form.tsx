@@ -433,15 +433,12 @@ export function InspectionReportForm({
   }, [router, reportsHref])
   const { locale } = useI18n()
   const copy = COPY[locale]
-  const cleanStageName = stage.name.replace(/^\d+[\.\s\-]+/, "")
-  const cleanTermReportName = reportDefinition.reportName.replace(/^\d+[\.\s\-]+/, "")
+  const cleanStageName = stage.name.replace(/^\d+[\.\s\-]+/, "").trim()
+  const cleanTermReportName = reportDefinition.reportName.replace(/^\d+[\.\s\-]+/, "").trim()
   const reportDate = response?.createdAt ?? new Date().toISOString()
   const [reportType, setReportType] = useState<ReportTypeValue>((REPORT_TYPES.some((item) => item.value === response?.reportType) ? response?.reportType : "inspection_report") as ReportTypeValue)
   const [visitNumber, setVisitNumber] = useState(response?.visitNumber ?? suggestedVisitNumber)
-  const initialVisitFormatted = String(visitNumber).padStart(3, "0")
-  const defaultReportTitlePattern = locale === "ar"
-    ? `زيارة ${initialVisitFormatted} - ${cleanStageName} Report`
-    : `Visit ${initialVisitFormatted} - ${cleanStageName} Report`
+  const defaultReportTitlePattern = cleanTermReportName || cleanStageName
   const [subject, setSubject] = useState(response?.subject ?? "")
   const [reportTitle, setReportTitle] = useState(response?.reportTitle ?? defaultReportTitlePattern)
   const [content, setContent] = useState<TermResponseContent>(() => {
@@ -549,20 +546,7 @@ export function InspectionReportForm({
       setVisitNumber("" as any)
       return
     }
-    const oldVisitNo = typeof visitNumber === "number" && visitNumber > 0 ? visitNumber : 1
-    const oldFormatted = String(oldVisitNo).padStart(3, "0")
     setVisitNumber(parsed)
-
-    const newFormatted = String(parsed).padStart(3, "0")
-    const oldPatternAr = `زيارة ${oldFormatted} - ${cleanStageName} Report`
-    const oldPatternEn = `Visit ${oldFormatted} - ${cleanStageName} Report`
-    if (reportTitle === oldPatternAr || reportTitle === oldPatternEn || !reportTitle.trim()) {
-      setReportTitle(
-        locale === "ar"
-          ? `زيارة ${newFormatted} - ${cleanStageName} Report`
-          : `Visit ${newFormatted} - ${cleanStageName} Report`
-      )
-    }
   }
 
   const ensureResponse = async (saveStatus: "draft" | "in_progress" = "draft") => {
