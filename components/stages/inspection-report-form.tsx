@@ -539,9 +539,17 @@ export function InspectionReportForm({
   }, [])
 
   const handleVisitNumberChange = (rawVal: string) => {
+    if (!rawVal.trim()) {
+      setVisitNumber("" as any)
+      return
+    }
     const parsed = parseInt(rawVal, 10)
-    if (Number.isNaN(parsed) || parsed < 1) return
-    const oldFormatted = String(visitNumber).padStart(3, "0")
+    if (Number.isNaN(parsed) || parsed < 1) {
+      setVisitNumber("" as any)
+      return
+    }
+    const oldVisitNo = typeof visitNumber === "number" && visitNumber > 0 ? visitNumber : 1
+    const oldFormatted = String(oldVisitNo).padStart(3, "0")
     setVisitNumber(parsed)
 
     const newFormatted = String(parsed).padStart(3, "0")
@@ -558,6 +566,7 @@ export function InspectionReportForm({
 
   const ensureResponse = async (saveStatus: "draft" | "in_progress" = "draft") => {
     const targetResponseId = responseId ?? initialResponseId
+    const currentVisitNo = typeof visitNumber === "number" && visitNumber > 0 ? visitNumber : (response?.visitNumber ?? suggestedVisitNumber ?? 1)
     const reportInput = {
       projectId: project.id,
       responseId: targetResponseId,
@@ -565,7 +574,7 @@ export function InspectionReportForm({
       subject,
       reportTitle,
       content,
-      visitNumber,
+      visitNumber: currentVisitNo,
       approvalRequired: reportDefinition.approvalRequired,
       responseType: reportDefinition.responseType,
       responsibleUserId: reportDefinition.responsibleUser?.id ?? null,
@@ -781,7 +790,7 @@ export function InspectionReportForm({
             responseId: id,
           })
 
-          let translationData: any = null
+          let translationPayload: { data: any; ccRecipients: ReportCcRecipient[] } | null = null
           const startTime = Date.now()
           while (Date.now() - startTime < 45_000) {
             await new Promise((resolve) => setTimeout(resolve, 1500))
@@ -795,7 +804,10 @@ export function InspectionReportForm({
               if (res.ok) {
                 const payload = await res.json()
                 if (payload?.data?.translation?.status === "completed" && payload?.data?.translation?.translatedContent) {
-                  translationData = payload.data
+                  translationPayload = {
+                    data: payload.data,
+                    ccRecipients: payload.ccRecipients ?? [],
+                  }
                   break
                 }
               }
@@ -814,39 +826,39 @@ export function InspectionReportForm({
             bilingual?: { blob: Blob; filename: string }
           } = {}
 
-          if (translationData) {
+          if (translationPayload) {
             try {
               const [originalPdf, bilingualPdf] = await Promise.all([
                 exportTranslationPdf({
-                  data: translationData,
-                  translation: translationData.translation,
+                  data: translationPayload.data,
+                  translation: translationPayload.data.translation,
                   kind: "original",
-                  ccRecipients: translationData.ccRecipients ?? [],
+                  ccRecipients: translationPayload.ccRecipients,
                   appendClosingBlock: true,
                 }),
                 exportTranslationPdf({
-                  data: translationData,
-                  translation: translationData.translation,
+                  data: translationPayload.data,
+                  translation: translationPayload.data.translation,
                   kind: "bilingual",
-                  ccRecipients: translationData.ccRecipients ?? [],
+                  ccRecipients: translationPayload.ccRecipients,
                   appendClosingBlock: true,
                 }),
               ])
 
               generatedPdfs = { original: originalPdf, bilingual: bilingualPdf }
 
-              if (translationData.translation?.id) {
+              if (translationPayload.data.translation?.id) {
                 Promise.all([
                   storeTranslationPdf({
                     projectId: project.id,
-                    translationId: translationData.translation.id,
+                    translationId: translationPayload.data.translation.id,
                     kind: "original",
                     blob: originalPdf.blob,
                     filename: originalPdf.filename,
                   }),
                   storeTranslationPdf({
                     projectId: project.id,
-                    translationId: translationData.translation.id,
+                    translationId: translationPayload.data.translation.id,
                     kind: "bilingual",
                     blob: bilingualPdf.blob,
                     filename: bilingualPdf.filename,
@@ -983,11 +995,10 @@ export function InspectionReportForm({
     }
   }
 
-  const formattedVisitNo = String(visitNumber).padStart(3, "0")
+  const currentVisitNo = typeof visitNumber === "number" && visitNumber > 0 ? visitNumber : (response?.visitNumber ?? suggestedVisitNumber ?? 1)
+  const formattedVisitNo = String(currentVisitNo).padStart(3, "0")
   const projectCode = project.code?.trim() || "PROJ"
-  const displayReportNo = response?.reportNumber && response.reportNumber.includes("/")
-    ? response.reportNumber
-    : `${projectCode}/${formattedVisitNo}`
+  const displayReportNo = `${projectCode}/${formattedVisitNo}`
   const creatorPerson = response?.createdBy ?? currentUserPerson ?? {
     id: currentUserId ?? "",
     name: "Project member",

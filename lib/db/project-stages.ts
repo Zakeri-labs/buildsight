@@ -387,7 +387,7 @@ export async function loadProjectStageExecution(
     const mapped: ProjectTermResponse = {
       id: response.id,
       reportNumber: response.report_number,
-      visitNumber: response.visit_number,
+      visitNumber: Number.isInteger(Number(response.visit_number)) && Number(response.visit_number) > 0 ? Number(response.visit_number) : 1,
       reportType: response.report_type,
       subject: response.subject,
       reportTitle: response.report_title,

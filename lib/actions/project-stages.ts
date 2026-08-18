@@ -515,7 +515,10 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       .maybeSingle()
     const projCode = proj?.code?.trim() || "PROJ"
 
-    let assignedVisitNumber = userVisitNumber ?? siteVisitReportVisitNumber ?? existing?.visit_number ?? (await loadNextProjectVisitNumber(input.projectId))
+    const existingVisitNo = Number.isInteger(Number(existing?.visit_number)) && Number(existing?.visit_number) > 0
+      ? Number(existing!.visit_number)
+      : null
+    let assignedVisitNumber = userVisitNumber ?? existingVisitNo ?? siteVisitReportVisitNumber ?? (await loadNextProjectVisitNumber(input.projectId))
     const formattedVisitNo = String(assignedVisitNumber).padStart(3, "0")
     let reportNumber = `${projCode}/${formattedVisitNo}`
 
