@@ -1005,6 +1005,7 @@ export function InspectionReportForm({
   const currentVisitNo = typeof visitNumber === "number" && visitNumber > 0 ? visitNumber : (response?.visitNumber ?? suggestedVisitNumber ?? 1)
   const formattedVisitNo = String(currentVisitNo).padStart(3, "0")
   const projectCode = project.code?.trim() || "PROJ"
+  const displayReportNo = `${projectCode}/${formattedVisitNo}`
   const creatorPerson = response?.createdBy ?? currentUserPerson ?? {
     id: currentUserId ?? "",
     name: "Project member",
