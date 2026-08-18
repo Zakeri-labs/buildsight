@@ -508,8 +508,13 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         ? existing.status
         : input.saveStatus === "in_progress" ? "in_progress" : "draft"
     const now = new Date().toISOString()
-    const userVisitNumber = typeof input.visitNumber === "number" && Number.isInteger(input.visitNumber) && input.visitNumber > 0
+    const parsedUserVisit = typeof input.visitNumber === "number"
       ? input.visitNumber
+      : typeof input.visitNumber === "string"
+        ? parseInt(input.visitNumber, 10)
+        : null
+    const userVisitNumber = Number.isInteger(parsedUserVisit) && (parsedUserVisit as number) > 0
+      ? (parsedUserVisit as number)
       : null
 
     const { data: proj } = await admin

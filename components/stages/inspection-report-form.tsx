@@ -566,7 +566,14 @@ export function InspectionReportForm({
 
   const ensureResponse = async (saveStatus: "draft" | "in_progress" = "draft") => {
     const targetResponseId = responseId ?? initialResponseId
-    const currentVisitNo = typeof visitNumber === "number" && visitNumber > 0 ? visitNumber : (response?.visitNumber ?? suggestedVisitNumber ?? 1)
+    const parsedStateVisit = typeof visitNumber === "number"
+      ? visitNumber
+      : typeof visitNumber === "string"
+        ? parseInt(visitNumber, 10)
+        : null
+    const currentVisitNo = Number.isInteger(parsedStateVisit) && (parsedStateVisit as number) > 0
+      ? (parsedStateVisit as number)
+      : (response?.visitNumber ?? suggestedVisitNumber ?? 1)
     const reportInput = {
       projectId: project.id,
       responseId: targetResponseId,
@@ -763,7 +770,7 @@ export function InspectionReportForm({
           subject,
           reportTitle,
           content,
-          visitNumber,
+          visitNumber: currentVisitNo,
           approvalRequired: reportDefinition.approvalRequired,
           responseType: reportDefinition.responseType,
           responsibleUserId: reportDefinition.responsibleUser?.id ?? null,
