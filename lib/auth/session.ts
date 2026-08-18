@@ -47,7 +47,20 @@ export const getSession = cache(async (): Promise<SessionContext | null> => {
         .eq("status", "active"),
     ])
 
-    const memberships: OrgMembership[] = (memberRows ?? []).map((row: any) => ({
+    let activeMemberRows = memberRows ?? []
+    if (activeMemberRows.length === 0) {
+      await resolveUserEffectiveRole(user.id, user.email ?? "")
+      const { data: refreshedRows } = await supabase
+        .from("organization_memberships")
+        .select("role, organizations(*)")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+      if (refreshedRows && refreshedRows.length > 0) {
+        activeMemberRows = refreshedRows
+      }
+    }
+
+    const memberships: OrgMembership[] = activeMemberRows.map((row: any) => ({
       role: row.role,
       organization: row.organizations,
     }))
