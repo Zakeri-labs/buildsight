@@ -538,6 +538,24 @@ export function InspectionReportForm({
     setContent((current) => ({ ...current, [key]: value }))
   }, [])
 
+  const handleVisitNumberChange = (rawVal: string) => {
+    const parsed = parseInt(rawVal, 10)
+    if (Number.isNaN(parsed) || parsed < 1) return
+    const oldFormatted = String(visitNumber).padStart(3, "0")
+    setVisitNumber(parsed)
+
+    const newFormatted = String(parsed).padStart(3, "0")
+    const oldPatternAr = `زيارة ${oldFormatted} - ${cleanStageName} Report`
+    const oldPatternEn = `Visit ${oldFormatted} - ${cleanStageName} Report`
+    if (reportTitle === oldPatternAr || reportTitle === oldPatternEn || !reportTitle.trim()) {
+      setReportTitle(
+        locale === "ar"
+          ? `زيارة ${newFormatted} - ${cleanStageName} Report`
+          : `Visit ${newFormatted} - ${cleanStageName} Report`
+      )
+    }
+  }
+
   const ensureResponse = async (saveStatus: "draft" | "in_progress" = "draft") => {
     const targetResponseId = responseId ?? initialResponseId
     const reportInput = {
@@ -547,6 +565,7 @@ export function InspectionReportForm({
       subject,
       reportTitle,
       content,
+      visitNumber,
       approvalRequired: reportDefinition.approvalRequired,
       responseType: reportDefinition.responseType,
       responsibleUserId: reportDefinition.responsibleUser?.id ?? null,
@@ -735,6 +754,7 @@ export function InspectionReportForm({
           subject,
           reportTitle,
           content,
+          visitNumber,
           approvalRequired: reportDefinition.approvalRequired,
           responseType: reportDefinition.responseType,
           responsibleUserId: reportDefinition.responsibleUser?.id ?? null,
@@ -1057,9 +1077,25 @@ export function InspectionReportForm({
           <p className="text-sm font-semibold text-blue-950 dark:text-blue-100 md:text-base">{copy.basic}</p>
         </div>
         <CardContent className="grid gap-3 p-3 md:gap-4 md:p-5">
-          <div className="space-y-1.5">
-            <Label htmlFor="report-title" className="text-xs font-semibold text-foreground">{copy.title} <span className="text-destructive">*</span></Label>
-            <Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} className="h-9 px-3 text-xs md:text-sm" />
+          <div className="grid gap-3 sm:grid-cols-4 md:gap-4">
+            <div className="space-y-1.5 sm:col-span-1">
+              <Label htmlFor="visit-number" className="text-xs font-semibold text-foreground">
+                {copy.visitNo} <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="visit-number"
+                type="number"
+                min={1}
+                value={visitNumber}
+                onChange={(event) => handleVisitNumberChange(event.target.value)}
+                disabled={isLocked}
+                className="h-9 px-3 text-xs font-semibold md:text-sm"
+              />
+            </div>
+            <div className="space-y-1.5 sm:col-span-3">
+              <Label htmlFor="report-title" className="text-xs font-semibold text-foreground">{copy.title} <span className="text-destructive">*</span></Label>
+              <Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} className="h-9 px-3 text-xs md:text-sm" />
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="report-subject" className="text-xs font-semibold text-foreground">{copy.subject}</Label>

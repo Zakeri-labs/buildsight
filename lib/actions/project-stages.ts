@@ -306,6 +306,7 @@ type SaveReportResponseInput = {
   submit?: boolean
   saveStatus?: "draft" | "in_progress"
   siteVisitRequestId?: string | null
+  visitNumber?: number | null
 }
 
 type SavedReportResponse = { responseId: string; projectStageId: string; reportNumber: string; visitNumber: number; status: string }
@@ -503,8 +504,20 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       ? approvalRequired ? "submitted" : "completed"
       : input.saveStatus === "in_progress" ? "in_progress" : "draft"
     const now = new Date().toISOString()
-    let reportNumber = existing?.report_number ?? reportNumberCandidates(input.responseId)[0]
-    let assignedVisitNumber = existing?.visit_number ?? siteVisitReportVisitNumber ?? 1
+    const userVisitNumber = typeof input.visitNumber === "number" && Number.isInteger(input.visitNumber) && input.visitNumber > 0
+      ? input.visitNumber
+      : null
+
+    const { data: proj } = await admin
+      .from("projects")
+      .select("code")
+      .eq("id", input.projectId)
+      .maybeSingle()
+    const projCode = proj?.code?.trim() || "PROJ"
+
+    let assignedVisitNumber = userVisitNumber ?? siteVisitReportVisitNumber ?? existing?.visit_number ?? (await loadNextProjectVisitNumber(input.projectId))
+    const formattedVisitNo = String(assignedVisitNumber).padStart(3, "0")
+    let reportNumber = `${projCode}/${formattedVisitNo}`
 
     if (existing) {
       const updatePayload: Record<string, unknown> = {
@@ -515,6 +528,8 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         status: nextStatus,
         updated_by: actorId,
         completed_at: input.submit && !approvalRequired ? now : null,
+        visit_number: assignedVisitNumber,
+        report_number: reportNumber,
       }
       if (directStage && siteVisitRequestId && !existing.site_visit_request_id) {
         updatePayload.site_visit_request_id = siteVisitRequestId
@@ -527,17 +542,6 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         throw error
       }
     } else {
-      assignedVisitNumber = siteVisitReportVisitNumber ?? await loadNextProjectVisitNumber(input.projectId)
-      const formattedVisitNo = String(assignedVisitNumber).padStart(3, "0")
-
-      const { data: proj } = await admin
-        .from("projects")
-        .select("code")
-        .eq("id", input.projectId)
-        .maybeSingle()
-      const projCode = proj?.code?.trim() || "PROJ"
-      reportNumber = `${projCode}/${formattedVisitNo}`
-
       const { error: insertError } = await admin.from("term_responses").insert({
         id: input.responseId,
         project_id: input.projectId,
