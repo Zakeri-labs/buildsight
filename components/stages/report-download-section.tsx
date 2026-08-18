@@ -93,7 +93,16 @@ export function ReportDownloadSection({
     })
   }
 
+  const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000
+  const isLinkExpired = Boolean(
+    translation?.generatedAt &&
+      Date.now() - new Date(translation.generatedAt).getTime() > FIVE_DAYS_MS,
+  )
+
   function handleWhatsAppShare() {
+    if (isLinkExpired || isStale) {
+      handleRetry()
+    }
     const url = buildWhatsAppShareUrl({
       projectName: "Project",
       projectId,
@@ -105,6 +114,9 @@ export function ReportDownloadSection({
   }
 
   function handleCopyShare() {
+    if (isLinkExpired || isStale) {
+      handleRetry()
+    }
     const msg = buildShareMessage({
       projectName: "Project",
       projectId,
