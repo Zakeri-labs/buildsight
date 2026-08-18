@@ -1442,9 +1442,12 @@ export function InspectionReportForm({
               ) : responseId && !isEditable ? (
                 <ReportDownloadSection
                   projectId={project.id}
+                  projectName={project.name}
                   stageId={resolvedStageId}
                   termId={isDirectStageReport ? undefined : reportDefinition.id}
                   responseId={responseId}
+                  reportTitle={reportTitle}
+                  visitNumber={visitNumber}
                   initialTranslation={translation}
                   responseUpdatedAt={response?.updatedAt}
                   locale={locale}

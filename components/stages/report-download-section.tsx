@@ -12,18 +12,24 @@ import { cn } from "@/lib/utils"
 
 export function ReportDownloadSection({
   projectId,
+  projectName,
   stageId,
   termId,
   responseId,
+  reportTitle,
+  visitNumber,
   initialTranslation,
   responseUpdatedAt,
   locale,
   variant = "card",
 }: {
   projectId: string
+  projectName?: string
   stageId: string
   termId?: string
   responseId: string
+  reportTitle?: string
+  visitNumber?: number | string
   initialTranslation?: ProjectStageTranslationSummary | null
   responseUpdatedAt?: string
   locale: "en" | "ar"
@@ -104,7 +110,9 @@ export function ReportDownloadSection({
       handleRetry()
     }
     const url = buildWhatsAppShareUrl({
-      projectName: "Project",
+      projectName: projectName || "Project",
+      reportTitle: reportTitle || "Inspection Report",
+      visitNumber,
       projectId,
       stageId: termId || stageId,
       responseId,
@@ -118,7 +126,9 @@ export function ReportDownloadSection({
       handleRetry()
     }
     const msg = buildShareMessage({
-      projectName: "Project",
+      projectName: projectName || "Project",
+      reportTitle: reportTitle || "Inspection Report",
+      visitNumber,
       projectId,
       stageId: termId || stageId,
       responseId,

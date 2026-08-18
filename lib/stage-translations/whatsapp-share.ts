@@ -31,7 +31,7 @@ export function buildShareMessage(options: {
   const displayTitle = visitFormatted ? `Visit ${visitFormatted} - ${cleanTitle}` : cleanTitle
 
   const messageLines = [
-    "🏗️ *BuildSight Inspection Report*",
+    "🏗️ *Bonyan Construction Report*",
     `*Project:* ${options.projectName}`,
     `*Report Title:* ${displayTitle}`,
     "",
