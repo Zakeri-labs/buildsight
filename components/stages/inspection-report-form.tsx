@@ -1415,7 +1415,25 @@ export function InspectionReportForm({
       </Dialog>
 
       {/* Submit Progress Modal */}
-      <Dialog open={submitModalOpen} onOpenChange={() => {/* locked while submitting */}}>
+      <Dialog
+        open={submitModalOpen}
+        onOpenChange={(open) => {
+          if (!open && submitResult) {
+            setSubmitModalOpen(false)
+            const targetStageId = submitResult.stageId
+            const targetResponseId = submitResult.responseId
+            setSubmitResult(null)
+            setReadyPdfs(null)
+            if (targetStageId && targetResponseId) {
+              const targetPath = `/projects/${project.id}/stages/${targetStageId}/reports/${targetResponseId}`
+              if (typeof window !== "undefined" && window.location.pathname !== targetPath) {
+                router.replace(targetPath)
+              }
+            }
+            router.refresh()
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-sm" onInteractOutside={(e) => e.preventDefault()}>
           {submitResult ? (
             // ── Success screen ──────────────────────────────────────────
@@ -1494,10 +1512,17 @@ export function InspectionReportForm({
                   type="button"
                   className="w-full"
                   onClick={() => {
+                    const targetStageId = submitResult.stageId
+                    const targetResponseId = submitResult.responseId
                     setSubmitModalOpen(false)
                     setSubmitResult(null)
                     setReadyPdfs(null)
-                    router.replace(`/projects/${project.id}/stages/${submitResult.stageId}/reports/${submitResult.responseId}`)
+                    if (targetStageId && targetResponseId) {
+                      const targetPath = `/projects/${project.id}/stages/${targetStageId}/reports/${targetResponseId}`
+                      if (typeof window !== "undefined" && window.location.pathname !== targetPath) {
+                        router.replace(targetPath)
+                      }
+                    }
                     router.refresh()
                   }}
                 >
