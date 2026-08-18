@@ -18,6 +18,7 @@ export function ReportDownloadSection({
   responseId,
   reportTitle,
   visitNumber,
+  supervisorName,
   initialTranslation,
   responseUpdatedAt,
   locale,
@@ -30,6 +31,7 @@ export function ReportDownloadSection({
   responseId: string
   reportTitle?: string
   visitNumber?: number | string
+  supervisorName?: string
   initialTranslation?: ProjectStageTranslationSummary | null
   responseUpdatedAt?: string
   locale: "en" | "ar"
@@ -113,6 +115,7 @@ export function ReportDownloadSection({
       projectName: projectName || "Project",
       reportTitle: reportTitle || "Inspection Report",
       visitNumber,
+      supervisorName,
       projectId,
       stageId: termId || stageId,
       responseId,
@@ -129,6 +132,7 @@ export function ReportDownloadSection({
       projectName: projectName || "Project",
       reportTitle: reportTitle || "Inspection Report",
       visitNumber,
+      supervisorName,
       projectId,
       stageId: termId || stageId,
       responseId,

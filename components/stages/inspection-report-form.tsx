@@ -1448,6 +1448,7 @@ export function InspectionReportForm({
                   responseId={responseId}
                   reportTitle={reportTitle}
                   visitNumber={visitNumber}
+                  supervisorName={creatorPerson.name}
                   initialTranslation={translation}
                   responseUpdatedAt={response?.updatedAt}
                   locale={locale}
@@ -1573,6 +1574,7 @@ export function InspectionReportForm({
                         projectName: project?.name || "Project",
                         reportTitle: reportTitle || "Inspection Report",
                         visitNumber: currentVisitNo,
+                        supervisorName: creatorPerson.name,
                         projectId: project.id,
                         stageId: submitResult?.stageId || stageId,
                         responseId: submitResult?.responseId || responseId,
@@ -1596,6 +1598,7 @@ export function InspectionReportForm({
                         projectName: project?.name || "Project",
                         reportTitle: reportTitle || "Inspection Report",
                         visitNumber: currentVisitNo,
+                        supervisorName: creatorPerson.name,
                         projectId: project.id,
                         stageId: submitResult?.stageId || stageId,
                         responseId: submitResult?.responseId || responseId,

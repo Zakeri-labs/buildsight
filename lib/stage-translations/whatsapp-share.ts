@@ -4,6 +4,7 @@ export function buildShareMessage(options: {
   projectName: string
   reportTitle?: string
   visitNumber?: number | string
+  supervisorName?: string
   projectId: string
   stageId?: string
   responseId?: string
@@ -34,6 +35,7 @@ export function buildShareMessage(options: {
     "🏗️ *Bonyan Construction Report*",
     `*Project:* ${options.projectName}`,
     `*Report Title:* ${displayTitle}`,
+    ...(options.supervisorName ? [`*Supervisor:* ${options.supervisorName}`] : []),
     "",
     "📥 *Download Bilingual PDF:*",
     shortUrl,
@@ -57,6 +59,7 @@ export function buildWhatsAppShareUrl(options: {
   projectName: string
   reportTitle?: string
   visitNumber?: number | string
+  supervisorName?: string
   projectId: string
   stageId?: string
   responseId?: string
