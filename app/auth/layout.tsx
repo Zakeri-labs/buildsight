@@ -11,9 +11,9 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           <img
             src="/auth_hero_bg.png"
             alt="Engineering Site Supervision"
-            className="size-full object-cover opacity-35 mix-blend-luminosity"
+            className="size-full object-cover opacity-55"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/70 to-slate-900/40" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/75 to-slate-900/30" />
           <div className="absolute inset-0 bg-blue-950/20 backdrop-blur-[1px]" />
         </div>
 
