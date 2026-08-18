@@ -1,6 +1,6 @@
 "use client"
 
-export function buildWhatsAppShareUrl(options: {
+export function buildShareMessage(options: {
   projectName: string
   reportTitle?: string
   visitNumber?: number | string
@@ -11,32 +11,56 @@ export function buildWhatsAppShareUrl(options: {
   phone?: string
 }) {
   const origin = typeof window !== "undefined" ? window.location.origin : "https://app.bonyanec.com"
+  const reportId = options.responseId || options.translationId
 
-  const queryParams = new URLSearchParams({
-    projectId: options.projectId,
-    kind: "bilingual",
-    share: "1",
-    ...(options.translationId ? { translationId: options.translationId } : {}),
-    ...(options.responseId ? { responseId: options.responseId } : {}),
-    ...(options.stageId ? { stageId: options.stageId } : {}),
-  })
+  const shortUrl = reportId
+    ? `${origin}/d/${reportId}`
+    : `${origin}/api/stage-translations/pdf?projectId=${options.projectId}&kind=bilingual&share=1`
 
-  const directPdfUrl = `${origin}/api/stage-translations/pdf?${queryParams.toString()}`
+  const visitFormatted = options.visitNumber ? String(options.visitNumber).padStart(3, "0") : ""
+  let cleanTitle = (options.reportTitle || "Inspection Report")
+    .replace(/^\d+[\.\s\-]+/, "")
+    .trim()
+
+  const visitRegex = /^(?:Visit|زيارة)\s*[\d٠-٩]+\s*[-–—:]\s*/i
+  if (visitRegex.test(cleanTitle)) {
+    cleanTitle = cleanTitle.replace(visitRegex, "").trim()
+  }
+
+  const displayTitle = visitFormatted ? `Visit ${visitFormatted} - ${cleanTitle}` : cleanTitle
 
   const messageLines = [
-    "🏗️ *BuildSight - Inspection Report*",
+    "🏗️ *BuildSight Inspection Report*",
     `*Project:* ${options.projectName}`,
-    options.reportTitle ? `*Report:* ${options.reportTitle}` : null,
-    options.visitNumber ? `*Visit No:* ${options.visitNumber}` : null,
-    "---------------------------------",
-    "📥 *Direct Bilingual PDF Download Link:*",
-    directPdfUrl,
-  ].filter(Boolean)
+    `*Report Title:* ${displayTitle}`,
+    "",
+    "📥 *Download Bilingual PDF:*",
+    shortUrl,
+  ]
 
   const text = messageLines.join("\n")
   const targetPhone = options.phone ? options.phone.replace(/[^0-9]/g, "") : ""
 
-  return targetPhone
+  const whatsappUrl = targetPhone
     ? `https://wa.me/${targetPhone}?text=${encodeURIComponent(text)}`
     : `https://wa.me/?text=${encodeURIComponent(text)}`
+
+  return {
+    text,
+    shortUrl,
+    whatsappUrl,
+  }
+}
+
+export function buildWhatsAppShareUrl(options: {
+  projectName: string
+  reportTitle?: string
+  visitNumber?: number | string
+  projectId: string
+  stageId?: string
+  responseId?: string
+  translationId?: string
+  phone?: string
+}) {
+  return buildShareMessage(options).whatsappUrl
 }

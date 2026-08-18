@@ -1,13 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AlertCircle, Download, FileDown, Loader2, RotateCw, Share2 } from "lucide-react"
+import { AlertCircle, Check, Copy, Download, FileDown, Loader2, RotateCw, Share2 } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import type { ProjectStageTranslationSummary } from "@/lib/db/project-stages"
 import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto-generation"
 import { exportTranslationPdf, downloadPdfBlob, storeTranslationPdf } from "@/lib/stage-translations/client-pdf"
-import { buildWhatsAppShareUrl } from "@/lib/stage-translations/whatsapp-share"
+import { buildShareMessage, buildWhatsAppShareUrl } from "@/lib/stage-translations/whatsapp-share"
 import { cn } from "@/lib/utils"
 
 export function ReportDownloadSection({
@@ -34,6 +34,7 @@ export function ReportDownloadSection({
   )
   const [retryBusy, setRetryBusy] = useState(false)
   const [downloading, setDownloading] = useState<"original" | "bilingual" | null>(null)
+  const [copiedShare, setCopiedShare] = useState(false)
 
   const status = translation?.status ?? "pending"
   const isFailed = status === "failed" || status === "error"
@@ -101,6 +102,21 @@ export function ReportDownloadSection({
       translationId: translation?.id,
     })
     window.open(url, "_blank")
+  }
+
+  function handleCopyShare() {
+    const msg = buildShareMessage({
+      projectName: "Project",
+      projectId,
+      stageId: termId || stageId,
+      responseId,
+      translationId: translation?.id,
+    })
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(msg.text)
+      setCopiedShare(true)
+      setTimeout(() => setCopiedShare(false), 2000)
+    }
   }
 
   async function handleDownload(kind: "original" | "bilingual") {
@@ -193,7 +209,21 @@ export function ReportDownloadSection({
               className="h-9 gap-1.5 rounded-lg border-emerald-500/40 bg-emerald-50/60 px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-100/80 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60 shadow-xs"
             >
               <Share2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>{locale === "ar" ? "مشاركة عبر واتساب" : "Share via WhatsApp"}</span>
+              <span>{locale === "ar" ? "مشاركة" : "Share"}</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleCopyShare}
+              className="h-9 gap-1.5 rounded-lg border-primary/30 bg-background px-3 text-xs font-semibold shadow-xs hover:bg-accent"
+            >
+              {copiedShare ? (
+                <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <Copy className="size-3.5 text-muted-foreground" />
+              )}
+              <span>{copiedShare ? (locale === "ar" ? "تم النسخ!" : "Copied!") : (locale === "ar" ? "نسخ" : "Copy")}</span>
             </Button>
             <Button
               type="button"
@@ -336,7 +366,21 @@ export function ReportDownloadSection({
                 className="h-9 gap-1.5 rounded-xl border-emerald-500/40 bg-emerald-50/60 px-3 text-xs font-bold text-emerald-700 hover:bg-emerald-100/80 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60 shadow-2xs"
               >
                 <Share2 className="size-4 text-emerald-600 dark:text-emerald-400" />
-                <span>{locale === "ar" ? "مشاركة عبر واتساب" : "Share via WhatsApp"}</span>
+                <span>{locale === "ar" ? "مشاركة" : "Share"}</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleCopyShare}
+                className="h-9 gap-1.5 rounded-xl border-primary/30 bg-background px-3 text-xs font-bold shadow-2xs hover:bg-accent"
+              >
+                {copiedShare ? (
+                  <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <Copy className="size-4 text-muted-foreground" />
+                )}
+                <span>{copiedShare ? (locale === "ar" ? "تم النسخ!" : "Copied!") : (locale === "ar" ? "نسخ" : "Copy")}</span>
               </Button>
               <Button
                 type="button"

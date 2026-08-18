@@ -487,6 +487,7 @@ export function InspectionReportForm({
     original?: { blob: Blob; filename: string }
     bilingual?: { blob: Blob; filename: string }
   } | null>(null)
+  const [copiedModalShare, setCopiedModalShare] = useState(false)
   const [basicOpen, setBasicOpen] = useState(false)
   const [reviewComments, setReviewComments] = useState("")
   const [approvalHistory, setApprovalHistory] = useState(response?.approvals ?? [])
@@ -1559,28 +1560,60 @@ export function InspectionReportForm({
                   </Button>
                 </div>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const url = buildWhatsAppShareUrl({
-                      projectName: project?.name || "Project",
-                      reportTitle: reportTitle || "Inspection Report",
-                      visitNumber: currentVisitNo,
-                      projectId: project.id,
-                      stageId: submitResult?.stageId || stageId,
-                      responseId: submitResult?.responseId || responseId,
-                      translationId: translation?.id,
-                      phone: "96891451613",
-                    })
-                    window.open(url, "_blank")
-                  }}
-                  className="h-10 w-full gap-2 rounded-lg border-emerald-500/40 bg-emerald-50/50 font-semibold text-emerald-700 hover:bg-emerald-100/80 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60 shadow-xs"
-                >
-                  <Share2 className="size-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>{locale === "ar" ? "مشاركة عبر واتساب" : "Share via WhatsApp"}</span>
-                </Button>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const url = buildWhatsAppShareUrl({
+                        projectName: project?.name || "Project",
+                        reportTitle: reportTitle || "Inspection Report",
+                        visitNumber: currentVisitNo,
+                        projectId: project.id,
+                        stageId: submitResult?.stageId || stageId,
+                        responseId: submitResult?.responseId || responseId,
+                        translationId: translation?.id,
+                        phone: "96891451613",
+                      })
+                      window.open(url, "_blank")
+                    }}
+                    className="h-10 gap-1.5 rounded-lg border-emerald-500/40 bg-emerald-50/50 font-semibold text-emerald-700 hover:bg-emerald-100/80 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60 shadow-xs"
+                  >
+                    <Share2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>{locale === "ar" ? "مشاركة" : "Share"}</span>
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const msg = buildShareMessage({
+                        projectName: project?.name || "Project",
+                        reportTitle: reportTitle || "Inspection Report",
+                        visitNumber: currentVisitNo,
+                        projectId: project.id,
+                        stageId: submitResult?.stageId || stageId,
+                        responseId: submitResult?.responseId || responseId,
+                        translationId: translation?.id,
+                      })
+                      if (typeof navigator !== "undefined" && navigator.clipboard) {
+                        navigator.clipboard.writeText(msg.text)
+                        setCopiedModalShare(true)
+                        setTimeout(() => setCopiedModalShare(false), 2000)
+                      }
+                    }}
+                    className="h-10 gap-1.5 rounded-lg border-primary/30 bg-background font-semibold shadow-xs hover:bg-accent"
+                  >
+                    {copiedModalShare ? (
+                      <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <Copy className="size-4 text-muted-foreground" />
+                    )}
+                    <span>{copiedModalShare ? (locale === "ar" ? "تم النسخ!" : "Copied!") : (locale === "ar" ? "نسخ" : "Copy")}</span>
+                  </Button>
+                </div>
               </div>
               <DialogFooter className="mt-4">
                 <Button
