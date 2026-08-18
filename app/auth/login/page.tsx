@@ -26,6 +26,7 @@ function LoginCard() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [redirecting, setRedirecting] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -36,9 +37,11 @@ function LoginCard() {
       const result = await signInWithPassword(email, password)
       if (result.error) {
         setError(invitationFlow ? "Unable to sign in with this email and password." : result.error)
+        setLoading(false)
         return
       }
 
+      setRedirecting(true)
       router.replace(next)
       router.refresh()
     } catch (error) {
@@ -49,10 +52,11 @@ function LoginCard() {
             ? error.message
             : "Unable to sign in. Please try again.",
       )
-    } finally {
       setLoading(false)
     }
   }
+
+  const isPending = loading || redirecting
 
   return (
     <Card className="gap-0 border-slate-200/80 shadow-xl shadow-slate-900/5 dark:border-slate-800 dark:bg-slate-900/90 dark:shadow-none">
@@ -89,7 +93,8 @@ function LoginCard() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                readOnly={invitationFlow}
+                readOnly={invitationFlow || isPending}
+                disabled={isPending}
                 placeholder="admin@provision.test"
                 className="h-11 border-slate-200 bg-slate-50/50 pl-9 text-sm focus:bg-background dark:border-slate-700 dark:bg-slate-800/50"
               />
@@ -115,13 +120,15 @@ function LoginCard() {
                 autoComplete="current-password"
                 required
                 value={password}
+                disabled={isPending}
                 onChange={(e) => setPassword(e.target.value)}
                 className="h-11 border-slate-200 bg-slate-50/50 px-9 text-sm focus:bg-background dark:border-slate-700 dark:bg-slate-800/50"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                disabled={isPending}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 disabled:opacity-50"
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -136,16 +143,23 @@ function LoginCard() {
             </div>
           )}
 
+          {redirecting && (
+            <div className="flex items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs font-medium text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300 animate-in fade-in">
+              <span className="size-3.5 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent dark:border-emerald-400" />
+              <span>Authenticated! Preparing your workspace...</span>
+            </div>
+          )}
+
           <Button
             type="submit"
-            disabled={loading}
+            disabled={isPending}
             size="lg"
             className="h-11 w-full font-semibold text-white shadow-md transition-all hover:shadow-lg active:scale-[0.99]"
           >
-            {loading ? (
+            {isPending ? (
               <span className="flex items-center gap-2">
                 <span className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                Signing in...
+                {redirecting ? "Entering workspace..." : "Signing in..."}
               </span>
             ) : (
               <span className="flex items-center justify-center gap-2">

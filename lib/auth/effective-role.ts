@@ -153,23 +153,7 @@ export async function resolveUserEffectiveRole(
 
   const admin = createAdminClient()
 
-  let email = userEmail?.trim().toLowerCase()
-  if (!email) {
-    const { data: profile } = await admin
-      .from("profiles")
-      .select("email")
-      .eq("id", normalizedUserId)
-      .maybeSingle()
-    if (profile?.email) {
-      email = profile.email.trim().toLowerCase()
-    }
-  }
-
-  if (email) {
-    await autoAcceptPendingInvitations(admin, normalizedUserId, email)
-  }
-
-  // 1. Check active organization memberships
+  // 1. Check active organization memberships FIRST (fast path for existing members)
   const { data: memberships } = await admin
     .from("organization_memberships")
     .select("organization_id, role")
@@ -192,57 +176,95 @@ export async function resolveUserEffectiveRole(
     }
   }
 
-  // 2. Check project owners (Viewer / Client link)
-  const { data: projectOwners } = await admin
-    .from("project_owners")
-    .select("project_id")
-    .eq("viewer_user_id", normalizedUserId)
-    .limit(1)
+  // 2. Resolve email and auto-accept any pending invitations for new accounts
+  let email = userEmail?.trim().toLowerCase()
+  if (!email) {
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("email")
+      .eq("id", normalizedUserId)
+      .maybeSingle()
+    if (profile?.email) {
+      email = profile.email.trim().toLowerCase()
+    }
+  }
 
-  if (projectOwners && projectOwners.length > 0) {
+  if (email) {
+    const acceptedAny = await autoAcceptPendingInvitations(admin, normalizedUserId, email)
+    if (acceptedAny) {
+      const { data: freshMemberships } = await admin
+        .from("organization_memberships")
+        .select("organization_id, role")
+        .eq("user_id", normalizedUserId)
+        .eq("status", "active")
+
+      if (freshMemberships && freshMemberships.length > 0) {
+        const roles = new Set(freshMemberships.map((m) => m.role))
+        if (roles.has("org_admin") || roles.has("org_manager")) {
+          const orgId = freshMemberships.find((m) => m.role === "org_admin" || m.role === "org_manager")?.organization_id ?? null
+          return { role: "admin", destination: "/", organizationId: orgId }
+        }
+        if (roles.has("org_member")) {
+          const orgId = freshMemberships.find((m) => m.role === "org_member")?.organization_id ?? null
+          return { role: "member", destination: "/memberhomepage", organizationId: orgId }
+        }
+        if (roles.has("viewer")) {
+          const orgId = freshMemberships.find((m) => m.role === "viewer")?.organization_id ?? null
+          return { role: "viewer", destination: "/projects", organizationId: orgId }
+        }
+      }
+    }
+  }
+
+  // 3. Fallback checks in parallel (project owners, participants, invitations)
+  const [projectOwnersRes, projectParticipantsRes, invitesRes] = await Promise.all([
+    admin
+      .from("project_owners")
+      .select("project_id")
+      .eq("viewer_user_id", normalizedUserId)
+      .limit(1),
+    admin
+      .from("project_participants")
+      .select("organization_id, participant_type, participant_role_label")
+      .eq("key_contact_user_id", normalizedUserId)
+      .eq("status", "active"),
+    email
+      ? admin
+          .from("invitations")
+          .select("organization_id, organization_role, status")
+          .eq("email", email)
+          .in("status", ["pending", "accepted"])
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: null }),
+  ])
+
+  if (projectOwnersRes.data && projectOwnersRes.data.length > 0) {
     return { role: "viewer", destination: "/projects", organizationId: null }
   }
 
-  // 3. Check project participants (active assignments)
-  const { data: projectParticipants } = await admin
-    .from("project_participants")
-    .select("organization_id, participant_type, participant_role_label")
-    .eq("key_contact_user_id", normalizedUserId)
-    .eq("status", "active")
-
-  if (projectParticipants && projectParticipants.length > 0) {
-    const isClientParticipant = projectParticipants.some(
+  if (projectParticipantsRes.data && projectParticipantsRes.data.length > 0) {
+    const isClientParticipant = projectParticipantsRes.data.some(
       (p) =>
         p.participant_type === "client" ||
         (p.participant_role_label &&
           ["client", "client / owner", "owner", "project owner"].includes(p.participant_role_label.toLowerCase().trim())),
     )
     if (isClientParticipant) {
-      return { role: "viewer", destination: "/projects", organizationId: projectParticipants[0].organization_id ?? null }
+      return { role: "viewer", destination: "/projects", organizationId: projectParticipantsRes.data[0].organization_id ?? null }
     }
-    return { role: "member", destination: "/memberhomepage", organizationId: projectParticipants[0].organization_id ?? null }
+    return { role: "member", destination: "/memberhomepage", organizationId: projectParticipantsRes.data[0].organization_id ?? null }
   }
 
-  // 4. Check pending or accepted invitations for email (fallback)
-  if (email) {
-    const { data: invites } = await admin
-      .from("invitations")
-      .select("organization_id, organization_role, status")
-      .eq("email", email)
-      .in("status", ["pending", "accepted"])
-      .order("created_at", { ascending: false })
-
-    if (invites && invites.length > 0) {
-      const invite = invites[0]
-      if (invite.organization_role === "org_admin" || invite.organization_role === "org_manager") {
-        return { role: "admin", destination: "/", organizationId: invite.organization_id }
-      }
-      if (invite.organization_role === "viewer") {
-        return { role: "viewer", destination: "/projects", organizationId: invite.organization_id }
-      }
-      if (invite.organization_role === "org_member") {
-        return { role: "member", destination: "/memberhomepage", organizationId: invite.organization_id }
-      }
+  if (invitesRes.data && invitesRes.data.length > 0) {
+    const invite = invitesRes.data[0]
+    if (invite.organization_role === "org_admin" || invite.organization_role === "org_manager") {
+      return { role: "admin", destination: "/", organizationId: invite.organization_id }
+    }
+    if (invite.organization_role === "viewer") {
+      return { role: "viewer", destination: "/projects", organizationId: invite.organization_id }
+    }
+    if (invite.organization_role === "org_member") {
+      return { role: "member", destination: "/memberhomepage", organizationId: invite.organization_id }
     }
   }
 
