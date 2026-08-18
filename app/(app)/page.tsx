@@ -100,8 +100,9 @@ export default async function DashboardPage({
   ]
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex justify-end">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-6">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold tracking-tight text-muted-foreground sm:text-base">Portfolio Overview</h2>
         <DateRangePill
           preset={dateRange.preset}
           label={dateRange.label}
@@ -115,8 +116,8 @@ export default async function DashboardPage({
       <div
         className={
           hasAdminRole
-            ? "grid grid-cols-1 items-stretch gap-6 lg:grid-cols-3"
-            : "grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2"
+            ? "grid grid-cols-1 items-stretch gap-4 sm:gap-6 lg:grid-cols-3"
+            : "grid grid-cols-1 items-stretch gap-4 sm:gap-6 lg:grid-cols-2"
         }
       >
         <CompletedVisitsBySupervisorCard
@@ -128,7 +129,7 @@ export default async function DashboardPage({
         <UpcomingSiteVisitsCard data={data.upcomingSiteVisits} />
       </div>
 
-      <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 items-stretch gap-4 sm:gap-6 lg:grid-cols-3">
         <div className="min-h-0 lg:col-span-2 lg:h-full">
           <ProjectsOverview
             projects={data.projects}
@@ -136,7 +137,7 @@ export default async function DashboardPage({
             supervisorOptions={supervisorOptions}
           />
         </div>
-        <div className="flex min-h-0 flex-col gap-6 lg:h-full">
+        <div className="flex min-h-0 flex-col gap-4 sm:gap-6 lg:h-full">
           <div className="min-h-0 flex-1 overflow-hidden">
             <RecentSupervisorReportsCard reports={data.recentSupervisorReports} />
           </div>

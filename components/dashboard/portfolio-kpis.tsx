@@ -62,19 +62,21 @@ function KpiCard({ kpi }: { kpi: KpiCardData }) {
   const Icon = iconMap[kpi.icon]
   const TrendIcon = kpi.trend?.direction === "up" ? ArrowUp : ArrowDown
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
-      <div className="flex items-center gap-3">
-        <span className={cn("flex size-11 shrink-0 items-center justify-center rounded-xl", toneTile[kpi.tone])}>
-          <Icon className="size-5" />
-        </span>
-        <p className="text-sm font-semibold text-foreground">{kpi.label}</p>
+    <div className="rounded-xl border border-border bg-card p-3.5 sm:p-4 transition-all">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg sm:size-10 sm:rounded-xl", toneTile[kpi.tone])}>
+            <Icon className="size-4 sm:size-5" />
+          </span>
+          <p className="truncate text-xs font-semibold text-foreground sm:text-sm">{kpi.label}</p>
+        </div>
       </div>
-      <div className="mt-3 flex items-end justify-between gap-2">
-        <p className="text-4xl font-bold leading-none tracking-tight text-foreground">{kpi.value}</p>
-        <Sparkline data={kpi.spark} className={cn("mb-0.5", toneSpark[kpi.tone])} />
+      <div className="mt-2.5 flex items-end justify-between gap-2 sm:mt-3">
+        <p className="text-2xl font-bold leading-none tracking-tight text-foreground sm:text-3xl">{kpi.value}</p>
+        <Sparkline data={kpi.spark} className={cn("mb-0.5 w-16 sm:w-20", toneSpark[kpi.tone])} />
       </div>
-      <div className="mt-3 text-sm">
-        {kpi.caption && <span className="text-muted-foreground">{kpi.caption}</span>}
+      <div className="mt-2 text-xs text-muted-foreground">
+        {kpi.caption && <span className="block truncate">{kpi.caption}</span>}
         {kpi.trend && (
           <span
             className={cn(
@@ -96,7 +98,7 @@ export function PortfolioKpis({ kpis }: { kpis: KpiCardData[] }) {
   return (
     <div
       className={cn(
-        "grid grid-cols-1 gap-6 sm:grid-cols-2",
+        "grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-3",
         kpis.length === 3 ? "lg:grid-cols-3" : "xl:grid-cols-4",
       )}
     >

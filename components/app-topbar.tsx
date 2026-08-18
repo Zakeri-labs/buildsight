@@ -93,7 +93,7 @@ export function AppTopbar({
   const isTitlelessPage = isSiteVisitRequestList || isInitialDocumentsPage
 
   return (
-    <header className={`sticky top-0 z-30 flex items-center gap-3 bg-background/95 px-4 backdrop-blur md:px-8 ${isTitlelessPage ? "h-14 justify-between md:justify-end" : "h-20"}`}>
+    <header className={`sticky top-0 z-30 flex items-center gap-2 border-b border-border/40 bg-background/95 px-3 backdrop-blur sm:px-4 md:px-8 ${isTitlelessPage ? "h-14 justify-between md:justify-end" : "h-14 sm:h-16 md:h-20"}`}>
       {/* Mobile Hamburger Drawer Trigger */}
       <button
         type="button"
@@ -127,17 +127,17 @@ export function AppTopbar({
       {/* Page title */}
       {!isTitlelessPage ? (
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-xl font-bold tracking-tight text-foreground md:text-2xl">{title}</h1>
+          <h1 className="truncate text-base font-bold tracking-tight text-foreground sm:text-lg md:text-2xl">{title}</h1>
           {subtitle && <p className="hidden truncate text-sm text-muted-foreground sm:block">{subtitle}</p>}
         </div>
       ) : (
         <div className="min-w-0 flex-1 md:hidden">
-          <h1 className="truncate text-lg font-bold tracking-tight text-foreground">{title}</h1>
+          <h1 className="truncate text-base font-bold tracking-tight text-foreground">{title}</h1>
         </div>
       )}
 
       {/* Right-side actions */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
 
         {/* Language toggle */}
         <LanguageSwitch />
@@ -153,7 +153,7 @@ export function AppTopbar({
                 <button
                   type="button"
                   aria-label="User Menu"
-                  className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-muted"
+                  className="flex items-center gap-1.5 rounded-xl px-1.5 py-1 transition-colors hover:bg-muted sm:gap-2.5 sm:px-2 sm:py-1.5"
                 >
                   <ProfileAvatar
                     name={currentUser.name}
@@ -166,7 +166,7 @@ export function AppTopbar({
                     <span className="text-sm font-semibold">{currentUser.name}</span>
                     <span className="text-xs text-muted-foreground">{userRoleLabel}</span>
                   </span>
-                  <span className="flex size-8 items-center justify-center rounded-lg text-muted-foreground">
+                  <span className="hidden size-7 items-center justify-center rounded-lg text-muted-foreground sm:flex sm:size-8">
                     <ChevronDown className="size-4" />
                   </span>
                 </button>

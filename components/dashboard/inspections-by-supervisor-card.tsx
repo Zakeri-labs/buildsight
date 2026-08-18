@@ -148,41 +148,41 @@ export function CompletedVisitsBySupervisorCard({
   const completionPercent = total > 0 ? Math.round((completed / total) * 100) : 0
 
   return (
-    <div className="flex min-h-0 flex-col rounded-xl border border-border bg-card p-5">
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 sm:grid-cols-[33%_minmax(0,1fr)] sm:gap-4">
+    <div className="flex flex-col rounded-xl border border-border bg-card p-4 sm:p-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[33%_minmax(0,1fr)] sm:gap-4">
         <section className="border-b border-border/70 pb-4 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4">
           <h2 className="text-base font-semibold text-foreground">Visit Completion</h2>
 
-          <div className="mt-4 flex flex-col items-center">
-            <div className="flex size-[136px] items-center justify-center rounded-full bg-muted/20 ring-1 ring-border/45">
+          <div className="mt-3 sm:mt-4 flex flex-col items-center">
+            <div className="flex size-[124px] sm:size-[136px] items-center justify-center rounded-full bg-muted/20 ring-1 ring-border/45">
               <DonutChart
-                size={112}
-                strokeWidth={15}
+                size={104}
+                strokeWidth={14}
                 total={total}
                 segments={[
                   { value: completed, color: "var(--success)" },
                   { value: scheduled, color: "var(--info)" },
                 ]}
                 centerTop={
-                  <span className="text-[17px] font-semibold leading-none tracking-tight tabular-nums text-foreground">
+                  <span className="text-base sm:text-[17px] font-semibold leading-none tracking-tight tabular-nums text-foreground">
                     {completed} of {total}
                   </span>
                 }
                 centerBottom={
-                  <span className="mt-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+                  <span className="mt-1 sm:mt-1.5 text-[10px] sm:text-[11px] font-medium tabular-nums text-muted-foreground">
                     {completionPercent}%
                   </span>
                 }
               />
             </div>
 
-            <div className="mt-4 w-full max-w-[172px] space-y-1.5 text-xs">
-              <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
+            <div className="mt-3 sm:mt-4 w-full max-w-[172px] space-y-1 sm:space-y-1.5 text-xs">
+              <div className="flex items-center gap-2 rounded-md px-2 py-1">
                 <span className="size-2.5 shrink-0 rounded-full bg-success" aria-hidden="true" />
                 <span className="min-w-0 flex-1 text-muted-foreground">Completed</span>
                 <span className="shrink-0 font-semibold tabular-nums text-foreground">{completed}</span>
               </div>
-              <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
+              <div className="flex items-center gap-2 rounded-md px-2 py-1">
                 <span className="size-2.5 shrink-0 rounded-full bg-info" aria-hidden="true" />
                 <span className="min-w-0 flex-1 text-muted-foreground">Scheduled</span>
                 <span className="shrink-0 font-semibold tabular-nums text-foreground">{scheduled}</span>

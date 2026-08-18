@@ -110,10 +110,82 @@ export function ProjectsOverview({
 
   return (
     <>
-      <div className="flex h-full min-h-0 flex-col rounded-xl border border-border bg-card p-5">
+      <div className="flex h-full min-h-0 flex-col rounded-xl border border-border bg-card p-4 sm:p-5">
         <h2 className="text-base font-semibold text-foreground">Projects Overview</h2>
 
-        <div className="mt-4 flex-1 overflow-x-auto">
+        {/* Mobile Card View (sm:hidden) */}
+        <div className="mt-3 space-y-2.5 sm:hidden">
+          {projects.length === 0 ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">
+              No projects yet.
+            </div>
+          ) : (
+            projects.map((p) => (
+              <div key={p.id} className="rounded-lg border border-border/80 bg-background p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Link href={`/projects/${p.id}`} className="flex min-w-0 items-center gap-2.5 hover:text-primary">
+                    <ProjectImageDisplay
+                      src={p.image}
+                      projectId={p.id}
+                      alt={p.name}
+                      className="size-8 shrink-0 rounded-lg border"
+                      iconClassName="size-3.5"
+                    />
+                    <span className="min-w-0 truncate text-sm font-semibold text-foreground">{p.name}</span>
+                  </Link>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span
+                      className={cn(
+                        "inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                        roleBadge[p.role] ?? "bg-slate-100 text-slate-700",
+                      )}
+                    >
+                      {p.role}
+                    </span>
+                    {p.canEdit ? (
+                      <button
+                        type="button"
+                        aria-label={`Edit ${p.name}`}
+                        onClick={() => p.edit && setEditTarget(p)}
+                        className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        <MoreHorizontal className="size-3.5" />
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground pt-1.5 border-t border-border/50">
+                  <div className="truncate">
+                    <span className="font-medium text-foreground">Client: </span>
+                    {p.ownerClient ?? "—"}
+                  </div>
+                  <div className="truncate">
+                    <span className="font-medium text-foreground">Supervisor: </span>
+                    {p.supervisor ?? "—"}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 text-xs pt-1">
+                  <div className="flex items-center gap-2.5 text-[11px]">
+                    <span className="font-semibold text-blue-600">{p.inspections} Insp</span>
+                    <span className="font-semibold text-emerald-600">{p.rfis} RFI</span>
+                    <span className="font-semibold text-amber-600">{p.vos} VO</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 w-24">
+                    <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${p.progress}%` }} />
+                    </div>
+                    <span className="text-[10px] font-semibold tabular-nums text-muted-foreground">{p.progress}%</span>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop Table View (hidden sm:block) */}
+        <div className="mt-4 hidden flex-1 overflow-x-auto sm:block">
           <table className="w-full min-w-[640px] table-fixed border-collapse text-sm">
             <colgroup>
               <col className="w-[20%]" />
