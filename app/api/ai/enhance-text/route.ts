@@ -64,15 +64,24 @@ export async function POST(request: NextRequest) {
         "",
         "2. EXPAND AND ELABORATE: Fully expand and elaborate the raw inspection notes into detailed, technical, and comprehensive engineering statements. Elaborate on the site findings, structural implications, quality assurance requirements, and corrective actions using precise civil engineering terminology in the SAME input language.",
         "",
-        "3. SECTION DIVISION: Divide the report into EXACTLY TWO distinct sections in the input language:",
-        "   - Section 1: Observations (e.g. 'Observations:' in English, 'الملاحظات:' or 'مشاهدات:' in Arabic/Persian)",
-        "   - Section 2: Directives (e.g. 'Directives:' in English, 'التوجيهات:' or 'دستورالعمل‌ها:' in Arabic/Persian)",
+        "3. SECTION DIVISION & MARKERS: Divide the report into EXACTLY TWO distinct sections wrapped in explicit HTML comments:",
+        "   <!-- SECTION: OBSERVATIONS -->",
+        "   <p><strong>Observations / مشاهدات و ملاحظات / الملاحظات:</strong></p>",
+        "   <p>(A) ...</p>",
+        "   <!-- END: OBSERVATIONS -->",
+        "",
+        "   <!-- SECTION: DIRECTIVES -->",
+        "   <p><strong>Directives / دستورالعمل‌ها و ابلاغیه‌ها / التوجيهات:</strong></p>",
+        "   <ul>",
+        "     <li>...</li>",
+        "   </ul>",
+        "   <!-- END: DIRECTIVES -->",
         "",
         "4. SECTION 1 - OBSERVATIONS FORMATTING:",
         "   - Title: Observations header in the input language (using <p><strong>Observations:</strong></p> in English, <p><strong>الملاحظات:</strong></p> / <p><strong>مشاهدات و ملاحظات:</strong></p> in Arabic/Persian).",
-        "   - List each individual observation on its own line/paragraph.",
+        "   - List each individual observation on its own paragraph.",
         "   - Prefix each item with uppercase letter indicators in parentheses: (A), (B), (C), (D)... (or (أ), (ب), (ج), (د)... if in Arabic/Persian).",
-        "   - Expand each observation into a complete, formal technical statement describing what was observed on site, its location/component, and the initial instruction issued.",
+        "   - Expand each observation into a complete, formal technical statement describing what was observed on site, its location/component, and technical context.",
         "",
         "5. SECTION 2 - DIRECTIVES FORMATTING:",
         "   - Title: Directives header in the input language (using <p><strong>Directives:</strong></p> in English, <p><strong>التوجيهات:</strong></p> / <p><strong>دستورالعمل‌ها و ابلاغیه‌ها:</strong></p> in Arabic/Persian).",
@@ -81,9 +90,6 @@ export async function POST(request: NextRequest) {
         "",
         "6. ACCURACY & INTEGRITY:",
         "   - Do NOT change numbers, grid axes, or factual measurements provided in the input, but thoroughly expand the description and technical context.",
-        "",
-        "7. OUTPUT FORMAT:",
-        "   - Return clean HTML suitable for a rich-text report editor in the input language: <p><strong>...:</strong></p><p>(A) ...</p><br><p><strong>...:</strong></p><ul><li>...</li></ul>.",
       ].join("\n")
     }
 
@@ -132,7 +138,39 @@ export async function POST(request: NextRequest) {
       resultText = resultText.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim()
     }
 
-    return NextResponse.json({ resultText }, { headers: { "Cache-Control": "no-store" } })
+    let observations = ""
+    let recommendations = ""
+
+    if (action === "enhance_style") {
+      const obsMatch = resultText.match(/<!-- SECTION: OBSERVATIONS -->([\s\S]*?)<!-- END: OBSERVATIONS -->/i)
+      const dirMatch = resultText.match(/<!-- SECTION: DIRECTIVES -->([\s\S]*?)<!-- END: DIRECTIVES -->/i)
+
+      if (obsMatch && obsMatch[1]) {
+        observations = obsMatch[1].trim()
+      }
+      if (dirMatch && dirMatch[1]) {
+        recommendations = dirMatch[1].trim()
+      }
+
+      if (!observations && !recommendations) {
+        const splitRegex = /<p[^>]*>\s*<strong>\s*(?:Directives|التوجيهات|دستورالعمل‌ها|دستورالعمل|توجيهات|Recommendations|Directives:)\b[\s\S]*/i
+        const match = resultText.match(splitRegex)
+        if (match && match.index !== undefined && match.index > 0) {
+          observations = resultText.slice(0, match.index).trim()
+          recommendations = resultText.slice(match.index).trim()
+        } else {
+          observations = resultText
+        }
+      }
+    }
+
+    const cleanResultText = resultText.replace(/<!--[\s\S]*?-->/g, "").trim()
+
+    return NextResponse.json({
+      resultText: cleanResultText,
+      observations: observations.replace(/<!--[\s\S]*?-->/g, "").trim(),
+      recommendations: recommendations.replace(/<!--[\s\S]*?-->/g, "").trim(),
+    }, { headers: { "Cache-Control": "no-store" } })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof AuthzError ? error.message : error instanceof Error ? error.message : "AI processing failed." },

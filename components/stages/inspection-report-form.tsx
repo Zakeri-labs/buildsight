@@ -1344,7 +1344,25 @@ export function InspectionReportForm({
       ) : null}
 
       {reportDefinition.responseType === "combined" ? SECTION_META.map((section) => (
-        <RichSectionEditor key={section.key} title={locale === "ar" ? section.titleAr : section.title} description={section.description} value={content[section.key]} onChange={(value) => updateSection(section.key, value)} allowTable={section.key === "feedback"} disabled={isLocked} uploadInlineImage={uploadInlineImage} project={project} ccCandidates={ccCandidates} />
+        <RichSectionEditor
+          key={section.key}
+          title={locale === "ar" ? section.titleAr : section.title}
+          description={section.description}
+          value={content[section.key]}
+          onChange={(value) => updateSection(section.key, value)}
+          onSplitSections={(obs, rec) => {
+            setContent((current) => ({
+              ...current,
+              ...(obs ? { observation: obs } : {}),
+              ...(rec ? { recommendations: rec } : {}),
+            }))
+          }}
+          allowTable={section.key === "feedback"}
+          disabled={isLocked}
+          uploadInlineImage={uploadInlineImage}
+          project={project}
+          ccCandidates={ccCandidates}
+        />
       )) : reportDefinition.responseType === "inspection_checklist" ? (
         <RichSectionEditor title="Overall Notes" description="Add overall inspection observations or follow-up notes." value={content.feedback} onChange={(value) => updateSection("feedback", value)} allowTable={false} disabled={isLocked} uploadInlineImage={uploadInlineImage} project={project} ccCandidates={ccCandidates} />
       ) : reportDefinition.responseType === "text" ? null : (
@@ -1762,6 +1780,7 @@ function RichSectionEditor({
   description,
   value,
   onChange,
+  onSplitSections,
   allowTable,
   disabled,
   uploadInlineImage,
@@ -1772,6 +1791,7 @@ function RichSectionEditor({
   description: string
   value: string
   onChange: (value: string) => void
+  onSplitSections?: (obs: string, rec: string) => void
   allowTable: boolean
   disabled: boolean
   uploadInlineImage: (file: File) => Promise<string>
@@ -2066,7 +2086,10 @@ function RichSectionEditor({
       if (!res.ok || !data.resultText) {
         throw new Error(data.error || "AI generation failed.")
       }
-      if (editorRef.current) {
+
+      if (action === "enhance_style" && onSplitSections && (data.observations || data.recommendations)) {
+        onSplitSections(data.observations || data.resultText, data.recommendations || "")
+      } else if (editorRef.current) {
         editorRef.current.innerHTML = data.resultText
         pushHistorySnapshot(data.resultText, true)
         onChange(data.resultText)
