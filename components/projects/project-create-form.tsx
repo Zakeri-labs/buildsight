@@ -132,11 +132,7 @@ export function generateAutoProjectCode(
   startDateStr: string,
   existingCodes: string[] = [],
 ): string {
-  let prefix = "Bonyan"
-  if (orgName?.trim()) {
-    const firstWord = orgName.trim().split(/\s+/)[0].replace(/[^a-zA-Z0-9]/g, "")
-    if (firstWord.length >= 2) prefix = firstWord
-  }
+  const prefix = "Bonyan"
 
   let year = 2026
   if (startDateStr) {
