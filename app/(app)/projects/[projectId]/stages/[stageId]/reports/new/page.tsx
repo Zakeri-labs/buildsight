@@ -4,6 +4,7 @@ import { requireOnboarded } from "@/lib/auth/session"
 import { loadNextProjectVisitNumber, loadProjectStage, loadSiteVisitReportContext } from "@/lib/db/project-stages"
 import { loadProjectParticipantsOnly } from "@/lib/report-cc/server"
 import { resolveCalendarProjectScope } from "@/lib/calendar/server"
+import { getHistoricalCompletedChecklistIds } from "@/lib/stages/execution"
 
 export const maxDuration = 300
 
@@ -43,5 +44,6 @@ export default async function NewStageReportPage({
     avatarUrl: session.profile?.avatar_url || null,
   }
   const stageSubterms = data.stage.terms.flatMap((t) => [t, ...t.subterms])
-  return <InspectionReportForm project={data.project} stage={{ id: data.stage.id, name: data.stage.name }} reportConfig={{ id: data.stage.id, reportName: `${data.stage.name} Report`, required: false, responsibleUser: null, templateReference: null, responseType: "combined", instructions: null, approvalRequired: true, status: data.stage.status }} response={null} translation={null} canReview={data.canReview} canManage={data.canManage} isMember={data.isMember} currentUserId={data.currentUserId} currentUserPerson={currentUserPerson} workflowActive={true} canEdit={true} suggestedVisitNumber={nextVisitNumber} initialResponseId={crypto.randomUUID()} ccCandidates={ccCandidates} initialCcRecipients={[]} stageSubterms={stageSubterms} siteVisitRequestId={siteVisitRequestId} />
+  const historicalCompletedItemIds = getHistoricalCompletedChecklistIds(data.stage)
+  return <InspectionReportForm project={data.project} stage={{ id: data.stage.id, name: data.stage.name }} reportConfig={{ id: data.stage.id, reportName: `${data.stage.name} Report`, required: false, responsibleUser: null, templateReference: null, responseType: "combined", instructions: null, approvalRequired: true, status: data.stage.status }} response={null} translation={null} canReview={data.canReview} canManage={data.canManage} isMember={data.isMember} currentUserId={data.currentUserId} currentUserPerson={currentUserPerson} workflowActive={true} canEdit={true} suggestedVisitNumber={nextVisitNumber} initialResponseId={crypto.randomUUID()} ccCandidates={ccCandidates} initialCcRecipients={[]} stageSubterms={stageSubterms} siteVisitRequestId={siteVisitRequestId} historicalCompletedItemIds={historicalCompletedItemIds} />
 }

@@ -3,6 +3,7 @@ import { InspectionReportForm } from "@/components/stages/inspection-report-form
 import { requireOnboarded } from "@/lib/auth/session"
 import { loadNextProjectVisitNumber, loadProjectStageTerm } from "@/lib/db/project-stages"
 import { loadProjectParticipantsOnly } from "@/lib/report-cc/server"
+import { getHistoricalCompletedChecklistIds } from "@/lib/stages/execution"
 
 export default async function NewTermReportPage({ params }: { params: Promise<{ projectId: string; stageId: string; termId: string }> }) {
   const [{ projectId, stageId, termId }, session] = await Promise.all([params, requireOnboarded()])
@@ -18,6 +19,7 @@ export default async function NewTermReportPage({ params }: { params: Promise<{ 
     email: session.email,
     avatarUrl: session.profile?.avatar_url || null,
   }
+  const historicalCompletedItemIds = getHistoricalCompletedChecklistIds(data.stage)
   return (
     <InspectionReportForm
       project={data.project}
@@ -47,6 +49,7 @@ export default async function NewTermReportPage({ params }: { params: Promise<{ 
       ccCandidates={ccCandidates}
       initialCcRecipients={[]}
       stageSubterms={stageSubterms}
+      historicalCompletedItemIds={historicalCompletedItemIds}
     />
   )
 }

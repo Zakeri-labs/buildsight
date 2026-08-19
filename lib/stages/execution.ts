@@ -360,3 +360,56 @@ export function calculateStageStats(stage: StageStatsInput): StageStatsResult {
   }
 }
 
+export function getHistoricalCompletedChecklistIds(stage: {
+  reports?: Array<any>
+  terms?: Array<any>
+}): string[] {
+  if (!stage) return []
+
+  const completedIds = new Set<string>()
+  const processedReportIds = new Set<string>()
+  const stageReportsMap = new Map<string, any>()
+
+  const collectReportsFromTerms = (terms?: Array<any>) => {
+    for (const term of terms ?? []) {
+      const responses = term.responses ?? (term.response ? [term.response] : [])
+      for (const resp of responses) {
+        if (resp && resp.id && !processedReportIds.has(resp.id)) {
+          processedReportIds.add(resp.id)
+          stageReportsMap.set(resp.id, resp)
+        }
+      }
+      if (term.subterms?.length) {
+        collectReportsFromTerms(term.subterms)
+      }
+    }
+  }
+
+  collectReportsFromTerms(stage.terms)
+
+  for (const report of stage.reports ?? []) {
+    if (report && report.id && !processedReportIds.has(report.id)) {
+      processedReportIds.add(report.id)
+      stageReportsMap.set(report.id, report)
+    }
+  }
+
+  const reports = Array.from(stageReportsMap.values())
+  const eligibleReports = reports.filter((r) => r && r.status !== "draft")
+
+  for (const report of eligibleReports) {
+    const rawContent = report.content ?? report.response_content
+    const content = typeof rawContent === "string" ? parseJsonContent(rawContent) : rawContent
+    const checklist = Array.isArray(content?.checklist) ? content.checklist : []
+    for (const item of checklist) {
+      if (item && (item.checked === true || item.result === "pass")) {
+        if (typeof item.id === "string" && item.id.trim()) {
+          completedIds.add(item.id.trim())
+        }
+      }
+    }
+  }
+
+  return Array.from(completedIds)
+}
+

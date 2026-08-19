@@ -374,6 +374,7 @@ export function InspectionReportForm({
   initialCcRecipients,
   stageSubterms,
   siteVisitRequestId = null,
+  historicalCompletedItemIds = [],
 }: {
   project: { id: string; name: string; code: string | null }
   stage: { id: string; name: string }
@@ -415,6 +416,7 @@ export function InspectionReportForm({
   initialCcRecipients: ReportCcRecipient[]
   stageSubterms?: Array<{ id: string; reportName: string }>
   siteVisitRequestId?: string | null
+  historicalCompletedItemIds?: string[]
 }) {
   const router = useRouter()
   const reportDefinition = stageReportConfig ?? legacyTerm
@@ -447,7 +449,7 @@ export function InspectionReportForm({
       initialChecklist = response.content.checklist
     } else if (stageSubterms?.length) {
       initialChecklist = stageSubterms.map((item) => ({
-        id: crypto.randomUUID(),
+        id: item.id || crypto.randomUUID(),
         label: item.reportName.replace(/^\d+[\.\s\-]+/, ""),
         checked: false,
         result: "" as const,
@@ -456,7 +458,7 @@ export function InspectionReportForm({
       const fallbackItems = getFallbackStageChecklist(stage.name)
       if (fallbackItems.length) {
         initialChecklist = fallbackItems.map((item) => ({
-          id: crypto.randomUUID(),
+          id: item.id || crypto.randomUUID(),
           label: item.reportName.replace(/^\d+[\.\s\-]+/, ""),
           checked: false,
           result: "" as const,
@@ -465,6 +467,22 @@ export function InspectionReportForm({
         initialChecklist = checklistFromTemplate(reportDefinition.templateReference)
       }
     }
+
+    if (response === null && historicalCompletedItemIds?.length) {
+      const completedSet = new Set(historicalCompletedItemIds)
+      initialChecklist = initialChecklist.map((item) => {
+        if (completedSet.has(item.id)) {
+          return {
+            ...item,
+            checked: true,
+            result: "pass" as const,
+            notes: undefined,
+          }
+        }
+        return item
+      })
+    }
+
     return {
       ...(response?.content ?? EMPTY_TERM_RESPONSE_CONTENT),
       checklist: initialChecklist,
