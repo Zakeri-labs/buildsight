@@ -135,7 +135,7 @@ export function resolveDashboardDateRange(
   const requested = firstValue(params.range)
   const preset = requested && PRESETS.has(requested as DashboardDateRangePreset)
     ? (requested as DashboardDateRangePreset)
-    : "last30"
+    : "today"
   const today = currentCalendarDateKey(now)
 
   if (preset === "all") return buildRange("all", null, null, "All Time")
