@@ -1105,9 +1105,13 @@ export function InspectionReportForm({
       {responseId && status !== "draft" && status !== "in_progress" ? (
         <ReportDownloadSection
           projectId={project.id}
+          projectName={project.name}
           stageId={resolvedStageId}
           termId={isDirectStageReport ? undefined : reportDefinition.id}
           responseId={responseId}
+          reportTitle={reportTitle || defaultReportTitlePattern}
+          visitNumber={currentVisitNo}
+          supervisorName={creatorPerson.name}
           initialTranslation={translation}
           responseUpdatedAt={response?.updatedAt}
           locale={locale}
@@ -1446,8 +1450,8 @@ export function InspectionReportForm({
                   stageId={resolvedStageId}
                   termId={isDirectStageReport ? undefined : reportDefinition.id}
                   responseId={responseId}
-                  reportTitle={reportTitle}
-                  visitNumber={visitNumber}
+                  reportTitle={reportTitle || defaultReportTitlePattern}
+                  visitNumber={currentVisitNo}
                   supervisorName={creatorPerson.name}
                   initialTranslation={translation}
                   responseUpdatedAt={response?.updatedAt}
@@ -1572,7 +1576,7 @@ export function InspectionReportForm({
                     onClick={() => {
                       const url = buildWhatsAppShareUrl({
                         projectName: project?.name || "Project",
-                        reportTitle: reportTitle || "Inspection Report",
+                        reportTitle: reportTitle?.trim() || defaultReportTitlePattern || "Inspection Report",
                         visitNumber: currentVisitNo,
                         supervisorName: creatorPerson.name,
                         projectId: project.id,
@@ -1596,7 +1600,7 @@ export function InspectionReportForm({
                     onClick={() => {
                       const msg = buildShareMessage({
                         projectName: project?.name || "Project",
-                        reportTitle: reportTitle || "Inspection Report",
+                        reportTitle: reportTitle?.trim() || defaultReportTitlePattern || "Inspection Report",
                         visitNumber: currentVisitNo,
                         supervisorName: creatorPerson.name,
                         projectId: project.id,
