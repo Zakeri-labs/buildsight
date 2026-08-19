@@ -64,23 +64,21 @@ export function ProjectInitialDocumentUploadStep({
   const inputRefs = useRef<Partial<Record<InitialDocumentUploadCategory, HTMLInputElement | null>>>({})
   const [dragTarget, setDragTarget] = useState<InitialDocumentUploadCategory | null>(null)
 
-  const dedicatedCategories = INITIAL_DOCUMENT_UPLOAD_CARDS.filter((category) => !category.multiple)
-  const additionalCategory = INITIAL_DOCUMENT_UPLOAD_CARDS.find((category) => category.multiple)!
+  const dedicatedCategories = INITIAL_DOCUMENT_UPLOAD_CARDS.filter((category) => category.value !== "additional_documents")
+  const additionalCategory = INITIAL_DOCUMENT_UPLOAD_CARDS.find((category) => category.value === "additional_documents")!
 
   function selectFiles(categoryValue: InitialDocumentUploadCategory, incomingFiles: File[]) {
     const category = INITIAL_DOCUMENT_UPLOAD_CARDS.find((item) => item.value === categoryValue)
     if (!category || incomingFiles.length === 0) return
 
-    const files = category.multiple ? incomingFiles : [incomingFiles[0]]
+    const files = incomingFiles
     const validationError = files.map(validateInitialDocumentFile).find(Boolean)
     if (validationError) {
       onValidationError(validationError)
       return
     }
 
-    const retained = category.multiple
-      ? selections
-      : selections.filter((selection) => selection.uploadCategory !== category.value)
+    const retained = selections
     const existingKeys = new Set(
       retained
         .filter((selection) => selection.uploadCategory === category.value)
@@ -145,10 +143,8 @@ export function ProjectInitialDocumentUploadStep({
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {dedicatedCategories.map((category) => {
-          const selected = selections.find((selection) => selection.uploadCategory === category.value)
-          const name = selected ? (selected.file ? selected.file.name : (selected.fileName || "Document")) : ""
-          const size = selected ? (selected.file ? selected.file.size : (selected.fileSize || 0)) : 0
-          const Icon = selected ? (selected.file ? fileIcon(selected.file) : fileIcon(name)) : FileText
+          const cardSelections = selections.filter((selection) => selection.uploadCategory === category.value)
+          const hasFiles = cardSelections.length > 0
           return (
             <div
               key={category.value}
@@ -162,14 +158,14 @@ export function ProjectInitialDocumentUploadStep({
                 <div className="min-w-0">
                   <h3 className="text-sm font-semibold">{isArabic ? category.labelAr : category.label}</h3>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {isArabic ? "ملف واحد · حتى 50 ميجابايت لكل ملف" : "One file · Up to 50 MB each"}
+                    {isArabic ? "يسمح بعدة ملفات · حتى 50 ميجابايت لكل ملف" : "Multiple files allowed · Up to 50 MB each"}
                   </p>
                 </div>
                 <span className={cn(
                   "flex size-9 shrink-0 items-center justify-center rounded-xl",
-                  selected ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300" : "bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300",
+                  hasFiles ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300" : "bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300",
                 )}>
-                  {selected ? <FileCheck2 className="size-4" /> : <Icon className="size-4" />}
+                  {hasFiles ? <FileCheck2 className="size-4" /> : <FileText className="size-4" />}
                 </span>
               </div>
 
@@ -177,48 +173,56 @@ export function ProjectInitialDocumentUploadStep({
                 ref={(node: HTMLInputElement | null) => { inputRefs.current[category.value] = node }}
                 type="file"
                 accept={INITIAL_DOCUMENT_ACCEPT}
+                multiple
                 disabled={disabled}
                 onChange={(event: ChangeEvent<HTMLInputElement>) => handleInput(category.value, event)}
                 className="hidden"
               />
 
-              {selected ? (
-                <div className="mt-4 flex flex-1 flex-col">
-                  <div className="flex items-center gap-2.5 rounded-xl border bg-muted/25 px-3 py-3">
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background text-primary shadow-sm"><Icon className="size-4" /></span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium" title={name}>{name}</p>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">{formatInitialDocumentFileSize(size)}</p>
-                    </div>
-                    {selected.isExisting ? (
-                      <a
-                        href={`/api/initial-documents?id=${selected.id}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={isArabic ? "عرض المستند" : "View document"}
-                        className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <ExternalLink className="size-3.5" />
-                      </a>
-                    ) : null}
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => removeSelection(selected.id)}
-                      aria-label={isArabic ? `إزالة ${name}` : `Remove ${name}`}
-                      className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </div>
+              {hasFiles ? (
+                <div className="mt-4 flex flex-1 flex-col gap-2">
+                  {cardSelections.map((selected) => {
+                    const name = selected.file ? selected.file.name : (selected.fileName || "Document")
+                    const size = selected.file ? selected.file.size : (selected.fileSize || 0)
+                    const Icon = selected.file ? fileIcon(selected.file) : fileIcon(name)
+                    return (
+                      <div key={selected.id} className="flex items-center gap-2.5 rounded-xl border bg-muted/25 px-3 py-2.5">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background text-primary shadow-sm"><Icon className="size-4" /></span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-medium" title={name}>{name}</p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">{formatInitialDocumentFileSize(size)}</p>
+                        </div>
+                        {selected.isExisting ? (
+                          <a
+                            href={`/api/initial-documents?id=${selected.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={isArabic ? "عرض المستند" : "View document"}
+                            className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            <ExternalLink className="size-3.5" />
+                          </a>
+                        ) : null}
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => removeSelection(selected.id)}
+                          aria-label={isArabic ? `إزالة ${name}` : `Remove ${name}`}
+                          className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                    )
+                  })}
                   <button
                     type="button"
                     disabled={disabled}
                     onClick={() => inputRefs.current[category.value]?.click()}
                     className="mt-auto inline-flex items-center justify-center gap-2 rounded-xl border border-dashed px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                   >
-                    <RefreshCw className="size-3.5" />
-                    {isArabic ? "استبدال الملف" : "Replace file"}
+                    <CloudUpload className="size-3.5" />
+                    {isArabic ? "اختر ملفات" : "Choose files"}
                   </button>
                 </div>
               ) : (
@@ -229,7 +233,7 @@ export function ProjectInitialDocumentUploadStep({
                   className="mt-4 flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed px-4 py-5 text-center transition-colors hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                 >
                   <CloudUpload className="mb-2 size-6 text-primary" />
-                  <span className="text-xs font-semibold">{isArabic ? "اختر ملفًا" : "Choose a file"}</span>
+                  <span className="text-xs font-semibold">{isArabic ? "اختر ملفات" : "Choose files"}</span>
                   <span className="mt-1 text-[11px] text-muted-foreground">{isArabic ? "أو اسحب وأفلت هنا" : "or drag and drop here"}</span>
                 </button>
               )}

@@ -41,20 +41,25 @@ export function ProjectDocumentUploadStep({
     const category = SIMPLE_UPLOAD_CATEGORIES.find((item) => item.value === categoryValue)
     if (!category || incomingFiles.length === 0) return
 
-    const files = category.multiple ? incomingFiles : [incomingFiles[0]]
-    if (category.multiple && files.length > SIMPLE_UPLOAD_MAX_ADDITIONAL_FILES) {
-      onValidationError(isArabic ? `تقبل المستندات الإضافية حتى ${SIMPLE_UPLOAD_MAX_ADDITIONAL_FILES} ملفًا في المرة الواحدة.` : `Additional Documents accepts up to ${SIMPLE_UPLOAD_MAX_ADDITIONAL_FILES} files at a time.`)
+    const existingFiles = selections[categoryValue] ?? []
+    const existingKeys = new Set(existingFiles.map((file) => `${file.name}:${file.size}:${file.lastModified}`))
+    const uniqueIncoming = incomingFiles.filter((file) => !existingKeys.has(`${file.name}:${file.size}:${file.lastModified}`))
+    if (uniqueIncoming.length === 0) return
+
+    const combinedFiles = [...existingFiles, ...uniqueIncoming]
+    if (combinedFiles.length > SIMPLE_UPLOAD_MAX_ADDITIONAL_FILES) {
+      onValidationError(isArabic ? `تقبل الفئة حتى ${SIMPLE_UPLOAD_MAX_ADDITIONAL_FILES} ملفًا.` : `Category accepts up to ${SIMPLE_UPLOAD_MAX_ADDITIONAL_FILES} files.`)
       return
     }
 
-    const validationError = files.map((file) => validateSimpleUploadFile(file)).find(Boolean)
+    const validationError = uniqueIncoming.map((file) => validateSimpleUploadFile(file)).find(Boolean)
     if (validationError) {
       onValidationError(validationError)
       return
     }
 
     onValidationError(null)
-    onChange({ ...selections, [categoryValue]: files })
+    onChange({ ...selections, [categoryValue]: combinedFiles })
   }
 
   function handleInputChange(categoryValue: SimpleUploadCategoryValue, event: ChangeEvent<HTMLInputElement>) {
@@ -148,8 +153,8 @@ export function ProjectDocumentUploadStep({
                   onClick={() => inputRefs.current[category.value]?.click()}
                   className="mt-auto inline-flex items-center justify-center gap-2 rounded-xl border border-dashed px-3 py-2 text-xs font-medium text-muted-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary disabled:opacity-50"
                 >
-                  <RefreshCw className="size-3.5" />
-                  {isArabic ? (category.multiple ? "استبدال الملفات" : "استبدال الملف") : (category.multiple ? "Replace selection" : "Replace file")}
+                  <CloudUpload className="size-3.5" />
+                  {isArabic ? "اختر ملفات" : "Choose files"}
                 </button>
               </div>
             ) : (

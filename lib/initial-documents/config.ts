@@ -52,12 +52,12 @@ export type InitialDocumentCategory = (typeof INITIAL_DOCUMENT_CATEGORIES)[numbe
 export type InitialDocumentCategoryDefinition = (typeof INITIAL_DOCUMENT_CATEGORIES)[number]
 
 export const INITIAL_DOCUMENT_UPLOAD_CARDS = [
-  { value: "drawing", label: "Drawing", labelAr: "المخططات", category: "approved_drawings", multiple: false },
-  { value: "supervision_agreement", label: "Supervision Agreement", labelAr: "اتفاقية الإشراف", category: "consultant_agreement", multiple: false },
-  { value: "contract_agreement", label: "Contract Agreement", labelAr: "اتفاقية العقد", category: "contractor_agreement", multiple: false },
-  { value: "three_d_perspective", label: "3D Perspective", labelAr: "منظور ثلاثي الأبعاد", category: "other", multiple: false },
-  { value: "approval_document", label: "Approval Document", labelAr: "مستند الموافقة", category: "permits_approvals", multiple: false },
-  { value: "test_reports", label: "Test Reports", labelAr: "تقارير الاختبار", category: "initial_site_reports", multiple: false },
+  { value: "drawing", label: "Drawing", labelAr: "المخططات", category: "approved_drawings", multiple: true },
+  { value: "supervision_agreement", label: "Supervision Agreement", labelAr: "اتفاقية الإشراف", category: "consultant_agreement", multiple: true },
+  { value: "contract_agreement", label: "Contract Agreement", labelAr: "اتفاقية العقد", category: "contractor_agreement", multiple: true },
+  { value: "three_d_perspective", label: "3D Perspective", labelAr: "منظور ثلاثي الأبعاد", category: "other", multiple: true },
+  { value: "approval_document", label: "Approval Document", labelAr: "مستند الموافقة", category: "permits_approvals", multiple: true },
+  { value: "test_reports", label: "Test Reports", labelAr: "تقارير الاختبار", category: "initial_site_reports", multiple: true },
   { value: "additional_documents", label: "Additional Documents", labelAr: "مستندات إضافية", category: "other", multiple: true },
 ] as const satisfies readonly {
   value: string

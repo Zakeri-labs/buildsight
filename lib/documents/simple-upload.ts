@@ -51,12 +51,12 @@ export const SIMPLE_UPLOAD_ALLOWED_MIME_TYPES = [
 export const SIMPLE_UPLOAD_ACCEPT = SIMPLE_UPLOAD_ALLOWED_EXTENSIONS.map((extension) => `.${extension}`).join(",")
 
 export const SIMPLE_UPLOAD_CATEGORIES = [
-  { value: "drawing", label: "Drawing", labelAr: "المخططات", documentType: "drawing", multiple: false },
-  { value: "supervision_agreement", label: "Supervision Agreement", labelAr: "اتفاقية الإشراف", documentType: "other", multiple: false },
-  { value: "contract_agreement", label: "Contract Agreement", labelAr: "اتفاقية العقد", documentType: "other", multiple: false },
-  { value: "3d_perspective", label: "3D Perspective", labelAr: "منظور ثلاثي الأبعاد", documentType: "drawing", multiple: false },
-  { value: "approval_document", label: "Approval Document", labelAr: "مستند الموافقة", documentType: "approval", multiple: false },
-  { value: "test_reports", label: "Test Reports", labelAr: "تقارير الاختبار", documentType: "test_report", multiple: false },
+  { value: "drawing", label: "Drawing", labelAr: "المخططات", documentType: "drawing", multiple: true },
+  { value: "supervision_agreement", label: "Supervision Agreement", labelAr: "اتفاقية الإشراف", documentType: "other", multiple: true },
+  { value: "contract_agreement", label: "Contract Agreement", labelAr: "اتفاقية العقد", documentType: "other", multiple: true },
+  { value: "3d_perspective", label: "3D Perspective", labelAr: "منظور ثلاثي الأبعاد", documentType: "drawing", multiple: true },
+  { value: "approval_document", label: "Approval Document", labelAr: "مستند الموافقة", documentType: "approval", multiple: true },
+  { value: "test_reports", label: "Test Reports", labelAr: "تقارير الاختبار", documentType: "test_report", multiple: true },
   { value: "additional_documents", label: "Additional Documents", labelAr: "مستندات إضافية", documentType: "other", multiple: true },
 ] as const satisfies readonly {
   value: string
