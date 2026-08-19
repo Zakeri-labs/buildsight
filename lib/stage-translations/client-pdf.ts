@@ -346,7 +346,8 @@ function htmlToBlocks(html: string): PdfBlock[] {
     }
     if (tag === "p" || tag === "blockquote") {
       const text = normalizeText(node.textContent || "")
-      if (text) blocks.push({ type: "paragraph", text })
+      const isRedundantHeader = /^(?:Observations|Directives|Recommendations|الملاحظات|مشاهدات|التوجيهات|دستورالعمل‌ها)\s*[\/:]/i.test(text)
+      if (text && !isRedundantHeader) blocks.push({ type: "paragraph", text })
       for (const image of Array.from(node.querySelectorAll(":scope > img"))) visit(image)
       return
     }
@@ -561,8 +562,12 @@ function writePdfText(
     return
   }
 
-  const preparedText = rtl ? shapeArabicText(doc, text) : text
-  doc.text(preparedText, x, y, rtl ? { ...options, ...ARABIC_TEXT_OPTIONS } : options)
+  const useArabicMode = rtl || containsAnyArabic
+  if (containsAnyArabic) {
+    doc.setFont(ARABIC_FONT_FAMILY, "normal")
+  }
+  const preparedText = useArabicMode ? shapeArabicText(doc, text) : text
+  doc.text(preparedText, x, y, useArabicMode ? { ...options, ...ARABIC_TEXT_OPTIONS } : options)
 }
 
 function textLines(doc: JsPdfDocument, text: string, width: number) {
@@ -3514,7 +3519,8 @@ function bilingualCellLines(
 ) {
   const value = normalizeText(text || "")
   if (!value) return [] as string[]
-  setLanguage(doc, rtl, fontSize, bold)
+  const hasArabic = containsArabic(value)
+  setLanguage(doc, rtl || hasArabic, fontSize, bold)
   const split = doc.splitTextToSize(value, Math.max(8, width))
   return Array.isArray(split) ? split.map(String) : [String(split)]
 }

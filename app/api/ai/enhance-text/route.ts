@@ -68,24 +68,22 @@ export async function POST(request: NextRequest) {
         "",
         "4. SECTION DIVISION & MARKERS: Divide the report into EXACTLY TWO distinct sections wrapped in explicit HTML comments:",
         "   <!-- SECTION: OBSERVATIONS -->",
-        "   <p><strong>Observations / مشاهدات و ملاحظات / الملاحظات:</strong></p>",
         "   <p>(A) ...</p>",
         "   <!-- END: OBSERVATIONS -->",
         "",
         "   <!-- SECTION: DIRECTIVES -->",
-        "   <p><strong>Directives / دستورالعمل‌ها و ابلاغیه‌ها / التوجيهات:</strong></p>",
         "   <ul>",
         "     <li>...</li>",
         "   </ul>",
         "   <!-- END: DIRECTIVES -->",
         "",
         "5. SECTION 1 - OBSERVATIONS FORMATTING:",
-        "   - Title: Observations header in the input language.",
+        "   - Do NOT include a section title heading or header tag (e.g. do NOT output <p><strong>Observations...</strong></p>). The application UI and PDF generator already provide section header cards.",
         "   - List each individual observation on its own paragraph.",
         "   - Prefix each item with uppercase letter indicators in parentheses: (A), (B), (C), (D)... (or (أ), (ب), (ج), (د)... if in Arabic/Persian).",
         "",
         "6. SECTION 2 - DIRECTIVES FORMATTING:",
-        "   - Title: Directives header in the input language.",
+        "   - Do NOT include a section title heading or header tag (e.g. do NOT output <p><strong>Directives...</strong></p>).",
         "   - List the actionable corrective instructions as a bulleted list (<ul><li>...</li></ul> in HTML).",
         "",
         "7. ACCURACY & INTEGRITY:",
@@ -178,12 +176,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const cleanResultText = resultText.replace(/<!--[\s\S]*?-->/g, "").trim()
+    const stripRedundantHeader = (html: string) =>
+      html.replace(/<p[^>]*>\s*<strong>\s*(?:Observations|Directives|Recommendations|مشاهدات|دستورالعمل‌ها|التوجيهات)\b[\s\S]*?<\/strong>\s*<\/p>\s*/gi, "").trim()
+
+    const cleanResultText = stripRedundantHeader(resultText.replace(/<!--[\s\S]*?-->/g, "").trim())
+    const cleanObs = stripRedundantHeader(observations.replace(/<!--[\s\S]*?-->/g, "").trim())
+    const cleanRec = stripRedundantHeader(recommendations.replace(/<!--[\s\S]*?-->/g, "").trim())
 
     return NextResponse.json({
       resultText: cleanResultText,
-      observations: observations.replace(/<!--[\s\S]*?-->/g, "").trim(),
-      recommendations: recommendations.replace(/<!--[\s\S]*?-->/g, "").trim(),
+      observations: cleanObs,
+      recommendations: cleanRec,
     }, { headers: { "Cache-Control": "no-store" } })
   } catch (error) {
     return NextResponse.json(
