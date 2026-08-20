@@ -601,7 +601,6 @@ export const PDF_UI_SECTION_KEYS = [
   "findings",
   "recommendations",
   "correctiveActions",
-  "approvals",
   "attachments",
 ] as const
 
@@ -687,7 +686,6 @@ export function buildLanguagePdfTemplate(input: {
       title: language === "ar" ? section.ar : section.en,
       html: content.sections[section.key],
     })),
-    approvalSection(content, language),
     attachmentsSection({ data, content, language, sourceDocument }),
   ]
 
