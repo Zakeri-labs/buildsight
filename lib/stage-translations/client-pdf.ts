@@ -580,12 +580,13 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   const { template, pageWidth, logoImage } = flow
   const org = getOrganizationProfile()
   const margin = PAGE.margin
+  const headerTop = 4.5
 
   // Light gray background, thin gold top
   doc.setFillColor(248, 250, 252)
-  doc.rect(0, 0, pageWidth, headerH, "F")
+  doc.rect(0, headerTop, pageWidth, headerH, "F")
   doc.setFillColor(180, 138, 32)
-  doc.rect(0, 0, pageWidth, 1.5, "F")
+  doc.rect(0, headerTop, pageWidth, 1.5, "F")
 
   // ── 3-COLUMN LAYOUT: [Logo] | [Company Name] | [Date/Doc/Page] ────
   const totalW = pageWidth - margin * 2  // 182 mm
@@ -606,20 +607,20 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     doc.addImage(
       logoImage.dataUrl, "PNG",
       col1X + 2.5,   // Left-aligned in left column
-      1.5 + (headerH - 1.5 - h) / 2,
+      headerTop + 1.5 + (headerH - 1.5 - h) / 2,
       w, h, undefined, "FAST",
     )
   } else {
     setLanguage(doc, false, 10, true)
     doc.setTextColor(180, 138, 32)
-    doc.text("BONYAN", col1X + 2.5, headerH / 2 + 2, { align: "left" })
+    doc.text("BONYAN", col1X + 2.5, headerTop + headerH / 2 + 2, { align: "left" })
   }
 
   // ── CENTER COLUMN: Company Name (EN + AR) Bold Center-aligned ─────────────
   const nameEn = org.nameEn || "BONYAN CONSTRUCTION FOR ENGINEERING CONSULTANCY"
   const nameAr = org.nameAr || "بنيان الإنشائية للاستشارات الهندسية"
   const cx = col2X + col2W / 2
-  const midY = 1.5 + (headerH - 1.5) / 2   // vertical center of header area
+  const midY = headerTop + 1.5 + (headerH - 1.5) / 2   // vertical center of header area
 
   // English name – Bold, auto-scale to fit col2W
   let enSize = 8.5
@@ -663,7 +664,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   const labelX  = col3X + 2.5
   const rightX  = col3X + col3W - 2.5
   const stepY   = 3.8   // compact line spacing, no extra gap
-  const startY  = 1.5 + (headerH - 1.5 - 2 * stepY) / 2  // vertically centered block
+  const startY  = headerTop + 1.5 + (headerH - 1.5 - 2 * stepY) / 2  // vertically centered block
 
   infoRows.forEach(({ label, value }, i) => {
     const y = startY + i * stepY
@@ -693,14 +694,14 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   // Bottom separator
   doc.setDrawColor(226, 232, 240)
   doc.setLineWidth(0.4)
-  doc.line(0, headerH, pageWidth, headerH)
+  doc.line(0, headerTop + headerH, pageWidth, headerTop + headerH)
   doc.setLineWidth(0.2)
 }
 
 function drawContinuationHeader(flow: Flow) {
   const headerH = 17   // compact height for 3 rows
   drawHeaderColumns(flow.doc, flow, headerH)
-  flow.y = headerH + 7
+  flow.y = 4.5 + headerH + 7
 }
 
 function addFlowPage(flow: Flow) {
@@ -836,6 +837,7 @@ function drawFirstPageHeader(
 ) {
   const { doc, template, pageWidth, rtl } = flow
   const margin = PAGE.margin
+  const headerTop = 4.5
   const headerH = 17
 
   drawHeaderColumns(doc, flow, headerH)
@@ -868,7 +870,7 @@ function drawFirstPageHeader(
     doc,
     reportMainTitle,
     rtl ? pageWidth - margin : margin,
-    headerH + 8,
+    headerTop + headerH + 8,
     { align: rtl ? "right" : "left" },
     rtl,
   )
@@ -881,7 +883,7 @@ function drawFirstPageHeader(
       doc,
       rawSubject,
       rtl ? pageWidth - margin : margin,
-      headerH + 13.5,
+      headerTop + headerH + 13.5,
       { align: rtl ? "right" : "left" },
       rtl,
     )
@@ -891,13 +893,13 @@ function drawFirstPageHeader(
   // Thin rule below title
   doc.setDrawColor(226, 232, 240)
   doc.setLineWidth(0.3)
-  doc.line(margin, headerH + titleBlockOffset, pageWidth - margin, headerH + titleBlockOffset)
+  doc.line(margin, headerTop + headerH + titleBlockOffset, pageWidth - margin, headerTop + headerH + titleBlockOffset)
   doc.setLineWidth(0.2)
 
   // ── UNIFIED EXECUTIVE METADATA CARD (Recipients + 8 Metadata Cells) ──────
   const cardX = margin
   const cardWidth = pageWidth - margin * 2
-  const gridTop = headerH + titleBlockOffset + 2
+  const gridTop = headerTop + headerH + titleBlockOffset + 2
   const useBilingualLocationCell = true
 
   const reportTo = template.reportToRecipients || []
@@ -2355,6 +2357,7 @@ async function renderPreservedSourceLayout(flow: Flow, layout: NonNullable<Langu
             ? `نسخة مرئية احتياطية للصفحة ${item.pageNumber} للحفاظ على جميع عناصر الإثبات.`
             : `Visual fallback for source page ${item.pageNumber}, preserving undecodable evidence.`,
           preferredWidthRatio: 1,
+          preferredWidthRatio: 1,
           preferredHeightRatio: 0.9,
           alignment: "center",
         }, subFlow.width)
@@ -2390,6 +2393,7 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     doc.setPage(page)
 
     // ── Update Header Page Number (Right Column, Row 3) ─────────────────
+    const headerTop = 4.5
     const headerH = 17
     const totalW = width - margin * 2
     const col1W = 42
@@ -2399,7 +2403,7 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     const rightX = col3X + col3W - 2.5
     const labelX  = col3X + 2.5
     const stepY = 3.8
-    const startY = 1.5 + (headerH - 1.5 - 2 * stepY) / 2
+    const startY = headerTop + 1.5 + (headerH - 1.5 - 2 * stepY) / 2
     const pageY = startY + 2 * stepY
 
     // Blank out old row 3 in column 3 area (light gray fill)
@@ -2411,27 +2415,28 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     if (rtl) {
       // Arabic (RTL): Label on Right edge, Page number on Left edge
       setLanguage(doc, true, 6.5, false)
-      doc.setTextColor(100, 116, 139)
+      doc.setTextColor(0, 0, 0)
       const shapedPageLabel = String(shapeArabicText(doc, "الصفحة:"))
       doc.text(shapedPageLabel, rightX, pageY, { align: "right" })
 
       setLanguage(doc, false, 7.5, true)
-      doc.setTextColor(15, 23, 42)
+      doc.setTextColor(0, 0, 0)
       doc.text(pageStr, labelX, pageY, { align: "left" })
     } else {
       // English (LTR): Label on Left edge, Page number on Right edge
       setLanguage(doc, false, 6.5, false)
-      doc.setTextColor(100, 116, 139)
+      doc.setTextColor(0, 0, 0)
       doc.text("Page:", labelX, pageY, { align: "left" })
 
       setLanguage(doc, false, 7.5, true)
-      doc.setTextColor(15, 23, 42)
+      doc.setTextColor(0, 0, 0)
       doc.text(pageStr, rightX, pageY, { align: "right" })
     }
 
     // ── Footer Top Accent Line ──────────────────────────────────────────
+    const footerTopY = height - 23.5
     doc.setFillColor(180, 138, 32)
-    doc.rect(margin, height - 17.5, width - margin * 2, 0.6, "F")
+    doc.rect(margin, footerTopY, width - margin * 2, 0.6, "F")
 
     // Left Column: Phones, Social/Website + Email on same line
     const socialHandle = org.website ? (org.website.startsWith("@") ? org.website : `@${org.website}`) : ""
@@ -2444,12 +2449,12 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
 
     if (contactLines.length) {
       setLanguage(doc, false, 6.5, false)
-      doc.setTextColor(71, 85, 105)
+      doc.setTextColor(0, 0, 0)
       writePdfText(
         doc,
         contactLines,
         margin,
-        height - 13.5,
+        footerTopY + 4,
         { align: "left", lineHeightFactor: 1.2 },
         false,
       )
@@ -2461,29 +2466,32 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
 
     // Draw Line 1 (English CR/PO - right aligned, bold dark)
     setLanguage(doc, false, 6.5, true)
-    doc.setTextColor(15, 23, 42)
-    doc.text(enAddressLine1, width - margin, height - 13.5, { align: "right" })
+    doc.setTextColor(0, 0, 0)
+    doc.text(enAddressLine1, width - margin, footerTopY + 4, { align: "right" })
 
     // Draw Line 2 (English Address - right aligned)
     if (enAddressLine2) {
       setLanguage(doc, false, 6.5, false)
-      doc.setTextColor(100, 116, 139)
-      doc.text(enAddressLine2, width - margin, height - 9.5, { align: "right" })
+      doc.setTextColor(0, 0, 0)
+      doc.text(enAddressLine2, width - margin, footerTopY + 8, { align: "right" })
     }
 
-
     // Sub-Footer Divider Line
-    doc.setDrawColor(241, 245, 249)
+    const subFooterDividerY = footerTopY + 12.7
+    doc.setDrawColor(200, 200, 200)
     doc.setLineWidth(0.15)
-    doc.line(margin, height - 4.8, width - margin, height - 4.8)
+    doc.line(margin, subFooterDividerY, width - margin, subFooterDividerY)
 
     // Sub-Footer Left: Company Name
+    const subFooterTextY = subFooterDividerY + 3.2
     setLanguage(doc, false, 6, false)
-    doc.setTextColor(148, 163, 184)
-    doc.text(org.name.toUpperCase(), margin, height - 2.2, { align: "left" })
+    doc.setTextColor(0, 0, 0)
+    doc.text(org.name.toUpperCase(), margin, subFooterTextY, { align: "left" })
 
     // Sub-Footer Right: Page Number
-    doc.text(`Page ${page} / ${pages}`, width - margin, height - 2.2, { align: "right" })
+    setLanguage(doc, false, 6, false)
+    doc.setTextColor(0, 0, 0)
+    doc.text(`Page ${page} / ${pages}`, width - margin, subFooterTextY, { align: "right" })
   }
   if (rtl) setLanguage(doc, true, 8, false)
 }
