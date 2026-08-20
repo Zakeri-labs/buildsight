@@ -923,6 +923,14 @@ function drawFirstPageHeader(
       measureField(recipient.name, 7.5, true, 3.4)
       if (recipient.role) measureField(recipient.role, 6.5, false, 3.2)
       if (recipient.company) measureField(recipient.company, 6.5, false, 3.2)
+      if (recipient.phone) {
+        setLanguage(doc, false, 6.2, false)
+        const lines = textLines(doc, recipient.phone, width - 6)
+        lines.forEach(() => {
+          lastBaselineY = cursorY
+          cursorY += 3.2
+        })
+      }
       if (recipient.email) {
         setLanguage(doc, false, 6.2, false)
         const lines = textLines(doc, recipient.email, width - 6)
@@ -1102,6 +1110,7 @@ function drawFirstPageHeader(
       if (recipient.company && recipient.company.trim() !== recipient.name.trim()) {
         drawField(recipient.company, 6.5, false, 3.2, [71, 85, 105])
       }
+      if (recipient.phone) drawField(recipient.phone, 6.2, false, 3.2, [71, 85, 105], true)
       if (recipient.email) drawField(recipient.email, 6.2, false, 3.2, [180, 138, 32], true)
       currY += 1.2
     })
@@ -4482,7 +4491,7 @@ function stripStaticFooterFromDocumentTemplate(
 function formatCcRecipientForPdf(recipient: ReportCcRecipient) {
   const normalizedName = recipient.name.trim() || "—"
   const seen = new Set([normalizedName.toLocaleLowerCase()])
-  const details = [recipient.role, recipient.company, recipient.type === "external" ? recipient.email : null]
+  const details = [recipient.role, recipient.company, recipient.phone, recipient.type === "external" ? recipient.email : null]
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value))
     .filter((value) => {

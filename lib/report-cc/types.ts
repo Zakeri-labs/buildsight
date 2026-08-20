@@ -23,6 +23,7 @@ export type ReportCcRecipient = {
   company: string | null
   role: string | null
   avatarUrl: string | null
+  phone?: string | null
   createdAt: string
 }
 
