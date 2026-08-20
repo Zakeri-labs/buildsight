@@ -166,19 +166,50 @@ export async function loadReportCcRecipients(
   }
 
   const userIds = Array.from(new Set((rows ?? []).map((row: any) => row.user_id).filter(Boolean))) as string[]
-  const [{ data: profiles, error: profileError }, candidates] = await Promise.all([
+
+  const [{ data: profiles, error: profileError }, candidates, { data: participants }] = await Promise.all([
     userIds.length
-      ? admin.from("profiles").select("id, full_name, email, avatar_url").in("id", userIds)
+      ? admin.from("profiles").select("id, full_name, email, avatar_url, phone").in("id", userIds)
       : Promise.resolve({ data: [] as any[], error: null }),
-    userIds.length ? loadProjectCcCandidates(projectId) : Promise.resolve([] as ProjectCcCandidate[]),
+    loadProjectParticipantsOnly(projectId).catch(() => [] as ProjectCcCandidate[]),
+    admin
+      .from("project_participants")
+      .select("id, key_contact_user_id, key_contact_email, key_contact_phone")
+      .eq("project_id", projectId)
+      .eq("status", "active"),
   ])
   if (profileError) throw profileError
+
   const profileById = new Map<string, any>((profiles ?? []).map((profile: any) => [profile.id as string, profile]))
   const candidateById = new Map<string, ProjectCcCandidate>(candidates.map((candidate) => [candidate.id, candidate]))
+
+  const phoneByUserId = new Map<string, string>()
+  const phoneById = new Map<string, string>()
+  const phoneByEmail = new Map<string, string>()
+
+  for (const p of participants ?? []) {
+    const phone = p.key_contact_phone?.trim()
+    if (phone) {
+      if (p.key_contact_user_id) phoneByUserId.set(p.key_contact_user_id, phone)
+      if (p.id) phoneById.set(p.id, phone)
+      if (p.key_contact_email?.trim()) phoneByEmail.set(p.key_contact_email.trim().toLowerCase(), phone)
+    }
+  }
 
   return (rows ?? []).map((row: any) => {
     const profile = row.user_id ? profileById.get(row.user_id) : null
     const candidate = row.user_id ? candidateById.get(row.user_id) : null
+
+    const resolvedPhone =
+      candidate?.phone?.trim() ||
+      (row.user_id ? phoneByUserId.get(row.user_id) : null) ||
+      (row.user_id ? phoneById.get(row.user_id) : null) ||
+      (profile?.email ? phoneByEmail.get(profile.email.trim().toLowerCase()) : null) ||
+      (row.external_email ? phoneByEmail.get(row.external_email.trim().toLowerCase()) : null) ||
+      profile?.phone?.trim() ||
+      (row as any).external_phone?.trim() ||
+      null
+
     return {
       id: row.id,
       context: row.recipient_context,
@@ -189,6 +220,7 @@ export async function loadReportCcRecipients(
       company: row.recipient_type === "internal" ? candidate?.organizationName ?? null : row.external_company ?? null,
       role: row.recipient_type === "internal" ? candidate?.role ?? null : row.external_role ?? null,
       avatarUrl: row.recipient_type === "internal" ? profile?.avatar_url ?? null : null,
+      phone: resolvedPhone,
       createdAt: row.created_at,
     } satisfies ReportCcRecipient
   })
