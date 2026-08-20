@@ -74,7 +74,7 @@ export async function loadProjectCcCandidates(projectId: string): Promise<Projec
 
   const { data: profiles, error: profileError } = await admin
     .from("profiles")
-    .select("id, full_name, email, avatar_url, phone")
+    .select("id, full_name, email, avatar_url")
     .in("id", userIds)
   if (profileError) throw profileError
 
@@ -92,7 +92,7 @@ export async function loadProjectCcCandidates(projectId: string): Promise<Projec
       const projectMember = projectMemberByUser.get(profile.id)
       const orgMember = orgMemberByUser.get(profile.id)
       const rawRole = participant?.participant_role_label || participant?.project_role || projectMember?.access_role || orgMember?.role
-      const phone = participant?.key_contact_phone?.trim() || profile?.phone?.trim() || null
+      const phone = participant?.key_contact_phone?.trim() || null
       return {
         id: profile.id,
         name: personName(profile),
@@ -169,7 +169,7 @@ export async function loadReportCcRecipients(
   const userIds = Array.from(new Set((rows ?? []).map((row: any) => row.user_id).filter(Boolean))) as string[]
   const [{ data: profiles, error: profileError }, candidates] = await Promise.all([
     userIds.length
-      ? admin.from("profiles").select("id, full_name, email, avatar_url, phone").in("id", userIds)
+      ? admin.from("profiles").select("id, full_name, email, avatar_url").in("id", userIds)
       : Promise.resolve({ data: [] as any[], error: null }),
     userIds.length ? loadProjectCcCandidates(projectId) : Promise.resolve([] as ProjectCcCandidate[]),
   ])
@@ -190,7 +190,7 @@ export async function loadReportCcRecipients(
       company: row.recipient_type === "internal" ? candidate?.organizationName ?? null : row.external_company ?? null,
       role: row.recipient_type === "internal" ? candidate?.role ?? null : row.external_role ?? null,
       avatarUrl: row.recipient_type === "internal" ? profile?.avatar_url ?? null : null,
-      phone: row.recipient_type === "internal" ? candidate?.phone ?? profile?.phone ?? null : null,
+      phone: row.recipient_type === "internal" ? candidate?.phone ?? null : null,
       createdAt: row.created_at,
     } satisfies ReportCcRecipient
   })
