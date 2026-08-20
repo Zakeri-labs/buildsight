@@ -686,19 +686,6 @@ export function InspectionReportForm({
       return
     }
     if (mode === "submit") {
-      const totalRecipients = ccSelection.internalUserIds.length + ccSelection.externalRecipients.length
-      const reportToCount = (ccSelection.reportToUserIds?.length ?? 0) + ccSelection.externalRecipients.filter((r) => (r as any).group === "reportTo" || !(r as any).group).length
-      const ccToCount = (ccSelection.ccToUserIds?.length ?? 0) + ccSelection.externalRecipients.filter((r) => (r as any).group === "ccTo").length
-
-      if (totalRecipients === 0 || reportToCount === 0 || ccToCount === 0) {
-        setError(
-          locale === "ar"
-            ? "يرجى تحديد مستلم التقرير (Report to) ومستلم النسخة (CC to) قبل إرسال التقرير."
-            : "Please select both 'Report to' and 'CC to' recipients before submitting the report for review."
-        )
-        return
-      }
-
       const validationError = configuredResponseError(
         reportDefinition.responseType,
         content,

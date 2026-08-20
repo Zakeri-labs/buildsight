@@ -1105,16 +1105,6 @@ function drawFirstPageHeader(
     )
 
     if (!recList.length) {
-      setLanguage(doc, isRtl, 7.5, false)
-      doc.setTextColor(148, 163, 184)
-      writePdfText(
-        doc,
-        "—",
-        isRtl ? x + w - 3 : x + 3,
-        gridTop + 8,
-        { align: isRtl ? "right" : "left" },
-        isRtl,
-      )
       return
     }
 
