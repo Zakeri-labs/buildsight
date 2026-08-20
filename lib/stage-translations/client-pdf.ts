@@ -233,6 +233,40 @@ export function safePdfFilename(value: string) {
   return normalized || "inspection-report"
 }
 
+export function formatReportPdfFilename(
+  projectName: string | null | undefined,
+  rawDate: string | null | undefined,
+  languageType: "English" | "Bilingual" | "Arabic",
+): string {
+  const cleanName = (projectName || "Project")
+    .trim()
+    .replace(/[^\w\s\u0600-\u06ff-]/g, "")
+    .replace(/[\s_]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "")
+
+  const safeProjectName = cleanName || "Project"
+
+  let dateFormatted = "2026-01-01"
+  try {
+    if (rawDate) {
+      const d = new Date(rawDate)
+      if (!isNaN(d.getTime())) {
+        const year = d.getFullYear()
+        const month = String(d.getMonth() + 1).padStart(2, "0")
+        const day = String(d.getDate()).padStart(2, "0")
+        dateFormatted = `${year}-${month}-${day}`
+      } else {
+        dateFormatted = rawDate.split("T")[0] || dateFormatted
+      }
+    }
+  } catch {
+    if (rawDate) dateFormatted = rawDate.split("T")[0] || dateFormatted
+  }
+
+  return `${safeProjectName}-${dateFormatted}-${languageType}.pdf`
+}
+
 export function downloadPdfBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
@@ -4524,8 +4558,8 @@ export async function exportTranslationPdf({
   ccRecipients?: ReportCcRecipient[]
   appendClosingBlock?: boolean
 }) {
-  const base = safePdfFilename(data.project.code || data.project.name)
-  const report = safePdfFilename(data.response.reportNumber)
+  const projectName = data.project.name
+  const submissionDate = data.response.createdAt || data.response.updatedAt
   const sourcePdf = getSourcePdfAttachment(data)
   const ccMetadata = ccRecipients.map(formatCcRecipientForPdf)
   let sourceDocument: ExtractedSourceDocument | null = null
@@ -4552,7 +4586,7 @@ export async function exportTranslationPdf({
     validateTemplateAssets(englishTemplate, sourceDocument)
     return {
       blob: await buildLanguagePdfBlob(englishTemplate, { appendClosingBlock }),
-      filename: `${base}-${report}-english-structured.pdf`,
+      filename: formatReportPdfFilename(projectName, submissionDate, "English"),
     }
   }
 
@@ -4565,7 +4599,10 @@ export async function exportTranslationPdf({
   validateMirroredTemplates(englishTemplate, arabicTemplate)
   const arabicBlob = await buildLanguagePdfBlob(arabicTemplate, { appendClosingBlock })
   if (kind === "arabic") {
-    return { blob: arabicBlob, filename: `${base}-${report}-arabic-translation.pdf` }
+    return {
+      blob: arabicBlob,
+      filename: formatReportPdfFilename(projectName, submissionDate, "Arabic"),
+    }
   }
 
   const bilingualBlob = await buildNativeBilingualPdfBlob({
@@ -4576,5 +4613,8 @@ export async function exportTranslationPdf({
     sourceDocument,
     appendClosingBlock,
   })
-  return { blob: bilingualBlob, filename: `${base}-${report}-bilingual.pdf` }
+  return {
+    blob: bilingualBlob,
+    filename: formatReportPdfFilename(projectName, submissionDate, "Bilingual"),
+  }
 }
