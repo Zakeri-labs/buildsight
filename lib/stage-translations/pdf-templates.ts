@@ -112,6 +112,7 @@ export type PdfRecipientInfo = {
   name: string
   role?: string | null
   company?: string | null
+  phone?: string | null
   email?: string | null
   type?: "internal" | "external"
 }
@@ -649,6 +650,7 @@ export function buildLanguagePdfTemplate(input: {
     name: r.name,
     role: r.role,
     company: r.company,
+    phone: r.phone,
     email: r.email,
     type: r.type,
   }))
@@ -658,6 +660,7 @@ export function buildLanguagePdfTemplate(input: {
     name: r.name,
     role: r.role,
     company: r.company,
+    phone: r.phone,
     email: r.email,
     type: r.type,
   }))
