@@ -48,7 +48,7 @@ const PAGE = {
   landscapeWidth: 297,
   landscapeHeight: 210,
   margin: 14,
-  footer: 10,
+  footer: 23,
 } as const
 
 type JsPdfDocument = any
