@@ -639,10 +639,10 @@ export function buildLanguagePdfTemplate(input: {
   ccRecipients?: string[]
 }): LanguagePdfTemplate {
   const { data, translation, language, sourceDocument, ccRecipientsList = [] } = input
-  const content = language === "ar"
-    ? translation?.translatedContent
-    : translation?.originalContent ?? data.response.content
-  if (!content) throw new Error("Generate the Arabic translation before exporting the Arabic PDF.")
+  const content = (language === "ar" ? translation?.translatedContent : null)
+    ?? translation?.originalContent
+    ?? data.response.content
+  if (!content) throw new Error("Report content is missing.")
 
   const reportToRecipients: PdfRecipientInfo[] = ccRecipientsList.slice(0, 1).map((r) => ({
     id: r.id,

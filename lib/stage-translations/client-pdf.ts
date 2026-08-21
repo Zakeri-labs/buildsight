@@ -4580,15 +4580,14 @@ export async function exportTranslationPdf({
     }
   }
 
-  if (!translation?.translatedContent) throw new Error("Generate the Arabic translation before exporting PDFs.")
   const rawArabicTemplate = buildLanguagePdfTemplate({ data, translation, language: "ar", sourceDocument, ccRecipientsList: ccRecipients, ccRecipients: ccMetadata })
   const footerCleanArabicTemplate = stripStaticFooterFromDocumentTemplate(rawArabicTemplate, sourceDocument)
   const arabicTemplate = synchronizeMirroredDocumentStructures(englishTemplate, footerCleanArabicTemplate)
-  validateTemplateAssets(arabicTemplate, sourceDocument)
-  validateTemplateAssets(englishTemplate, sourceDocument)
-  validateMirroredTemplates(englishTemplate, arabicTemplate)
-  const arabicBlob = await buildLanguagePdfBlob(arabicTemplate, { appendClosingBlock })
+
   if (kind === "arabic") {
+    if (!translation?.translatedContent) throw new Error("Generate the Arabic translation before exporting the Arabic PDF.")
+    validateTemplateAssets(arabicTemplate, sourceDocument)
+    const arabicBlob = await buildLanguagePdfBlob(arabicTemplate, { appendClosingBlock })
     return {
       blob: arabicBlob,
       filename: formatReportPdfFilename(projectName, submissionDate, "Arabic"),
