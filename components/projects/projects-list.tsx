@@ -376,12 +376,6 @@ export function ProjectsList({
   const stoppedProjects = projectRows.filter((project) => project.status === "stopped").length
   const completedProjects = projectRows.filter((project) => project.status === "completed").length
   const typeOptions = Array.from(new Set(projectRows.map((project) => project.projectType).filter((type) => type !== "—")))
-  const ownerOptions = Array.from(new Set(projectRows.map((project) => project.ownerClient).filter((owner) => owner !== "—")))
-  const totalProjects = projectRows.length
-  const activeProjects = projectRows.filter((project) => project.status === "active").length
-  const stoppedProjects = projectRows.filter((project) => project.status === "stopped").length
-  const completedProjects = projectRows.filter((project) => project.status === "completed").length
-  const typeOptions = Array.from(new Set(projectRows.map((project) => project.projectType).filter((type) => type !== "—")))
   const projectYearOptions = useMemo(() => {
     const yearSet = new Set<string>()
     for (const project of projectRows) {
