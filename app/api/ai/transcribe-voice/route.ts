@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { OPENAI_CONFIG } from "@/lib/openai-config"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -8,7 +9,7 @@ const OPENAI_TRANSCRIPTION_URL = "https://api.openai.com/v1/audio/transcriptions
 
 export async function POST(request: NextRequest) {
   try {
-    const apiKey = process.env.OPENAI_API_KEY?.trim()
+    const apiKey = OPENAI_CONFIG.apiKey
     if (!apiKey) {
       return NextResponse.json({ error: "OPENAI_API_KEY is missing." }, { status: 500 })
     }
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
 
     const openAiFormData = new FormData()
     openAiFormData.append("file", audioFile, audioFile.name || "speech.webm")
-    openAiFormData.append("model", "whisper-1")
+    openAiFormData.append("model", OPENAI_CONFIG.transcriptionModel)
     // Prompt to guide Whisper for construction engineering context across Hindi, Persian, Arabic, English
     openAiFormData.append(
       "prompt",

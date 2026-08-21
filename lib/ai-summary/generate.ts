@@ -7,9 +7,9 @@ import { getSimpleUploadCategory } from "@/lib/documents/simple-upload"
 import { sanitizeReportHtml } from "@/lib/stages/execution"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { richTextToPlainText } from "@/lib/ai-summary/sources"
+import { OPENAI_CONFIG } from "@/lib/openai-config"
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-const OPENAI_MODEL = "gpt-5.6"
 const SIGNED_URL_TTL_SECONDS = 20 * 60
 const MAX_SELECTED_SOURCES = 30
 const MAX_CUSTOM_INSTRUCTIONS = 2_000
@@ -119,7 +119,7 @@ export async function generateAiSummary(rawInput: GenerateAiSummaryInput) {
   if (responseIds.length + documentIds.length === 0) throw new Error("Select at least one inspection report or project document.")
   if (responseIds.length + documentIds.length > MAX_SELECTED_SOURCES) throw new Error(`Select no more than ${MAX_SELECTED_SOURCES} sources at a time.`)
 
-  const apiKey = process.env.OPENAI_API_KEY?.trim()
+  const apiKey = OPENAI_CONFIG.apiKey
   if (!apiKey) throw new Error("AI Summary is not configured. Add OPENAI_API_KEY to the server environment.")
 
   const admin = createAdminClient()
@@ -344,7 +344,7 @@ export async function generateAiSummary(rawInput: GenerateAiSummaryInput) {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: OPENAI_MODEL,
+      model: OPENAI_CONFIG.summaryModel,
       store: false,
       max_output_tokens: 2_500,
       input: [{ role: "user", content }],

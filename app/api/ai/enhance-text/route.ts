@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { assertProjectMember, AuthzError } from "@/lib/auth/guards"
 import { stripHtmlToPlainText } from "@/lib/documents/bilingual-details"
+import { OPENAI_CONFIG } from "@/lib/openai-config"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
 const OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
-const OPENAI_MODEL = process.env.OPENAI_TRANSLATION_MODEL?.trim() || "gpt-4o-mini"
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       await assertProjectMember(projectId).catch(() => undefined)
     }
 
-    const apiKey = process.env.OPENAI_API_KEY?.trim()
+    const apiKey = OPENAI_CONFIG.apiKey
     if (!apiKey) {
       return NextResponse.json({ error: "AI service is not configured. OPENAI_API_KEY is missing." }, { status: 500 })
     }
@@ -91,8 +91,6 @@ export async function POST(request: NextRequest) {
       ].join("\n")
     }
 
-    const resolvedModel = OPENAI_MODEL.startsWith("gpt-5") ? "gpt-4o-mini" : OPENAI_MODEL
-
     const response = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
       method: "POST",
       headers: {
@@ -100,7 +98,7 @@ export async function POST(request: NextRequest) {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: resolvedModel,
+        model: OPENAI_CONFIG.enhanceTextModel,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `INPUT HTML / TEXT:\n${inputContent}` },

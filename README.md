@@ -24,6 +24,35 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Environment Configuration
+
+Configure OpenAI API features using dedicated environment variables:
+
+```bash
+# Shared OpenAI API Key used across all AI features
+OPENAI_API_KEY="sk-..."
+
+# 1) Report & Document Translation Model
+# Controls the AI model used for report translation workflows.
+# Default: gpt-5.6
+OPENAI_REPORT_TRANSLATION_MODEL="gpt-5.6"
+
+# 2) Voice-to-Text / Audio Transcription Model
+# Controls the speech-to-text model used for voice recordings.
+# Default: whisper-1
+OPENAI_TRANSCRIPTION_MODEL="whisper-1"
+
+# 3) Form Text Enhancement Model
+# Controls the AI model used for in-form text enhancement & inline translation.
+# Default: gpt-4o-mini
+OPENAI_ENHANCE_TEXT_MODEL="gpt-4o-mini"
+
+# 4) AI Summary Model
+# Controls the AI model used for multi-document AI summary generation.
+# Default: gpt-5.6
+OPENAI_SUMMARY_MODEL="gpt-5.6"
+```
+
 ## Learn More
 
 To learn more, take a look at the following resources:

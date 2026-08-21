@@ -11,9 +11,9 @@ import type {
 } from "@/lib/stage-translations/types"
 import { sanitizeReportHtml } from "@/lib/stages/execution"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { OPENAI_CONFIG } from "@/lib/openai-config"
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-const OPENAI_MODEL = process.env.OPENAI_TRANSLATION_MODEL?.trim() || "gpt-5.6"
 const SIGNED_URL_TTL_SECONDS = 20 * 60
 const TRANSLATION_BUCKET = "project-stage-translations"
 const STAGE_EVIDENCE_BUCKET = "project-stage-evidence"
@@ -614,7 +614,7 @@ export async function generateStageTranslation(input: {
     }
   }
 
-  const apiKey = process.env.OPENAI_API_KEY?.trim()
+  const apiKey = OPENAI_CONFIG.apiKey
   if (!apiKey) throw new Error("Document Translation is not configured. Add OPENAI_API_KEY to the server environment.")
 
   const original = pageData.response.content
@@ -717,7 +717,7 @@ export async function generateStageTranslation(input: {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: OPENAI_MODEL,
+        model: OPENAI_CONFIG.reportTranslationModel,
         store: false,
         max_output_tokens: 24_000,
         input: [{ role: "user", content }],
