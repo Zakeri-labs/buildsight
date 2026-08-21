@@ -304,8 +304,24 @@ export function AppSidebar({
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                 <Input
+                  type="text"
                   value={projectSearch}
                   onChange={(e) => setProjectSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Escape" && e.key !== "ArrowDown") {
+                      e.stopPropagation()
+                    }
+                  }}
+                  onKeyDownCapture={(e) => {
+                    if (e.key !== "Escape" && e.key !== "ArrowDown") {
+                      e.stopPropagation()
+                    }
+                  }}
+                  onKeyUp={(e) => {
+                    if (e.key !== "Escape" && e.key !== "ArrowDown") {
+                      e.stopPropagation()
+                    }
+                  }}
                   placeholder={t.projects.searchProjects}
                   className="h-9 pl-8 text-xs"
                 />
