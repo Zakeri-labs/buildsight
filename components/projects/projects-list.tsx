@@ -245,18 +245,11 @@ const mockProjects: ProjectRow[] = [
   },
 ]
 
-function extractProjectStartYear(startDateStr: string | null | undefined): string | null {
-  if (!startDateStr || startDateStr.trim() === "—") return null
-  const trimmed = startDateStr.trim()
-  const match = trimmed.match(/\b(20\d\d|19\d\d)\b/)
-  if (match) {
-    return match[1]
-  }
-  const parsed = new Date(trimmed)
-  if (!Number.isNaN(parsed.getTime())) {
-    return String(parsed.getFullYear())
-  }
-  return null
+function extractProjectCodeYear(codeStr: string | null | undefined): string | null {
+  if (!codeStr || codeStr.trim() === "—") return null
+  const trimmed = codeStr.trim()
+  const match = trimmed.match(/(?:Bonyan\/sup\/|Bonyan\/|\/|-)\b(20\d\d|19\d\d)\b/) || trimmed.match(/\b(20\d\d|19\d\d)\b/)
+  return match ? match[1] : null
 }
 
 export function ProjectsList({
@@ -282,8 +275,7 @@ export function ProjectsList({
   const [selectedType, setSelectedType] = useState("all")
   const [selectedSupervisor, setSelectedSupervisor] = useState("all")
   const [selectedAreaDistrict, setSelectedAreaDistrict] = useState("all")
-  const [selectedStartYear, setSelectedStartYear] = useState("all")
-  const [selectedOwner, setSelectedOwner] = useState("all")
+  const [selectedProjectYear, setSelectedProjectYear] = useState("all")
   const [sortBy, setSortBy] = useState("default")
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -319,10 +311,9 @@ export function ProjectsList({
       }
       if (selectedStatus !== "all" && p.status !== selectedStatus) return false
       if (selectedType !== "all" && p.projectType !== selectedType) return false
-      if (selectedOwner !== "all" && p.ownerClient !== selectedOwner) return false
       return true
     })
-  }, [projectRows, searchQuery, selectedStatus, selectedType, selectedOwner])
+  }, [projectRows, searchQuery, selectedStatus, selectedType])
 
   const desktopFilteredProjects = useMemo(() => {
     return filteredProjects.filter((project) => {
@@ -341,13 +332,13 @@ export function ProjectsList({
         selectedAreaDistrict !== "__unspecified__" &&
         areaDistrict.toLocaleLowerCase() !== selectedAreaDistrict.toLocaleLowerCase()
       ) return false
-      if (selectedStartYear !== "all") {
-        const year = extractProjectStartYear(project.startDate)
-        if (year !== selectedStartYear) return false
+      if (selectedProjectYear !== "all") {
+        const year = extractProjectCodeYear(project.code)
+        if (year !== selectedProjectYear) return false
       }
       return true
     })
-  }, [filteredProjects, selectedSupervisor, selectedAreaDistrict, selectedStartYear])
+  }, [filteredProjects, selectedSupervisor, selectedAreaDistrict, selectedProjectYear])
 
   const desktopProjects = useMemo(() => {
     const rows = [...desktopFilteredProjects]
@@ -386,10 +377,15 @@ export function ProjectsList({
   const completedProjects = projectRows.filter((project) => project.status === "completed").length
   const typeOptions = Array.from(new Set(projectRows.map((project) => project.projectType).filter((type) => type !== "—")))
   const ownerOptions = Array.from(new Set(projectRows.map((project) => project.ownerClient).filter((owner) => owner !== "—")))
-  const startYearOptions = useMemo(() => {
+  const totalProjects = projectRows.length
+  const activeProjects = projectRows.filter((project) => project.status === "active").length
+  const stoppedProjects = projectRows.filter((project) => project.status === "stopped").length
+  const completedProjects = projectRows.filter((project) => project.status === "completed").length
+  const typeOptions = Array.from(new Set(projectRows.map((project) => project.projectType).filter((type) => type !== "—")))
+  const projectYearOptions = useMemo(() => {
     const yearSet = new Set<string>()
     for (const project of projectRows) {
-      const year = extractProjectStartYear(project.startDate)
+      const year = extractProjectCodeYear(project.code)
       if (year) yearSet.add(year)
     }
     return Array.from(yearSet).sort((a, b) => Number(b) - Number(a))
@@ -412,7 +408,7 @@ export function ProjectsList({
   ).sort((left, right) => left.localeCompare(right))
   const hasUnassignedSupervisor = projectRows.some((project) => !project.assignedSupervisorId)
   const hasUnspecifiedArea = projectRows.some((project) => !project.areaDistrict?.trim())
-  const activeFilterCount = [selectedStatus, selectedType, selectedSupervisor, selectedAreaDistrict, selectedStartYear, selectedOwner].filter((value) => value !== "all").length
+  const activeFilterCount = [selectedStatus, selectedType, selectedSupervisor, selectedAreaDistrict, selectedProjectYear].filter((value) => value !== "all").length
   const desktopActiveFilterCount = activeFilterCount
   const hasSearchOrFilters = Boolean(searchQuery.trim()) || activeFilterCount > 0 || sortBy !== "default"
   const desktopPageCount = Math.max(1, Math.ceil(desktopProjects.length / pageSize))
@@ -430,8 +426,7 @@ export function ProjectsList({
   const [draftType, setDraftType] = useState(selectedType)
   const [draftSupervisor, setDraftSupervisor] = useState(selectedSupervisor)
   const [draftAreaDistrict, setDraftAreaDistrict] = useState(selectedAreaDistrict)
-  const [draftStartYear, setDraftStartYear] = useState(selectedStartYear)
-  const [draftOwner, setDraftOwner] = useState(selectedOwner)
+  const [draftProjectYear, setDraftProjectYear] = useState(selectedProjectYear)
   const [draftSortBy, setDraftSortBy] = useState(sortBy)
 
   useEffect(() => {
@@ -440,19 +435,17 @@ export function ProjectsList({
       setDraftType(selectedType)
       setDraftSupervisor(selectedSupervisor)
       setDraftAreaDistrict(selectedAreaDistrict)
-      setDraftStartYear(selectedStartYear)
-      setDraftOwner(selectedOwner)
+      setDraftProjectYear(selectedProjectYear)
       setDraftSortBy(sortBy)
     }
-  }, [filtersOpen, selectedStatus, selectedType, selectedSupervisor, selectedAreaDistrict, selectedStartYear, selectedOwner, sortBy])
+  }, [filtersOpen, selectedStatus, selectedType, selectedSupervisor, selectedAreaDistrict, selectedProjectYear, sortBy])
 
   function handleMobileClear() {
     setDraftStatus("all")
     setDraftType("all")
     setDraftSupervisor("all")
     setDraftAreaDistrict("all")
-    setDraftStartYear("all")
-    setDraftOwner("all")
+    setDraftProjectYear("all")
     setDraftSortBy("default")
     clearAllProjectListFilters()
   }
@@ -462,8 +455,7 @@ export function ProjectsList({
     setSelectedType(draftType)
     setSelectedSupervisor(draftSupervisor)
     setSelectedAreaDistrict(draftAreaDistrict)
-    setSelectedStartYear(draftStartYear)
-    setSelectedOwner(draftOwner)
+    setSelectedProjectYear(draftProjectYear)
     setSortBy(draftSortBy)
     setCurrentPage(1)
     setFiltersOpen(false)
@@ -483,10 +475,9 @@ export function ProjectsList({
     [locale],
   )
 
-
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchQuery, selectedStatus, selectedType, selectedSupervisor, selectedAreaDistrict, selectedStartYear, selectedOwner, sortBy, pageSize])
+  }, [searchQuery, selectedStatus, selectedType, selectedSupervisor, selectedAreaDistrict, selectedProjectYear, sortBy, pageSize])
 
   function clearAllProjectListFilters() {
     setSearchQuery("")
@@ -494,8 +485,7 @@ export function ProjectsList({
     setSelectedType("all")
     setSelectedSupervisor("all")
     setSelectedAreaDistrict("all")
-    setSelectedStartYear("all")
-    setSelectedOwner("all")
+    setSelectedProjectYear("all")
     setSortBy("default")
     setCurrentPage(1)
   }
@@ -720,27 +710,15 @@ export function ProjectsList({
                     ]}
                   />
                 </MobileFilterField>
-                <MobileFilterField label={locale === "ar" ? "سنة البدء" : "Start Year"}>
+                <MobileFilterField label={locale === "ar" ? "سنة المشروع" : "Project Year"}>
                   <DropdownFilter
                     label={locale === "ar" ? "جميع السنوات" : "All Years"}
-                    value={draftStartYear}
-                    onChange={setDraftStartYear}
+                    value={draftProjectYear}
+                    onChange={setDraftProjectYear}
                     className="w-full"
                     options={[
                       { label: locale === "ar" ? "جميع السنوات" : "All Years", value: "all" },
-                      ...startYearOptions.map((year) => ({ label: year, value: year })),
-                    ]}
-                  />
-                </MobileFilterField>
-                <MobileFilterField label={locale === "ar" ? "المالك / العميل" : "Owner / Client"}>
-                  <DropdownFilter
-                    label={locale === "ar" ? "كل العملاء" : "All Clients"}
-                    value={draftOwner}
-                    onChange={setDraftOwner}
-                    className="w-full"
-                    options={[
-                      { label: locale === "ar" ? "كل العملاء" : "All Clients", value: "all" },
-                      ...ownerOptions.map((owner) => ({ label: owner, value: owner })),
+                      ...projectYearOptions.map((year) => ({ label: year, value: year })),
                     ]}
                   />
                 </MobileFilterField>
@@ -912,25 +890,14 @@ export function ProjectsList({
           ]}
         />
 
-        {/* Dropdown 5: Start Year */}
+        {/* Dropdown 5: Project Year */}
         <DropdownFilter
-          label="Start Year"
-          value={selectedStartYear}
-          onChange={setSelectedStartYear}
+          label={locale === "ar" ? "سنة المشروع" : "Project Year"}
+          value={selectedProjectYear}
+          onChange={setSelectedProjectYear}
           options={[
             { label: locale === "ar" ? "جميع السنوات" : "All Years", value: "all" },
-            ...startYearOptions.map((year) => ({ label: year, value: year })),
-          ]}
-        />
-
-        {/* Dropdown 6: Owner / Client */}
-        <DropdownFilter
-          label="Owner / Client"
-          value={selectedOwner}
-          onChange={setSelectedOwner}
-          options={[
-            { label: "All Clients", value: "all" },
-            ...ownerOptions.map((owner) => ({ label: owner, value: owner })),
+            ...projectYearOptions.map((year) => ({ label: year, value: year })),
           ]}
         />
 
