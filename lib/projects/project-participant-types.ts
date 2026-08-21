@@ -91,6 +91,7 @@ export type ProjectParticipantView = {
     avatar?: string
     profileAvatar?: string
     participantAvatar?: string
+    ownerIdCardAvatar?: string
     detail?: string
   }
   usersWithAccess: number

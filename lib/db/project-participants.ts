@@ -215,21 +215,37 @@ export async function getProjectParticipantUserOptions(projectId: string): Promi
   return options.sort((a, b) => a.name.localeCompare(b.name) || a.organizationName.localeCompare(b.organizationName))
 }
 
+import { isImageIdCard, ownerIdCardDisplayUrl } from "@/lib/projects/owner-id-card"
+
 export async function getProjectParticipants(projectId: string): Promise<ProjectParticipantView[]> {
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from("project_participants")
-    .select(
-      "id, organization_id, organization_name, participant_type, project_role, participant_role_label, contractor_role, contractor_role_other, source_key, access_membership_id, key_contact_user_id, key_contact_name, key_contact_email, key_contact_phone, avatar_url, status",
-    )
-    .eq("project_id", projectId)
-    .eq("status", "active")
-    .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: true })
+  const [dataResult, ownersResult] = await Promise.all([
+    admin
+      .from("project_participants")
+      .select(
+        "id, organization_id, organization_name, participant_type, project_role, participant_role_label, contractor_role, contractor_role_other, source_key, access_membership_id, key_contact_user_id, key_contact_name, key_contact_email, key_contact_phone, avatar_url, status",
+      )
+      .eq("project_id", projectId)
+      .eq("status", "active")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true }),
+    admin
+      .from("project_owners")
+      .select("id, viewer_user_id, id_card_storage_path, id_card_mime_type, id_card_original_filename")
+      .eq("project_id", projectId),
+  ])
 
-  if (error) throw error
-  const rows = (data ?? []) as ParticipantRow[]
+  if (dataResult.error) throw dataResult.error
+  if (ownersResult.error) throw ownersResult.error
+
+  const rows = (dataResult.data ?? []) as ParticipantRow[]
   if (rows.length === 0) return []
+
+  const ownerRows = ownersResult.data ?? []
+  const ownerById = new Map(ownerRows.map((o) => [o.id, o] as const))
+  const ownerByViewerUserId = new Map(
+    ownerRows.filter((o) => Boolean(o.viewer_user_id)).map((o) => [o.viewer_user_id!, o] as const),
+  )
 
   const organizationIds = Array.from(new Set(rows.map((row) => row.organization_id).filter((id): id is string => Boolean(id))))
   const resolvableRows = rows.filter((row) => !row.source_key.startsWith("external-contractor:"))
@@ -289,6 +305,15 @@ export async function getProjectParticipants(projectId: string): Promise<Project
       .filter((value): value is string => Boolean(value && value !== contactName))
       .join(" · ")
     const role = projectRole(row.project_role, row.participant_role_label)
+    const isClient = row.participant_type === "client" || role === "Client" || role === "Client / Owner" || row.source_key.startsWith("owner:")
+    let ownerIdCardAvatar: string | undefined = undefined
+    if (isClient) {
+      const ownerId = row.source_key.startsWith("owner:") ? row.source_key.slice(6) : null
+      const owner = (ownerId ? ownerById.get(ownerId) : null) ?? (row.key_contact_user_id ? ownerByViewerUserId.get(row.key_contact_user_id) : null)
+      if (owner?.id_card_storage_path && isImageIdCard(owner.id_card_mime_type, owner.id_card_original_filename)) {
+        ownerIdCardAvatar = ownerIdCardDisplayUrl(owner.id_card_storage_path)
+      }
+    }
 
     return {
       id: row.id,
@@ -309,9 +334,10 @@ export async function getProjectParticipants(projectId: string): Promise<Project
         email: profile?.email?.trim() || row.key_contact_email?.trim() || undefined,
         phone: row.key_contact_phone?.trim() || undefined,
         initials: initials(contactName),
-        avatar: profile ? profileAvatar : participantAvatar ?? undefined,
+        avatar: isClient && ownerIdCardAvatar ? ownerIdCardAvatar : (profile ? profileAvatar : participantAvatar ?? undefined),
         profileAvatar,
         participantAvatar: participantAvatar ?? undefined,
+        ownerIdCardAvatar,
         detail: contactDetail || undefined,
       },
       usersWithAccess: row.organization_id ? accessByOrganization.get(row.organization_id)?.size ?? 0 : 0,

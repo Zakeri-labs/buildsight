@@ -716,6 +716,10 @@ export function ProjectParticipants({
   })), [participants])
 
   function participantAvatar(participant: ProjectParticipant) {
+    const isClient = participant.participantType === "client" || participant.projectRole === "Client" || participant.projectRole === "Client / Owner" || participant.sourceKey.startsWith("owner:")
+    if (isClient && participant.keyContact.ownerIdCardAvatar) {
+      return participant.keyContact.ownerIdCardAvatar
+    }
     const userId = participant.keyContact.userId
     if (userId) {
       if (Object.prototype.hasOwnProperty.call(profileAvatarOverrides, userId)) return profileAvatarOverrides[userId]

@@ -39,3 +39,19 @@ export function validateOwnerIdCardFile(file: {
 
   return null
 }
+
+export function isImageIdCard(mimeType: string | null | undefined, filename: string | null | undefined): boolean {
+  const mime = mimeType?.trim().toLowerCase()
+  if (mime === "image/jpeg" || mime === "image/png" || mime === "image/webp") return true
+  if (mime === "application/pdf") return false
+  const ext = filename?.trim().split(".").pop()?.toLowerCase()
+  if (ext === "jpg" || ext === "jpeg" || ext === "png" || ext === "webp") return true
+  return false
+}
+
+export function ownerIdCardDisplayUrl(storagePath: string | null | undefined): string | undefined {
+  const trimmed = storagePath?.trim()
+  if (!trimmed) return undefined
+  if (trimmed.startsWith("/api/document-images?")) return trimmed
+  return `/api/document-images?path=${encodeURIComponent(trimmed)}`
+}
