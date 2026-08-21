@@ -366,6 +366,10 @@ export async function updateProject(input: {
     contactPhone?: string | null
     viewerUserId?: string | null
     viewerInvitationId?: string | null
+    idCardStoragePath?: string | null
+    idCardOriginalFilename?: string | null
+    idCardMimeType?: string | null
+    idCardSizeBytes?: number | null
   }>
   contractor?: {
     organizationId?: string | null
@@ -560,6 +564,14 @@ export async function updateProject(input: {
         contact_phone: owner.contactPhone?.trim() || null,
         viewer_user_id: owner.viewerUserId?.trim() || null,
         viewer_invitation_id: owner.viewerInvitationId?.trim() || null,
+        ...(owner.idCardStoragePath
+          ? {
+              id_card_storage_path: owner.idCardStoragePath,
+              id_card_original_filename: owner.idCardOriginalFilename || null,
+              id_card_mime_type: owner.idCardMimeType || null,
+              id_card_size_bytes: owner.idCardSizeBytes ?? null,
+            }
+          : {}),
       }))
       await admin.from("project_owners").insert(ownerRows)
     }

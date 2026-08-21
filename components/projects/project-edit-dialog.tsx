@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  FileCheck2,
   FileText,
   FileUp,
   ImageIcon,
@@ -65,7 +66,7 @@ import {
 } from "@/lib/actions/initial-documents"
 import { useI18n } from "@/lib/i18n"
 import { type ProjectLocationValue } from "@/lib/locations/types"
-import { DOCUMENT_ASSET_BUCKET, sanitizeStorageFileName } from "@/lib/documents/simple-upload"
+import { DOCUMENT_ASSET_BUCKET, formatFileSize, sanitizeStorageFileName } from "@/lib/documents/simple-upload"
 import {
   sanitizeInitialDocumentFileName,
   validateInitialDocumentFile,
@@ -85,6 +86,8 @@ import {
 } from "@/lib/projects/project-options"
 import {
   OWNER_ID_CARD_ACCEPT,
+  isImageIdCard,
+  ownerIdCardDisplayUrl,
   validateOwnerIdCardFile,
 } from "@/lib/projects/owner-id-card"
 import {
@@ -105,12 +108,21 @@ import { cn } from "@/lib/utils"
 export { normalizeProjectStatus, PROJECT_STATUS_OPTIONS }
 export type { ProjectStatusValue }
 
+type ExistingOwnerIdCard = {
+  storagePath: string
+  originalFilename: string
+  mimeType: string
+  sizeBytes?: number
+}
+
 type OwnerDetails = {
+  id?: string
   name: string
   contactName: string
   contactEmail: string
   contactPhone: string
   idCardFile: File | null
+  existingIdCard?: ExistingOwnerIdCard | null
 }
 
 type ProjectImageDraft = { id: string; file: File }
@@ -135,7 +147,7 @@ type UserOption = {
 const MAX_OWNERS = 10
 
 function emptyOwner(): OwnerDetails {
-  return { name: "", contactName: "", contactEmail: "", contactPhone: "", idCardFile: null }
+  return { name: "", contactName: "", contactEmail: "", contactPhone: "", idCardFile: null, existingIdCard: null }
 }
 
 function isOptionalWholeNumber(value: string) {
@@ -310,7 +322,7 @@ export function ProjectEditDialog({
             .maybeSingle(),
           supabase
             .from("project_owners")
-            .select("id, owner_order, name, contact_name, contact_email, contact_phone, viewer_user_id, viewer_invitation_id")
+            .select("id, owner_order, name, contact_name, contact_email, contact_phone, viewer_user_id, viewer_invitation_id, id_card_storage_path, id_card_original_filename, id_card_mime_type, id_card_size_bytes")
             .eq("project_id", project.id)
             .order("owner_order", { ascending: true }),
           getInitialDocumentsForProjectAction(project.id),
@@ -382,11 +394,20 @@ export function ProjectEditDialog({
         if (ownerRows && ownerRows.length > 0 && !hasInitializedRef.current) {
           hasInitializedRef.current = true
           const loadedOwners: OwnerDetails[] = ownerRows.map((row) => ({
+            id: row.id,
             name: row.name || "",
             contactName: row.contact_name || "",
             contactEmail: row.contact_email || "",
             contactPhone: row.contact_phone || "",
             idCardFile: null,
+            existingIdCard: row.id_card_storage_path
+              ? {
+                  storagePath: row.id_card_storage_path,
+                  originalFilename: row.id_card_original_filename || "ID Card",
+                  mimeType: row.id_card_mime_type || "application/octet-stream",
+                  sizeBytes: row.id_card_size_bytes ?? undefined,
+                }
+              : null,
           }))
           setOwners(loadedOwners)
 
@@ -879,6 +900,10 @@ export function ProjectEditDialog({
             contactPhone: o.contactPhone.trim() || null,
             viewerUserId: viewer?.source === "registered" ? viewer.id : null,
             viewerInvitationId: viewer?.source === "pending" ? viewer.id : null,
+            idCardStoragePath: o.idCardFile ? null : (o.existingIdCard?.storagePath ?? null),
+            idCardOriginalFilename: o.idCardFile ? null : (o.existingIdCard?.originalFilename ?? null),
+            idCardMimeType: o.idCardFile ? null : (o.existingIdCard?.mimeType ?? null),
+            idCardSizeBytes: o.idCardFile ? null : (o.existingIdCard?.sizeBytes ?? null),
           }
         }),
       })
@@ -887,6 +912,43 @@ export function ProjectEditDialog({
         setError(result.error)
         setPending(false)
         return
+      }
+
+      const newIdCardOwners = owners.filter((o) => Boolean(o.idCardFile))
+      if (newIdCardOwners.length > 0) {
+        setSubmissionMessage(copy.uploading)
+        const supabase = createClient()
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+          throw new Error("Your session has expired. Please log in again.")
+        }
+        const { data: updatedOwnerRows } = await supabase
+          .from("project_owners")
+          .select("id, owner_order")
+          .eq("project_id", project.id)
+          .order("owner_order", { ascending: true })
+
+        const idCardRecords: Array<{ ownerId: string; storagePath: string; originalFilename: string; mimeType: string; sizeBytes: number }> = []
+        for (const [idx, o] of owners.entries()) {
+          if (!o.idCardFile) continue
+          const ownerId = updatedOwnerRows?.[idx]?.id
+          if (!ownerId) continue
+          const storagePath = `${project.id}/${session.user.id}/owner-id-cards/${ownerId}/${crypto.randomUUID()}-${sanitizeStorageFileName(o.idCardFile.name)}`
+          await uploadDocumentAsset(o.idCardFile, storagePath, session.access_token)
+          idCardRecords.push({
+            ownerId,
+            storagePath,
+            originalFilename: o.idCardFile.name,
+            mimeType: o.idCardFile.type || "application/octet-stream",
+            sizeBytes: o.idCardFile.size,
+          })
+        }
+        if (idCardRecords.length > 0) {
+          const attachRes = await attachProjectOwnerIdCards({ projectId: project.id, files: idCardRecords })
+          if (!attachRes.ok) {
+            console.error("[EditProject] Failed to attach owner ID cards:", attachRes.error)
+          }
+        }
       }
 
       if (projectImages.length > 0) {
@@ -1567,7 +1629,9 @@ export function ProjectEditDialog({
                         <OwnerIdCardField
                           id={`edit-owner-id-card-${index}`}
                           file={owner.idCardFile}
+                          existingIdCard={owner.existingIdCard}
                           onChange={(file) => updateOwner(index, "idCardFile", file)}
+                          onRemoveExisting={() => updateOwner(index, "existingIdCard", null)}
                           disabled={pending}
                           label={`${copy.idCard} (${copy.optional})`}
                           help={copy.idCardHelp}
@@ -2005,7 +2069,9 @@ function ProjectGalleryField({
 function OwnerIdCardField({
   id,
   file,
+  existingIdCard,
   onChange,
+  onRemoveExisting,
   disabled,
   label,
   help,
@@ -2017,7 +2083,9 @@ function OwnerIdCardField({
 }: {
   id: string
   file: File | null
+  existingIdCard?: ExistingOwnerIdCard | null
   onChange: (file: File | null) => void
+  onRemoveExisting?: () => void
   disabled?: boolean
   label: string
   help: string
@@ -2029,18 +2097,41 @@ function OwnerIdCardField({
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const captureInputRef = useRef<HTMLInputElement>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [localError, setLocalError] = useState<string | null>(null)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
 
-  function handleFileChange(selected: File | null) {
+  useEffect(() => {
+    if (!file || !file.type.startsWith("image/")) {
+      setPreviewUrl(null)
+      return
+    }
+    const objectUrl = URL.createObjectURL(file)
+    setPreviewUrl(objectUrl)
+    return () => URL.revokeObjectURL(objectUrl)
+  }, [file])
+
+  function selectFile(selected: File | null) {
     if (!selected) return
     const validationError = validateOwnerIdCardFile(selected)
     if (validationError) {
       setLocalError(validationError)
+      if (fileInputRef.current) fileInputRef.current.value = ""
+      if (captureInputRef.current) captureInputRef.current.value = ""
       return
     }
     setLocalError(null)
     onChange(selected)
+    if (fileInputRef.current) fileInputRef.current.value = ""
+    if (captureInputRef.current) captureInputRef.current.value = ""
+  }
+
+  function handleRemove() {
+    setLocalError(null)
+    onChange(null)
+    if (onRemoveExisting) onRemoveExisting()
+    if (fileInputRef.current) fileInputRef.current.value = ""
+    if (captureInputRef.current) captureInputRef.current.value = ""
   }
 
   function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
@@ -2073,9 +2164,20 @@ function OwnerIdCardField({
     if (disabled) return
     const droppedFile = e.dataTransfer.files?.[0]
     if (droppedFile) {
-      handleFileChange(droppedFile)
+      selectFile(droppedFile)
     }
   }
+
+  const hasItem = Boolean(file || existingIdCard)
+  const isExistingImage = Boolean(existingIdCard && isImageIdCard(existingIdCard.mimeType, existingIdCard.originalFilename))
+  const existingImageUrl = isExistingImage && existingIdCard ? ownerIdCardDisplayUrl(existingIdCard.storagePath) : null
+  const displayImage = previewUrl || existingImageUrl
+  const fileName = file ? file.name : existingIdCard ? existingIdCard.originalFilename : ""
+  const fileSizeText = file
+    ? formatFileSize(file.size)
+    : existingIdCard?.sizeBytes
+    ? formatFileSize(existingIdCard.sizeBytes)
+    : null
 
   return (
     <div className="space-y-2">
@@ -2086,7 +2188,7 @@ function OwnerIdCardField({
         type="file"
         accept={OWNER_ID_CARD_ACCEPT}
         className="hidden"
-        onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
+        onChange={(e) => selectFile(e.target.files?.[0] ?? null)}
         disabled={disabled}
       />
       <input
@@ -2095,7 +2197,7 @@ function OwnerIdCardField({
         accept="image/*"
         capture="environment"
         className="hidden"
-        onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
+        onChange={(e) => selectFile(e.target.files?.[0] ?? null)}
         disabled={disabled}
       />
 
@@ -2113,24 +2215,33 @@ function OwnerIdCardField({
         )}
       >
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            {file ? <FileCheck2 className="size-4" /> : <ImageIcon className="size-4 text-muted-foreground" />}
+          <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/10 text-primary">
+            {displayImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={displayImage} alt="ID Card preview" className="size-full object-cover" />
+            ) : hasItem ? (
+              <FileCheck2 className="size-4 text-primary" />
+            ) : (
+              <ImageIcon className="size-4 text-muted-foreground" />
+            )}
           </div>
           <div className="min-w-0">
             <p className={cn("truncate text-xs font-medium", isDraggingOver && "font-semibold text-primary")}>
-              {isDraggingOver ? "Drop ID card here" : file ? file.name : emptyLabel}
+              {isDraggingOver ? "Drop ID card here" : hasItem ? fileName : emptyLabel}
             </p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">{help}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {fileSizeText ? `${fileSizeText} · ` : ""}{help}
+            </p>
           </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          {file ? (
+          {hasItem ? (
             <>
               <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => fileInputRef.current?.click()} disabled={disabled}>
                 {replaceLabel}
               </Button>
-              <Button type="button" variant="ghost" size="sm" className="h-8 text-xs text-destructive" onClick={() => onChange(null)} disabled={disabled}>
+              <Button type="button" variant="ghost" size="sm" className="h-8 text-xs text-destructive" onClick={handleRemove} disabled={disabled}>
                 {removeLabel}
               </Button>
             </>
