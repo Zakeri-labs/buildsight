@@ -2030,6 +2030,7 @@ function OwnerIdCardField({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const captureInputRef = useRef<HTMLInputElement>(null)
   const [localError, setLocalError] = useState<string | null>(null)
+  const [isDraggingOver, setIsDraggingOver] = useState(false)
 
   function handleFileChange(selected: File | null) {
     if (!selected) return
@@ -2040,6 +2041,40 @@ function OwnerIdCardField({
     }
     setLocalError(null)
     onChange(selected)
+  }
+
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!disabled && !isDraggingOver) {
+      setIsDraggingOver(true)
+    }
+  }
+
+  function handleDragEnter(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!disabled && !isDraggingOver) {
+      setIsDraggingOver(true)
+    }
+  }
+
+  function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return
+    setIsDraggingOver(false)
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDraggingOver(false)
+    if (disabled) return
+    const droppedFile = e.dataTransfer.files?.[0]
+    if (droppedFile) {
+      handleFileChange(droppedFile)
+    }
   }
 
   return (
@@ -2064,13 +2099,27 @@ function OwnerIdCardField({
         disabled={disabled}
       />
 
-      <div className="flex flex-col gap-2.5 rounded-xl border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={cn(
+          "flex flex-col gap-2.5 rounded-xl border bg-background p-3 transition-colors sm:flex-row sm:items-center sm:justify-between",
+          isDraggingOver
+            ? "border-primary bg-primary/5 ring-2 ring-primary/20 dark:border-primary dark:bg-primary/10"
+            : "hover:border-primary/50 hover:bg-muted/20",
+          disabled && "pointer-events-none opacity-60"
+        )}
+      >
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             {file ? <FileCheck2 className="size-4" /> : <ImageIcon className="size-4 text-muted-foreground" />}
           </div>
           <div className="min-w-0">
-            <p className="truncate text-xs font-medium">{file ? file.name : emptyLabel}</p>
+            <p className={cn("truncate text-xs font-medium", isDraggingOver && "font-semibold text-primary")}>
+              {isDraggingOver ? "Drop ID card here" : file ? file.name : emptyLabel}
+            </p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">{help}</p>
           </div>
         </div>

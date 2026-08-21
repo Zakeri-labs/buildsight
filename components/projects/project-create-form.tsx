@@ -346,7 +346,7 @@ export function ProjectCreateForm({
         captureIdCard: "التقاط صورة",
         replaceIdCard: "استبدال الملف",
         removeIdCard: "إزالة الملف",
-        noIdCard: "لم يتم اختيار بطاقة هوية",
+        noIdCard: "اسحب وأسقط بطاقة الهوية هنا، أو اختر ملفاً",
         assignContractor: "تعيين مقاول مسجل",
         noContractor: "بدون تعيين جهة مسجلة",
         activeOrganizations: "الجهات المعتمدة",
@@ -451,7 +451,7 @@ export function ProjectCreateForm({
         captureIdCard: "Capture Photo",
         replaceIdCard: "Replace File",
         removeIdCard: "Remove File",
-        noIdCard: "No ID card selected",
+        noIdCard: "Drag & drop ID card here, or choose a file",
         assignContractor: "Assign Registered Contractor",
         noContractor: "No registered organization assigned",
         activeOrganizations: "Active Organizations",
@@ -1884,10 +1884,13 @@ function OwnerIdCardField({
   removeLabel: string
   emptyLabel: string
 }) {
+  const { locale } = useI18n()
+  const isArabic = locale === "ar"
   const inputRef = useRef<HTMLInputElement>(null)
   const captureInputRef = useRef<HTMLInputElement>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [localError, setLocalError] = useState<string | null>(null)
+  const [isDraggingOver, setIsDraggingOver] = useState(false)
 
   useEffect(() => {
     if (!file || !file.type.startsWith("image/")) {
@@ -1921,6 +1924,48 @@ function OwnerIdCardField({
     if (captureInputRef.current) captureInputRef.current.value = ""
   }
 
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!disabled && !isDraggingOver) {
+      setIsDraggingOver(true)
+    }
+  }
+
+  function handleDragEnter(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!disabled && !isDraggingOver) {
+      setIsDraggingOver(true)
+    }
+  }
+
+  function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return
+    setIsDraggingOver(false)
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDraggingOver(false)
+    if (disabled) return
+    const droppedFile = e.dataTransfer.files?.[0]
+    if (droppedFile) {
+      selectFile(droppedFile)
+    }
+  }
+
+  const dropZoneText = isDraggingOver
+    ? isArabic
+      ? "أسقط بطاقة الهوية هنا"
+      : "Drop ID card here"
+    : file
+    ? file.name
+    : emptyLabel
+
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
@@ -1943,7 +1988,19 @@ function OwnerIdCardField({
         aria-label={captureLabel}
         onChange={(event) => selectFile(event.target.files?.[0] ?? null)}
       />
-      <div className="rounded-xl border border-dashed bg-background p-3">
+      <div
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={cn(
+          "rounded-xl border border-dashed p-3 transition-colors",
+          isDraggingOver
+            ? "border-primary bg-primary/5 ring-2 ring-primary/20 dark:border-primary dark:bg-primary/10"
+            : "bg-background hover:border-primary/50 hover:bg-muted/20",
+          disabled && "pointer-events-none opacity-60"
+        )}
+      >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30">
             {previewUrl ? (
@@ -1957,8 +2014,8 @@ function OwnerIdCardField({
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className={cn("truncate text-sm font-medium", !file && "text-muted-foreground")}>
-              {file?.name || emptyLabel}
+            <p className={cn("truncate text-sm font-medium", !file && "text-muted-foreground", isDraggingOver && "font-semibold text-primary")}>
+              {dropZoneText}
             </p>
             {file ? (
               <p className="mt-1 text-xs text-muted-foreground">
