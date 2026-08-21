@@ -3,6 +3,7 @@
 export function buildShareMessage(options: {
   projectName: string
   reportTitle?: string
+  reportSubject?: string
   visitNumber?: number | string
   supervisorName?: string
   projectId: string
@@ -19,25 +20,15 @@ export function buildShareMessage(options: {
     ? `${origin}/r/${microCode}`
     : `${origin}/api/stage-translations/pdf?projectId=${options.projectId}&kind=bilingual&share=1`
 
-  const visitFormatted = options.visitNumber ? String(options.visitNumber).padStart(3, "0") : ""
-  let cleanTitle = (options.reportTitle || "Inspection Report")
-    .replace(/^\d+[\.\s\-]+/, "")
-    .trim()
-
-  const visitRegex = /^(?:Visit|زيارة)\s*[\d٠-٩]+\s*[-–—:]\s*/i
-  if (visitRegex.test(cleanTitle)) {
-    cleanTitle = cleanTitle.replace(visitRegex, "").trim()
-  }
-
-  const displayTitle = visitFormatted ? `Visit ${visitFormatted} - ${cleanTitle}` : cleanTitle
+  const subjectText = (options.reportSubject || options.reportTitle || "Inspection Report").trim()
 
   const messageLines = [
     "🏗️ *Bonyan Construction Report*",
     `*Project:* ${options.projectName}`,
-    `*Report Title:* ${displayTitle}`,
+    `*Report Subject:* ${subjectText}`,
     ...(options.supervisorName ? [`*Supervisor:* ${options.supervisorName}`] : []),
     "",
-    "📥 *Download Bilingual PDF:*",
+    "📄 *Download Bilingual PDF:*",
     shortUrl,
   ]
 
@@ -58,6 +49,7 @@ export function buildShareMessage(options: {
 export function buildWhatsAppShareUrl(options: {
   projectName: string
   reportTitle?: string
+  reportSubject?: string
   visitNumber?: number | string
   supervisorName?: string
   projectId: string

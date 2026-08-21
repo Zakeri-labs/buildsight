@@ -17,6 +17,7 @@ export function ReportDownloadSection({
   termId,
   responseId,
   reportTitle,
+  reportSubject,
   visitNumber,
   supervisorName,
   initialTranslation,
@@ -30,6 +31,7 @@ export function ReportDownloadSection({
   termId?: string
   responseId: string
   reportTitle?: string
+  reportSubject?: string
   visitNumber?: number | string
   supervisorName?: string
   initialTranslation?: ProjectStageTranslationSummary | null
@@ -114,6 +116,7 @@ export function ReportDownloadSection({
     const url = buildWhatsAppShareUrl({
       projectName: projectName || "Project",
       reportTitle: reportTitle || "Inspection Report",
+      reportSubject: reportSubject || reportTitle || "Inspection Report",
       visitNumber,
       supervisorName,
       projectId,
@@ -131,6 +134,7 @@ export function ReportDownloadSection({
     const msg = buildShareMessage({
       projectName: projectName || "Project",
       reportTitle: reportTitle || "Inspection Report",
+      reportSubject: reportSubject || reportTitle || "Inspection Report",
       visitNumber,
       supervisorName,
       projectId,
