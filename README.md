@@ -34,22 +34,22 @@ OPENAI_API_KEY="sk-..."
 
 # 1) Report & Document Translation Model
 # Controls the AI model used for report translation workflows.
-# Default: gpt-5.6
+# Available models: gpt-5.6 (default), gpt-4o, gpt-4o-mini, o1, o3-mini, gpt-4.5-preview
 OPENAI_REPORT_TRANSLATION_MODEL="gpt-5.6"
 
 # 2) Voice-to-Text / Audio Transcription Model
 # Controls the speech-to-text model used for voice recordings.
-# Default: whisper-1
+# Available models: whisper-1 (default), gpt-4o-audio-preview, gpt-4o-mini-audio-preview
 OPENAI_TRANSCRIPTION_MODEL="whisper-1"
 
 # 3) Form Text Enhancement Model
 # Controls the AI model used for in-form text enhancement & inline translation.
-# Default: gpt-4o-mini
+# Available models: gpt-4o-mini (default), gpt-4o, gpt-3.5-turbo
 OPENAI_ENHANCE_TEXT_MODEL="gpt-4o-mini"
 
 # 4) AI Summary Model
 # Controls the AI model used for multi-document AI summary generation.
-# Default: gpt-5.6
+# Available models: gpt-5.6 (default), gpt-4o, gpt-4o-mini, o1, o3-mini
 OPENAI_SUMMARY_MODEL="gpt-5.6"
 ```
 
