@@ -564,7 +564,7 @@ export async function loadProjectStageExecution(
         name: stage.name,
         description: stage.description,
         status: stage.status,
-        isPreCompleted: Boolean(stage.is_pre_completed),
+        isPreCompleted: Boolean(stage.is_pre_completed || stage.status === "completed"),
         sortOrder: stage.sort_order,
         reports: stageReports,
         reportSummary: {
@@ -706,7 +706,7 @@ export async function loadProjectStageExecution(
     description: ps.description,
     sortOrder: ps.sort_order,
     active: ps.status !== "disabled",
-    isPreCompleted: Boolean(ps.is_pre_completed),
+    isPreCompleted: Boolean(ps.is_pre_completed || ps.status === "completed"),
     hasData: ["in_progress", "completed"].includes(ps.status),
     hasPendingReview: false,
     terms: [],
@@ -731,7 +731,7 @@ export async function loadProjectStageExecution(
           description: stage.description,
           sortOrder: stage.sort_order,
           active: Boolean(projectStage ? projectStage.status !== "disabled" : true),
-          isPreCompleted: Boolean(projectStage?.is_pre_completed),
+          isPreCompleted: Boolean(projectStage?.is_pre_completed || projectStage?.status === "completed"),
           hasData:
             allItems.some((item) => item.hasData) ||
             legacyHasData ||

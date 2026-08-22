@@ -951,10 +951,10 @@ export async function saveProjectStageSelectionAction(
     }
 
     const admin = createAdminClient()
-    const [
+    let [
       { data: libraryStages, error: libraryStageError },
       { data: libraryTerms, error: libraryTermError },
-      { data: existingStages, error: existingStageError },
+      existingStagesRes,
     ] = await Promise.all([
       admin
         .from("stages")
@@ -973,7 +973,16 @@ export async function saveProjectStageSelectionAction(
     ])
     if (libraryStageError) throw libraryStageError
     if (libraryTermError) throw libraryTermError
-    if (existingStageError) throw existingStageError
+
+    let existingStages = existingStagesRes.data
+    if (existingStagesRes.error) {
+      const fallback = await admin
+        .from("project_stages")
+        .select("id, template_stage_id, status")
+        .eq("project_id", input.projectId)
+      if (fallback.error) throw fallback.error
+      existingStages = fallback.data
+    }
 
     let projectStages = existingStages ?? []
     const existingStageByTemplate = new Map<string, any>(
@@ -1027,13 +1036,23 @@ export async function saveProjectStageSelectionAction(
       .filter((item): item is NonNullable<typeof item> => item !== null)
     if (missingStageRows.length) {
       const { error } = await admin.from("project_stages").insert(missingStageRows)
-      if (error && !isUniqueViolation(error)) throw error
-      const { data, error: reloadError } = await admin
+      if (error && !isUniqueViolation(error)) {
+        const stripped = missingStageRows.map(({ is_pre_completed, ...rest }: any) => rest)
+        const { error: retryErr } = await admin.from("project_stages").insert(stripped)
+        if (retryErr && !isUniqueViolation(retryErr)) throw retryErr
+      }
+      let reloadRes = await admin
         .from("project_stages")
         .select("id, template_stage_id, status, is_pre_completed")
         .eq("project_id", input.projectId)
-      if (reloadError) throw reloadError
-      projectStages = data ?? []
+      if (reloadRes.error) {
+        reloadRes = await admin
+          .from("project_stages")
+          .select("id, template_stage_id, status")
+          .eq("project_id", input.projectId)
+        if (reloadRes.error) throw reloadRes.error
+      }
+      projectStages = reloadRes.data ?? []
     }
 
     const projectStageByTemplate = new Map<string, any>(
@@ -1171,7 +1190,21 @@ export async function saveProjectStageSelectionAction(
           .update(updates)
           .eq("id", projectStage.id)
           .eq("project_id", input.projectId)
-        if (error) throw error
+        if (error) {
+          if (updates.is_pre_completed !== undefined) {
+            delete updates.is_pre_completed
+            if (Object.keys(updates).length > 0) {
+              const { error: fallbackError } = await admin
+                .from("project_stages")
+                .update(updates)
+                .eq("id", projectStage.id)
+                .eq("project_id", input.projectId)
+              if (fallbackError) throw fallbackError
+            }
+          } else {
+            throw error
+          }
+        }
       }
     }
 
