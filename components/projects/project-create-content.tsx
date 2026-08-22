@@ -103,6 +103,20 @@ export async function ProjectCreateContent() {
     ).values(),
   ).sort((a, b) => a.name.localeCompare(b.name))
 
+  const [{ data: templateStageRows }] = await Promise.all([
+    admin
+      .from("stages")
+      .select("id, name, sort_order")
+      .eq("organization_id", supervisingOrg.id)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true }),
+  ])
+  const templateStages = (templateStageRows ?? []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    sortOrder: s.sort_order,
+  }))
+
   return (
     <ProjectCreateForm
       supervisingOrg={{ id: supervisingOrg.id, name: supervisingOrg.name }}
@@ -111,6 +125,7 @@ export async function ProjectCreateContent() {
       supervisors={supervisorOptions}
       existingProjectCodes={existingProjectCodes}
       currentUserId={session.userId}
+      templateStages={templateStages}
     />
   )
 }

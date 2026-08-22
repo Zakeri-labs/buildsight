@@ -56,6 +56,7 @@ import {
 import {
   attachProjectGalleryImages,
   attachProjectOwnerIdCards,
+  getProjectStagesForEditAction,
   updateProject,
   type OwnerIdCardUploadInput,
 } from "@/lib/actions/projects"
@@ -248,6 +249,9 @@ export function ProjectEditDialog({
   const [contractorAddress, setContractorAddress] = useState(project.contractorAddress ?? "")
   const [contractorPostalCode, setContractorPostalCode] = useState(project.contractorPostalCode ?? "")
   const [contractorPhone, setContractorPhone] = useState(project.contractorPhone ?? "")
+  const [completedUpToStageId, setCompletedUpToStageId] = useState<string>("none")
+  const [projectStages, setProjectStages] = useState<Array<{ id: string; templateStageId: string | null; name: string; sortOrder: number; status: string; isPreCompleted: boolean }>>([])
+  const [loadingStages, setLoadingStages] = useState(true)
 
   const [financialValues, setFinancialValues] = useState<ProjectFinancialFormValues>({
     structureSupervisionFee: project.structureSupervisionFee == null ? "" : String(project.structureSupervisionFee),
@@ -469,6 +473,18 @@ export function ProjectEditDialog({
           })
           setInitialDocuments(loadedDocs)
         }
+
+        const stagesRes = await getProjectStagesForEditAction(project.id)
+        if (stagesRes.ok && stagesRes.data && active) {
+          setProjectStages(stagesRes.data)
+          const lastPreCompleted = [...stagesRes.data].reverse().find((s) => s.isPreCompleted || s.status === "completed")
+          if (lastPreCompleted) {
+            setCompletedUpToStageId(lastPreCompleted.templateStageId || lastPreCompleted.id)
+          } else {
+            setCompletedUpToStageId("none")
+          }
+          setLoadingStages(false)
+        }
       } catch {
         // Safe fallback for background lookups
       }
@@ -559,6 +575,9 @@ export function ProjectEditDialog({
         visitsPlaceholder: "مثال: 12",
         invalidVisitCounts: "يجب أن تكون الزيارات المشمولة أعدادًا صحيحة غير سالبة.",
         invalidFinancialAmounts: "أدخل مبالغ صحيحة غير سالبة، ويجب ألا يتجاوز المبلغ المستلم إجمالي رسوم الإشراف.",
+        completedUpToStage: "مكتمل حتى مرحلة",
+        completedUpToStagePlaceholder: "اختر آخر مرحلة مكتملة",
+        noneCompletedStage: "لا يوجد / لم تكتمل أي مرحلة",
         description: "وصف المشروع",
         descriptionPlaceholder: "نبذة مختصرة عن نطاق المشروع وأهدافه",
         ownerCount: "عدد المالكين",
@@ -660,6 +679,9 @@ export function ProjectEditDialog({
         visitsPlaceholder: "e.g. 12",
         invalidVisitCounts: "Included visits must be non-negative whole numbers.",
         invalidFinancialAmounts: "Enter valid non-negative amounts, and do not let Received Amount exceed the total supervision fees.",
+        completedUpToStage: "Completed Up To Stage",
+        completedUpToStagePlaceholder: "Select last completed stage",
+        noneCompletedStage: "None / No completed stages",
         description: "Project Description",
         descriptionPlaceholder: "Briefly describe the project scope and objectives",
         ownerCount: "Number of Owners",
@@ -881,6 +903,7 @@ export function ProjectEditDialog({
         location: location.address.trim(),
         latitude: location.latitude,
         longitude: location.longitude,
+        completedUpToStageId: completedUpToStageId !== "none" ? completedUpToStageId : "none",
         assignedUserId: assignedUserId || null,
         assignedSupervisorId: assignedSupervisorId || null,
         contractor: {
@@ -1401,7 +1424,32 @@ export function ProjectEditDialog({
                         </div>
                       </Field>
                     </div>
-                    <div className="flex min-h-32 flex-1 flex-col gap-2">
+                    <Field label={`${copy.completedUpToStage} (${copy.optional})`}>
+                      <Select
+                        value={completedUpToStageId}
+                        onValueChange={(val) => setCompletedUpToStageId(val || "none")}
+                        disabled={pending || loadingStages}
+                      >
+                        <SelectTrigger className="h-10 w-full">
+                          <SelectValue placeholder={copy.completedUpToStagePlaceholder}>
+                            {(val) => {
+                              if (!val || val === "none") return copy.noneCompletedStage
+                              const found = projectStages.find((s) => s.id === String(val) || s.templateStageId === String(val))
+                              return found ? found.name : copy.noneCompletedStage
+                            }}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">{copy.noneCompletedStage}</SelectItem>
+                          {projectStages.map((stage) => (
+                            <SelectItem key={stage.id} value={stage.templateStageId || stage.id}>
+                              {stage.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <div className="flex min-h-24 flex-1 flex-col gap-2">
                       <Label htmlFor="edit-project-description">
                         {copy.description} ({copy.optional})
                       </Label>
@@ -1411,8 +1459,8 @@ export function ProjectEditDialog({
                         onChange={(e) => setDescription(e.target.value)}
                         placeholder={copy.descriptionPlaceholder}
                         disabled={pending}
-                        rows={4}
-                        className="min-h-24 flex-1 resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 lg:resize-none"
+                        rows={2}
+                        className="min-h-16 flex-1 resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 lg:resize-none"
                       />
                     </div>
                   </div>

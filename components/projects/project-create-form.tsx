@@ -54,6 +54,7 @@ import {
   attachProjectGalleryImages,
   attachProjectOwnerIdCards,
   createProject,
+  getOrganizationTemplateStagesAction,
   type OwnerIdCardUploadInput,
 } from "@/lib/actions/projects"
 import { saveInitialDocumentAction } from "@/lib/actions/initial-documents"
@@ -170,6 +171,7 @@ export function ProjectCreateForm({
   supervisors,
   existingProjectCodes = [],
   currentUserId,
+  templateStages: initialTemplateStages = [],
 }: {
   supervisingOrg: { id: string; name: string }
   contractorOrganizations: ContractorOrganization[]
@@ -177,6 +179,7 @@ export function ProjectCreateForm({
   supervisors: UserOption[]
   existingProjectCodes?: string[]
   currentUserId?: string
+  templateStages?: Array<{ id: string; name: string; sortOrder: number }>
 }) {
   const router = useRouter()
   const { locale } = useI18n()
@@ -194,7 +197,28 @@ export function ProjectCreateForm({
   const [plotNo, setPlotNo] = useState("")
   const [projectStartDate, setProjectStartDate] = useState("")
   const [supervisionStartDate, setSupervisionStartDate] = useState("")
+  const [completedUpToStageId, setCompletedUpToStageId] = useState<string>("none")
+  const [templateStages, setTemplateStages] = useState<Array<{ id: string; name: string; sortOrder: number }>>(initialTemplateStages)
   const [priority, setPriority] = useState<ProjectPriorityValue>("medium")
+
+  useEffect(() => {
+    if (initialTemplateStages.length > 0) {
+      setTemplateStages(initialTemplateStages)
+    } else if (supervisingOrg?.id) {
+      getOrganizationTemplateStagesAction(supervisingOrg.id).then((res) => {
+        if (res.ok && res.data) {
+          setTemplateStages(res.data)
+        }
+      })
+    }
+  }, [supervisingOrg?.id, initialTemplateStages])
+
+  useEffect(() => {
+    if (!codeTouched) {
+      const autoCode = generateAutoProjectCode(supervisingOrg.name, projectStartDate, existingProjectCodes)
+      setCode(autoCode)
+    }
+  }, [projectStartDate, supervisingOrg.name, existingProjectCodes, codeTouched])
   const [includedStructureVisits, setIncludedStructureVisits] = useState("")
   const [includedFinishingVisits, setIncludedFinishingVisits] = useState("")
   const [description, setDescription] = useState("")
@@ -323,6 +347,9 @@ export function ProjectCreateForm({
         visitsPlaceholder: "مثال: 12",
         invalidVisitCounts: "يجب أن تكون الزيارات المشمولة أعدادًا صحيحة غير سالبة.",
         invalidFinancialAmounts: "أدخل مبالغ صحيحة غير سالبة، ويجب ألا يتجاوز المبلغ المستلم إجمالي رسوم الإشراف.",
+        completedUpToStage: "مكتمل حتى مرحلة",
+        completedUpToStagePlaceholder: "اختر آخر مرحلة مكتملة",
+        noneCompletedStage: "لا يوجد / لم تكتمل أي مرحلة",
         description: "وصف المشروع",
         descriptionPlaceholder: "نبذة مختصرة عن نطاق المشروع وأهدافه",
         ownerCount: "عدد المالكين",
@@ -428,6 +455,9 @@ export function ProjectCreateForm({
         visitsPlaceholder: "e.g. 12",
         invalidVisitCounts: "Included visits must be non-negative whole numbers.",
         invalidFinancialAmounts: "Enter valid non-negative amounts, and do not let Received Amount exceed the total supervision fees.",
+        completedUpToStage: "Completed Up To Stage",
+        completedUpToStagePlaceholder: "Select last completed stage",
+        noneCompletedStage: "None / No completed stages",
         description: "Project Description",
         descriptionPlaceholder: "Briefly describe the project scope and objectives",
         ownerCount: "Number of Owners",
@@ -834,6 +864,7 @@ export function ProjectCreateForm({
           nextPaymentDueDate: financialValues.nextPaymentDueDate,
           invoiceReferencePaymentNote: financialValues.invoiceReferencePaymentNote,
           initialRemarks: financialValues.initialRemarks,
+          completedUpToStageId: completedUpToStageId !== "none" ? completedUpToStageId : null,
           owners: owners.map((owner, index) => {
             const selectedViewer = selectedOwnerViewers[index] ?? null
             return {
@@ -1201,7 +1232,32 @@ export function ProjectCreateForm({
                           </div>
                         </Field>
                       </div>
-                      <div className="flex min-h-32 flex-1 flex-col gap-2">
+                      <Field label={`${copy.completedUpToStage} (${copy.optional})`}>
+                        <Select
+                          value={completedUpToStageId}
+                          onValueChange={(val) => setCompletedUpToStageId(val || "none")}
+                          disabled={pending}
+                        >
+                          <SelectTrigger className="h-10 w-full">
+                            <SelectValue placeholder={copy.completedUpToStagePlaceholder}>
+                              {(val) => {
+                                if (!val || val === "none") return copy.noneCompletedStage
+                                const found = templateStages.find((s) => s.id === String(val))
+                                return found ? found.name : copy.noneCompletedStage
+                              }}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">{copy.noneCompletedStage}</SelectItem>
+                            {templateStages.map((stage) => (
+                              <SelectItem key={stage.id} value={stage.id}>
+                                {stage.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                      <div className="flex min-h-24 flex-1 flex-col gap-2">
                         <Label htmlFor="new-project-description">{copy.description} ({copy.optional})</Label>
                         <textarea
                           id="new-project-description"
@@ -1209,8 +1265,8 @@ export function ProjectCreateForm({
                           onChange={(event) => setDescription(event.target.value)}
                           placeholder={copy.descriptionPlaceholder}
                           disabled={pending}
-                          rows={4}
-                          className="min-h-24 flex-1 resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 lg:resize-none"
+                          rows={2}
+                          className="min-h-16 flex-1 resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 lg:resize-none"
                         />
                       </div>
                     </div>

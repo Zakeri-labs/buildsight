@@ -379,6 +379,7 @@ export async function updateProject(input: {
     postalCode?: string
     phone?: string
   }
+  completedUpToStageId?: string | null
 }): Promise<ActionResult<{ supervisionStartDate: string | null }>> {
   try {
     const name = input.name.trim()
@@ -597,6 +598,33 @@ export async function updateProject(input: {
 
     if (input.supervisionStartDate !== undefined && persistedProject.supervision_start_date !== supervisionStartDate.date) {
       return { ok: false, error: "Supervision Start Date was not saved. Please try again." }
+    }
+
+    if (input.completedUpToStageId !== undefined && input.completedUpToStageId !== null && input.completedUpToStageId !== "none") {
+      const { data: projectStages } = await admin
+        .from("project_stages")
+        .select("id, template_stage_id, status, is_pre_completed, sort_order")
+        .eq("project_id", input.projectId)
+        .order("sort_order", { ascending: true })
+
+      if (projectStages && projectStages.length > 0) {
+        const targetIdx = projectStages.findIndex(
+          (s) => s.id === input.completedUpToStageId || s.template_stage_id === input.completedUpToStageId,
+        )
+        if (targetIdx !== -1) {
+          const idsToMark = projectStages
+            .slice(0, targetIdx + 1)
+            .filter((s) => !s.is_pre_completed || s.status !== "completed")
+            .map((s) => s.id)
+
+          if (idsToMark.length > 0) {
+            await admin
+              .from("project_stages")
+              .update({ is_pre_completed: true, status: "completed" })
+              .in("id", idsToMark)
+          }
+        }
+      }
     }
 
     await audit({
@@ -898,6 +926,7 @@ export async function createProject(input: {
     postalCode?: string
     phone?: string
   }
+  completedUpToStageId?: string | null
 }): Promise<ActionResult<{ id: string; ownerIds: string[] }>> {
   let createdProjectId: string | null = null
   try {
@@ -1303,6 +1332,27 @@ export async function createProject(input: {
       },
     })
 
+    if (input.completedUpToStageId && input.completedUpToStageId !== "none") {
+      const { data: projectStages } = await admin
+        .from("project_stages")
+        .select("id, template_stage_id, sort_order")
+        .eq("project_id", created.id)
+        .order("sort_order", { ascending: true })
+
+      if (projectStages && projectStages.length > 0) {
+        const targetIdx = projectStages.findIndex(
+          (s) => s.id === input.completedUpToStageId || s.template_stage_id === input.completedUpToStageId,
+        )
+        if (targetIdx !== -1) {
+          const idsToMark = projectStages.slice(0, targetIdx + 1).map((s) => s.id)
+          await admin
+            .from("project_stages")
+            .update({ is_pre_completed: true, status: "completed" })
+            .in("id", idsToMark)
+        }
+      }
+    }
+
     const cookieStore = await cookies()
     cookieStore.set(SELECTED_PROJECT_COOKIE, created.id, {
       path: "/",
@@ -1676,5 +1726,61 @@ export async function removeProjectUser(input: {
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not remove user." }
+  }
+}
+
+export async function getOrganizationTemplateStagesAction(
+  supervisingOrgId: string,
+): Promise<ActionResult<Array<{ id: string; name: string; sortOrder: number }>>> {
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from("stages")
+      .select("id, name, sort_order")
+      .eq("organization_id", supervisingOrgId)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+
+    if (error) throw error
+
+    return {
+      ok: true,
+      data: (data ?? []).map((s) => ({
+        id: s.id,
+        name: s.name,
+        sortOrder: s.sort_order,
+      })),
+    }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to load stages." }
+  }
+}
+
+export async function getProjectStagesForEditAction(
+  projectId: string,
+): Promise<ActionResult<Array<{ id: string; templateStageId: string | null; name: string; sortOrder: number; status: string; isPreCompleted: boolean }>>> {
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from("project_stages")
+      .select("id, template_stage_id, name, sort_order, status, is_pre_completed")
+      .eq("project_id", projectId)
+      .order("sort_order", { ascending: true })
+
+    if (error) throw error
+
+    return {
+      ok: true,
+      data: (data ?? []).map((s) => ({
+        id: s.id,
+        templateStageId: s.template_stage_id,
+        name: s.name,
+        sortOrder: s.sort_order,
+        status: s.status,
+        isPreCompleted: Boolean(s.is_pre_completed),
+      })),
+    }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to load project stages." }
   }
 }
