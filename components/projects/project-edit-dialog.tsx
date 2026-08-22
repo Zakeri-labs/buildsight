@@ -483,10 +483,11 @@ export function ProjectEditDialog({
           } else {
             setCompletedUpToStageId("none")
           }
-          setLoadingStages(false)
         }
       } catch {
         // Safe fallback for background lookups
+      } finally {
+        if (active) setLoadingStages(false)
       }
     }
     loadData()

@@ -601,21 +601,39 @@ export async function updateProject(input: {
     }
 
     if (input.completedUpToStageId !== undefined && input.completedUpToStageId !== null && input.completedUpToStageId !== "none") {
-      let { data: projectStages } = await admin
+      let { data: projectStages, error: selectErr } = await admin
         .from("project_stages")
         .select("id, template_stage_id, name, status, is_pre_completed, sort_order")
         .eq("project_id", input.projectId)
         .order("sort_order", { ascending: true })
 
+      if (selectErr) {
+        const fallback = await admin
+          .from("project_stages")
+          .select("id, template_stage_id, name, status, sort_order")
+          .eq("project_id", input.projectId)
+          .order("sort_order", { ascending: true })
+        if (!fallback.error) projectStages = fallback.data
+      }
+
       if (!projectStages || projectStages.length === 0) {
         try {
           await admin.rpc("instantiate_project_stages", { target_project_id: input.projectId })
         } catch {}
-        const { data: reloaded } = await admin
+        let { data: reloaded, error: reloadErr } = await admin
           .from("project_stages")
           .select("id, template_stage_id, name, status, is_pre_completed, sort_order")
           .eq("project_id", input.projectId)
           .order("sort_order", { ascending: true })
+
+        if (reloadErr) {
+          const fallbackReload = await admin
+            .from("project_stages")
+            .select("id, template_stage_id, name, status, sort_order")
+            .eq("project_id", input.projectId)
+            .order("sort_order", { ascending: true })
+          if (!fallbackReload.error) reloaded = fallbackReload.data
+        }
         projectStages = reloaded
       }
 
@@ -629,14 +647,21 @@ export async function updateProject(input: {
         if (targetIdx !== -1) {
           const targetStage = projectStages[targetIdx]
           const idsToMark = projectStages
-            .filter((s, idx) => (s.sort_order <= targetStage.sort_order || idx <= targetIdx) && (!s.is_pre_completed || s.status !== "completed"))
+            .filter((s, idx) => (s.sort_order <= targetStage.sort_order || idx <= targetIdx) && (s.status !== "completed"))
             .map((s) => s.id)
 
           if (idsToMark.length > 0) {
-            await admin
+            const { error: updateErr } = await admin
               .from("project_stages")
               .update({ is_pre_completed: true, status: "completed" })
               .in("id", idsToMark)
+
+            if (updateErr) {
+              await admin
+                .from("project_stages")
+                .update({ status: "completed" })
+                .in("id", idsToMark)
+            }
           }
         }
       }
@@ -1818,23 +1843,65 @@ export async function getProjectStagesForEditAction(
 ): Promise<ActionResult<Array<{ id: string; templateStageId: string | null; name: string; sortOrder: number; status: string; isPreCompleted: boolean }>>> {
   try {
     const admin = createAdminClient()
-    const { data, error } = await admin
+
+    let { data: stageRows, error: stageErr } = await admin
       .from("project_stages")
       .select("id, template_stage_id, name, sort_order, status, is_pre_completed")
       .eq("project_id", projectId)
       .order("sort_order", { ascending: true })
 
-    if (error) throw error
+    if (stageErr) {
+      const fallback = await admin
+        .from("project_stages")
+        .select("id, template_stage_id, name, sort_order, status")
+        .eq("project_id", projectId)
+        .order("sort_order", { ascending: true })
+      if (!fallback.error) {
+        stageRows = fallback.data
+      }
+    }
+
+    if (!stageRows || stageRows.length === 0) {
+      const { data: projectRow } = await admin
+        .from("projects")
+        .select("supervising_organization_id")
+        .eq("id", projectId)
+        .maybeSingle()
+
+      if (projectRow?.supervising_organization_id) {
+        const { data: libStages } = await admin
+          .from("stages")
+          .select("id, name, sort_order, is_active")
+          .eq("organization_id", projectRow.supervising_organization_id)
+          .order("sort_order", { ascending: true })
+
+        if (libStages && libStages.length > 0) {
+          return {
+            ok: true,
+            data: libStages
+              .filter((s: any) => s.is_active !== false)
+              .map((s: any) => ({
+                id: s.id,
+                templateStageId: s.id,
+                name: s.name,
+                sortOrder: s.sort_order,
+                status: "not_started",
+                isPreCompleted: false,
+              })),
+          }
+        }
+      }
+    }
 
     return {
       ok: true,
-      data: (data ?? []).map((s) => ({
+      data: (stageRows ?? []).map((s: any) => ({
         id: s.id,
         templateStageId: s.template_stage_id,
         name: s.name,
         sortOrder: s.sort_order,
         status: s.status,
-        isPreCompleted: Boolean(s.is_pre_completed),
+        isPreCompleted: Boolean(s.is_pre_completed || s.status === "completed"),
       })),
     }
   } catch (err) {
