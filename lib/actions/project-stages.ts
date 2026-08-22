@@ -1148,7 +1148,6 @@ export async function saveProjectStageSelectionAction(
     }
 
     const selectedStageSet = new Set(requestedStageIds)
-    const preCompletedStageSet = new Set(uniqueIds(input.preCompletedStageIds) ?? [])
     for (const projectStage of projectStages) {
       const templateId = projectStage.template_stage_id || projectStage.id
       const shouldEnable = selectedStageSet.has(templateId) || selectedStageSet.has(projectStage.id)
