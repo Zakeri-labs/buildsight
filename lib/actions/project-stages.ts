@@ -1007,17 +1007,20 @@ export async function saveProjectStageSelectionAction(
       if (definition) neededStageIds.add(definition.stage_id)
     }
 
+    const preCompletedStageSet = new Set(uniqueIds(input.preCompletedStageIds) ?? [])
     const missingStageRows = Array.from(neededStageIds)
       .filter((id) => !existingStageByTemplate.has(id))
       .map((id) => {
         const definition = libraryStageById.get(id)
         if (!definition || definition.is_active === false) return null
+        const isPreCompleted = preCompletedStageSet.has(definition.id)
         return {
           project_id: input.projectId,
           template_stage_id: definition.id,
           name: definition.name,
           description: definition.description,
-          status: requestedStageIds.includes(definition.id) ? "not_started" : "disabled",
+          status: isPreCompleted ? "completed" : requestedStageIds.includes(definition.id) ? "not_started" : "disabled",
+          is_pre_completed: isPreCompleted,
           sort_order: definition.sort_order,
         }
       })
@@ -1150,10 +1153,11 @@ export async function saveProjectStageSelectionAction(
       const templateId = projectStage.template_stage_id || projectStage.id
       const shouldEnable = selectedStageSet.has(templateId) || selectedStageSet.has(projectStage.id)
       const isPreCompleted = shouldEnable && (preCompletedStageSet.has(templateId) || preCompletedStageSet.has(projectStage.id))
+      const isUnPreCompleting = Boolean(projectStage.is_pre_completed) && !isPreCompleted
       const nextStatus = shouldEnable
         ? isPreCompleted
           ? "completed"
-          : projectStage.status === "disabled"
+          : projectStage.status === "disabled" || isUnPreCompleting
             ? await deriveProjectStageStatus(projectStage.id)
             : projectStage.status
         : "disabled"
@@ -1168,21 +1172,7 @@ export async function saveProjectStageSelectionAction(
           .update(updates)
           .eq("id", projectStage.id)
           .eq("project_id", input.projectId)
-        if (error) {
-          if (updates.is_pre_completed !== undefined) {
-            delete updates.is_pre_completed
-            if (Object.keys(updates).length > 0) {
-              const { error: fallbackError } = await admin
-                .from("project_stages")
-                .update(updates)
-                .eq("id", projectStage.id)
-                .eq("project_id", input.projectId)
-              if (fallbackError) throw fallbackError
-            }
-          } else {
-            throw error
-          }
-        }
+        if (error) throw error
       }
     }
 
