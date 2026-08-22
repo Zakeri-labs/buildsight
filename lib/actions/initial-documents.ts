@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache"
 import { requireOnboarded } from "@/lib/auth/session"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { resolveProjectReadAccessForUser } from "@/lib/auth/project-access"
 import {
   INITIAL_DOCUMENTS_BUCKET,
   getInitialDocumentUploadCategoryFromPath,
@@ -124,8 +126,12 @@ export async function getInitialDocumentsForProjectAction(
     if (!UUID_PATTERN.test(projectId)) {
       return { ok: false, error: "Invalid project ID." }
     }
-    const supabase = await createClient()
-    const { data: rows, error } = await supabase
+    const access = await resolveProjectReadAccessForUser(session.userId, projectId)
+    if (!access) {
+      return { ok: false, error: "You do not have access to this project." }
+    }
+    const admin = createAdminClient()
+    const { data: rows, error } = await admin
       .from("initial_docs")
       .select("id, project_id, file_name, original_file_name, file_path, file_size, category")
       .eq("project_id", projectId)

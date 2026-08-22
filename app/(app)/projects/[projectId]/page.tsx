@@ -130,8 +130,8 @@ async function getProjectDocuments(
   currentUserId: string,
   currentUserEmail: string,
 ): Promise<ProjectDocument[]> {
-  const supabase = await createClient()
-  const { data: documents } = await supabase
+  const admin = createAdminClient()
+  const { data: documents } = await admin
     .from("documents")
     .select("id, reference, title, document_type, status, created_by, updated_at, file_storage_path, original_filename")
     .eq("project_id", projectId)
@@ -141,7 +141,7 @@ async function getProjectDocuments(
   const documentRows = (documents ?? []) as ProjectDocumentRow[]
   const creatorIds = Array.from(new Set(documentRows.map((document) => document.created_by)))
   const { data: profiles } = creatorIds.length
-    ? await supabase.from("profiles").select("id, full_name, email, avatar_url").in("id", creatorIds)
+    ? await admin.from("profiles").select("id, full_name, email, avatar_url").in("id", creatorIds)
     : { data: [] as ProjectDocumentProfile[] }
   const profileRows = (profiles ?? []) as ProjectDocumentProfile[]
   const profileMap = new Map<string, ProjectDocumentProfile>(profileRows.map((profile) => [profile.id, profile]))

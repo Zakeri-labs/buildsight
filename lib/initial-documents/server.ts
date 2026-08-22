@@ -3,6 +3,8 @@ import "server-only"
 import type { InitialDocumentListItem } from "@/lib/initial-documents/types"
 import { getInitialDocumentCategory, getInitialDocumentUploadCategoryFromPath } from "@/lib/initial-documents/config"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { resolveProjectReadAccessForUser } from "@/lib/auth/project-access"
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>
 
@@ -41,9 +43,15 @@ export async function getInitialDocumentsForScope({
   currentUserEmail: string
   supabase?: ServerSupabaseClient
 }): Promise<{ documents: InitialDocumentListItem[]; errorMessage: string | null }> {
+  const admin = createAdminClient()
   const supabase = providedSupabase ?? await createClient()
 
-  let query = supabase
+  if (projectId) {
+    const access = await resolveProjectReadAccessForUser(currentUserId, projectId)
+    if (!access) return { documents: [], errorMessage: null }
+  }
+
+  let query = admin
     .from("initial_docs")
     .select("id, project_id, file_name, original_file_name, file_path, mime_type, file_size, category, uploaded_by, created_at")
     .order("created_at", { ascending: false })
@@ -58,10 +66,10 @@ export async function getInitialDocumentsForScope({
 
   const [{ data: rawProjects, error: projectsError }, { data: rawProfiles, error: profilesError }] = await Promise.all([
     projectIds.length
-      ? supabase.from("projects").select("id, name").in("id", projectIds)
+      ? admin.from("projects").select("id, name").in("id", projectIds)
       : Promise.resolve({ data: [] as ProjectNameRow[], error: null }),
     uploaderIds.length
-      ? supabase.from("profiles").select("id, full_name, email").in("id", uploaderIds)
+      ? admin.from("profiles").select("id, full_name, email").in("id", uploaderIds)
       : Promise.resolve({ data: [] as ProfileNameRow[], error: null }),
   ])
 
