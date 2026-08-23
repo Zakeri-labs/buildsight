@@ -46,9 +46,10 @@ export function ReportDownloadSection({
   const [downloading, setDownloading] = useState<"original" | "bilingual" | null>(null)
   const [copiedShare, setCopiedShare] = useState(false)
 
+  const hasStoredPdf = Boolean(translation?.bilingualPdfPath || translation?.originalPdfPath)
   const status = translation?.status ?? "pending"
-  const isFailed = status === "failed" || status === "error"
-  const isCompleted = status === "completed"
+  const isFailed = (status === "failed" || status === "error") && !hasStoredPdf
+  const isCompleted = status === "completed" || hasStoredPdf
   const isPending = !isCompleted && !isFailed
 
   const isStale = Boolean(
@@ -109,6 +110,22 @@ export function ReportDownloadSection({
       Date.now() - new Date(translation.generatedAt).getTime() > FIVE_DAYS_MS,
   )
 
+  async function ensureBilingualPdfReady(): Promise<string | null> {
+    if (translation?.bilingualPdfPath) {
+      return translation.bilingualPdfPath
+    }
+    const res = await ensureBilingualPdfStored({
+      projectId,
+      stageId: termId || stageId,
+      responseId,
+      existingPath: translation?.bilingualPdfPath,
+    })
+    if (res.translation) {
+      setTranslation((current) => ({ ...(current || {}), ...res.translation }))
+    }
+    return res.storagePath
+  }
+
   async function handleWhatsAppShare() {
     if (sharing) return
     setSharing(true)
@@ -116,12 +133,7 @@ export function ReportDownloadSection({
       if (isLinkExpired || isStale) {
         handleRetry()
       }
-      await ensureBilingualPdfStored({
-        projectId,
-        stageId: termId || stageId,
-        responseId,
-        existingPath: translation?.bilingualPdfPath,
-      })
+      await ensureBilingualPdfReady()
       const url = buildWhatsAppShareUrl({
         projectName: projectName || "Project",
         reportTitle: reportTitle || "Inspection Report",
@@ -134,6 +146,8 @@ export function ReportDownloadSection({
         translationId: translation?.id,
       })
       window.open(url, "_blank")
+    } catch (err) {
+      console.error("WhatsApp share PDF preparation error:", err)
     } finally {
       setSharing(false)
     }
@@ -146,12 +160,7 @@ export function ReportDownloadSection({
       if (isLinkExpired || isStale) {
         handleRetry()
       }
-      await ensureBilingualPdfStored({
-        projectId,
-        stageId: termId || stageId,
-        responseId,
-        existingPath: translation?.bilingualPdfPath,
-      })
+      await ensureBilingualPdfReady()
       const msg = buildShareMessage({
         projectName: projectName || "Project",
         reportTitle: reportTitle || "Inspection Report",
@@ -168,6 +177,8 @@ export function ReportDownloadSection({
         setCopiedShare(true)
         setTimeout(() => setCopiedShare(false), 2000)
       }
+    } catch (err) {
+      console.error("Copy share text error:", err)
     } finally {
       setSharing(false)
     }
@@ -178,23 +189,33 @@ export function ReportDownloadSection({
     setDownloading(kind)
 
     try {
-      const storedPath =
-        kind === "original"
-          ? translation?.originalPdfPath
-          : translation?.bilingualPdfPath
-
-      if (storedPath && translation?.id) {
-        const params = new URLSearchParams({
-          projectId,
-          translationId: translation.id,
-          kind,
-        })
-        window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
-        setTimeout(() => setDownloading(null), 2500)
-        return
+      if (kind === "bilingual") {
+        const storedPath = await ensureBilingualPdfReady()
+        if (storedPath && translation?.id) {
+          const params = new URLSearchParams({
+            projectId,
+            translationId: translation.id,
+            kind: "bilingual",
+          })
+          window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
+          setTimeout(() => setDownloading(null), 2500)
+          return
+        }
+      } else {
+        const storedPath = translation?.originalPdfPath
+        if (storedPath && translation?.id) {
+          const params = new URLSearchParams({
+            projectId,
+            translationId: translation.id,
+            kind: "original",
+          })
+          window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
+          setTimeout(() => setDownloading(null), 2500)
+          return
+        }
       }
 
-      // Live client PDF generation fallback without navigating to secondary page
+      // Fallback export if storage path creation failed
       const params = new URLSearchParams({
         projectId,
         stageId: termId || stageId,

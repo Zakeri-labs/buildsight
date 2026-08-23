@@ -340,9 +340,9 @@ export async function ensureBilingualPdfStored(input: {
   stageId?: string
   responseId?: string
   existingPath?: string | null
-}): Promise<string | null> {
-  if (input.existingPath) return input.existingPath
-  if (!input.projectId || !input.responseId) return null
+}): Promise<{ storagePath: string | null; translation?: any }> {
+  if (input.existingPath) return { storagePath: input.existingPath }
+  if (!input.projectId || !input.responseId) return { storagePath: null }
 
   try {
     const params = new URLSearchParams({
@@ -351,13 +351,13 @@ export async function ensureBilingualPdfStored(input: {
       responseId: input.responseId,
     })
     const res = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
-    if (!res.ok) return null
+    if (!res.ok) return { storagePath: null }
     const payload = await res.json()
     const data = payload?.data
-    if (!data || !data.translation?.id) return null
+    if (!data || !data.translation?.id) return { storagePath: null }
 
     if (data.translation?.bilingualPdfPath) {
-      return data.translation.bilingualPdfPath
+      return { storagePath: data.translation.bilingualPdfPath, translation: data.translation }
     }
 
     const pdfResult = await exportTranslationPdf({
@@ -376,10 +376,18 @@ export async function ensureBilingualPdfStored(input: {
       filename: pdfResult.filename,
     })
 
-    return storedPath
+    const updatedTranslation = {
+      ...data.translation,
+      status: "completed",
+      bilingualPdfPath: storedPath,
+      generatedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    return { storagePath: storedPath, translation: updatedTranslation }
   } catch (err) {
     console.error("Auto-generate bilingual PDF error before share:", err)
-    return null
+    return { storagePath: null }
   }
 }
 

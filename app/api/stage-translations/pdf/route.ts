@@ -188,7 +188,11 @@ export async function POST(request: NextRequest) {
     const oldPath = translation[column]
     const { error: updateError } = await admin
       .from("translation_documents")
-      .update({ [column]: storagePath, updated_at: new Date().toISOString() })
+      .update({
+        [column]: storagePath,
+        translation_status: "completed",
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", translationId)
       .eq("project_id", projectId)
     if (updateError) {
