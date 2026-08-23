@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useI18n } from "@/lib/i18n"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { AlertCircle, Check, Building2, Phone, Mail, Globe, MapPin, ShieldAlert, Sparkles } from "lucide-react"
+import { AlertCircle, Check, Building2, Phone, Mail, Globe, MapPin, ShieldAlert, Sparkles, Upload, ImageIcon, Trash2 } from "lucide-react"
 import { useCurrentUser } from "@/components/current-user-provider"
 import { getOrganizationProfile, saveOrganizationProfile, type OrganizationProfile } from "@/lib/organization/profile"
 
@@ -15,6 +15,7 @@ export function SettingsOrganization() {
   const { locale } = useI18n()
   const currentUser = useCurrentUser()
   const isArabic = locale === "ar"
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Admin access check: org_admin, admin, or fallback in dev
   const isAdmin = !currentUser.role || currentUser.role === "org_admin" || currentUser.role === "admin"
@@ -28,6 +29,27 @@ export function SettingsOrganization() {
 
   function handleChange(field: keyof OrganizationProfile, value: string) {
     setProfile((prev) => ({ ...prev, [field]: value }))
+    setSaved(false)
+  }
+
+  function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string
+      if (dataUrl) {
+        setProfile((prev) => ({ ...prev, logoUrl: dataUrl }))
+        setSaved(false)
+      }
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ""
+  }
+
+  function handleRemoveLogo() {
+    setProfile((prev) => ({ ...prev, logoUrl: "" }))
     setSaved(false)
   }
 
@@ -200,6 +222,78 @@ export function SettingsOrganization() {
             </div>
           </div>
 
+          {/* Organization Logo Section */}
+          <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label className="flex items-center gap-1.5 text-base font-semibold text-foreground">
+                  <ImageIcon className="size-4 text-primary" />
+                  {isArabic ? "شعار المؤسسة" : "Organization Logo"}
+                </Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {isArabic
+                    ? "قم برفع شعار المؤسسة الخاص بك ليظهر في أعلى شريط التنقل الجانبي (Sidebar) بدلاً من الشعار الافتراضي."
+                    : "Upload your custom organization logo to display in the top-left sidebar header."}
+                </p>
+              </div>
+              {profile.logoUrl ? (
+                <Badge variant="secondary" className="shrink-0 text-xs">
+                  {isArabic ? "شعار مخصص" : "Custom Logo"}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="shrink-0 text-xs text-muted-foreground">
+                  {isArabic ? "الشعار الافتراضي" : "Default Logo"}
+                </Badge>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-1">
+              {/* Preview Box */}
+              <div className="flex h-16 w-48 shrink-0 items-center justify-center rounded-lg border border-sidebar-border bg-sidebar p-2 shadow-inner">
+                <img
+                  src={profile.logoUrl || "/Logow.png"}
+                  alt="Organization Logo Preview"
+                  className="max-h-12 w-auto max-w-full object-contain"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleLogoUpload}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="mr-2 size-4" />
+                  {profile.logoUrl
+                    ? (isArabic ? "تغيير الشعار" : "Change Logo")
+                    : (isArabic ? "رفع الشعار" : "Upload Logo")}
+                </Button>
+
+                {profile.logoUrl ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={handleRemoveLogo}
+                  >
+                    <Trash2 className="mr-2 size-4" />
+                    {isArabic ? "إزالة الشعار" : "Remove Logo"}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
           {/* Save Action & Feedback */}
           <div className="flex items-center justify-between border-t pt-4">
             {saved ? (
@@ -207,7 +301,7 @@ export function SettingsOrganization() {
                 <Check className="size-4" />
                 {isArabic ? "تم حفظ بيانات المؤسسة بنجاح!" : "Organization profile saved successfully!"}
               </span>
-            ) : <span />}
+            ) : null}
             <Button type="submit">
               {isArabic ? "حفظ التغييرات" : "Save Organization Profile"}
             </Button>

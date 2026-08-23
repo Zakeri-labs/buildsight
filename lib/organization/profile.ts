@@ -9,6 +9,7 @@ export type OrganizationProfile = {
   website: string
   addressEn: string
   addressAr: string
+  logoUrl?: string
 }
 
 export const DEFAULT_ORG_PROFILE: OrganizationProfile = {
@@ -22,6 +23,7 @@ export const DEFAULT_ORG_PROFILE: OrganizationProfile = {
   website: "",
   addressEn: "Al Seeb, Al Mabela, Sultanate of Oman",
   addressAr: "السيب، المعبيلة، سلطنة عمان",
+  logoUrl: "",
 }
 
 const STORAGE_KEY = "buildsight_organization_profile"
