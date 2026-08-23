@@ -624,37 +624,37 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
 
   // ── 3-COLUMN LAYOUT: [Logo] | [Company Name] | [Date/Doc/Page] ────
   const totalW = pageWidth - margin * 2  // 182 mm
-  const col1W = 42   // Left  – Logo
+  const col1W = 50   // Left  – Logo (enlarged area)
   const col3W = 44   // Right – Date / Doc / Page (3 rows) – compact width
-  const col2W = totalW - col1W - col3W   // Center – Company names (96 mm)
-  const col1X = margin
+  const col2W = totalW - col1W - col3W   // Center – Company names
+  const col1X = 10   // Move logo further to the left
   const col2X = margin + col1W
   const col3X = margin + col1W + col2W
 
-  // ── LEFT COLUMN: Logo (Left-aligned) ────────────────────────────────────
+  // ── LEFT COLUMN: Logo (Left-aligned, larger & further left) ────────────────────────────────────
   if (logoImage) {
-    const maxH = 12   // preserve original logo height cap so logo is not resized when header height increases
-    const maxW = col1W - 5
+    const maxH = 24   // Larger logo height (fits inside headerH=35)
+    const maxW = 54   // Larger logo width
     const ratio = Math.min(maxW / logoImage.width, maxH / logoImage.height)
     const w = logoImage.width * ratio
     const h = logoImage.height * ratio
     doc.addImage(
       logoImage.dataUrl, "PNG",
-      col1X + 2.5,   // Left-aligned in left column
+      col1X,   // Left-aligned further to the left
       headerTop + 1.5 + (headerH - 1.5 - h) / 2,
       w, h, undefined, "FAST",
     )
   } else {
     setLanguage(doc, false, 10, true)
     doc.setTextColor(180, 138, 32)
-    doc.text("BONYAN", col1X + 2.5, headerTop + headerH / 2 + 2, { align: "left" })
+    doc.text("BONYAN", col1X, headerTop + headerH / 2 + 2, { align: "left" })
   }
 
-  // ── CENTER COLUMN: Company Name (EN + AR) Bold Center-aligned ─────────────
+  // ── CENTER COLUMN: Company Name (EN + AR) Bold Center-aligned (moved upward near top golden line) ─────
   const nameEn = org.nameEn || "BONYAN CONSTRUCTION FOR ENGINEERING CONSULTANCY"
   const nameAr = org.nameAr || "بنيان الإنشائية للاستشارات الهندسية"
   const cx = col2X + col2W / 2
-  const midY = headerTop + 1.5 + (headerH - 1.5) / 2   // vertical center of header area
+  const topTextY = headerTop + 1.5 + 5.5   // Placed upward just below top golden line
 
   // English name – Bold, auto-scale to fit col2W
   let enSize = 8.5
@@ -664,7 +664,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     setLanguage(doc, false, enSize, true)
   }
   doc.setTextColor(15, 23, 42)
-  doc.text(nameEn, cx, midY - 2, { align: "center" })
+  doc.text(nameEn, cx, topTextY, { align: "center" })
 
   // Arabic name – Bold, auto-scale to fit col2W
   let arSize = 8.5
@@ -675,7 +675,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     setLanguage(doc, true, arSize, true)
   }
   doc.setTextColor(180, 138, 32)
-  writePdfText(doc, nameAr, cx, midY + 3.5, { align: "center" }, true)
+  writePdfText(doc, nameAr, cx, topTextY + 5.5, { align: "center" }, true)
 
   // ── RIGHT COLUMN: Date / Document No. / Page (Right-aligned, aligned near bottom of header) ──
   const rawDate = template.createdAt || ""
@@ -2380,7 +2380,6 @@ async function renderPreservedSourceLayout(flow: Flow, layout: NonNullable<Langu
           caption: flow.rtl
             ? `نسخة مرئية احتياطية للصفحة ${item.pageNumber} للحفاظ على جميع عناصر الإثبات.`
             : `Visual fallback for source page ${item.pageNumber}, preserving undecodable evidence.`,
-          preferredWidthRatio: 1,
           preferredWidthRatio: 1,
           preferredHeightRatio: 0.9,
           alignment: "center",
