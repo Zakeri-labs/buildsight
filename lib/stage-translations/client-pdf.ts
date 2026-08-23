@@ -698,8 +698,8 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   ]
   const labelX  = col3X + 2.5
   const rightX  = col3X + col3W - 2.5
-  const stepY   = 3.8   // compact line spacing, no extra gap
-  const startY  = headerTop + 1.5 + 4.5  // aligned upward in upper header area
+  const stepY   = 4.0   // line spacing
+  const startY  = headerTop + 1.5 + 8.5  // aligned downward to align with logo vertical band (Y = 14.5mm)
 
   infoRows.forEach(({ label, value }, i) => {
     const y = startY + i * stepY
@@ -2420,14 +2420,14 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     const headerTop = 4.5
     const headerH = 35
     const totalW = width - margin * 2
-    const col1W = 42
+    const col1W = 50
     const col3W = 44
     const col2W = totalW - col1W - col3W
     const col3X = margin + col1W + col2W
     const rightX = col3X + col3W - 2.5
     const labelX  = col3X + 2.5
-    const stepY = 3.8
-    const startY = (headerTop + headerH) - (2 * stepY + 3.5)
+    const stepY = 4.0
+    const startY = headerTop + 1.5 + 8.5
     const pageY = startY + 2 * stepY
 
     // Blank out old row 3 in column 3 area (light gray fill)
