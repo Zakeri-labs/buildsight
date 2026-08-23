@@ -633,7 +633,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
 
   // ── LEFT COLUMN: Logo (Left-aligned) ────────────────────────────────────
   if (logoImage) {
-    const maxH = headerH - 5
+    const maxH = 12   // preserve original logo height cap so logo is not resized when header height increases
     const maxW = col1W - 5
     const ratio = Math.min(maxW / logoImage.width, maxH / logoImage.height)
     const w = logoImage.width * ratio
@@ -677,7 +677,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   doc.setTextColor(180, 138, 32)
   writePdfText(doc, nameAr, cx, midY + 3.5, { align: "center" }, true)
 
-  // ── RIGHT COLUMN: Date / Document No. / Page (Right-aligned, tight vertical center) ──
+  // ── RIGHT COLUMN: Date / Document No. / Page (Right-aligned, aligned near bottom of header) ──
   const rawDate = template.createdAt || ""
   const formattedDate = (() => {
     try {
@@ -698,7 +698,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   const labelX  = col3X + 2.5
   const rightX  = col3X + col3W - 2.5
   const stepY   = 3.8   // compact line spacing, no extra gap
-  const startY  = headerTop + 1.5 + (headerH - 1.5 - 2 * stepY) / 2  // vertically centered block
+  const startY  = (headerTop + headerH) - (2 * stepY + 3.5)  // aligned near bottom edge of expanded header
 
   infoRows.forEach(({ label, value }, i) => {
     const y = startY + i * stepY
@@ -733,7 +733,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
 }
 
 function drawContinuationHeader(flow: Flow) {
-  const headerH = 17   // compact height for 3 rows
+  const headerH = 35   // expanded height (~4 cm total header area)
   drawHeaderColumns(flow.doc, flow, headerH)
   flow.y = 4.5 + headerH + 7
 }
@@ -872,7 +872,7 @@ function drawFirstPageHeader(
   const { doc, template, pageWidth, rtl } = flow
   const margin = PAGE.margin
   const headerTop = 4.5
-  const headerH = 17
+  const headerH = 35
 
   drawHeaderColumns(doc, flow, headerH)
 
@@ -2418,7 +2418,7 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
 
     // ── Update Header Page Number (Right Column, Row 3) ─────────────────
     const headerTop = 4.5
-    const headerH = 17
+    const headerH = 35
     const totalW = width - margin * 2
     const col1W = 42
     const col3W = 44
@@ -2427,7 +2427,7 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     const rightX = col3X + col3W - 2.5
     const labelX  = col3X + 2.5
     const stepY = 3.8
-    const startY = headerTop + 1.5 + (headerH - 1.5 - 2 * stepY) / 2
+    const startY = (headerTop + headerH) - (2 * stepY + 3.5)
     const pageY = startY + 2 * stepY
 
     // Blank out old row 3 in column 3 area (light gray fill)
