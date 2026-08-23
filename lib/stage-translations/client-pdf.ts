@@ -566,7 +566,8 @@ function decodeImage(dataUrl: string) {
   })
 }
 
-async function normalizeImage(dataUrl: string, isPng = false): Promise<LoadedImage> {
+async function normalizeImage(dataUrl: string, isPngHint = false): Promise<LoadedImage> {
+  const isPng = isPngHint || dataUrl.startsWith("data:image/png") || dataUrl.startsWith("data:image/webp")
   const image = await decodeImage(dataUrl)
   const maxDimension = 1800
   const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth || 1, image.naturalHeight || 1))
@@ -590,7 +591,9 @@ async function normalizeImage(dataUrl: string, isPng = false): Promise<LoadedIma
 function loadImage(src: string) {
   const cached = imageCache.get(src)
   if (cached) return cached
-  const isPng = !src.startsWith("data:image/jpeg") && !src.startsWith("data:image/jpg") && (src.toLowerCase().endsWith(".png") || src.startsWith("data:"))
+  const cleanPath = src.split("?")[0].toLowerCase()
+  const isJpeg = src.startsWith("data:image/jpeg") || src.startsWith("data:image/jpg") || cleanPath.endsWith(".jpg") || cleanPath.endsWith(".jpeg")
+  const isPng = !isJpeg
   const promise = (async () => {
     try {
       const rawDataUrl = src.startsWith("data:")
