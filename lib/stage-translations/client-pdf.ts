@@ -658,7 +658,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   const topTextY = headerTop + 1.5 + 5.5   // Placed upward just below top golden line
 
   // English name – Bold, auto-scale to fit col2W
-  let enSize = 8.5
+  let enSize = 10.5
   setLanguage(doc, false, enSize, true)
   while (doc.getTextWidth(nameEn) > col2W - 4 && enSize > 5) {
     enSize -= 0.3
@@ -678,7 +678,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   doc.setTextColor(180, 138, 32)
   writePdfText(doc, nameAr, cx, topTextY + 5.5, { align: "center" }, true)
 
-  // ── RIGHT COLUMN: Date / Document No. / Page (Right-aligned, aligned near bottom of header) ──
+  // ── RIGHT COLUMN: Date / Document No. / Page (Right-aligned, aligned in upper header area) ──
   const rawDate = template.createdAt || ""
   const formattedDate = (() => {
     try {
@@ -699,7 +699,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   const labelX  = col3X + 2.5
   const rightX  = col3X + col3W - 2.5
   const stepY   = 3.8   // compact line spacing, no extra gap
-  const startY  = (headerTop + headerH) - (2 * stepY + 3.5)  // aligned near bottom edge of expanded header
+  const startY  = headerTop + 1.5 + 4.5  // aligned upward in upper header area
 
   infoRows.forEach(({ label, value }, i) => {
     const y = startY + i * stepY
@@ -1138,7 +1138,7 @@ function drawFirstPageHeader(
         drawField(recipient.company, 6.5, false, 3.2, [71, 85, 105])
       }
       if (recipient.phone) drawField(recipient.phone, 6.2, false, 3.2, [71, 85, 105], true)
-      if (recipient.email) drawField(recipient.email, 6.2, false, 3.2, [180, 138, 32], true)
+      if (recipient.email) drawField(recipient.email, 6.2, false, 3.2, [0, 0, 0], true)
       currY += 1.2
     })
   }
