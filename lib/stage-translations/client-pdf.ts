@@ -16,7 +16,7 @@ import { getSourcePdfAttachment } from "@/lib/stage-translations/source-document
 import type { StageTranslationPageData, StageTranslationRecord } from "@/lib/stage-translations/types"
 import type { ReportCcRecipient } from "@/lib/report-cc/types"
 import { createClient as createSupabaseClient } from "@/lib/supabase/client"
-import { getOrganizationProfile } from "@/lib/organization/profile"
+import { getOrganizationProfile, fetchOrganizationProfileFromDb } from "@/lib/organization/profile"
 
 const JSPDF_SCRIPT_ID = "buildsight-jspdf"
 const JSPDF_SCRIPT_URLS = [
@@ -3193,12 +3193,13 @@ async function buildLanguagePdfBlob(
   options: { appendClosingBlock?: boolean } = {},
 ) {
   validateLanguagePdfTemplate(template)
-  const profile = getOrganizationProfile()
+  const profile = await fetchOrganizationProfileFromDb()
   const pdfHeaderLogoSource = profile.pdfHeaderLogoUrl || "/LogoB.png"
+  const closingLogoSource = profile.pdfLogoUrl || CLOSING_LOGO_URL
   const [JsPdf, logoImage, closingLogoImage] = await Promise.all([
     loadPdfTools(),
     loadImage(pdfHeaderLogoSource),
-    options.appendClosingBlock ? loadImage(CLOSING_LOGO_URL) : Promise.resolve(null),
+    options.appendClosingBlock ? loadImage(closingLogoSource) : Promise.resolve(null),
   ])
   const doc = new JsPdf({
     unit: "mm",
@@ -4255,12 +4256,13 @@ async function buildNativeBilingualPdfBlob(input: {
   appendClosingBlock?: boolean
 }) {
   const { data, englishTemplate, arabicTemplate, appendClosingBlock = false } = input
-  const profile = getOrganizationProfile()
+  const profile = await fetchOrganizationProfileFromDb()
   const pdfHeaderLogoSource = profile.pdfHeaderLogoUrl || "/LogoB.png"
+  const closingLogoSource = profile.pdfLogoUrl || CLOSING_LOGO_URL
   const [JsPdf, logoImage, closingLogoImage] = await Promise.all([
     loadPdfTools(),
     loadImage(pdfHeaderLogoSource),
-    appendClosingBlock ? loadImage(CLOSING_LOGO_URL) : Promise.resolve(null),
+    appendClosingBlock ? loadImage(closingLogoSource) : Promise.resolve(null),
   ])
   const doc = new JsPdf({
     unit: "mm",

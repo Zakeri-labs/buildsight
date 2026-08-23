@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
-import { getOrganizationProfile } from "@/lib/organization/profile"
+import { getOrganizationProfile, fetchOrganizationProfileFromDb } from "@/lib/organization/profile"
 
 export function Logo({
   showText = true,
@@ -23,6 +23,7 @@ export function Logo({
       setCustomLogoUrl(profile.logoUrl || null)
     }
     updateLogo()
+    fetchOrganizationProfileFromDb().then(updateLogo)
 
     window.addEventListener("organization_profile_updated", updateLogo)
     return () => {
