@@ -2483,7 +2483,7 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     const rightX = col3X + col3W - 2.5
     const labelX  = col3X + 2.5
     const stepY = 4.0
-    const startY = headerTop + 1.5 + 8.5
+    const startY = headerTop + 1.5 + 14.5
     const pageY = startY + 2 * stepY
 
     // Blank out old row 3 in column 3 area (light gray fill)
