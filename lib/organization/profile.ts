@@ -18,8 +18,8 @@ export const DEFAULT_ORG_PROFILE: OrganizationProfile = {
   poBox: "1015",
   postalCode: "132",
   phones: "+968 9411 4511, 9546 2124",
-  email: "info@bonyan-om.com",
-  website: "@bonyanec",
+  email: "info@Bonyanec.com",
+  website: "",
   addressEn: "Al Seeb, Al Mabela, Sultanate of Oman",
   addressAr: "السيب، المعبيلة، سلطنة عمان",
 }
