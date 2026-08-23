@@ -883,9 +883,14 @@ export function InspectionReportForm({
         router.refresh()
       }
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Unable to save the report.")
-      // Mark current active step as error
-      setSubmitSteps((prev) => prev.map((s) => s.status === "active" ? { ...s, status: "error" } : s))
+      const errMsg = saveError instanceof Error ? saveError.message : "Unable to save the report."
+      setError(errMsg)
+      setSubmitSteps((prev) => {
+        const activeIdx = prev.findIndex((s) => s.status === "active")
+        const targetIdx = activeIdx !== -1 ? activeIdx : prev.findIndex((s) => s.status === "pending")
+        const errorIdx = targetIdx !== -1 ? targetIdx : Math.max(0, prev.length - 1)
+        return prev.map((s, idx) => (idx === errorIdx ? { ...s, status: "error" } : s))
+      })
     } finally {
       setBusy(null)
     }
@@ -1725,12 +1730,29 @@ export function InspectionReportForm({
                     </span>
                   </div>
                 ))}
-                {submitSteps.some((s) => s.status === "error") && error ? (
-                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
-                    {error}
-                    <div className="mt-2">
-                      <Button type="button" size="sm" variant="outline" className="text-xs" onClick={() => { setSubmitModalOpen(false); setError(null) }}>
-                        {locale === "ar" ? "إغلاق والمحاولة مجدداً" : "Close and Retry"}
+                {(submitSteps.some((s) => s.status === "error") || error) ? (
+                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+                    <div className="flex items-center gap-1.5 font-bold text-red-700 dark:text-red-300">
+                      <AlertCircle className="size-4 shrink-0 text-red-600 dark:text-red-400" />
+                      <span>{locale === "ar" ? "فشل إرسال التقرير" : "Submission Failed"}</span>
+                    </div>
+                    <p className="mt-1.5 font-medium leading-relaxed">
+                      {error || (locale === "ar" ? "حدث خطأ غير متوقع أثناء إرسال التقرير." : "An error occurred while submitting the report.")}
+                    </p>
+                    <div className="mt-3">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 gap-1.5 rounded-lg border-red-300 bg-white px-3 text-xs font-semibold text-red-800 shadow-xs hover:bg-red-100 dark:border-red-800 dark:bg-red-900/40 dark:text-red-200 dark:hover:bg-red-900/60"
+                        onClick={() => {
+                          setSubmitModalOpen(false)
+                          setError(null)
+                          setSubmitSteps((prev) => prev.map((s) => s.status === "error" ? { ...s, status: "pending" } : s))
+                        }}
+                      >
+                        <X className="size-3.5" />
+                        <span>{locale === "ar" ? "إغلاق والمحاولة مجدداً" : "Close and Retry"}</span>
                       </Button>
                     </div>
                   </div>

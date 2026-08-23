@@ -87,8 +87,8 @@ async function assertCanManage(projectId: string, responseId: string, context: R
   const isCreator = response.created_by === actorId
   const isResponsible = term?.responsible_user_id === actorId
   if (!isCreator && !isResponsible) await assertProjectAdmin(projectId)
-  if (context === "report" && ["submitted", "under_review", "approved", "completed"].includes(response.status)) {
-    throw new Error("CC recipients cannot be changed while this report is awaiting review or finalized.")
+  if (context === "report" && ["approved", "completed"].includes(response.status)) {
+    throw new Error("CC recipients cannot be changed while this report is finalized.")
   }
   return { actorId, response, term }
 }
