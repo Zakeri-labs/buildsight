@@ -40,7 +40,7 @@ export async function GET() {
   try {
     const admin = createAdminClient()
     
-    // 1. Try organization_settings table
+    // 1. Primary Source of Truth: public.organization_settings table
     const { data: settingsData, error: settingsError } = await admin
       .from("organization_settings")
       .select("*")
@@ -66,7 +66,7 @@ export async function GET() {
       return NextResponse.json({ data: profile })
     }
 
-    // 2. Fallback to public.organizations table
+    // 2. Secondary Database Source: public.organizations table
     const { data: orgData } = await admin
       .from("organizations")
       .select("*")
@@ -136,11 +136,11 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     }
 
-    // 1. Try upserting organization_settings
-    await admin.from("organization_settings").upsert(payload).catch(() => null)
+    // 1. Write to primary table: public.organization_settings
+    const { error: settingsError } = await admin.from("organization_settings").upsert(payload)
 
-    // 2. Also sync to public.organizations table
-    await admin
+    // 2. Also write to public.organizations table
+    const { error: orgsError } = await admin
       .from("organizations")
       .update({
         name: savedProfile.nameEn,
@@ -156,7 +156,13 @@ export async function POST(request: NextRequest) {
         pdf_header_logo_url: savedProfile.pdfHeaderLogoUrl || "",
       } as any)
       .eq("type", "supervising")
-      .catch(() => null)
+
+    if (settingsError && orgsError) {
+      return NextResponse.json(
+        { error: `Database write failed: ${settingsError.message} | ${orgsError.message}` },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({ success: true, data: savedProfile })
   } catch (error) {

@@ -66,35 +66,31 @@ export async function fetchOrganizationProfileFromDb(): Promise<OrganizationProf
   return getOrganizationProfile()
 }
 
-export function saveOrganizationProfile(profile: OrganizationProfile): Promise<OrganizationProfile> {
-  inMemoryProfile = profile
-  if (typeof window === "undefined") return Promise.resolve(profile)
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(profile))
-    window.dispatchEvent(new Event("organization_profile_updated"))
-  } catch {
-    // Ignore storage errors
-  }
+export async function saveOrganizationProfile(profile: OrganizationProfile): Promise<OrganizationProfile> {
+  if (typeof window === "undefined") return profile
 
-  // Persist to database & update storage URLs
-  return fetch("/api/organization/profile", {
+  const res = await fetch("/api/organization/profile", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(profile),
   })
-    .then(async (res) => {
-      if (!res.ok) return profile
-      const json = await res.json()
-      if (json?.data) {
-        const savedProfile: OrganizationProfile = { ...DEFAULT_ORG_PROFILE, ...json.data }
-        inMemoryProfile = savedProfile
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(savedProfile))
-        } catch {}
-        window.dispatchEvent(new Event("organization_profile_updated"))
-        return savedProfile
-      }
-      return profile
-    })
-    .catch(() => profile)
+
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}))
+    throw new Error(json.error || `Failed to save organization profile (${res.status})`)
+  }
+
+  const json = await res.json()
+  if (!json?.data) {
+    throw new Error("Invalid response from organization profile server")
+  }
+
+  const savedProfile: OrganizationProfile = { ...DEFAULT_ORG_PROFILE, ...json.data }
+  inMemoryProfile = savedProfile
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(savedProfile))
+  } catch {}
+  window.dispatchEvent(new Event("organization_profile_updated"))
+
+  return savedProfile
 }
