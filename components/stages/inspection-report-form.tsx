@@ -55,8 +55,8 @@ import {
 import { saveReportCcRecipientsAction } from "@/lib/actions/report-cc"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto-generation"
-import { exportTranslationPdf, storeTranslationPdf, downloadPdfBlob } from "@/lib/stage-translations/client-pdf"
-import { buildWhatsAppShareUrl } from "@/lib/stage-translations/whatsapp-share"
+import { exportTranslationPdf, storeTranslationPdf, downloadPdfBlob, ensureBilingualPdfStored } from "@/lib/stage-translations/client-pdf"
+import { buildWhatsAppShareUrl, buildShareMessage } from "@/lib/stage-translations/whatsapp-share"
 import { StageTranslationActions } from "@/components/stages/stage-translation-actions"
 import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
 import { ReportDownloadSection } from "@/components/stages/report-download-section"
@@ -1580,7 +1580,17 @@ export function InspectionReportForm({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => {
+                    onClick={async () => {
+                      const respId = submitResult?.responseId || responseId
+                      const stgId = submitResult?.stageId || stageId
+                      if (respId && project?.id) {
+                        await ensureBilingualPdfStored({
+                          projectId: project.id,
+                          stageId: stgId,
+                          responseId: respId,
+                          existingPath: translation?.bilingualPdfPath,
+                        })
+                      }
                       const url = buildWhatsAppShareUrl({
                         projectName: project?.name || "Project",
                         reportTitle: reportTitle?.trim() || defaultReportTitlePattern || "Inspection Report",
@@ -1588,8 +1598,8 @@ export function InspectionReportForm({
                         visitNumber: currentVisitNo,
                         supervisorName: creatorPerson.name,
                         projectId: project.id,
-                        stageId: submitResult?.stageId || stageId,
-                        responseId: submitResult?.responseId || responseId,
+                        stageId: stgId,
+                        responseId: respId,
                         translationId: translation?.id,
                         phone: "96891451613",
                       })
@@ -1605,7 +1615,17 @@ export function InspectionReportForm({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => {
+                    onClick={async () => {
+                      const respId = submitResult?.responseId || responseId
+                      const stgId = submitResult?.stageId || stageId
+                      if (respId && project?.id) {
+                        await ensureBilingualPdfStored({
+                          projectId: project.id,
+                          stageId: stgId,
+                          responseId: respId,
+                          existingPath: translation?.bilingualPdfPath,
+                        })
+                      }
                       const msg = buildShareMessage({
                         projectName: project?.name || "Project",
                         reportTitle: reportTitle?.trim() || defaultReportTitlePattern || "Inspection Report",
@@ -1613,8 +1633,8 @@ export function InspectionReportForm({
                         visitNumber: currentVisitNo,
                         supervisorName: creatorPerson.name,
                         projectId: project.id,
-                        stageId: submitResult?.stageId || stageId,
-                        responseId: submitResult?.responseId || responseId,
+                        stageId: stgId,
+                        responseId: respId,
                         translationId: translation?.id,
                       })
                       if (typeof navigator !== "undefined" && navigator.clipboard) {

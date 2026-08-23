@@ -15,10 +15,15 @@ export function buildShareMessage(options: {
   const origin = typeof window !== "undefined" ? window.location.origin : "https://app.bonyanec.com"
   const reportId = options.responseId || options.translationId
   const microCode = reportId ? reportId.split("-")[0] : null
+  const queryIdParam = options.translationId
+    ? `translationId=${options.translationId}`
+    : options.responseId
+    ? `responseId=${options.responseId}`
+    : ""
 
   const shortUrl = microCode
     ? `${origin}/r/${microCode}`
-    : `${origin}/api/stage-translations/pdf?projectId=${options.projectId}&kind=bilingual&share=1`
+    : `${origin}/api/stage-translations/pdf?projectId=${options.projectId}&kind=bilingual&share=1${queryIdParam ? `&${queryIdParam}` : ""}`
 
   const subjectText = (options.reportSubject || options.reportTitle || "Inspection Report").trim()
 

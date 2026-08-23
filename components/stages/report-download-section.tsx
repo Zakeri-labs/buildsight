@@ -93,8 +93,8 @@ export function ReportDownloadSection({
   }, [projectId, stageId, termId, responseId, isCompleted, isStale])
 
   function handleRetry() {
+    if (retryBusy) return
     setRetryBusy(true)
-    setTranslation((current) => (current ? { ...current, status: "pending" } : null))
     enqueueStageTranslationJob({
       projectId,
       stageId: termId || stageId,
@@ -109,43 +109,67 @@ export function ReportDownloadSection({
       Date.now() - new Date(translation.generatedAt).getTime() > FIVE_DAYS_MS,
   )
 
-  function handleWhatsAppShare() {
-    if (isLinkExpired || isStale) {
-      handleRetry()
+  async function handleWhatsAppShare() {
+    if (sharing) return
+    setSharing(true)
+    try {
+      if (isLinkExpired || isStale) {
+        handleRetry()
+      }
+      await ensureBilingualPdfStored({
+        projectId,
+        stageId: termId || stageId,
+        responseId,
+        existingPath: translation?.bilingualPdfPath,
+      })
+      const url = buildWhatsAppShareUrl({
+        projectName: projectName || "Project",
+        reportTitle: reportTitle || "Inspection Report",
+        reportSubject: reportSubject || reportTitle || "Inspection Report",
+        visitNumber,
+        supervisorName,
+        projectId,
+        stageId: termId || stageId,
+        responseId,
+        translationId: translation?.id,
+      })
+      window.open(url, "_blank")
+    } finally {
+      setSharing(false)
     }
-    const url = buildWhatsAppShareUrl({
-      projectName: projectName || "Project",
-      reportTitle: reportTitle || "Inspection Report",
-      reportSubject: reportSubject || reportTitle || "Inspection Report",
-      visitNumber,
-      supervisorName,
-      projectId,
-      stageId: termId || stageId,
-      responseId,
-      translationId: translation?.id,
-    })
-    window.open(url, "_blank")
   }
 
-  function handleCopyShare() {
-    if (isLinkExpired || isStale) {
-      handleRetry()
-    }
-    const msg = buildShareMessage({
-      projectName: projectName || "Project",
-      reportTitle: reportTitle || "Inspection Report",
-      reportSubject: reportSubject || reportTitle || "Inspection Report",
-      visitNumber,
-      supervisorName,
-      projectId,
-      stageId: termId || stageId,
-      responseId,
-      translationId: translation?.id,
-    })
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(msg.text)
-      setCopiedShare(true)
-      setTimeout(() => setCopiedShare(false), 2000)
+  async function handleCopyShare() {
+    if (sharing) return
+    setSharing(true)
+    try {
+      if (isLinkExpired || isStale) {
+        handleRetry()
+      }
+      await ensureBilingualPdfStored({
+        projectId,
+        stageId: termId || stageId,
+        responseId,
+        existingPath: translation?.bilingualPdfPath,
+      })
+      const msg = buildShareMessage({
+        projectName: projectName || "Project",
+        reportTitle: reportTitle || "Inspection Report",
+        reportSubject: reportSubject || reportTitle || "Inspection Report",
+        visitNumber,
+        supervisorName,
+        projectId,
+        stageId: termId || stageId,
+        responseId,
+        translationId: translation?.id,
+      })
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        navigator.clipboard.writeText(msg.text)
+        setCopiedShare(true)
+        setTimeout(() => setCopiedShare(false), 2000)
+      }
+    } finally {
+      setSharing(false)
     }
   }
 

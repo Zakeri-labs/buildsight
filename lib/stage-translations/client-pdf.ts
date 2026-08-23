@@ -335,6 +335,54 @@ export async function storeTranslationPdf(input: {
   return String(finalized.storagePath || storagePath)
 }
 
+export async function ensureBilingualPdfStored(input: {
+  projectId: string
+  stageId?: string
+  responseId?: string
+  existingPath?: string | null
+}): Promise<string | null> {
+  if (input.existingPath) return input.existingPath
+  if (!input.projectId || !input.responseId) return null
+
+  try {
+    const params = new URLSearchParams({
+      projectId: input.projectId,
+      stageId: input.stageId || "",
+      responseId: input.responseId,
+    })
+    const res = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
+    if (!res.ok) return null
+    const payload = await res.json()
+    const data = payload?.data
+    if (!data || !data.translation?.id) return null
+
+    if (data.translation?.bilingualPdfPath) {
+      return data.translation.bilingualPdfPath
+    }
+
+    const pdfResult = await exportTranslationPdf({
+      data,
+      translation: data.translation,
+      kind: "bilingual",
+      ccRecipients: payload?.ccRecipients ?? [],
+      appendClosingBlock: true,
+    })
+
+    const storedPath = await storeTranslationPdf({
+      projectId: input.projectId,
+      translationId: data.translation.id,
+      kind: "bilingual",
+      blob: pdfResult.blob,
+      filename: pdfResult.filename,
+    })
+
+    return storedPath
+  } catch (err) {
+    console.error("Auto-generate bilingual PDF error before share:", err)
+    return null
+  }
+}
+
 function normalizeText(value: string) {
   return value.replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim()
 }
