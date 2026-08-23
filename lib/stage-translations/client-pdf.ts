@@ -755,7 +755,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   const labelX  = col3X + 2.5
   const rightX  = col3X + col3W - 2.5
   const stepY   = 4.0   // line spacing
-  const startY  = headerTop + 1.5 + 8.5  // aligned downward to align with logo vertical band (Y = 14.5mm)
+  const startY  = headerTop + 1.5 + 14.5 // aligned downward to align bottom of text block with logo bottom edge (Y = 20.5mm)
 
   infoRows.forEach(({ label, value }, i) => {
     const y = startY + i * stepY
