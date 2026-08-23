@@ -17,6 +17,7 @@ export function SettingsOrganization() {
   const isArabic = locale === "ar"
   const orgFileInputRef = useRef<HTMLInputElement>(null)
   const pdfFileInputRef = useRef<HTMLInputElement>(null)
+  const pdfHeaderFileInputRef = useRef<HTMLInputElement>(null)
 
   // Admin access check: org_admin, admin, or fallback in dev
   const isAdmin = !currentUser.role || currentUser.role === "org_admin" || currentUser.role === "admin"
@@ -72,6 +73,27 @@ export function SettingsOrganization() {
 
   function handleRemovePdfLogo() {
     setProfile((prev) => ({ ...prev, pdfLogoUrl: "" }))
+    setSaved(false)
+  }
+
+  function handlePdfHeaderLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string
+      if (dataUrl) {
+        setProfile((prev) => ({ ...prev, pdfHeaderLogoUrl: dataUrl }))
+        setSaved(false)
+      }
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ""
+  }
+
+  function handleRemovePdfHeaderLogo() {
+    setProfile((prev) => ({ ...prev, pdfHeaderLogoUrl: "" }))
     setSaved(false)
   }
 
@@ -244,9 +266,9 @@ export function SettingsOrganization() {
             </div>
           </div>
 
-          {/* Organization Logo & PDF Logo Side-by-Side Section */}
-          <div className="grid gap-5 lg:grid-cols-2">
-            {/* Left: Organization Logo */}
+          {/* Organization Logo, PDF Logo & PDF Header Logo 3-Column Section */}
+          <div className="grid gap-5 lg:grid-cols-3">
+            {/* 1. Organization Logo */}
             <div className="flex flex-col justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -273,7 +295,7 @@ export function SettingsOrganization() {
 
               <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-1">
                 {/* Preview Box */}
-                <div className="flex h-16 w-44 shrink-0 items-center justify-center rounded-lg border border-sidebar-border bg-sidebar p-2 shadow-inner">
+                <div className="flex h-16 w-36 shrink-0 items-center justify-center rounded-lg border border-sidebar-border bg-sidebar p-2 shadow-inner">
                   <img
                     src={profile.logoUrl || "/Logow.png"}
                     alt="Organization Logo Preview"
@@ -298,7 +320,7 @@ export function SettingsOrganization() {
                   >
                     <Upload className="mr-2 size-4" />
                     {profile.logoUrl
-                      ? (isArabic ? "تغيير الشعار" : "Change Logo")
+                      ? (isArabic ? "تغيير" : "Change")
                       : (isArabic ? "رفع الشعار" : "Upload Logo")}
                   </Button>
 
@@ -311,14 +333,14 @@ export function SettingsOrganization() {
                       onClick={handleRemoveOrgLogo}
                     >
                       <Trash2 className="mr-2 size-4" />
-                      {isArabic ? "إزالة الشعار" : "Remove Logo"}
+                      {isArabic ? "إزالة" : "Remove"}
                     </Button>
                   ) : null}
                 </div>
               </div>
             </div>
 
-            {/* Right: PDF Logo */}
+            {/* 2. PDF Logo */}
             <div className="flex flex-col justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -345,7 +367,7 @@ export function SettingsOrganization() {
 
               <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-1">
                 {/* Preview Box */}
-                <div className="flex h-16 w-44 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white p-2 shadow-inner dark:border-slate-800 dark:bg-slate-950">
+                <div className="flex h-16 w-36 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white p-2 shadow-inner dark:border-slate-800 dark:bg-slate-950">
                   <img
                     src={profile.pdfLogoUrl || "/bonyan-closing-logo.png"}
                     alt="PDF Logo Preview"
@@ -370,7 +392,7 @@ export function SettingsOrganization() {
                   >
                     <Upload className="mr-2 size-4" />
                     {profile.pdfLogoUrl
-                      ? (isArabic ? "تغيير الشعار" : "Change Logo")
+                      ? (isArabic ? "تغيير" : "Change")
                       : (isArabic ? "رفع الشعار" : "Upload Logo")}
                   </Button>
 
@@ -383,7 +405,79 @@ export function SettingsOrganization() {
                       onClick={handleRemovePdfLogo}
                     >
                       <Trash2 className="mr-2 size-4" />
-                      {isArabic ? "إزالة الشعار" : "Remove Logo"}
+                      {isArabic ? "إزالة" : "Remove"}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            {/* 3. PDF Header Logo */}
+            <div className="flex flex-col justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <Label className="flex items-center gap-1.5 text-base font-semibold text-foreground">
+                    <ImageIcon className="size-4 text-blue-600 dark:text-blue-400" />
+                    {isArabic ? "شعار هيدر الـ PDF" : "PDF Header Logo"}
+                  </Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {isArabic
+                      ? "رفع شعار مخصص لاستخدامه حصراً في هيدر تقارير الـ PDF."
+                      : "Upload a custom logo used specifically in the PDF report header."}
+                  </p>
+                </div>
+                {profile.pdfHeaderLogoUrl ? (
+                  <Badge variant="secondary" className="shrink-0 text-xs">
+                    {isArabic ? "شعار مخصص" : "Custom Logo"}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="shrink-0 text-xs text-muted-foreground">
+                    {isArabic ? "الشعار الافتراضي" : "Default Logo"}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-1">
+                {/* Preview Box */}
+                <div className="flex h-16 w-36 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white p-2 shadow-inner dark:border-slate-800 dark:bg-slate-950">
+                  <img
+                    src={profile.pdfHeaderLogoUrl || "/LogoB.png"}
+                    alt="PDF Header Logo Preview"
+                    className="max-h-12 w-auto max-w-full object-contain"
+                  />
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    ref={pdfHeaderFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handlePdfHeaderLogoUpload}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => pdfHeaderFileInputRef.current?.click()}
+                  >
+                    <Upload className="mr-2 size-4" />
+                    {profile.pdfHeaderLogoUrl
+                      ? (isArabic ? "تغيير" : "Change")
+                      : (isArabic ? "رفع الشعار" : "Upload Logo")}
+                  </Button>
+
+                  {profile.pdfHeaderLogoUrl ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={handleRemovePdfHeaderLogo}
+                    >
+                      <Trash2 className="mr-2 size-4" />
+                      {isArabic ? "إزالة" : "Remove"}
                     </Button>
                   ) : null}
                 </div>

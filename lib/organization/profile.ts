@@ -11,6 +11,7 @@ export type OrganizationProfile = {
   addressAr: string
   logoUrl?: string
   pdfLogoUrl?: string
+  pdfHeaderLogoUrl?: string
 }
 
 export const DEFAULT_ORG_PROFILE: OrganizationProfile = {
@@ -26,6 +27,7 @@ export const DEFAULT_ORG_PROFILE: OrganizationProfile = {
   addressAr: "السيب، المعبيلة، سلطنة عمان",
   logoUrl: "",
   pdfLogoUrl: "",
+  pdfHeaderLogoUrl: "",
 }
 
 const STORAGE_KEY = "buildsight_organization_profile"
