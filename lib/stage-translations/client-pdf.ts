@@ -534,7 +534,7 @@ async function normalizeImage(dataUrl: string, isPng = false): Promise<LoadedIma
 function loadImage(src: string) {
   const cached = imageCache.get(src)
   if (cached) return cached
-  const isPng = src.toLowerCase().endsWith(".png") || src.startsWith("data:image/png")
+  const isPng = !src.startsWith("data:image/jpeg") && !src.startsWith("data:image/jpg") && (src.toLowerCase().endsWith(".png") || src.startsWith("data:"))
   const promise = (async () => {
     try {
       const rawDataUrl = src.startsWith("data:")
@@ -638,8 +638,9 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     const ratio = Math.min(maxW / logoImage.width, maxH / logoImage.height)
     const w = logoImage.width * ratio
     const h = logoImage.height * ratio
+    const imgFormat = logoImage.dataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG"
     doc.addImage(
-      logoImage.dataUrl, "PNG",
+      logoImage.dataUrl, imgFormat,
       col1X,   // Left-aligned further to the left
       headerTop + 1.5 + (headerH - 1.5 - h) / 2,
       w, h, undefined, "FAST",
