@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { AlertCircle, Check, Building2, Phone, Mail, Globe, MapPin, ShieldAlert, Sparkles, Upload, ImageIcon, Trash2 } from "lucide-react"
 import { useCurrentUser } from "@/components/current-user-provider"
-import { getOrganizationProfile, saveOrganizationProfile, type OrganizationProfile } from "@/lib/organization/profile"
+import { getOrganizationProfile, fetchOrganizationProfileFromDb, saveOrganizationProfile, type OrganizationProfile } from "@/lib/organization/profile"
 
 export function SettingsOrganization() {
   const { locale } = useI18n()
@@ -26,7 +26,9 @@ export function SettingsOrganization() {
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    setProfile(getOrganizationProfile())
+    fetchOrganizationProfileFromDb().then((fetched) => {
+      setProfile(fetched)
+    })
   }, [])
 
   function handleChange(field: keyof OrganizationProfile, value: string) {

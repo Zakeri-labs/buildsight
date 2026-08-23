@@ -31,20 +31,43 @@ export const DEFAULT_ORG_PROFILE: OrganizationProfile = {
 }
 
 const STORAGE_KEY = "buildsight_organization_profile"
+let inMemoryProfile: OrganizationProfile | null = null
 
 export function getOrganizationProfile(): OrganizationProfile {
+  if (inMemoryProfile) return inMemoryProfile
   if (typeof window === "undefined") return DEFAULT_ORG_PROFILE
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return DEFAULT_ORG_PROFILE
     const parsed = JSON.parse(raw) as Partial<OrganizationProfile>
-    return { ...DEFAULT_ORG_PROFILE, ...parsed }
+    inMemoryProfile = { ...DEFAULT_ORG_PROFILE, ...parsed }
+    return inMemoryProfile
   } catch {
     return DEFAULT_ORG_PROFILE
   }
 }
 
+export async function fetchOrganizationProfileFromDb(): Promise<OrganizationProfile> {
+  if (typeof window === "undefined") return getOrganizationProfile()
+  try {
+    const res = await fetch("/api/organization/profile", { cache: "no-store" })
+    if (!res.ok) return getOrganizationProfile()
+    const json = await res.json()
+    if (json?.data) {
+      const dbProfile: OrganizationProfile = { ...DEFAULT_ORG_PROFILE, ...json.data }
+      inMemoryProfile = dbProfile
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(dbProfile))
+      } catch {}
+      window.dispatchEvent(new Event("organization_profile_updated"))
+      return dbProfile
+    }
+  } catch {}
+  return getOrganizationProfile()
+}
+
 export function saveOrganizationProfile(profile: OrganizationProfile): void {
+  inMemoryProfile = profile
   if (typeof window === "undefined") return
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(profile))
@@ -52,4 +75,11 @@ export function saveOrganizationProfile(profile: OrganizationProfile): void {
   } catch {
     // Ignore storage errors
   }
+
+  // Persist to database asynchronously
+  fetch("/api/organization/profile", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(profile),
+  }).catch(() => undefined)
 }
