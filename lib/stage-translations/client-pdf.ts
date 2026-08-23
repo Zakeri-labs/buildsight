@@ -3192,9 +3192,11 @@ async function buildLanguagePdfBlob(
   options: { appendClosingBlock?: boolean } = {},
 ) {
   validateLanguagePdfTemplate(template)
+  const profile = getOrganizationProfile()
+  const pdfHeaderLogoSource = profile.pdfHeaderLogoUrl || "/LogoB.png"
   const [JsPdf, logoImage, closingLogoImage] = await Promise.all([
     loadPdfTools(),
-    loadImage("/LogoB.png"),
+    loadImage(pdfHeaderLogoSource),
     options.appendClosingBlock ? loadImage(CLOSING_LOGO_URL) : Promise.resolve(null),
   ])
   const doc = new JsPdf({
@@ -4252,9 +4254,11 @@ async function buildNativeBilingualPdfBlob(input: {
   appendClosingBlock?: boolean
 }) {
   const { data, englishTemplate, arabicTemplate, appendClosingBlock = false } = input
+  const profile = getOrganizationProfile()
+  const pdfHeaderLogoSource = profile.pdfHeaderLogoUrl || "/LogoB.png"
   const [JsPdf, logoImage, closingLogoImage] = await Promise.all([
     loadPdfTools(),
-    loadImage("/LogoB.png"),
+    loadImage(pdfHeaderLogoSource),
     appendClosingBlock ? loadImage(CLOSING_LOGO_URL) : Promise.resolve(null),
   ])
   const doc = new JsPdf({
