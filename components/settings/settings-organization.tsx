@@ -99,9 +99,10 @@ export function SettingsOrganization() {
     setSaved(false)
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    saveOrganizationProfile(profile)
+    const savedProfile = await saveOrganizationProfile(profile)
+    setProfile(savedProfile)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
   }

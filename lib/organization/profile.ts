@@ -66,9 +66,9 @@ export async function fetchOrganizationProfileFromDb(): Promise<OrganizationProf
   return getOrganizationProfile()
 }
 
-export function saveOrganizationProfile(profile: OrganizationProfile): void {
+export function saveOrganizationProfile(profile: OrganizationProfile): Promise<OrganizationProfile> {
   inMemoryProfile = profile
-  if (typeof window === "undefined") return
+  if (typeof window === "undefined") return Promise.resolve(profile)
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(profile))
     window.dispatchEvent(new Event("organization_profile_updated"))
@@ -76,10 +76,25 @@ export function saveOrganizationProfile(profile: OrganizationProfile): void {
     // Ignore storage errors
   }
 
-  // Persist to database asynchronously
-  fetch("/api/organization/profile", {
+  // Persist to database & update storage URLs
+  return fetch("/api/organization/profile", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(profile),
-  }).catch(() => undefined)
+  })
+    .then(async (res) => {
+      if (!res.ok) return profile
+      const json = await res.json()
+      if (json?.data) {
+        const savedProfile: OrganizationProfile = { ...DEFAULT_ORG_PROFILE, ...json.data }
+        inMemoryProfile = savedProfile
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(savedProfile))
+        } catch {}
+        window.dispatchEvent(new Event("organization_profile_updated"))
+        return savedProfile
+      }
+      return profile
+    })
+    .catch(() => profile)
 }

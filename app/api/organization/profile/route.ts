@@ -5,6 +5,37 @@ import { DEFAULT_ORG_PROFILE, type OrganizationProfile } from "@/lib/organizatio
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+async function uploadLogoToStorage(dataUrl: string | undefined, logoType: string): Promise<string> {
+  if (!dataUrl || !dataUrl.startsWith("data:")) return dataUrl || ""
+  try {
+    const admin = createAdminClient()
+    const match = dataUrl.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/)
+    if (!match) return dataUrl
+    const contentType = match[1]
+    const base64Data = match[2]
+    const buffer = Buffer.from(base64Data, "base64")
+    const ext = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg"
+    const storagePath = `org-logos/${logoType}-${Date.now()}.${ext}`
+
+    const { error: uploadError } = await admin.storage
+      .from("project-stage-evidence")
+      .upload(storagePath, buffer, {
+        contentType,
+        upsert: true,
+      })
+
+    if (uploadError) return dataUrl
+
+    const { data: signed } = await admin.storage
+      .from("project-stage-evidence")
+      .createSignedUrl(storagePath, 60 * 60 * 24 * 365 * 10)
+
+    return signed?.signedUrl || dataUrl
+  } catch {
+    return dataUrl
+  }
+}
+
 export async function GET() {
   try {
     const admin = createAdminClient()
@@ -75,22 +106,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid profile data" }, { status: 400 })
     }
 
+    const logoUrl = await uploadLogoToStorage(body.logoUrl, "org-logo")
+    const pdfLogoUrl = await uploadLogoToStorage(body.pdfLogoUrl, "pdf-logo")
+    const pdfHeaderLogoUrl = await uploadLogoToStorage(body.pdfHeaderLogoUrl, "pdf-header-logo")
+
+    const savedProfile: OrganizationProfile = {
+      ...body,
+      logoUrl,
+      pdfLogoUrl,
+      pdfHeaderLogoUrl,
+    }
+
     const admin = createAdminClient()
     const payload = {
       id: "default",
-      name_en: body.nameEn || DEFAULT_ORG_PROFILE.nameEn,
-      name_ar: body.nameAr || DEFAULT_ORG_PROFILE.nameAr,
-      cr_number: body.crNumber || DEFAULT_ORG_PROFILE.crNumber,
-      po_box: body.poBox || DEFAULT_ORG_PROFILE.poBox,
-      postal_code: body.postalCode || DEFAULT_ORG_PROFILE.postalCode,
-      phones: body.phones || DEFAULT_ORG_PROFILE.phones,
-      email: body.email || DEFAULT_ORG_PROFILE.email,
-      website: body.website || "",
-      address_en: body.addressEn || DEFAULT_ORG_PROFILE.addressEn,
-      address_ar: body.addressAr || DEFAULT_ORG_PROFILE.addressAr,
-      logo_url: body.logoUrl || "",
-      pdf_logo_url: body.pdfLogoUrl || "",
-      pdf_header_logo_url: body.pdfHeaderLogoUrl || "",
+      name_en: savedProfile.nameEn || DEFAULT_ORG_PROFILE.nameEn,
+      name_ar: savedProfile.nameAr || DEFAULT_ORG_PROFILE.nameAr,
+      cr_number: savedProfile.crNumber || DEFAULT_ORG_PROFILE.crNumber,
+      po_box: savedProfile.poBox || DEFAULT_ORG_PROFILE.poBox,
+      postal_code: savedProfile.postalCode || DEFAULT_ORG_PROFILE.postalCode,
+      phones: savedProfile.phones || DEFAULT_ORG_PROFILE.phones,
+      email: savedProfile.email || DEFAULT_ORG_PROFILE.email,
+      website: savedProfile.website || "",
+      address_en: savedProfile.addressEn || DEFAULT_ORG_PROFILE.addressEn,
+      address_ar: savedProfile.addressAr || DEFAULT_ORG_PROFILE.addressAr,
+      logo_url: savedProfile.logoUrl || "",
+      pdf_logo_url: savedProfile.pdfLogoUrl || "",
+      pdf_header_logo_url: savedProfile.pdfHeaderLogoUrl || "",
       updated_at: new Date().toISOString(),
     }
 
@@ -101,22 +143,22 @@ export async function POST(request: NextRequest) {
     await admin
       .from("organizations")
       .update({
-        name: body.nameEn,
-        name_ar: body.nameAr,
-        email: body.email,
-        phone: body.phones,
-        website: body.website,
-        address: body.addressEn,
-        postal_code: body.postalCode,
-        registration_number: body.crNumber,
-        logo_url: body.logoUrl || "",
-        pdf_logo_url: body.pdfLogoUrl || "",
-        pdf_header_logo_url: body.pdfHeaderLogoUrl || "",
+        name: savedProfile.nameEn,
+        name_ar: savedProfile.nameAr,
+        email: savedProfile.email,
+        phone: savedProfile.phones,
+        website: savedProfile.website,
+        address: savedProfile.addressEn,
+        postal_code: savedProfile.postalCode,
+        registration_number: savedProfile.crNumber,
+        logo_url: savedProfile.logoUrl || "",
+        pdf_logo_url: savedProfile.pdfLogoUrl || "",
+        pdf_header_logo_url: savedProfile.pdfHeaderLogoUrl || "",
       } as any)
       .eq("type", "supervising")
       .catch(() => null)
 
-    return NextResponse.json({ success: true, data: body })
+    return NextResponse.json({ success: true, data: savedProfile })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to save organization profile"
     return NextResponse.json({ error: message }, { status: 500 })
