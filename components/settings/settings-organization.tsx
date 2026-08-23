@@ -36,20 +36,40 @@ export function SettingsOrganization() {
     setSaved(false)
   }
 
-  function handleOrgLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function uploadLogoFile(file: File, type: string): Promise<string> {
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("type", type)
+    const res = await fetch("/api/organization/logo-upload", {
+      method: "POST",
+      body: formData,
+    })
+    if (!res.ok) throw new Error("Failed to upload logo")
+    const data = await res.json()
+    return data.url || ""
+  }
+
+  async function handleOrgLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string
-      if (dataUrl) {
-        setProfile((prev) => ({ ...prev, logoUrl: dataUrl }))
+    e.target.value = ""
+    try {
+      const url = await uploadLogoFile(file, "org-logo")
+      if (url) {
+        setProfile((prev) => ({ ...prev, logoUrl: url }))
         setSaved(false)
       }
+    } catch {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string
+        if (dataUrl) {
+          setProfile((prev) => ({ ...prev, logoUrl: dataUrl }))
+          setSaved(false)
+        }
+      }
+      reader.readAsDataURL(file)
     }
-    reader.readAsDataURL(file)
-    e.target.value = ""
   }
 
   function handleRemoveOrgLogo() {
@@ -57,20 +77,27 @@ export function SettingsOrganization() {
     setSaved(false)
   }
 
-  function handlePdfLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handlePdfLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string
-      if (dataUrl) {
-        setProfile((prev) => ({ ...prev, pdfLogoUrl: dataUrl }))
+    e.target.value = ""
+    try {
+      const url = await uploadLogoFile(file, "pdf-logo")
+      if (url) {
+        setProfile((prev) => ({ ...prev, pdfLogoUrl: url }))
         setSaved(false)
       }
+    } catch {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string
+        if (dataUrl) {
+          setProfile((prev) => ({ ...prev, pdfLogoUrl: dataUrl }))
+          setSaved(false)
+        }
+      }
+      reader.readAsDataURL(file)
     }
-    reader.readAsDataURL(file)
-    e.target.value = ""
   }
 
   function handleRemovePdfLogo() {
@@ -78,20 +105,27 @@ export function SettingsOrganization() {
     setSaved(false)
   }
 
-  function handlePdfHeaderLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handlePdfHeaderLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string
-      if (dataUrl) {
-        setProfile((prev) => ({ ...prev, pdfHeaderLogoUrl: dataUrl }))
+    e.target.value = ""
+    try {
+      const url = await uploadLogoFile(file, "pdf-header-logo")
+      if (url) {
+        setProfile((prev) => ({ ...prev, pdfHeaderLogoUrl: url }))
         setSaved(false)
       }
+    } catch {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string
+        if (dataUrl) {
+          setProfile((prev) => ({ ...prev, pdfHeaderLogoUrl: dataUrl }))
+          setSaved(false)
+        }
+      }
+      reader.readAsDataURL(file)
     }
-    reader.readAsDataURL(file)
-    e.target.value = ""
   }
 
   function handleRemovePdfHeaderLogo() {
