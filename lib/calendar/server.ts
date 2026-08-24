@@ -444,6 +444,7 @@ export async function getCalendarSchedulingProjects({ userId, projects }: {
     return {
       id: project.id,
       name: project.name,
+      code: project.code,
       supervisor,
       participants: Array.from(people.values()).sort((left, right) => left.name.localeCompare(right.name)),
     }

@@ -49,6 +49,7 @@ export type CalendarSchedulingPersonViewModel = {
 export type CalendarSchedulingProjectViewModel = {
   id: string
   name: string
+  code?: string | null
   supervisor: CalendarSchedulingPersonViewModel
   participants: CalendarSchedulingPersonViewModel[]
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, useTransition, type ChangeEvent } from "react"
-import { MapPinned } from "lucide-react"
+import { MapPinned, Search } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -63,6 +63,7 @@ export function ScheduleSiteVisitDialog({
 }) {
   const requestProject = request ? projects.find((project) => project.id === request.projectId) ?? null : null
   const [projectId, setProjectId] = useState(request?.projectId ?? projects[0]?.id ?? "")
+  const [projectSearch, setProjectSearch] = useState("")
   const [date, setDate] = useState(request?.requestedDate ?? initialDate)
   const [time, setTime] = useState("")
   const [notes, setNotes] = useState(request?.notes ?? "")
@@ -77,11 +78,22 @@ export function ScheduleSiteVisitDialog({
     [projectId, projects, requestProject],
   )
 
+  const filteredProjects = useMemo(() => {
+    const query = projectSearch.trim().toLowerCase()
+    if (!query) return projects
+    return projects.filter((project) => {
+      const matchName = project.name.toLowerCase().includes(query)
+      const matchCode = project.code ? project.code.toLowerCase().includes(query) : false
+      return matchName || matchCode
+    })
+  }, [projectSearch, projects])
+
   useEffect(() => {
     if (!open) return
     setProjectId((current) => request?.projectId ?? (
       projects.some((project) => project.id === current) ? current : projects[0]?.id ?? ""
     ))
+    setProjectSearch("")
     setDate(request?.requestedDate ?? initialDate)
     setTime("")
     setNotes(request?.notes ?? "")
@@ -102,6 +114,7 @@ export function ScheduleSiteVisitDialog({
   function changeProject(value: unknown) {
     if (request) return
     setProjectId(String(value))
+    setProjectSearch("")
     setAssignedUserIds([])
     setError("")
   }
@@ -211,17 +224,56 @@ export function ScheduleSiteVisitDialog({
                 <SelectContent
                   align={isMobileProjectSelect ? "start" : "center"}
                   alignItemWithTrigger={!isMobileProjectSelect}
-                  className="max-sm:!w-[var(--anchor-width)] max-sm:!min-w-0 max-sm:max-w-[calc(100vw-2rem)] max-sm:max-h-[min(18rem,var(--available-height))]"
+                  className="p-0 max-sm:!w-[var(--anchor-width)] max-sm:!min-w-0 max-sm:max-w-[calc(100vw-2rem)] max-sm:max-h-[min(20rem,var(--available-height))]"
                 >
-                  {projects.map((project) => (
-                    <SelectItem
-                      key={project.id}
-                      value={project.id}
-                      className="max-sm:items-start max-sm:py-2 max-sm:[&>span:first-child]:min-w-0 max-sm:[&>span:first-child]:shrink max-sm:[&>span:first-child]:whitespace-normal max-sm:[&>span:first-child]:break-words max-sm:[&>span:first-child]:leading-5"
-                    >
-                      {project.name}
-                    </SelectItem>
-                  ))}
+                  <div className="sticky top-0 z-10 bg-popover p-2 pb-1.5 border-b border-border/60">
+                    <div className="relative flex items-center">
+                      <Search className="absolute left-2.5 size-3.5 text-muted-foreground pointer-events-none" />
+                      <input
+                        type="text"
+                        value={projectSearch}
+                        onChange={(e) => setProjectSearch(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key !== "Escape" && e.key !== "ArrowDown" && e.key !== "ArrowUp") {
+                            e.stopPropagation()
+                          }
+                        }}
+                        onKeyDownCapture={(e) => {
+                          if (e.key !== "Escape" && e.key !== "ArrowDown" && e.key !== "ArrowUp") {
+                            e.stopPropagation()
+                          }
+                        }}
+                        onKeyUp={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="Search projects..."
+                        className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-1">
+                    {filteredProjects.length === 0 ? (
+                      <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                        No matching projects found.
+                      </div>
+                    ) : (
+                      filteredProjects.map((project) => (
+                        <SelectItem
+                          key={project.id}
+                          value={project.id}
+                          className="max-sm:py-2 max-sm:[&>span:first-child]:min-w-0 max-sm:[&>span:first-child]:shrink max-sm:[&>span:first-child]:leading-5"
+                        >
+                          <div className="flex w-full min-w-0 items-center justify-between gap-3 pr-2">
+                            <span className="truncate font-medium">{project.name}</span>
+                            {project.code ? (
+                              <span className="shrink-0 text-xs font-mono text-muted-foreground/80">{project.code}</span>
+                            ) : null}
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
+                  </div>
                 </SelectContent>
               </Select>
             )}
