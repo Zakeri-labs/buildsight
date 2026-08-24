@@ -289,3 +289,25 @@ export async function canAdministerProject(projectId: string): Promise<boolean> 
     throw error
   }
 }
+
+/**
+ * Efficient batch check for project administration permissions across multiple projects.
+ * Returns a Set of project IDs that the specified user has project_admin privileges for.
+ */
+export async function getProjectAdminSetForUser(
+  userId: string,
+  projectIds: string[],
+): Promise<Set<string>> {
+  if (!projectIds.length) return new Set()
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("project_user_memberships")
+    .select("project_id")
+    .in("project_id", projectIds)
+    .eq("user_id", userId)
+    .eq("access_role", "project_admin")
+    .eq("status", "active")
+
+  if (error) throw error
+  return new Set((data ?? []).map((row: any) => row.project_id as string))
+}

@@ -3,7 +3,7 @@ export const revalidate = 0
 
 import { ProjectsList, type ProjectRow } from "@/components/projects/projects-list"
 import { requireOnboarded } from "@/lib/auth/session"
-import { canAdministerOrganization, canAdministerProject } from "@/lib/auth/guards"
+import { canAdministerOrganization, canAdministerProject, getProjectAdminSetForUser } from "@/lib/auth/guards"
 import { getOrgProjects } from "@/lib/db/domain"
 import { PROJECT_TYPES, isProjectTypeValue } from "@/lib/projects/project-options"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
@@ -62,8 +62,21 @@ export default async function ProjectsPage({
   const assignedSupervisorIds = projects
     .map((project) => project.assignedSupervisorId)
     .filter((id): id is string => Boolean(id))
+
+  const projectIds = projects.map((p) => p.id)
+  const getEditPermissions = async (): Promise<boolean[]> => {
+    if (!projects.length) return []
+    if (canCreateProjects) {
+      // Organization Admins have administration rights for all projects in their organization
+      return projects.map(() => true)
+    }
+    // For non-org-admins, batch query project_user_memberships in a single query
+    const adminProjectSet = await getProjectAdminSetForUser(session.userId, projectIds)
+    return projects.map((project) => adminProjectSet.has(project.id))
+  }
+
   const [editPermissions, supervisorOptions, supervisorNameById] = await Promise.all([
-    Promise.all(projects.map((project) => canAdministerProject(project.id))),
+    getEditPermissions(),
     organizationId && canCreateProjects ? getProjectSupervisorCandidates(organizationId) : Promise.resolve([]),
     getAssignedSupervisorNames(assignedSupervisorIds),
   ])
