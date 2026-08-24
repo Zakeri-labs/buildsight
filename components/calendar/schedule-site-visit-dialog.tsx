@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, useTransition, type ChangeEvent } from "react"
-import { MapPinned, Search } from "lucide-react"
+import { Check, ChevronDown, MapPinned, Search } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -12,9 +12,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   approveCalendarClientVisitRequestAction,
   createDirectSiteVisitAction,
@@ -24,6 +28,7 @@ import type {
   CalendarSchedulingProjectViewModel,
 } from "@/lib/calendar/types"
 import { localDateInputValue } from "@/lib/site-visits/format"
+import { cn } from "@/lib/utils"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -64,6 +69,7 @@ export function ScheduleSiteVisitDialog({
   const requestProject = request ? projects.find((project) => project.id === request.projectId) ?? null : null
   const [projectId, setProjectId] = useState(request?.projectId ?? projects[0]?.id ?? "")
   const [projectSearch, setProjectSearch] = useState("")
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false)
   const [date, setDate] = useState(request?.requestedDate ?? initialDate)
   const [time, setTime] = useState("")
   const [notes, setNotes] = useState(request?.notes ?? "")
@@ -94,6 +100,7 @@ export function ScheduleSiteVisitDialog({
       projects.some((project) => project.id === current) ? current : projects[0]?.id ?? ""
     ))
     setProjectSearch("")
+    setProjectMenuOpen(false)
     setDate(request?.requestedDate ?? initialDate)
     setTime("")
     setNotes(request?.notes ?? "")
@@ -115,6 +122,7 @@ export function ScheduleSiteVisitDialog({
     if (request) return
     setProjectId(String(value))
     setProjectSearch("")
+    setProjectMenuOpen(false)
     setAssignedUserIds([])
     setError("")
   }
@@ -217,14 +225,25 @@ export function ScheduleSiteVisitDialog({
                 </div>
               </>
             ) : (
-              <Select value={projectId || null} onValueChange={changeProject} disabled={pending}>
-                <SelectTrigger className="h-10 w-full min-w-0 overflow-hidden max-sm:min-h-10">
-                  <SelectValue placeholder="Select project">{() => selectedProject?.name ?? "Select project"}</SelectValue>
-                </SelectTrigger>
-                <SelectContent
+              <DropdownMenu
+                open={projectMenuOpen}
+                onOpenChange={(nextOpen) => {
+                  if (pending) return
+                  setProjectMenuOpen(nextOpen)
+                  if (!nextOpen) setProjectSearch("")
+                }}
+              >
+                <DropdownMenuTrigger
+                  disabled={pending || projects.length === 0}
+                  className="flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-3 py-2 text-sm font-medium outline-none transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 max-sm:min-h-10"
+                >
+                  <span className="truncate">{selectedProject?.name ?? "Select project"}</span>
+                  <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
                   align={isMobileProjectSelect ? "start" : "center"}
-                  alignItemWithTrigger={!isMobileProjectSelect}
-                  className="p-0 max-sm:!w-[var(--anchor-width)] max-sm:!min-w-0 max-sm:max-w-[calc(100vw-2rem)] max-sm:max-h-[min(20rem,var(--available-height))]"
+                  sideOffset={4}
+                  className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[280px] max-w-[calc(100vw-2rem)] max-h-[min(20rem,var(--available-height))] overflow-y-auto p-0 shadow-md"
                 >
                   <div className="sticky top-0 z-10 bg-popover p-2 pb-1.5 border-b border-border/60">
                     <div className="relative flex items-center">
@@ -252,30 +271,49 @@ export function ScheduleSiteVisitDialog({
                     </div>
                   </div>
 
-                  <div className="p-1">
+                  <div className="p-1 space-y-0.5">
                     {filteredProjects.length === 0 ? (
                       <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-                        No matching projects found.
+                        No projects found
                       </div>
                     ) : (
-                      filteredProjects.map((project) => (
-                        <SelectItem
-                          key={project.id}
-                          value={project.id}
-                          className="max-sm:py-2 max-sm:[&>span:first-child]:min-w-0 max-sm:[&>span:first-child]:shrink max-sm:[&>span:first-child]:leading-5"
-                        >
-                          <div className="flex w-full min-w-0 items-center justify-between gap-3 pr-2">
-                            <span className="truncate font-medium">{project.name}</span>
-                            {project.code ? (
-                              <span className="shrink-0 text-xs font-mono text-muted-foreground/80">{project.code}</span>
-                            ) : null}
-                          </div>
-                        </SelectItem>
-                      ))
+                      filteredProjects.map((project) => {
+                        const isSelected = project.id === selectedProject?.id
+                        return (
+                          <button
+                            key={project.id}
+                            type="button"
+                            onClick={() => {
+                              changeProject(project.id)
+                            }}
+                            className={cn(
+                              "flex w-full min-w-0 items-center justify-between gap-3 rounded-md px-2.5 py-2 text-sm text-left transition-colors outline-none",
+                              isSelected
+                                ? "bg-primary text-primary-foreground font-medium"
+                                : "hover:bg-accent hover:text-accent-foreground text-foreground",
+                            )}
+                          >
+                            <span className="truncate">{project.name}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {project.code ? (
+                                <span
+                                  className={cn(
+                                    "text-xs font-mono",
+                                    isSelected ? "text-primary-foreground/90" : "text-muted-foreground",
+                                  )}
+                                >
+                                  {project.code}
+                                </span>
+                              ) : null}
+                              {isSelected ? <Check className="size-4 shrink-0" /> : null}
+                            </div>
+                          </button>
+                        )
+                      })
                     )}
                   </div>
-                </SelectContent>
-              </Select>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
 
