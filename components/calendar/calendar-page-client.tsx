@@ -311,7 +311,7 @@ export function CalendarPageClient({
         </>
       ) : desktopCalendarLayout}
 
-      {data.scheduling.canSchedule ? (
+      {data.scheduling.canSchedule || Boolean(editingEvent) ? (
         <ScheduleSiteVisitDialog
           open={scheduleDialogOpen}
           onOpenChange={(open) => {

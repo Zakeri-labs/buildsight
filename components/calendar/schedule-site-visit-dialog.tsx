@@ -410,7 +410,7 @@ export function ScheduleSiteVisitDialog({
           <div className="grid gap-2">
             <Label>Supervisor</Label>
             <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
-              <p className="truncate text-sm font-medium text-foreground">{selectedProject?.supervisor.name ?? "Assigned Project Supervisor"}</p>
+              <p className="truncate text-sm font-medium text-foreground">{selectedProject?.supervisor?.name ?? "Assigned Project Supervisor"}</p>
               <p className="mt-0.5 text-xs text-muted-foreground">Project Supervisor</p>
             </div>
           </div>
@@ -418,7 +418,7 @@ export function ScheduleSiteVisitDialog({
           <div className="grid gap-2 max-sm:hidden">
             <Label>Participants</Label>
             <div className="grid max-h-48 min-w-0 gap-1 overflow-y-auto rounded-xl border p-2 max-sm:max-h-40">
-              {selectedProject?.participants.length ? selectedProject.participants.map((person) => (
+              {selectedProject?.participants?.length ? selectedProject.participants.map((person) => (
                 <label key={person.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted">
                   <input type="checkbox" checked={assignedUserIds.includes(person.id)} onChange={() => toggleParticipant(person.id)} disabled={pending} className="size-4 rounded border-input accent-primary" />
                   <span className="min-w-0">
