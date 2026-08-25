@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import { Pencil } from "lucide-react"
 
 import {
   Dialog,
@@ -52,12 +53,15 @@ function DayEventRow({
   event,
   onClientRequestClick,
   onBeforeOpenEvent,
+  onEditVisit,
 }: {
   event: CalendarEventViewModel
   onClientRequestClick?: (requestId: string) => void
   onBeforeOpenEvent: () => void
+  onEditVisit?: (event: CalendarEventViewModel) => void
 }) {
   const canOpenRequest = event.kind === "client_request" && Boolean(onClientRequestClick)
+  const canEdit = Boolean(event.canEdit && onEditVisit)
   const statusLabel = EVENT_STATUS_LABELS[event.kind]
   const showSecondaryLabel = Boolean(event.secondaryLabel && event.secondaryLabel !== statusLabel)
 
@@ -72,14 +76,31 @@ function DayEventRow({
           <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground">{event.secondaryLabel}</p>
         ) : null}
       </div>
-      <span
-        className={cn(
-          "max-w-[6.5rem] shrink-0 whitespace-normal rounded-md border px-2 py-0.5 text-center text-[10px] font-semibold leading-4 sm:max-w-none sm:whitespace-nowrap",
-          EVENT_BADGE_STYLES[event.kind],
-        )}
-      >
-        {statusLabel}
-      </span>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <span
+          className={cn(
+            "max-w-[6.5rem] shrink-0 whitespace-normal rounded-md border px-2 py-0.5 text-center text-[10px] font-semibold leading-4 sm:max-w-none sm:whitespace-nowrap",
+            EVENT_BADGE_STYLES[event.kind],
+          )}
+        >
+          {statusLabel}
+        </span>
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onBeforeOpenEvent()
+              onEditVisit?.(event)
+            }}
+            className="flex size-7 items-center justify-center rounded-md text-foreground/70 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            title="Edit Site Visit"
+            aria-label="Edit Site Visit"
+          >
+            <Pencil className="size-3.5" aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
     </>
   )
 
@@ -111,12 +132,14 @@ export function DayDetailsDialog({
   date,
   events,
   onClientRequestClick,
+  onEditVisit,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   date: string | null
   events: CalendarEventViewModel[]
   onClientRequestClick?: (requestId: string) => void
+  onEditVisit?: (event: CalendarEventViewModel) => void
 }) {
   const sortedEvents = useMemo(
     () =>
@@ -155,6 +178,7 @@ export function DayDetailsDialog({
                 event={event}
                 onClientRequestClick={onClientRequestClick}
                 onBeforeOpenEvent={() => onOpenChange(false)}
+                onEditVisit={onEditVisit}
               />
             ))}
           </div>

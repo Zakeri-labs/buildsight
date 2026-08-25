@@ -74,7 +74,15 @@ export function LocationCombobox({
       return
     }
 
-    if (query.length < LOCATION_SEARCH_MIN_CHARACTERS) {
+    const isMapsUrl =
+      /^https?:\/\//i.test(query) &&
+      (/maps\.app\.goo\.gl/i.test(query) ||
+        /goo\.gl\/maps/i.test(query) ||
+        /google\.[a-z.]+\/maps/i.test(query) ||
+        /maps\.google\./i.test(query) ||
+        /g\.co\/maps/i.test(query))
+
+    if (!isMapsUrl && query.length < LOCATION_SEARCH_MIN_CHARACTERS) {
       setResults([])
       setState("idle")
       setOpen(false)
@@ -89,37 +97,46 @@ export function LocationCombobox({
       setState(cached.length ? "success" : "empty")
       setOpen(true)
       setActiveIndex(cached.length ? 0 : -1)
+      if (isMapsUrl && cached.length > 0) {
+        choose(cached[0])
+      }
       return
     }
 
     const controller = new AbortController()
-    const timer = window.setTimeout(async () => {
-      setState("loading")
-      setOpen(true)
-      try {
-        const response = await fetch(`/api/locations?q=${encodeURIComponent(query)}&lang=${locale}`, {
-          signal: controller.signal,
-          headers: { Accept: "application/json" },
-        })
-        if (!response.ok) throw new Error("Search failed")
-        const payload = (await response.json()) as { results?: LocationSuggestion[] }
-        if (sequence !== requestSequence.current) return
-        const nextResults = payload.results ?? []
-        if (queryCache.size >= 100) {
-          const oldest = queryCache.keys().next().value
-          if (oldest) queryCache.delete(oldest)
+    const timer = window.setTimeout(
+      async () => {
+        setState("loading")
+        setOpen(true)
+        try {
+          const response = await fetch(`/api/locations?q=${encodeURIComponent(query)}&lang=${locale}`, {
+            signal: controller.signal,
+            headers: { Accept: "application/json" },
+          })
+          if (!response.ok) throw new Error("Search failed")
+          const payload = (await response.json()) as { results?: LocationSuggestion[] }
+          if (sequence !== requestSequence.current) return
+          const nextResults = payload.results ?? []
+          if (queryCache.size >= 100) {
+            const oldest = queryCache.keys().next().value
+            if (oldest) queryCache.delete(oldest)
+          }
+          queryCache.set(cacheKey, nextResults)
+          setResults(nextResults)
+          setState(nextResults.length ? "success" : "empty")
+          setActiveIndex(nextResults.length ? 0 : -1)
+          if (isMapsUrl && nextResults.length > 0) {
+            choose(nextResults[0])
+          }
+        } catch (error) {
+          if (controller.signal.aborted || sequence !== requestSequence.current) return
+          setResults([])
+          setState("error")
+          setActiveIndex(-1)
         }
-        queryCache.set(cacheKey, nextResults)
-        setResults(nextResults)
-        setState(nextResults.length ? "success" : "empty")
-        setActiveIndex(nextResults.length ? 0 : -1)
-      } catch (error) {
-        if (controller.signal.aborted || sequence !== requestSequence.current) return
-        setResults([])
-        setState("error")
-        setActiveIndex(-1)
-      }
-    }, LOCATION_SEARCH_DEBOUNCE_MS)
+      },
+      isMapsUrl ? 100 : LOCATION_SEARCH_DEBOUNCE_MS,
+    )
 
     return () => {
       window.clearTimeout(timer)

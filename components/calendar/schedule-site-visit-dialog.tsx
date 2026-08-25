@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState, useTransition, type ChangeEvent } from "react"
-import { Check, ChevronDown, MapPinned, Search } from "lucide-react"
+import { useEffect, useMemo, useRef, useState, useTransition, type ChangeEvent } from "react"
+import { Check, ChevronDown, MapPinned, Search, Trash2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -12,19 +12,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   approveCalendarClientVisitRequestAction,
   createDirectSiteVisitAction,
+  updateScheduledSiteVisitAction,
+  updateSiteVisitStatusAction,
 } from "@/lib/actions/site-visits"
 import type {
   CalendarClientRequestViewModel,
+  CalendarEventViewModel,
   CalendarSchedulingProjectViewModel,
 } from "@/lib/calendar/types"
 import { localDateInputValue } from "@/lib/site-visits/format"
@@ -49,12 +47,22 @@ function displayRequestedDate(value: string) {
   }).format(date)
 }
 
+function normalizeTimeValue(value: string | null | undefined): string {
+  if (!value) return ""
+  const trimmed = value.trim()
+  if (TIME_PATTERN.test(trimmed)) return trimmed
+  const match = /^(\d{1,2}):(\d{2})/.exec(trimmed)
+  if (match) return `${match[1].padStart(2, "0")}:${match[2]}`
+  return ""
+}
+
 export function ScheduleSiteVisitDialog({
   open,
   onOpenChange,
   projects,
   initialDate,
   request = null,
+  editVisit = null,
   onScheduled,
   onRefreshRequired,
 }: {
@@ -63,25 +71,62 @@ export function ScheduleSiteVisitDialog({
   projects: CalendarSchedulingProjectViewModel[]
   initialDate: string
   request?: CalendarClientRequestViewModel | null
+  editVisit?: CalendarEventViewModel | null
   onScheduled: () => Promise<void> | void
   onRefreshRequired?: () => Promise<void> | void
 }) {
-  const requestProject = request ? projects.find((project) => project.id === request.projectId) ?? null : null
-  const [projectId, setProjectId] = useState(request?.projectId ?? projects[0]?.id ?? "")
+  const isEditMode = Boolean(editVisit)
+  const isRequestApproval = Boolean(request)
+  const fixedProject = editVisit
+    ? projects.find((project) => project.id === editVisit.projectId) ?? null
+    : request
+      ? projects.find((project) => project.id === request.projectId) ?? null
+      : null
+
+  const [projectId, setProjectId] = useState(editVisit?.projectId ?? request?.projectId ?? projects[0]?.id ?? "")
   const [projectSearch, setProjectSearch] = useState("")
   const [projectMenuOpen, setProjectMenuOpen] = useState(false)
-  const [date, setDate] = useState(request?.requestedDate ?? initialDate)
-  const [time, setTime] = useState("")
-  const [notes, setNotes] = useState(request?.notes ?? "")
-  const [assignedUserIds, setAssignedUserIds] = useState<string[]>([])
-  const [mobileNotesExpanded, setMobileNotesExpanded] = useState(false)
+  const [date, setDate] = useState(editVisit?.date ?? request?.requestedDate ?? initialDate)
+  const [time, setTime] = useState(normalizeTimeValue(editVisit?.timeLabel))
+  const [notes, setNotes] = useState(editVisit?.notes ?? request?.notes ?? "")
+  const [assignedUserIds, setAssignedUserIds] = useState<string[]>(editVisit?.assignedUserIds ?? [])
+  const [mobileNotesExpanded, setMobileNotesExpanded] = useState(Boolean(editVisit?.notes))
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
   const [error, setError] = useState("")
   const [pending, startTransition] = useTransition()
   const [isMobileProjectSelect, setIsMobileProjectSelect] = useState(false)
+  const projectDropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!projectMenuOpen) return
+
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
+      if (projectDropdownRef.current && !projectDropdownRef.current.contains(event.target as Node)) {
+        setProjectMenuOpen(false)
+        setProjectSearch("")
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setProjectMenuOpen(false)
+        setProjectSearch("")
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    document.addEventListener("touchstart", handleClickOutside)
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("touchstart", handleClickOutside)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [projectMenuOpen])
 
   const selectedProject = useMemo(
-    () => requestProject ?? projects.find((project) => project.id === projectId) ?? projects[0] ?? null,
-    [projectId, projects, requestProject],
+    () => fixedProject ?? projects.find((project) => project.id === projectId) ?? projects[0] ?? null,
+    [projectId, projects, fixedProject],
   )
 
   const filteredProjects = useMemo(() => {
@@ -96,18 +141,20 @@ export function ScheduleSiteVisitDialog({
 
   useEffect(() => {
     if (!open) return
-    setProjectId((current) => request?.projectId ?? (
-      projects.some((project) => project.id === current) ? current : projects[0]?.id ?? ""
-    ))
+    const targetProjectId = editVisit?.projectId ?? request?.projectId ?? (
+      projects.some((project) => project.id === projectId) ? projectId : projects[0]?.id ?? ""
+    )
+    setProjectId(targetProjectId)
     setProjectSearch("")
     setProjectMenuOpen(false)
-    setDate(request?.requestedDate ?? initialDate)
-    setTime("")
-    setNotes(request?.notes ?? "")
-    setAssignedUserIds([])
-    setMobileNotesExpanded(false)
+    setDate(editVisit?.date ?? request?.requestedDate ?? initialDate)
+    setTime(normalizeTimeValue(editVisit?.timeLabel))
+    setNotes(editVisit?.notes ?? request?.notes ?? "")
+    setAssignedUserIds(editVisit?.assignedUserIds ?? [])
+    setMobileNotesExpanded(Boolean(editVisit?.notes))
+    setConfirmCancelOpen(false)
     setError("")
-  }, [open, initialDate, projects, request])
+  }, [open, initialDate, projects, request, editVisit])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 639px)")
@@ -119,7 +166,7 @@ export function ScheduleSiteVisitDialog({
   }, [])
 
   function changeProject(value: unknown) {
-    if (request) return
+    if (isEditMode || request) return
     setProjectId(String(value))
     setProjectSearch("")
     setProjectMenuOpen(false)
@@ -161,21 +208,32 @@ export function ScheduleSiteVisitDialog({
 
     setError("")
     startTransition(async () => {
-      const result = request
-        ? await approveCalendarClientVisitRequestAction({
-            requestId: request.id,
-            scheduledDate: date,
-            scheduledTime: time,
-            notes,
-            assignedUserIds: submittedAssignedUserIds,
-          })
-        : await createDirectSiteVisitAction({
-            projectId,
-            scheduledDate: date,
-            scheduledTime: time,
-            notes,
-            assignedUserIds: submittedAssignedUserIds,
-          })
+      let result
+      if (isEditMode && editVisit) {
+        result = await updateScheduledSiteVisitAction({
+          requestId: editVisit.id,
+          scheduledDate: date,
+          scheduledTime: time,
+          notes,
+          assignedUserIds: submittedAssignedUserIds,
+        })
+      } else if (isRequestApproval && request) {
+        result = await approveCalendarClientVisitRequestAction({
+          requestId: request.id,
+          scheduledDate: date,
+          scheduledTime: time,
+          notes,
+          assignedUserIds: submittedAssignedUserIds,
+        })
+      } else {
+        result = await createDirectSiteVisitAction({
+          projectId,
+          scheduledDate: date,
+          scheduledTime: time,
+          notes,
+          assignedUserIds: submittedAssignedUserIds,
+        })
+      }
 
       if (result.ok === false) {
         setError(result.error)
@@ -189,8 +247,26 @@ export function ScheduleSiteVisitDialog({
     })
   }
 
-  const isRequestApproval = Boolean(request)
-  const projectIsFixed = isRequestApproval || projects.length === 1
+  function handleCancelVisit() {
+    if (!editVisit || pending) return
+    setError("")
+    startTransition(async () => {
+      const result = await updateSiteVisitStatusAction({
+        requestId: editVisit.id,
+        status: "cancelled",
+      })
+      if (result.ok === false) {
+        setError(result.error)
+        setConfirmCancelOpen(false)
+        return
+      }
+      await onScheduled()
+      setConfirmCancelOpen(false)
+      onOpenChange(false)
+    })
+  }
+
+  const projectIsFixed = isEditMode || isRequestApproval || projects.length === 1
   const showRequestedDateWarning = Boolean(
     request?.requestedDate && DATE_PATTERN.test(date) && date !== request.requestedDate,
   )
@@ -199,15 +275,22 @@ export function ScheduleSiteVisitDialog({
     <Dialog open={open} onOpenChange={(nextOpen: boolean) => {
       if (pending) return
       onOpenChange(nextOpen)
-      if (!nextOpen) setError("")
+      if (!nextOpen) {
+        setError("")
+        setConfirmCancelOpen(false)
+      }
     }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg max-sm:w-[calc(100vw-1rem)] max-sm:max-w-none max-sm:max-h-[calc(100dvh-1rem)] max-sm:gap-2.5 max-sm:p-4">
         <DialogHeader className="max-sm:-mx-4 max-sm:gap-0.5 max-sm:border-b max-sm:border-border/70 max-sm:px-4 max-sm:pb-3">
-          <DialogTitle>Schedule Site Visit</DialogTitle>
+          <DialogTitle>
+            {isEditMode ? "Edit Site Visit" : "Schedule Site Visit"}
+          </DialogTitle>
           <DialogDescription className="max-sm:hidden">
-            {isRequestApproval
-              ? "Confirm the schedule for this Client Visit Request. The client's requested values remain unchanged."
-              : "Schedule a direct Site Visit for an authorized project."}
+            {isEditMode
+              ? "Update visit schedule and details for this site visit."
+              : isRequestApproval
+                ? "Confirm the schedule for this Client Visit Request."
+                : "Schedule a direct Site Visit for an authorized project."}
           </DialogDescription>
         </DialogHeader>
 
@@ -225,95 +308,83 @@ export function ScheduleSiteVisitDialog({
                 </div>
               </>
             ) : (
-              <DropdownMenu
-                open={projectMenuOpen}
-                onOpenChange={(nextOpen) => {
-                  if (pending) return
-                  setProjectMenuOpen(nextOpen)
-                  if (!nextOpen) setProjectSearch("")
-                }}
-              >
-                <DropdownMenuTrigger
+              <div className="relative" ref={projectDropdownRef}>
+                <button
+                  type="button"
                   disabled={pending || projects.length === 0}
-                  className="flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-3 py-2 text-sm font-medium outline-none transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 max-sm:min-h-10"
+                  onClick={() => {
+                    if (pending) return
+                    setProjectMenuOpen((open) => {
+                      if (open) setProjectSearch("")
+                      return !open
+                    })
+                  }}
+                  className="flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-3 py-2 text-sm font-medium outline-none transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 max-sm:min-h-10 text-left"
                 >
                   <span className="truncate">{selectedProject?.name ?? "Select project"}</span>
-                  <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align={isMobileProjectSelect ? "start" : "center"}
-                  sideOffset={4}
-                  className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[280px] max-w-[calc(100vw-2rem)] max-h-[min(20rem,var(--available-height))] overflow-y-auto p-0 shadow-md"
-                >
-                  <div className="sticky top-0 z-10 bg-popover p-2 pb-1.5 border-b border-border/60">
-                    <div className="relative flex items-center">
-                      <Search className="absolute left-2.5 size-3.5 text-muted-foreground pointer-events-none" />
-                      <input
-                        type="text"
-                        value={projectSearch}
-                        onChange={(e) => setProjectSearch(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key !== "Escape" && e.key !== "ArrowDown" && e.key !== "ArrowUp") {
-                            e.stopPropagation()
-                          }
-                        }}
-                        onKeyDownCapture={(e) => {
-                          if (e.key !== "Escape" && e.key !== "ArrowDown" && e.key !== "ArrowUp") {
-                            e.stopPropagation()
-                          }
-                        }}
-                        onKeyUp={(e) => e.stopPropagation()}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => e.stopPropagation()}
-                        placeholder="Search projects..."
-                        className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring"
-                      />
+                  <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-200", projectMenuOpen && "rotate-180")} />
+                </button>
+
+                {projectMenuOpen ? (
+                  <div className="absolute left-0 top-full z-50 mt-1 w-full min-w-[280px] max-h-60 overflow-y-auto rounded-lg border border-border/80 bg-popover text-popover-foreground shadow-lg">
+                    <div className="sticky top-0 z-10 bg-popover p-2 pb-1.5 border-b border-border/60">
+                      <div className="relative flex items-center">
+                        <Search className="absolute left-2.5 size-3.5 text-muted-foreground pointer-events-none" />
+                        <input
+                          type="text"
+                          value={projectSearch}
+                          onChange={(e) => setProjectSearch(e.target.value)}
+                          placeholder="Search projects..."
+                          autoFocus
+                          className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="p-1 space-y-0.5">
+                      {filteredProjects.length === 0 ? (
+                        <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                          No projects found
+                        </div>
+                      ) : (
+                        filteredProjects.map((project) => {
+                          const isSelected = project.id === selectedProject?.id
+                          return (
+                            <button
+                              key={project.id}
+                              type="button"
+                              onClick={() => {
+                                changeProject(project.id)
+                              }}
+                              className={cn(
+                                "flex w-full min-w-0 items-center justify-between gap-3 rounded-md px-2.5 py-2 text-sm text-left transition-colors outline-none",
+                                isSelected
+                                  ? "bg-primary text-primary-foreground font-medium"
+                                  : "hover:bg-accent hover:text-accent-foreground text-foreground",
+                              )}
+                            >
+                              <span className="truncate">{project.name}</span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {project.code ? (
+                                  <span
+                                    className={cn(
+                                      "text-xs font-mono",
+                                      isSelected ? "text-primary-foreground/90" : "text-muted-foreground",
+                                    )}
+                                  >
+                                    {project.code}
+                                  </span>
+                                ) : null}
+                                {isSelected ? <Check className="size-4 shrink-0" /> : null}
+                              </div>
+                            </button>
+                          )
+                        })
+                      )}
                     </div>
                   </div>
-
-                  <div className="p-1 space-y-0.5">
-                    {filteredProjects.length === 0 ? (
-                      <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-                        No projects found
-                      </div>
-                    ) : (
-                      filteredProjects.map((project) => {
-                        const isSelected = project.id === selectedProject?.id
-                        return (
-                          <button
-                            key={project.id}
-                            type="button"
-                            onClick={() => {
-                              changeProject(project.id)
-                            }}
-                            className={cn(
-                              "flex w-full min-w-0 items-center justify-between gap-3 rounded-md px-2.5 py-2 text-sm text-left transition-colors outline-none",
-                              isSelected
-                                ? "bg-primary text-primary-foreground font-medium"
-                                : "hover:bg-accent hover:text-accent-foreground text-foreground",
-                            )}
-                          >
-                            <span className="truncate">{project.name}</span>
-                            <div className="flex items-center gap-2 shrink-0">
-                              {project.code ? (
-                                <span
-                                  className={cn(
-                                    "text-xs font-mono",
-                                    isSelected ? "text-primary-foreground/90" : "text-muted-foreground",
-                                  )}
-                                >
-                                  {project.code}
-                                </span>
-                              ) : null}
-                              {isSelected ? <Check className="size-4 shrink-0" /> : null}
-                            </div>
-                          </button>
-                        )
-                      })
-                    )}
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                ) : null}
+              </div>
             )}
           </div>
 
@@ -350,7 +421,7 @@ export function ScheduleSiteVisitDialog({
           <div className="grid gap-2">
             <Label>Supervisor</Label>
             <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
-              <p className="truncate text-sm font-medium text-foreground">{selectedProject?.supervisor.name ?? "Assigned Project Supervisor"}</p>
+              <p className="truncate text-sm font-medium text-foreground">{selectedProject?.supervisor?.name ?? "Assigned Project Supervisor"}</p>
               <p className="mt-0.5 text-xs text-muted-foreground">Project Supervisor</p>
             </div>
           </div>
@@ -358,7 +429,7 @@ export function ScheduleSiteVisitDialog({
           <div className="grid gap-2 max-sm:hidden">
             <Label>Participants</Label>
             <div className="grid max-h-48 min-w-0 gap-1 overflow-y-auto rounded-xl border p-2 max-sm:max-h-40">
-              {selectedProject?.participants.length ? selectedProject.participants.map((person) => (
+              {selectedProject?.participants?.length ? selectedProject.participants.map((person) => (
                 <label key={person.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted">
                   <input type="checkbox" checked={assignedUserIds.includes(person.id)} onChange={() => toggleParticipant(person.id)} disabled={pending} className="size-4 rounded border-input accent-primary" />
                   <span className="min-w-0">
@@ -390,20 +461,66 @@ export function ScheduleSiteVisitDialog({
           {error ? <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p> : null}
         </div>
 
-        <DialogFooter className="max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:grid max-sm:grid-cols-2 max-sm:gap-2 max-sm:bg-background/95 max-sm:pt-3 max-sm:pb-[calc(0.5rem+env(safe-area-inset-bottom))] max-sm:backdrop-blur-sm">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>Cancel</Button>
-          <Button type="button" onClick={submit} disabled={pending || !projectId || !date || !time}>
-            {pending ? (
-              "Scheduling..."
-            ) : isRequestApproval ? (
-              <>
-                <span className="sm:hidden">Schedule Visit</span>
-                <span className="max-sm:hidden">Approve and Schedule</span>
-              </>
-            ) : (
-              "Schedule Visit"
-            )}
-          </Button>
+        <DialogFooter className="max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:bg-background/95 max-sm:pt-3 max-sm:pb-[calc(0.5rem+env(safe-area-inset-bottom))] max-sm:backdrop-blur-sm">
+          {confirmCancelOpen ? (
+            <div className="flex w-full flex-col gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs">
+              <p className="font-semibold text-destructive">
+                Are you sure you want to cancel this site visit?
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfirmCancelOpen(false)}
+                  disabled={pending}
+                  className="h-8 text-xs font-medium"
+                >
+                  Keep Visit
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleCancelVisit}
+                  disabled={pending}
+                  className="h-8 text-xs font-medium"
+                >
+                  {pending ? "Cancelling..." : "Yes, Cancel Visit"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex w-full min-w-0 items-center justify-between gap-2 max-sm:grid max-sm:grid-cols-2">
+              {isEditMode ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setConfirmCancelOpen(true)}
+                  disabled={pending}
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive max-sm:order-3 max-sm:col-span-2"
+                >
+                  <Trash2 className="size-4 me-1.5" />
+                  Cancel Visit
+                </Button>
+              ) : null}
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>Cancel</Button>
+              <Button type="button" onClick={submit} disabled={pending || !projectId || !date || !time}>
+                {pending ? (
+                  isEditMode ? "Saving..." : "Scheduling..."
+                ) : isEditMode ? (
+                  "Save Changes"
+                ) : isRequestApproval ? (
+                  <>
+                    <span className="sm:hidden">Schedule Visit</span>
+                    <span className="max-sm:hidden">Approve and Schedule</span>
+                  </>
+                ) : (
+                  "Schedule Visit"
+                )}
+              </Button>
+            </div>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

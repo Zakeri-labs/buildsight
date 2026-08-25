@@ -1,6 +1,6 @@
 "use client"
 
-import { CalendarPlus, ChevronLeft, ChevronRight } from "lucide-react"
+import { CalendarPlus, ChevronLeft, ChevronRight, Pencil } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -100,11 +100,15 @@ function eventSortValue(event: CalendarEventViewModel) {
 function MobileEventRow({
   event,
   onClientRequestClick,
+  onEditVisit,
 }: {
   event: CalendarEventViewModel
   onClientRequestClick?: (requestId: string) => void
+  onEditVisit?: (event: CalendarEventViewModel) => void
 }) {
   const canOpenRequest = event.kind === "client_request" && Boolean(onClientRequestClick)
+  const canEdit = Boolean(event.canEdit && onEditVisit)
+
   const content = (
     <>
       <div className="w-[4.4rem] shrink-0 text-[11px] font-semibold tabular-nums text-foreground">
@@ -116,9 +120,25 @@ function MobileEventRow({
           <p className="mt-0.5 truncate text-[10px] leading-3.5 opacity-75">{event.secondaryLabel}</p>
         ) : null}
       </div>
-      <span className="shrink-0 rounded-md border border-current/15 bg-background/55 px-1.5 py-0.5 text-[9px] font-semibold leading-4">
-        {EVENT_STATUS_LABELS[event.kind]}
-      </span>
+      <div className="flex shrink-0 items-center gap-1">
+        <span className="rounded-md border border-current/15 bg-background/55 px-1.5 py-0.5 text-[9px] font-semibold leading-4">
+          {EVENT_STATUS_LABELS[event.kind]}
+        </span>
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onEditVisit?.(event)
+            }}
+            className="flex size-6 items-center justify-center rounded-md text-foreground/70 transition-colors hover:bg-background/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            title="Edit Site Visit"
+            aria-label="Edit Site Visit"
+          >
+            <Pencil className="size-3.5" aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
     </>
   )
 
@@ -156,6 +176,7 @@ export function MobileWeeklyCalendar({
   onToday,
   onScheduleVisit,
   onClientRequestClick,
+  onEditVisit,
 }: {
   selectedDate: Date
   today: Date
@@ -168,6 +189,7 @@ export function MobileWeeklyCalendar({
   onToday: () => void
   onScheduleVisit: () => void
   onClientRequestClick?: (requestId: string) => void
+  onEditVisit?: (event: CalendarEventViewModel) => void
 }) {
   const weekStart = startOfWeek(selectedDate)
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index))
@@ -265,7 +287,12 @@ export function MobileWeeklyCalendar({
         {selectedEvents.length ? (
           <div className="space-y-2">
             {selectedEvents.map((event) => (
-              <MobileEventRow key={`${event.kind}:${event.id}`} event={event} onClientRequestClick={onClientRequestClick} />
+              <MobileEventRow
+                key={`${event.kind}:${event.id}`}
+                event={event}
+                onClientRequestClick={onClientRequestClick}
+                onEditVisit={onEditVisit}
+              />
             ))}
           </div>
         ) : (

@@ -15,7 +15,11 @@ import { useCurrentUser } from "@/components/current-user-provider"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { calendarDateFromKey, calendarMonthKey, currentCalendarDateKey } from "@/lib/calendar/date"
-import type { CalendarClientRequestViewModel, CalendarDataViewModel } from "@/lib/calendar/types"
+import type {
+  CalendarClientRequestViewModel,
+  CalendarDataViewModel,
+  CalendarEventViewModel,
+} from "@/lib/calendar/types"
 
 function monthStart(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1)
@@ -58,6 +62,7 @@ export function CalendarPageClient({
   const [needsInitialReload, setNeedsInitialReload] = useState(Boolean(initialError))
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
   const [scheduleDate, setScheduleDate] = useState(() => currentCalendarDateKey())
+  const [editingEvent, setEditingEvent] = useState<CalendarEventViewModel | null>(null)
   const [selectedRequest, setSelectedRequest] = useState<CalendarClientRequestViewModel | null>(null)
   const [requestDetailsOpen, setRequestDetailsOpen] = useState(false)
   const [selectedDayDetailsDate, setSelectedDayDetailsDate] = useState<string | null>(null)
@@ -165,7 +170,15 @@ export function CalendarPageClient({
 
   function openScheduleDialog(date: string) {
     if (!data.scheduling.canSchedule) return
+    setEditingEvent(null)
     setScheduleDate(date)
+    setSuccess(null)
+    setScheduleDialogOpen(true)
+  }
+
+  function openEditDialog(event: CalendarEventViewModel) {
+    setEditingEvent(event)
+    setScheduleDate(event.date)
     setSuccess(null)
     setScheduleDialogOpen(true)
   }
@@ -303,18 +316,23 @@ export function CalendarPageClient({
               onToday={showTodayOnMobile}
               onScheduleVisit={() => openScheduleDialog(currentCalendarDateKey())}
               onClientRequestClick={openClientRequestById}
+              onEditVisit={openEditDialog}
             />
           </div>
           <div className="hidden md:block">{desktopCalendarLayout}</div>
         </>
       ) : desktopCalendarLayout}
 
-      {data.scheduling.canSchedule ? (
+      {data.scheduling.canSchedule || Boolean(editingEvent) ? (
         <ScheduleSiteVisitDialog
           open={scheduleDialogOpen}
-          onOpenChange={setScheduleDialogOpen}
+          onOpenChange={(open) => {
+            setScheduleDialogOpen(open)
+            if (!open) setEditingEvent(null)
+          }}
           projects={data.scheduling.projects}
           initialDate={scheduleDate}
+          editVisit={editingEvent}
           onScheduled={refreshAfterDirectSchedule}
         />
       ) : null}
@@ -325,6 +343,7 @@ export function CalendarPageClient({
         date={selectedDayDetailsDate}
         events={selectedDayEvents}
         onClientRequestClick={openClientRequestById}
+        onEditVisit={openEditDialog}
       />
 
       <ClientVisitRequestWorkflow
