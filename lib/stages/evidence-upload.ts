@@ -1,6 +1,5 @@
 import { STAGE_EVIDENCE_BUCKET } from "@/lib/stages/execution"
 import { uploadStorageAsset } from "@/lib/documents/storage-upload"
-import { uploadStageEvidenceAction } from "@/lib/actions/project-stages"
 
 export async function uploadStageEvidence(
   file: File,
@@ -19,11 +18,16 @@ export async function uploadStageEvidence(
       formData.append("responseId", parts[1])
       formData.append("path", path)
       formData.append("file", file)
-      const res = await uploadStageEvidenceAction(formData)
+      const res = await fetch("/api/stage-evidence", {
+        method: "POST",
+        body: formData,
+      })
       if (res.ok) {
         onProgress(100)
         return
       }
+      const data = await res.json().catch(() => null)
+      if (data?.error) throw new Error(data.error)
     }
     throw err
   }
