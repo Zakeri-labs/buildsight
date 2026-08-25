@@ -1532,7 +1532,7 @@ export function InspectionReportForm({
                     size="sm"
                     onClick={async () => {
                       const respId = submitResult?.responseId || responseId
-                      const stgId = submitResult?.stageId || stageId
+                      const stgId = submitResult?.stageId || resolvedStageId
                       if (respId && project?.id) {
                         await ensureBilingualPdfStored({
                           projectId: project.id,
@@ -1549,7 +1549,7 @@ export function InspectionReportForm({
                         supervisorName: creatorPerson.name,
                         projectId: project.id,
                         stageId: stgId,
-                        responseId: respId,
+                        responseId: respId ?? undefined,
                         translationId: translation?.id,
                         phone: "96891451613",
                       })
@@ -1567,7 +1567,7 @@ export function InspectionReportForm({
                     size="sm"
                     onClick={async () => {
                       const respId = submitResult?.responseId || responseId
-                      const stgId = submitResult?.stageId || stageId
+                      const stgId = submitResult?.stageId || resolvedStageId
                       if (respId && project?.id) {
                         await ensureBilingualPdfStored({
                           projectId: project.id,
@@ -1584,7 +1584,7 @@ export function InspectionReportForm({
                         supervisorName: creatorPerson.name,
                         projectId: project.id,
                         stageId: stgId,
-                        responseId: respId,
+                        responseId: respId ?? undefined,
                         translationId: translation?.id,
                       })
                       if (typeof navigator !== "undefined" && navigator.clipboard) {
