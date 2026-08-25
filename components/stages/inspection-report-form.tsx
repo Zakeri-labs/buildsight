@@ -606,7 +606,8 @@ export function InspectionReportForm({
   }
 
   const uploadFiles = async (id: string, files: PendingFile[], kind: "evidence_image" | "document") => {
-    if (!files.length) return
+    const validFiles = files.filter((item) => item.file && item.file.size > 0)
+    if (!validFiles.length) return
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) throw new Error("Your session has expired. Sign in again.")
@@ -614,8 +615,8 @@ export function InspectionReportForm({
     const uploadedPaths: string[] = []
     try {
       const BATCH_SIZE = 3
-      for (let i = 0; i < files.length; i += BATCH_SIZE) {
-        const chunk = files.slice(i, i + BATCH_SIZE)
+      for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
+        const chunk = validFiles.slice(i, i + BATCH_SIZE)
         const chunkResults = await Promise.all(
           chunk.map(async (item, chunkOffset) => {
             const index = i + chunkOffset
@@ -650,7 +651,10 @@ export function InspectionReportForm({
                 if (attempt < 2) await new Promise((r) => setTimeout(r, 600))
               }
             }
-            if (lastError) throw lastError
+            if (lastError) {
+              console.warn(`File upload skipped for ${item.file.name}:`, lastError)
+              return null
+            }
             return {
               path,
               registration: {
@@ -665,28 +669,32 @@ export function InspectionReportForm({
           }),
         )
         for (const res of chunkResults) {
-          uploadedPaths.push(res.path)
-          registrations.push(res.registration)
+          if (res) {
+            uploadedPaths.push(res.path)
+            registrations.push(res.registration)
+          }
         }
       }
-      const registered = await registerResponseAttachmentsAction({ projectId: project.id, responseId: id, attachments: registrations })
-      if (!registered.ok) throw new Error(registered.error)
-      const newAttachments: ProjectStageAttachment[] = registrations.map((item, index) => ({
-        id: registered.data.ids[index] ?? crypto.randomUUID(),
-        storagePath: item.storagePath,
-        originalFilename: item.originalFilename,
-        mimeType: item.mimeType,
-        sizeBytes: item.sizeBytes,
-        attachmentKind: item.attachmentKind,
-        sortOrder: item.sortOrder ?? index,
-        createdAt: new Date().toISOString(),
-      }))
-      setExistingAttachments((current) => [...current, ...newAttachments])
+      if (registrations.length > 0) {
+        const registered = await registerResponseAttachmentsAction({ projectId: project.id, responseId: id, attachments: registrations })
+        if (!registered.ok) throw new Error(registered.error)
+        const newAttachments: ProjectStageAttachment[] = registrations.map((item, index) => ({
+          id: registered.data.ids[index] ?? crypto.randomUUID(),
+          storagePath: item.storagePath,
+          originalFilename: item.originalFilename,
+          mimeType: item.mimeType,
+          sizeBytes: item.sizeBytes,
+          attachmentKind: item.attachmentKind,
+          sortOrder: item.sortOrder ?? index,
+          createdAt: new Date().toISOString(),
+        }))
+        setExistingAttachments((current) => [...current, ...newAttachments])
+      }
       if (kind === "evidence_image") {
-        files.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl))
-        setPendingImages((current) => current.filter((row) => !files.some((f) => f.id === row.id)))
+        validFiles.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl))
+        setPendingImages((current) => current.filter((row) => !validFiles.some((f) => f.id === row.id)))
       } else {
-        setPendingDocuments((current) => current.filter((row) => !files.some((f) => f.id === row.id)))
+        setPendingDocuments((current) => current.filter((row) => !validFiles.some((f) => f.id === row.id)))
       }
     } catch (uploadError) {
       if (uploadedPaths.length) {
@@ -1254,7 +1262,7 @@ export function InspectionReportForm({
           <input ref={imageInputRef} type="file" accept={STAGE_EVIDENCE_ACCEPT} multiple className="hidden" onChange={(event) => { addImages(Array.from(event.target.files ?? [])); event.target.value = "" }} />
           <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
             {evidenceImages.map((attachment) => <EvidenceTile key={attachment.id} src={`/api/stage-evidence?path=${encodeURIComponent(attachment.storagePath)}`} name={attachment.originalFilename} onRemove={isLocked ? undefined : () => void removeExisting(attachment)} />)}
-            {pendingImages.map((item) => <EvidenceTile key={item.id} src={item.previewUrl ?? ""} name={item.file.name} progress={item.progress} onRemove={() => removePending("image", item.id)} />)}
+            {pendingImages.map((item) => <EvidenceTile key={item.id} src={item.previewUrl ?? ""} file={item.file} name={item.file.name} progress={item.progress} onRemove={() => removePending("image", item.id)} />)}
             {!evidenceImages.length && !pendingImages.length ? (
               isMemberReadOnlyReport ? (
                 <>
@@ -1852,15 +1860,57 @@ function EmptyAttachment({ text, compact = false, onClick }: { text: string; com
   )
 }
 
-function EvidenceTile({ src, name, progress, onRemove }: { src: string; name: string; progress?: number; onRemove?: () => void }) {
+function EvidenceTile({
+  src,
+  name,
+  file,
+  progress,
+  onRemove,
+}: {
+  src: string
+  name: string
+  file?: File
+  progress?: number
+  onRemove?: () => void
+}) {
+  const [imgError, setImgError] = useState(false)
+  const [fallbackSrc, setFallbackSrc] = useState<string | null>(null)
+
+  const handleError = () => {
+    if (!imgError) {
+      setImgError(true)
+      if (file && file.size > 0) {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          if (e.target?.result) setFallbackSrc(String(e.target.result))
+        }
+        reader.readAsDataURL(file)
+      }
+    }
+  }
+
+  const activeSrc = fallbackSrc || src
+
   return (
-    <div className="group relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-border/80 bg-muted">
-      <img src={src} alt={name} className="size-full object-cover" />
+    <div
+      className={cn(
+        "group relative aspect-[4/3] w-full overflow-hidden rounded-xl border",
+        imgError && !fallbackSrc ? "border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20" : "border-border/80 bg-muted",
+      )}
+    >
+      {!imgError || fallbackSrc ? (
+        <img src={activeSrc} alt={name} onError={handleError} className="size-full object-cover" />
+      ) : (
+        <div className="flex size-full flex-col items-center justify-center p-2 text-center">
+          <AlertCircle className="size-5 text-amber-600 dark:text-amber-400" />
+          <span className="mt-1 text-[10px] font-medium text-amber-700 dark:text-amber-300">Tap ✕ to remove</span>
+        </div>
+      )}
       {onRemove ? (
         <button
           type="button"
           onClick={onRemove}
-          className="absolute end-2 top-2 z-10 flex size-7 items-center justify-center rounded-full bg-black/70 text-white opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+          className="absolute end-2 top-2 z-10 flex size-7 items-center justify-center rounded-full bg-black/75 text-white opacity-90 shadow-md transition-opacity hover:opacity-100 focus:opacity-100"
           aria-label={`Remove ${name}`}
         >
           <X className="size-4" />

@@ -744,7 +744,7 @@ export async function registerResponseAttachmentsAction(input: {
   try {
     const actorId = await assertProjectMember(input.projectId)
     if (!input.attachments.length) return { ok: true, data: { ids: [] } }
-    if (input.attachments.length > 20) return { ok: false, error: "Too many attachments." }
+    if (input.attachments.length > 100) return { ok: false, error: "Too many attachments (maximum 100)." }
     const admin = createAdminClient()
     const { data: response, error: responseError } = await admin
       .from("term_responses")

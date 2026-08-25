@@ -69,10 +69,10 @@ export function subtermResponseTypeLabel(value: SubtermResponseType) {
 }
 
 export const STAGE_EVIDENCE_BUCKET = "project-stage-evidence"
-const configuredEvidenceLimit = Number(process.env.NEXT_PUBLIC_STAGE_EVIDENCE_MAX_IMAGES || 8)
+const configuredEvidenceLimit = Number(process.env.NEXT_PUBLIC_STAGE_EVIDENCE_MAX_IMAGES || 100)
 export const STAGE_EVIDENCE_MAX_IMAGES = Number.isFinite(configuredEvidenceLimit)
-  ? Math.min(20, Math.max(1, Math.floor(configuredEvidenceLimit)))
-  : 8
+  ? Math.min(500, Math.max(1, Math.floor(configuredEvidenceLimit)))
+  : 100
 export const STAGE_EVIDENCE_MAX_FILE_BYTES = 15 * 1024 * 1024
 export const STAGE_EVIDENCE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif"
 export const STAGE_DOCUMENT_MAX_FILES = 10
