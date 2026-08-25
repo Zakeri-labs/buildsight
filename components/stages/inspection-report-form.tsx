@@ -747,17 +747,10 @@ export function InspectionReportForm({
       let stepIdx = 0
       if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
 
-      // Obtain or confirm responseId
-      let id = responseId ?? initialResponseId
-      let routeStageId = resolvedStageId
-      if (!id) {
-        const savedResponse = await ensureResponse(mode === "progress" ? "in_progress" : "draft")
-        id = savedResponse.responseId
-        routeStageId = savedResponse.projectStageId
-      } else if (!isSubmitMode) {
-        const savedResponse = await ensureResponse(mode === "progress" ? "in_progress" : "draft")
-        routeStageId = savedResponse.projectStageId
-      }
+      // Ensure the report record exists in DB first so attachments & CC recipients can be linked
+      const savedResponse = await ensureResponse(mode === "progress" ? "in_progress" : "draft")
+      const id = savedResponse.responseId
+      let routeStageId = savedResponse.projectStageId
 
       if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
 
