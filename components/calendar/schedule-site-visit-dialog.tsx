@@ -447,67 +447,69 @@ export function ScheduleSiteVisitDialog({
             )}
           </div>
 
+          {error ? <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p> : null}
+        </div>
+
+        <DialogFooter className="max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:bg-background/95 max-sm:pt-3 max-sm:pb-[calc(0.5rem+env(safe-area-inset-bottom))] max-sm:backdrop-blur-sm">
           {confirmCancelOpen ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs space-y-2">
+            <div className="flex w-full flex-col gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs">
               <p className="font-semibold text-destructive">
                 Are you sure you want to cancel this site visit?
               </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleCancelVisit}
-                  disabled={pending}
-                  className="h-8 text-xs"
-                >
-                  {pending ? "Cancelling..." : "Yes, Cancel Visit"}
-                </Button>
+              <div className="grid grid-cols-2 gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => setConfirmCancelOpen(false)}
                   disabled={pending}
-                  className="h-8 text-xs"
+                  className="h-8 text-xs font-medium"
                 >
                   Keep Visit
                 </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleCancelVisit}
+                  disabled={pending}
+                  className="h-8 text-xs font-medium"
+                >
+                  {pending ? "Cancelling..." : "Yes, Cancel Visit"}
+                </Button>
               </div>
             </div>
-          ) : null}
-
-          {error ? <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p> : null}
-        </div>
-
-        <DialogFooter className="max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:grid max-sm:grid-cols-2 max-sm:gap-2 max-sm:bg-background/95 max-sm:pt-3 max-sm:pb-[calc(0.5rem+env(safe-area-inset-bottom))] max-sm:backdrop-blur-sm">
-          {isEditMode && !confirmCancelOpen ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setConfirmCancelOpen(true)}
-              disabled={pending}
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive max-sm:order-3 max-sm:col-span-2"
-            >
-              <Trash2 className="size-4 me-1.5" />
-              Cancel Visit
-            </Button>
-          ) : null}
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>Cancel</Button>
-          <Button type="button" onClick={submit} disabled={pending || !projectId || !date || !time}>
-            {pending ? (
-              isEditMode ? "Saving..." : "Scheduling..."
-            ) : isEditMode ? (
-              "Save Changes"
-            ) : isRequestApproval ? (
-              <>
-                <span className="sm:hidden">Schedule Visit</span>
-                <span className="max-sm:hidden">Approve and Schedule</span>
-              </>
-            ) : (
-              "Schedule Visit"
-            )}
-          </Button>
+          ) : (
+            <div className="flex w-full min-w-0 items-center justify-between gap-2 max-sm:grid max-sm:grid-cols-2">
+              {isEditMode ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setConfirmCancelOpen(true)}
+                  disabled={pending}
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive max-sm:order-3 max-sm:col-span-2"
+                >
+                  <Trash2 className="size-4 me-1.5" />
+                  Cancel Visit
+                </Button>
+              ) : null}
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>Cancel</Button>
+              <Button type="button" onClick={submit} disabled={pending || !projectId || !date || !time}>
+                {pending ? (
+                  isEditMode ? "Saving..." : "Scheduling..."
+                ) : isEditMode ? (
+                  "Save Changes"
+                ) : isRequestApproval ? (
+                  <>
+                    <span className="sm:hidden">Schedule Visit</span>
+                    <span className="max-sm:hidden">Approve and Schedule</span>
+                  </>
+                ) : (
+                  "Schedule Visit"
+                )}
+              </Button>
+            </div>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
