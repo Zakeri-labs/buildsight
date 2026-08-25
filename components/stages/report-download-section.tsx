@@ -44,6 +44,7 @@ export function ReportDownloadSection({
   )
   const [retryBusy, setRetryBusy] = useState(false)
   const [downloading, setDownloading] = useState<"original" | "bilingual" | null>(null)
+  const [sharing, setSharing] = useState(false)
   const [copiedShare, setCopiedShare] = useState(false)
 
   const hasStoredPdf = Boolean(translation?.bilingualPdfPath || translation?.originalPdfPath)
@@ -129,6 +130,7 @@ export function ReportDownloadSection({
   async function handleWhatsAppShare() {
     if (sharing) return
     setSharing(true)
+    const newTab = typeof window !== "undefined" ? window.open("about:blank", "_blank") : null
     try {
       if (isLinkExpired || isStale) {
         handleRetry()
@@ -145,8 +147,13 @@ export function ReportDownloadSection({
         responseId,
         translationId: translation?.id,
       })
-      window.open(url, "_blank")
+      if (newTab) {
+        newTab.location.href = url
+      } else if (typeof window !== "undefined") {
+        window.location.href = url
+      }
     } catch (err) {
+      if (newTab) newTab.close()
       console.error("WhatsApp share PDF preparation error:", err)
     } finally {
       setSharing(false)
@@ -172,8 +179,34 @@ export function ReportDownloadSection({
         responseId,
         translationId: translation?.id,
       })
-      if (typeof navigator !== "undefined" && navigator.clipboard) {
-        navigator.clipboard.writeText(msg.text)
+
+      let success = false
+      if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+          await navigator.clipboard.writeText(msg.text)
+          success = true
+        } catch {
+          // Fall back to legacy document.execCommand if writeText fails
+        }
+      }
+
+      if (!success && typeof document !== "undefined") {
+        try {
+          const textarea = document.createElement("textarea")
+          textarea.value = msg.text
+          textarea.style.position = "fixed"
+          textarea.style.opacity = "0"
+          document.body.appendChild(textarea)
+          textarea.focus()
+          textarea.select()
+          success = document.execCommand("copy")
+          document.body.removeChild(textarea)
+        } catch {
+          // Ignore copy fallback failure
+        }
+      }
+
+      if (success) {
         setCopiedShare(true)
         setTimeout(() => setCopiedShare(false), 2000)
       }
@@ -280,16 +313,18 @@ export function ReportDownloadSection({
               type="button"
               variant="outline"
               size="sm"
+              disabled={sharing}
               onClick={handleWhatsAppShare}
               className="h-9 gap-1.5 rounded-lg border-emerald-500/40 bg-emerald-50/60 px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-100/80 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60 shadow-xs"
             >
-              <Share2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+              {sharing ? <Loader2 className="size-3.5 animate-spin text-emerald-600" /> : <Share2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />}
               <span>{locale === "ar" ? "مشاركة" : "Share"}</span>
             </Button>
             <Button
               type="button"
               variant="outline"
               size="sm"
+              disabled={sharing}
               onClick={handleCopyShare}
               className="h-9 gap-1.5 rounded-lg border-primary/30 bg-background px-3 text-xs font-semibold shadow-xs hover:bg-accent"
             >
@@ -437,16 +472,18 @@ export function ReportDownloadSection({
                 type="button"
                 variant="outline"
                 size="sm"
+                disabled={sharing}
                 onClick={handleWhatsAppShare}
                 className="h-9 gap-1.5 rounded-xl border-emerald-500/40 bg-emerald-50/60 px-3 text-xs font-bold text-emerald-700 hover:bg-emerald-100/80 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60 shadow-2xs"
               >
-                <Share2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+                {sharing ? <Loader2 className="size-4 animate-spin text-emerald-600" /> : <Share2 className="size-4 text-emerald-600 dark:text-emerald-400" />}
                 <span>{locale === "ar" ? "مشاركة" : "Share"}</span>
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
+                disabled={sharing}
                 onClick={handleCopyShare}
                 className="h-9 gap-1.5 rounded-xl border-primary/30 bg-background px-3 text-xs font-bold shadow-2xs hover:bg-accent"
               >
