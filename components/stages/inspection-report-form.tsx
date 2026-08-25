@@ -814,6 +814,97 @@ export function InspectionReportForm({
             stageId: result.data.projectStageId,
             responseId: id,
           })
+
+          let translationPayload: { data: any; ccRecipients: ReportCcRecipient[] } | null = null
+          const startTime = Date.now()
+          while (Date.now() - startTime < 35_000) {
+            await new Promise((resolve) => setTimeout(resolve, 1500))
+            try {
+              const params = new URLSearchParams({
+                projectId: project.id,
+                stageId: result.data.projectStageId,
+                responseId: id,
+              })
+              const res = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
+              if (res.ok) {
+                const payload = await res.json()
+                if (payload?.data?.translation?.status === "completed" && payload?.data?.translation?.translatedContent) {
+                  translationPayload = {
+                    data: payload.data,
+                    ccRecipients: payload.ccRecipients ?? [],
+                  }
+                  break
+                }
+              }
+            } catch {
+              // ignore transient errors
+            }
+          }
+
+          let generatedPdfs: {
+            original?: { blob: Blob; filename: string }
+            bilingual?: { blob: Blob; filename: string }
+          } = {}
+
+          try {
+            const params = new URLSearchParams({
+              projectId: project.id,
+              stageId: result.data.projectStageId,
+              responseId: id,
+            })
+            const res = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
+            if (res.ok) {
+              const payload = await res.json()
+              const pageData = payload?.data
+              const transRecord = pageData?.translation
+
+              if (pageData && transRecord) {
+                const originalPdf = await exportTranslationPdf({
+                  data: pageData,
+                  translation: transRecord,
+                  kind: "original",
+                  ccRecipients: payload?.ccRecipients ?? [],
+                  appendClosingBlock: true,
+                })
+                generatedPdfs.original = originalPdf
+
+                if (transRecord.id) {
+                  await storeTranslationPdf({
+                    projectId: project.id,
+                    translationId: transRecord.id,
+                    kind: "original",
+                    blob: originalPdf.blob,
+                    filename: originalPdf.filename,
+                  }).catch(() => null)
+                }
+
+                if (transRecord.status === "completed" && transRecord.translatedContent) {
+                  const bilingualPdf = await exportTranslationPdf({
+                    data: pageData,
+                    translation: transRecord,
+                    kind: "bilingual",
+                    ccRecipients: payload?.ccRecipients ?? [],
+                    appendClosingBlock: true,
+                  })
+                  generatedPdfs.bilingual = bilingualPdf
+
+                  if (transRecord.id) {
+                    await storeTranslationPdf({
+                      projectId: project.id,
+                      translationId: transRecord.id,
+                      kind: "bilingual",
+                      blob: bilingualPdf.blob,
+                      filename: bilingualPdf.filename,
+                    }).catch(() => null)
+                  }
+                }
+              }
+            }
+          } catch (pdfErr) {
+            console.warn("Client PDF generation warning during submit:", pdfErr)
+          }
+
+          setReadyPdfs(generatedPdfs)
           steps = updateStep(steps, stepIdx, "done")
         }
       } else {
