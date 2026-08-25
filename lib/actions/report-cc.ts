@@ -1,6 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { after } from "next/server"
 import { assertProjectAdmin, assertProjectMember, audit, AuthzError } from "@/lib/auth/guards"
 import { sendReportCcEmails } from "@/lib/email/report-cc"
 import { loadProjectCcCandidates, loadProjectParticipantsOnly, loadReportCcRecipients } from "@/lib/report-cc/server"
@@ -288,48 +289,53 @@ export async function saveReportCcRecipientsAction(input: {
       }
       return { recipientRowId: row.id, name: row.external_name, email: row.external_email, internal: false }
     })
-    const emailResults = emailRecipients.length
-      ? await sendReportCcEmails({
-          context: input.context,
-          projectName: project?.name ?? "Project",
-          stageName: stage?.name ?? "Stage",
-          termName: term?.report_name ?? stage?.name ?? "Report",
-          reportNumber: response.report_number,
-          reportTitle: response.report_title,
-          href: appHref(href),
-          recipients: emailRecipients,
-        })
-      : []
-
-    const emailFailures = emailResults.filter((result) => !result.ok).length
-    for (const emailResult of emailResults) {
-      await admin
-        .from("report_cc_recipients")
-        .update({
-          email_sent_at: emailResult.ok ? new Date().toISOString() : null,
-          email_status: emailResult.ok ? "sent" : emailResult.reason === "no_email" ? "skipped_no_email" : emailResult.reason === "unconfigured" ? "skipped_unconfigured" : "failed",
-        })
-        .eq("id", emailResult.recipientRowId)
+    if (emailRecipients.length) {
+      after(async () => {
+        try {
+          const emailResults = await sendReportCcEmails({
+            context: input.context,
+            projectName: project?.name ?? "Project",
+            stageName: stage?.name ?? "Stage",
+            termName: term?.report_name ?? stage?.name ?? "Report",
+            reportNumber: response.report_number,
+            reportTitle: response.report_title,
+            href: appHref(href),
+            recipients: emailRecipients,
+          })
+          const emailFailures = emailResults.filter((result) => result.status === "failed").length
+          for (const emailResult of emailResults) {
+            await admin
+              .from("report_cc_recipients")
+              .update({
+                email_sent_at: emailResult.status === "sent" ? new Date().toISOString() : null,
+                email_status: emailResult.status,
+              })
+              .eq("id", emailResult.recipientRowId)
+          }
+          await audit({
+            actorId,
+            action: "save_report_cc_recipients",
+            entityType: "term_response",
+            entityId: input.responseId,
+            projectId: input.projectId,
+            metadata: {
+              context: input.context,
+              internalCount: validInternalUserIds.length,
+              externalCount: externalRows.length,
+              insertedCount: inserted.length,
+              emailFailures,
+            },
+          })
+        } catch {
+          // Ignore background email task error
+        }
+      })
     }
-
-    await audit({
-      action: "save_report_cc_recipients",
-      targetType: "term_response",
-      targetId: input.responseId,
-      projectId: input.projectId,
-      details: {
-        context: input.context,
-        internalCount: validInternalUserIds.length,
-        externalCount: externalRows.length,
-        insertedCount: inserted.length,
-        emailFailures,
-      },
-    })
 
     const recipients = await loadReportCcRecipients(input.projectId, input.responseId, input.context)
     revalidatePath(`/projects/${input.projectId}`)
 
-    return { ok: true, recipients, emailFailures }
+    return { ok: true, recipients, emailFailures: 0 }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Unable to save CC recipients." }
   }

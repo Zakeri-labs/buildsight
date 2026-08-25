@@ -41,13 +41,18 @@ function PdfPage({ pdfjs, documentProxy, pageNumber }: { pdfjs: any; documentPro
 
     async function renderPage() {
       try {
+        const host = hostRef.current
+        const canvas = canvasRef.current
+        const textLayer = textLayerRef.current
+        if (!host || !canvas || !textLayer) return
+
         const page = await documentProxy.getPage(pageNumber)
         if (disposed) return
         const baseViewport = page.getViewport({ scale: 1 })
         const availableWidth = Math.max(260, host.clientWidth - 2)
         const scale = availableWidth / Math.max(1, baseViewport.width)
         const viewport = page.getViewport({ scale })
-        const outputScale = Math.min(2, window.devicePixelRatio || 1)
+        const outputScale = Math.min(2, typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1)
         const context = canvas.getContext("2d", { alpha: false })
         if (!context) throw new Error("Canvas rendering is not supported in this browser.")
 

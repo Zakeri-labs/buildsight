@@ -255,7 +255,7 @@ export async function loadDashboardSiteVisitActivity(
   const rangeStart = range?.startUtc ? Date.parse(range.startUtc) : null
   const rangeEnd = range?.endExclusiveUtc ? Date.parse(range.endExclusiveUtc) : null
 
-  return candidateRows.flatMap((row: any) => {
+  return candidateRows.flatMap((row: any): DashboardSiteVisitActivity[] => {
     const id = asUuid(row.id)
     const projectId = asUuid(row.project_id)
     const status = normalizedVisitStatus(row.status)

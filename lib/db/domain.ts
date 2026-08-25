@@ -395,8 +395,9 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
       }
 
       // Check template stage reports if no DB responses found for this stage
-      if (reportChecklistTotal === 0 && tmplStage.reports && Array.isArray(tmplStage.reports)) {
-        for (const report of tmplStage.reports) {
+      const tmplReports = (tmplStage as any).reports
+      if (reportChecklistTotal === 0 && tmplReports && Array.isArray(tmplReports)) {
+        for (const report of tmplReports) {
           const checklist = report.content?.checklist ?? []
           for (const item of checklist) {
             reportChecklistTotal++
@@ -426,8 +427,8 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
       if (stageTermsCount === 0 && tmplStage.terms) {
         for (const term of tmplStage.terms) {
           if (term.subterms && term.subterms.length > 0) {
-            stageTermsCount += term.subterms.filter((s: any) => s.active !== false).length
-          } else if (term.active !== false) {
+            stageTermsCount += term.subterms.filter((s: any) => s.active !== false && s.isActive !== false).length
+          } else if ((term as any).active !== false && (term as any).isActive !== false) {
             stageTermsCount += 1
           }
         }
@@ -1412,7 +1413,7 @@ export async function getDashboardData(
     const reportCcTasks: TaskRow[] = reportCcFeed.items.map((item) => ({
       id: `report-cc:${item.id}`,
       action: "Report CC Notification",
-      type: "CC Notification",
+      type: "CC",
       reference: item.reportNumber,
       reportTitle: item.reportTitle,
       dueLabel: "CC Copy",

@@ -981,7 +981,7 @@ export async function saveProjectStageSelectionAction(
         .select("id, template_stage_id, status")
         .eq("project_id", input.projectId)
       if (fallback.error) throw fallback.error
-      existingStages = fallback.data
+      existingStages = (fallback.data ?? []).map((s: any) => ({ ...s, is_pre_completed: s.status === "completed" }))
     }
 
     let projectStages = existingStages ?? []
@@ -1046,11 +1046,12 @@ export async function saveProjectStageSelectionAction(
         .select("id, template_stage_id, status, is_pre_completed")
         .eq("project_id", input.projectId)
       if (reloadRes.error) {
-        reloadRes = await admin
+        const fallbackReload = await admin
           .from("project_stages")
           .select("id, template_stage_id, status")
           .eq("project_id", input.projectId)
-        if (reloadRes.error) throw reloadRes.error
+        if (fallbackReload.error) throw fallbackReload.error
+        reloadRes = { ...fallbackReload, data: (fallbackReload.data ?? []).map((s: any) => ({ ...s, is_pre_completed: s.status === "completed" })) } as any
       }
       projectStages = reloadRes.data ?? []
     }

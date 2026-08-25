@@ -613,7 +613,7 @@ export async function updateProject(input: {
           .select("id, template_stage_id, name, status, sort_order")
           .eq("project_id", input.projectId)
           .order("sort_order", { ascending: true })
-        if (!fallback.error) projectStages = fallback.data
+        if (!fallback.error) projectStages = (fallback.data ?? []).map((s: any) => ({ ...s, is_pre_completed: s.status === "completed" }))
       }
 
       if (!projectStages || projectStages.length === 0) {
@@ -632,7 +632,7 @@ export async function updateProject(input: {
             .select("id, template_stage_id, name, status, sort_order")
             .eq("project_id", input.projectId)
             .order("sort_order", { ascending: true })
-          if (!fallbackReload.error) reloaded = fallbackReload.data
+          if (!fallbackReload.error) reloaded = (fallbackReload.data ?? []).map((s: any) => ({ ...s, is_pre_completed: s.status === "completed" }))
         }
         projectStages = reloaded
       }
@@ -1857,7 +1857,7 @@ export async function getProjectStagesForEditAction(
         .eq("project_id", projectId)
         .order("sort_order", { ascending: true })
       if (!fallback.error) {
-        stageRows = fallback.data
+        stageRows = (fallback.data ?? []).map((s: any) => ({ ...s, is_pre_completed: s.status === "completed" }))
       }
     }
 

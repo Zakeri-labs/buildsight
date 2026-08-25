@@ -613,38 +613,61 @@ export function InspectionReportForm({
     const registrations: AttachmentRegistration[] = []
     const uploadedPaths: string[] = []
     try {
-      for (let index = 0; index < files.length; index += 1) {
-        const item = files[index]
-        const folder = kind === "evidence_image" ? "evidence" : "documents"
-        const safeName = sanitizeEvidenceFileName(item.file.name)
-        const path = `${project.id}/${id}/${folder}/${crypto.randomUUID()}-${safeName}`
-        let mimeType = item.file.type
-        if (kind === "evidence_image") {
-          if (!mimeType || !mimeType.startsWith("image/")) {
-            const ext = item.file.name.toLowerCase().match(/\.[^.]+$/)?.[0]
-            if (ext === ".jpg" || ext === ".jpeg") mimeType = "image/jpeg"
-            else if (ext === ".png") mimeType = "image/png"
-            else if (ext === ".webp") mimeType = "image/webp"
-            else if (ext === ".gif") mimeType = "image/gif"
-            else mimeType = "image/jpeg"
-          }
-        } else {
-          mimeType = resolveStageDocumentMimeType(item.file) ?? "application/octet-stream"
+      const BATCH_SIZE = 3
+      for (let i = 0; i < files.length; i += BATCH_SIZE) {
+        const chunk = files.slice(i, i + BATCH_SIZE)
+        const chunkResults = await Promise.all(
+          chunk.map(async (item, chunkOffset) => {
+            const index = i + chunkOffset
+            const folder = kind === "evidence_image" ? "evidence" : "documents"
+            const safeName = sanitizeEvidenceFileName(item.file.name)
+            const path = `${project.id}/${id}/${folder}/${crypto.randomUUID()}-${safeName}`
+            let mimeType = item.file.type
+            if (kind === "evidence_image") {
+              if (!mimeType || !mimeType.startsWith("image/")) {
+                const ext = item.file.name.toLowerCase().match(/\.[^.]+$/)?.[0]
+                if (ext === ".jpg" || ext === ".jpeg") mimeType = "image/jpeg"
+                else if (ext === ".png") mimeType = "image/png"
+                else if (ext === ".webp") mimeType = "image/webp"
+                else if (ext === ".gif") mimeType = "image/gif"
+                else mimeType = "image/jpeg"
+              }
+            } else {
+              mimeType = resolveStageDocumentMimeType(item.file) ?? "application/octet-stream"
+            }
+            let lastError: any = null
+            for (let attempt = 1; attempt <= 2; attempt++) {
+              try {
+                await uploadStageEvidence(item.file, path, session.access_token, (progress) => {
+                  const update = (rows: PendingFile[]) => rows.map((row) => row.id === item.id ? { ...row, progress } : row)
+                  if (kind === "evidence_image") setPendingImages(update)
+                  else setPendingDocuments(update)
+                }, mimeType)
+                lastError = null
+                break
+              } catch (err) {
+                lastError = err
+                if (attempt < 2) await new Promise((r) => setTimeout(r, 600))
+              }
+            }
+            if (lastError) throw lastError
+            return {
+              path,
+              registration: {
+                storagePath: path,
+                originalFilename: item.file.name,
+                mimeType,
+                sizeBytes: item.file.size,
+                attachmentKind: kind,
+                sortOrder: existingAttachments.length + index,
+              },
+            }
+          }),
+        )
+        for (const res of chunkResults) {
+          uploadedPaths.push(res.path)
+          registrations.push(res.registration)
         }
-        await uploadStageEvidence(item.file, path, session.access_token, (progress) => {
-          const update = (rows: PendingFile[]) => rows.map((row) => row.id === item.id ? { ...row, progress } : row)
-          if (kind === "evidence_image") setPendingImages(update)
-          else setPendingDocuments(update)
-        }, mimeType)
-        uploadedPaths.push(path)
-        registrations.push({
-          storagePath: path,
-          originalFilename: item.file.name,
-          mimeType,
-          sizeBytes: item.file.size,
-          attachmentKind: kind,
-          sortOrder: existingAttachments.length + index,
-        })
       }
       const registered = await registerResponseAttachmentsAction({ projectId: project.id, responseId: id, attachments: registrations })
       if (!registered.ok) throw new Error(registered.error)
@@ -701,7 +724,6 @@ export function InspectionReportForm({
     setSuccess(null)
     setBusy(mode)
 
-    // For submit mode: open progress modal with steps
     const isSubmitMode = mode === "submit"
     const hasImages = pendingImages.length > 0
     const hasDocs = pendingDocuments.length > 0
@@ -714,8 +736,7 @@ export function InspectionReportForm({
       if (hasDocs) stepList.push(locale === "ar" ? `رفع ${pendingDocuments.length} مستند` : `Uploading ${pendingDocuments.length} document${pendingDocuments.length > 1 ? "s" : ""}`)
       stepList.push(locale === "ar" ? "إرسال التقرير للمراجعة" : "Submitting for review")
       if (isDirectStageReport) {
-        stepList.push(locale === "ar" ? "جدولة الترجمة" : "Scheduling translation")
-        stepList.push(locale === "ar" ? "إعداد ملفات PDF" : "Preparing PDF files")
+        stepList.push(locale === "ar" ? "جدولة الترجمة والملفات" : "Scheduling translation & PDFs")
       }
       steps = stepList.map((label) => ({ label, status: "pending" as const }))
       setSubmitSteps(steps)
@@ -725,10 +746,21 @@ export function InspectionReportForm({
     try {
       let stepIdx = 0
       if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
-      const savedResponse = await ensureResponse(mode === "progress" ? "in_progress" : "draft")
+
+      // Obtain or confirm responseId
+      let id = responseId ?? initialResponseId
+      let routeStageId = resolvedStageId
+      if (!id) {
+        const savedResponse = await ensureResponse(mode === "progress" ? "in_progress" : "draft")
+        id = savedResponse.responseId
+        routeStageId = savedResponse.projectStageId
+      } else if (!isSubmitMode) {
+        const savedResponse = await ensureResponse(mode === "progress" ? "in_progress" : "draft")
+        routeStageId = savedResponse.projectStageId
+      }
+
       if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
-      const id = savedResponse.responseId
-      let routeStageId = savedResponse.projectStageId
+
       if (ccSelection.internalUserIds.length || ccSelection.externalRecipients.length || initialCcRecipients.length) {
         const ccResult = await saveReportCcRecipientsAction({
           projectId: project.id,
@@ -741,6 +773,7 @@ export function InspectionReportForm({
         })
         if (!ccResult.ok) throw new Error(ccResult.error)
       }
+
       if (hasImages) {
         if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
         await uploadFiles(id, pendingImages, "evidence_image")
@@ -751,7 +784,7 @@ export function InspectionReportForm({
         await uploadFiles(id, pendingDocuments, "document")
         if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
       }
-      if (!hasImages && !hasDocs && isSubmitMode) {} // no upload steps to advance
+
       if (mode === "submit") {
         if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
         const reportInput = {
@@ -774,101 +807,20 @@ export function InspectionReportForm({
           : await saveTermResponseAction({ ...reportInput, termId: reportDefinition.id })
         if (!result.ok) throw new Error(result.error)
         if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
+
         routeStageId = result.data.projectStageId
         setResolvedStageId(result.data.projectStageId)
         setVisitNumber(result.data.visitNumber)
         setStatus(result.data.status as ResponseStatus)
         setSuccess(copy.submitted)
+
         if (isDirectStageReport && isSubmitMode) {
-          // Step 3: AI Translation
           steps = updateStep(steps, stepIdx, "active")
           enqueueStageTranslationJob({
             projectId: project.id,
             stageId: result.data.projectStageId,
             responseId: id,
           })
-
-          let translationPayload: { data: any; ccRecipients: ReportCcRecipient[] } | null = null
-          const startTime = Date.now()
-          while (Date.now() - startTime < 45_000) {
-            await new Promise((resolve) => setTimeout(resolve, 1500))
-            try {
-              const params = new URLSearchParams({
-                projectId: project.id,
-                stageId: result.data.projectStageId,
-                responseId: id,
-              })
-              const res = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
-              if (res.ok) {
-                const payload = await res.json()
-                if (payload?.data?.translation?.status === "completed" && payload?.data?.translation?.translatedContent) {
-                  translationPayload = {
-                    data: payload.data,
-                    ccRecipients: payload.ccRecipients ?? [],
-                  }
-                  break
-                }
-              }
-            } catch {
-              // ignore transient errors
-            }
-          }
-
-          steps = updateStep(steps, stepIdx, "done")
-          stepIdx++
-
-          // Step 4: Preparing PDF Files
-          steps = updateStep(steps, stepIdx, "active")
-          let generatedPdfs: {
-            original?: { blob: Blob; filename: string }
-            bilingual?: { blob: Blob; filename: string }
-          } = {}
-
-          if (translationPayload) {
-            try {
-              const [originalPdf, bilingualPdf] = await Promise.all([
-                exportTranslationPdf({
-                  data: translationPayload.data,
-                  translation: translationPayload.data.translation,
-                  kind: "original",
-                  ccRecipients: translationPayload.ccRecipients,
-                  appendClosingBlock: true,
-                }),
-                exportTranslationPdf({
-                  data: translationPayload.data,
-                  translation: translationPayload.data.translation,
-                  kind: "bilingual",
-                  ccRecipients: translationPayload.ccRecipients,
-                  appendClosingBlock: true,
-                }),
-              ])
-
-              generatedPdfs = { original: originalPdf, bilingual: bilingualPdf }
-
-              if (translationPayload.data.translation?.id) {
-                Promise.all([
-                  storeTranslationPdf({
-                    projectId: project.id,
-                    translationId: translationPayload.data.translation.id,
-                    kind: "original",
-                    blob: originalPdf.blob,
-                    filename: originalPdf.filename,
-                  }),
-                  storeTranslationPdf({
-                    projectId: project.id,
-                    translationId: translationPayload.data.translation.id,
-                    kind: "bilingual",
-                    blob: bilingualPdf.blob,
-                    filename: bilingualPdf.filename,
-                  }),
-                ]).catch(() => undefined)
-              }
-            } catch (pdfErr) {
-              console.warn("Client PDF generation warning:", pdfErr)
-            }
-          }
-
-          setReadyPdfs(generatedPdfs)
           steps = updateStep(steps, stepIdx, "done")
         }
       } else {

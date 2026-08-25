@@ -3,10 +3,12 @@
     "lib": [
       "dom",
       "dom.iterable",
+      "es2018",
+      "es2020",
       "esnext"
     ],
     "allowJs": true,
-    "target": "ES6",
+    "target": "ES2018",
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,

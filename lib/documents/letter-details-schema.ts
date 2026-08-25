@@ -155,22 +155,22 @@ ${status}.`
       result.activity = actMatch[1].trim()
     }
 
-    const obsMatch = text.match(/The details of the non-conformance are:\s*\n(.*?)\.\s*\n/is)
+    const obsMatch = text.match(/The details of the non-conformance are:\s*\n([\s\S]*?)\.\s*\n/i)
     if (obsMatch && obsMatch[1] && !obsMatch[1].includes("[describe")) {
       result.observedIssue = obsMatch[1].trim()
     }
 
-    const corrMatch = text.match(/The required corrective action is:\s*\n(.*?)\.\s*\n/is)
+    const corrMatch = text.match(/The required corrective action is:\s*\n([\s\S]*?)\.\s*\n/i)
     if (corrMatch && corrMatch[1] && !corrMatch[1].includes("[describe")) {
       result.correctiveAction = corrMatch[1].trim()
     }
 
-    const respMatch = text.match(/The responsible party for corrective action is:\s*\n(.*?)\.\s*\n/is)
+    const respMatch = text.match(/The responsible party for corrective action is:\s*\n([\s\S]*?)\.\s*\n/i)
     if (respMatch && respMatch[1] && !respMatch[1].includes("[company")) {
       result.responsibleParty = respMatch[1].trim()
     }
 
-    const targetMatch = text.match(/The target completion date is:\s*\n(.*?)\.\s*\n/is)
+    const targetMatch = text.match(/The target completion date is:\s*\n([\s\S]*?)\.\s*\n/i)
     if (targetMatch && targetMatch[1] && !targetMatch[1].includes("[date]")) {
       result.targetCompletionDate = targetMatch[1].trim()
     }
@@ -286,7 +286,7 @@ ${status}.`
       result.subject = subjectMatch[1].trim()
     }
 
-    const questionMatch = text.match(/The clarification required is:\s*\n\s*(.*?)\s*\n\s*This request was submitted by:/is)
+    const questionMatch = text.match(/The clarification required is:\s*\n\s*([\s\S]*?)\s*\n\s*This request was submitted by:/i)
     if (questionMatch && questionMatch[1] && !questionMatch[1].includes("[describe")) {
       result.question = questionMatch[1].trim()
     }
@@ -306,7 +306,7 @@ ${status}.`
       result.requiredResponseDate = reqDateMatch[1].trim()
     }
 
-    const respMatch = text.match(/Received response \/ clarification:\s*\n\s*(.*?)\s*\n\s*Current status:/is)
+    const respMatch = text.match(/Received response \/ clarification:\s*\n\s*([\s\S]*?)\s*\n\s*Current status:/i)
     if (respMatch && respMatch[1] && !respMatch[1].includes("[details")) {
       result.receivedResponse = respMatch[1].trim()
     }
@@ -441,17 +441,17 @@ ${status}.`
       result.inspectionDate = dateMatch[1].trim()
     }
 
-    const worksMatch = text.match(/The inspected works include:\s*\n\s*(.*?)\s*\n\s*Inspection result:/is)
+    const worksMatch = text.match(/The inspected works include:\s*\n\s*([\s\S]*?)\s*\n\s*Inspection result:/i)
     if (worksMatch && worksMatch[1] && !worksMatch[1].includes("[describe")) {
       result.inspectedWorks = worksMatch[1].trim()
     }
 
-    const resMatch = text.match(/Inspection result:\s*\n\s*(.*?)\s*\n\s*Inspection comments:/is)
+    const resMatch = text.match(/Inspection result:\s*\n\s*([\s\S]*?)\s*\n\s*Inspection comments:/i)
     if (resMatch && resMatch[1] && !resMatch[1].includes("[Approved")) {
       result.inspectionResult = resMatch[1].trim()
     }
 
-    const commMatch = text.match(/Inspection comments:\s*\n\s*(.*?)\s*\n\s*Current status:/is)
+    const commMatch = text.match(/Inspection comments:\s*\n\s*([\s\S]*?)\s*\n\s*Current status:/i)
     if (commMatch && commMatch[1] && !commMatch[1].includes("[remarks")) {
       result.comments = commMatch[1].trim()
     }
@@ -555,32 +555,32 @@ ${remarks}.`
     const result: Record<string, string> = {}
     if (!text) return result
 
-    const matMatch = text.match(/This Material Inspection Request is submitted for approval of:\s*\n\s*(.*?)\s*\n\s*Supplier \/ Manufacturer:/is)
+    const matMatch = text.match(/This Material Inspection Request is submitted for approval of:\s*\n\s*([\s\S]*?)\s*\n\s*Supplier \/ Manufacturer:/i)
     if (matMatch && matMatch[1] && !matMatch[1].includes("[material")) {
       result.materialName = matMatch[1].trim()
     }
 
-    const supMatch = text.match(/Supplier \/ Manufacturer:\s*\n\s*(.*?)\s*\n\s*Material details and specifications:/is)
+    const supMatch = text.match(/Supplier \/ Manufacturer:\s*\n\s*([\s\S]*?)\s*\n\s*Material details and specifications:/i)
     if (supMatch && supMatch[1] && !supMatch[1].includes("[supplier")) {
       result.supplier = supMatch[1].trim()
     }
 
-    const detMatch = text.match(/Material details and specifications:\s*\n\s*(.*?)\s*\n\s*Delivery date:/is)
+    const detMatch = text.match(/Material details and specifications:\s*\n\s*([\s\S]*?)\s*\n\s*Delivery date:/i)
     if (detMatch && detMatch[1] && !detMatch[1].includes("[delivery")) {
       result.materialDetails = detMatch[1].trim()
     }
 
-    const delDateMatch = text.match(/Delivery date:\s*\n\s*(.*?)\s*\n\s*Inspection result:/is)
+    const delDateMatch = text.match(/Delivery date:\s*\n\s*([\s\S]*?)\s*\n\s*Inspection result:/i)
     if (delDateMatch && delDateMatch[1] && !delDateMatch[1].includes("[date]")) {
       result.deliveryDate = delDateMatch[1].trim()
     }
 
-    const resMatch = text.match(/Inspection result:\s*\n\s*(.*?)\s*\n\s*Additional remarks:/is)
+    const resMatch = text.match(/Inspection result:\s*\n\s*([\s\S]*?)\s*\n\s*Additional remarks:/i)
     if (resMatch && resMatch[1] && !resMatch[1].includes("[Accepted")) {
       result.inspectionResult = resMatch[1].trim()
     }
 
-    const remMatch = text.match(/Additional remarks:\s*\n\s*(.*?)\s*$/is)
+    const remMatch = text.match(/Additional remarks:\s*\n\s*([\s\S]*?)\s*$/i)
     if (remMatch && remMatch[1] && !remMatch[1].includes("[inspection")) {
       result.remarks = remMatch[1].trim()
     }
@@ -740,22 +740,22 @@ ${attachmentsNote}`
       result.inspectorName = inspMatch[1].trim()
     }
 
-    const obsMatch = text.match(/Key Observations:\s*\n(.*?)\s*\n/is)
+    const obsMatch = text.match(/Key Observations:\s*\n(.*?)\s*\n/i)
     if (obsMatch && obsMatch[1] && !obsMatch[1].includes("[describe")) {
       result.observations = obsMatch[1].trim()
     }
 
-    const defMatch = text.match(/Identified Defects:\s*\n(.*?)\s*\n/is)
+    const defMatch = text.match(/Identified Defects:\s*\n(.*?)\s*\n/i)
     if (defMatch && defMatch[1] && !defMatch[1].includes("[describe")) {
       result.defects = defMatch[1].trim()
     }
 
-    const rectMatch = text.match(/Required Rectification:\s*\n(.*?)\s*\n/is)
+    const rectMatch = text.match(/Required Rectification:\s*\n(.*?)\s*\n/i)
     if (rectMatch && rectMatch[1] && !rectMatch[1].includes("[describe")) {
       result.rectification = rectMatch[1].trim()
     }
 
-    const recMatch = text.match(/Engineering Recommendations:\s*\n(.*?)\s*\n/is)
+    const recMatch = text.match(/Engineering Recommendations:\s*\n(.*?)\s*\n/i)
     if (recMatch && recMatch[1] && !recMatch[1].includes("[describe")) {
       result.recommendations = recMatch[1].trim()
     }
@@ -765,7 +765,7 @@ ${attachmentsNote}`
       result.inspectionStatus = statMatch[1].trim()
     }
 
-    const attMatch = text.match(/Attachments \/ References:\s*\n(.*?)$/is)
+    const attMatch = text.match(/Attachments \/ References:\s*\n(.*?)$/i)
     if (attMatch && attMatch[1] && !attMatch[1].includes("[photo")) {
       result.attachmentsNote = attMatch[1].trim()
     }
@@ -858,27 +858,27 @@ ${remarks}`
       result.ipcPeriod = periodMatch[1].trim()
     }
 
-    const claimMatch = text.match(/Gross Amount Claimed:\s*\n(.*?)\s*\n/is)
+    const claimMatch = text.match(/Gross Amount Claimed:\s*\n(.*?)\s*\n/i)
     if (claimMatch && claimMatch[1] && !claimMatch[1].includes("[claimed")) {
       result.claimedAmount = claimMatch[1].trim()
     }
 
-    const certMatch = text.match(/Net Certified Amount:\s*\n(.*?)\s*\n/is)
+    const certMatch = text.match(/Net Certified Amount:\s*\n(.*?)\s*\n/i)
     if (certMatch && certMatch[1] && !certMatch[1].includes("[certified")) {
       result.certifiedAmount = certMatch[1].trim()
     }
 
-    const worksMatch = text.match(/Summary of Works:\s*\n(.*?)\s*\n/is)
+    const worksMatch = text.match(/Summary of Works:\s*\n(.*?)\s*\n/i)
     if (worksMatch && worksMatch[1] && !worksMatch[1].includes("[summary")) {
       result.summaryOfWorks = worksMatch[1].trim()
     }
 
-    const dateMatch = text.match(/Date:\s*\n(.*?)\s*\n/is)
+    const dateMatch = text.match(/Date:\s*\n(.*?)\s*\n/i)
     if (dateMatch && dateMatch[1] && !dateMatch[1].includes("[date]")) {
       result.certificateDate = dateMatch[1].trim()
     }
 
-    const remMatch = text.match(/Certification Notes:\s*\n(.*)$/is)
+    const remMatch = text.match(/Certification Notes:\s*\n(.*)$/i)
     if (remMatch && remMatch[1] && !remMatch[1].includes("[retention")) {
       result.remarks = remMatch[1].trim()
     }
@@ -970,27 +970,27 @@ ${remarks}`
       result.voSubject = subMatch[1].trim()
     }
 
-    const justMatch = text.match(/Justification:\s*\n(.*?)\s*\n/is)
+    const justMatch = text.match(/Justification:\s*\n(.*?)\s*\n/i)
     if (justMatch && justMatch[1] && !justMatch[1].includes("[reason")) {
       result.justification = justMatch[1].trim()
     }
 
-    const costMatch = text.match(/Cost Impact:\s*\n(.*?)\s*\n/is)
+    const costMatch = text.match(/Cost Impact:\s*\n(.*?)\s*\n/i)
     if (costMatch && costMatch[1] && !costMatch[1].includes("[cost")) {
       result.costImpact = costMatch[1].trim()
     }
 
-    const timeMatch = text.match(/Time Impact:\s*\n(.*?)\s*\n/is)
+    const timeMatch = text.match(/Time Impact:\s*\n(.*?)\s*\n/i)
     if (timeMatch && timeMatch[1] && !timeMatch[1].includes("[time")) {
       result.timeImpact = timeMatch[1].trim()
     }
 
-    const dateMatch = text.match(/Date:\s*\n(.*?)\s*\n/is)
+    const dateMatch = text.match(/Date:\s*\n(.*?)\s*\n/i)
     if (dateMatch && dateMatch[1] && !dateMatch[1].includes("[date]")) {
       result.orderDate = dateMatch[1].trim()
     }
 
-    const remMatch = text.match(/Approval Terms & Refs:\s*\n(.*)$/is)
+    const remMatch = text.match(/Approval Terms & Refs:\s*\n(.*)$/i)
     if (remMatch && remMatch[1] && !remMatch[1].includes("[approval")) {
       result.remarks = remMatch[1].trim()
     }
@@ -1061,17 +1061,17 @@ ${remarks}`
       result.documentSubject = subMatch[1].trim()
     }
 
-    const dateMatch = text.match(/Date:\s*\n(.*?)\s*\n/is)
+    const dateMatch = text.match(/Date:\s*\n(.*?)\s*\n/i)
     if (dateMatch && dateMatch[1] && !dateMatch[1].includes("[date]")) {
       result.documentDate = dateMatch[1].trim()
     }
 
-    const detMatch = text.match(/Document Details:\s*\n(.*?)\s*\n/is)
+    const detMatch = text.match(/Document Details:\s*\n(.*?)\s*\n/i)
     if (detMatch && detMatch[1] && !detMatch[1].includes("[describe")) {
       result.details = detMatch[1].trim()
     }
 
-    const remMatch = text.match(/Distribution \/ Notes:\s*\n(.*?)$/is)
+    const remMatch = text.match(/Distribution \/ Notes:\s*\n(.*?)$/i)
     if (remMatch && remMatch[1] && !remMatch[1].includes("[distribution")) {
       result.remarks = remMatch[1].trim()
     }

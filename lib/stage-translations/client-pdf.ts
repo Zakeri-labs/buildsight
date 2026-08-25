@@ -4649,8 +4649,11 @@ export async function exportTranslationPdf({
   const footerCleanArabicTemplate = stripStaticFooterFromDocumentTemplate(rawArabicTemplate, sourceDocument)
   const arabicTemplate = synchronizeMirroredDocumentStructures(englishTemplate, footerCleanArabicTemplate)
 
+  if (kind === "arabic" || kind === "bilingual") {
+    if (!translation?.translatedContent) throw new Error("Generate the Arabic translation before exporting the Arabic or Bilingual PDF.")
+  }
+
   if (kind === "arabic") {
-    if (!translation?.translatedContent) throw new Error("Generate the Arabic translation before exporting the Arabic PDF.")
     validateTemplateAssets(arabicTemplate, sourceDocument)
     const arabicBlob = await buildLanguagePdfBlob(arabicTemplate, { appendClosingBlock })
     return {
@@ -4661,7 +4664,7 @@ export async function exportTranslationPdf({
 
   const bilingualBlob = await buildNativeBilingualPdfBlob({
     data,
-    translation,
+    translation: translation!,
     englishTemplate,
     arabicTemplate,
     sourceDocument,

@@ -231,7 +231,7 @@ export async function addProjectParticipantAction(input: AddParticipantInput): P
 
     const userId = input.userId!
     const [{ data: project, error: projectError }, { data: profile, error: profileError }] = await Promise.all([
-      admin.from("projects").select("id, supervising_organization_id").eq("id", input.projectId).maybeSingle(),
+      admin.from("projects").select("id, supervising_organization_id, assigned_supervisor_id").eq("id", input.projectId).maybeSingle(),
       admin.from("profiles").select("id, full_name, email").eq("id", userId).maybeSingle(),
     ])
     if (projectError) throw projectError
@@ -536,7 +536,7 @@ export async function addProjectParticipantAction(input: AddParticipantInput): P
             source_key: `user:${primaryProfile.id}:supervisor`,
             sort_order: sortOrder - 1,
             created_by: actorId,
-          }).catch(() => undefined)
+          }).then(() => undefined, () => undefined)
         }
       }
     }
