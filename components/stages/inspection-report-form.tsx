@@ -506,6 +506,7 @@ export function InspectionReportForm({
     bilingual?: { blob: Blob; filename: string }
   } | null>(null)
   const [copiedModalShare, setCopiedModalShare] = useState(false)
+  const [actionBusy, setActionBusy] = useState<"share" | "copy" | "english_pdf" | "bilingual_pdf" | null>(null)
   const [basicOpen, setBasicOpen] = useState(false)
   const [reviewComments, setReviewComments] = useState("")
   const [approvalHistory, setApprovalHistory] = useState(response?.approvals ?? [])
@@ -910,6 +911,16 @@ export function InspectionReportForm({
             }
           } catch (pdfErr) {
             console.warn("Client PDF generation warning during submit:", pdfErr)
+          }
+
+          try {
+            await ensureBilingualPdfStored({
+              projectId: project.id,
+              stageId: result.data.projectStageId,
+              responseId: id,
+            })
+          } catch (stErr) {
+            console.warn("Auto-store bilingual PDF warning during submit:", stErr)
           }
 
           setReadyPdfs(generatedPdfs)
@@ -1593,16 +1604,28 @@ export function InspectionReportForm({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      if (readyPdfs?.original) {
-                        downloadPdfBlob(readyPdfs.original.blob, readyPdfs.original.filename)
-                      } else {
-                        window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&translationId=${translation?.id}&kind=original`)
+                    disabled={actionBusy !== null}
+                    onClick={async () => {
+                      setActionBusy("english_pdf")
+                      try {
+                        if (readyPdfs?.original) {
+                          downloadPdfBlob(readyPdfs.original.blob, readyPdfs.original.filename)
+                        } else {
+                          const respId = submitResult?.responseId || responseId
+                          const query = translation?.id ? `translationId=${translation.id}` : `responseId=${respId}`
+                          window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&${query}&kind=original`)
+                        }
+                      } finally {
+                        setActionBusy(null)
                       }
                     }}
                     className="h-10 gap-2 rounded-lg font-semibold shadow-xs"
                   >
-                    <Download className="size-4 text-primary" />
+                    {actionBusy === "english_pdf" ? (
+                      <Loader2 className="size-4 animate-spin text-primary" />
+                    ) : (
+                      <Download className="size-4 text-primary" />
+                    )}
                     <span>English PDF</span>
                   </Button>
 
@@ -1610,16 +1633,37 @@ export function InspectionReportForm({
                     type="button"
                     variant="default"
                     size="sm"
-                    onClick={() => {
-                      if (readyPdfs?.bilingual) {
-                        downloadPdfBlob(readyPdfs.bilingual.blob, readyPdfs.bilingual.filename)
-                      } else {
-                        window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&translationId=${translation?.id}&kind=bilingual`)
+                    disabled={actionBusy !== null}
+                    onClick={async () => {
+                      setActionBusy("bilingual_pdf")
+                      try {
+                        if (readyPdfs?.bilingual) {
+                          downloadPdfBlob(readyPdfs.bilingual.blob, readyPdfs.bilingual.filename)
+                        } else {
+                          const respId = submitResult?.responseId || responseId
+                          const stgId = submitResult?.stageId || resolvedStageId
+                          if (respId && project?.id) {
+                            await ensureBilingualPdfStored({
+                              projectId: project.id,
+                              stageId: stgId,
+                              responseId: respId,
+                              existingPath: translation?.bilingualPdfPath,
+                            }).catch(() => null)
+                          }
+                          const query = translation?.id ? `translationId=${translation.id}` : `responseId=${respId}`
+                          window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&${query}&kind=bilingual`)
+                        }
+                      } finally {
+                        setActionBusy(null)
                       }
                     }}
                     className="h-10 gap-2 rounded-lg font-semibold shadow-xs"
                   >
-                    <Download className="size-4" />
+                    {actionBusy === "bilingual_pdf" ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Download className="size-4" />
+                    )}
                     <span>Bilingual PDF</span>
                   </Button>
                 </div>
@@ -1629,77 +1673,105 @@ export function InspectionReportForm({
                     type="button"
                     variant="outline"
                     size="sm"
+                    disabled={actionBusy !== null}
                     onClick={async () => {
-                      const respId = submitResult?.responseId || responseId
-                      const stgId = submitResult?.stageId || resolvedStageId
-                      if (respId && project?.id) {
-                        await ensureBilingualPdfStored({
+                      setActionBusy("share")
+                      try {
+                        const respId = submitResult?.responseId || responseId
+                        const stgId = submitResult?.stageId || resolvedStageId
+                        if (respId && project?.id) {
+                          await ensureBilingualPdfStored({
+                            projectId: project.id,
+                            stageId: stgId,
+                            responseId: respId,
+                            existingPath: translation?.bilingualPdfPath,
+                          }).catch(() => null)
+                        }
+                        const url = buildWhatsAppShareUrl({
+                          projectName: project?.name || "Project",
+                          reportTitle: reportTitle?.trim() || defaultReportTitlePattern || "Inspection Report",
+                          reportSubject: subject?.trim() || reportTitle?.trim() || "Inspection Report",
+                          visitNumber: currentVisitNo,
+                          supervisorName: creatorPerson.name,
                           projectId: project.id,
                           stageId: stgId,
-                          responseId: respId,
-                          existingPath: translation?.bilingualPdfPath,
+                          responseId: respId ?? undefined,
+                          translationId: translation?.id,
+                          phone: "96891451613",
                         })
+                        window.open(url, "_blank")
+                      } finally {
+                        setActionBusy(null)
                       }
-                      const url = buildWhatsAppShareUrl({
-                        projectName: project?.name || "Project",
-                        reportTitle: reportTitle?.trim() || defaultReportTitlePattern || "Inspection Report",
-                        reportSubject: subject?.trim() || reportTitle?.trim() || "Inspection Report",
-                        visitNumber: currentVisitNo,
-                        supervisorName: creatorPerson.name,
-                        projectId: project.id,
-                        stageId: stgId,
-                        responseId: respId ?? undefined,
-                        translationId: translation?.id,
-                        phone: "96891451613",
-                      })
-                      window.open(url, "_blank")
                     }}
                     className="h-10 gap-1.5 rounded-lg border-emerald-500/40 bg-emerald-50/50 font-semibold text-emerald-700 hover:bg-emerald-100/80 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60 shadow-xs"
                   >
-                    <Share2 className="size-4 text-emerald-600 dark:text-emerald-400" />
-                    <span>{locale === "ar" ? "مشاركة" : "Share"}</span>
+                    {actionBusy === "share" ? (
+                      <Loader2 className="size-4 animate-spin text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <Share2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+                    )}
+                    <span>
+                      {actionBusy === "share"
+                        ? (locale === "ar" ? "جاري التجهيز..." : "Preparing...")
+                        : (locale === "ar" ? "مشاركة" : "Share")}
+                    </span>
                   </Button>
 
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
+                    disabled={actionBusy !== null}
                     onClick={async () => {
-                      const respId = submitResult?.responseId || responseId
-                      const stgId = submitResult?.stageId || resolvedStageId
-                      if (respId && project?.id) {
-                        await ensureBilingualPdfStored({
+                      setActionBusy("copy")
+                      try {
+                        const respId = submitResult?.responseId || responseId
+                        const stgId = submitResult?.stageId || resolvedStageId
+                        if (respId && project?.id) {
+                          await ensureBilingualPdfStored({
+                            projectId: project.id,
+                            stageId: stgId,
+                            responseId: respId,
+                            existingPath: translation?.bilingualPdfPath,
+                          }).catch(() => null)
+                        }
+                        const msg = buildShareMessage({
+                          projectName: project?.name || "Project",
+                          reportTitle: reportTitle?.trim() || defaultReportTitlePattern || "Inspection Report",
+                          reportSubject: subject?.trim() || reportTitle?.trim() || "Inspection Report",
+                          visitNumber: currentVisitNo,
+                          supervisorName: creatorPerson.name,
                           projectId: project.id,
                           stageId: stgId,
-                          responseId: respId,
-                          existingPath: translation?.bilingualPdfPath,
+                          responseId: respId ?? undefined,
+                          translationId: translation?.id,
                         })
-                      }
-                      const msg = buildShareMessage({
-                        projectName: project?.name || "Project",
-                        reportTitle: reportTitle?.trim() || defaultReportTitlePattern || "Inspection Report",
-                        reportSubject: subject?.trim() || reportTitle?.trim() || "Inspection Report",
-                        visitNumber: currentVisitNo,
-                        supervisorName: creatorPerson.name,
-                        projectId: project.id,
-                        stageId: stgId,
-                        responseId: respId ?? undefined,
-                        translationId: translation?.id,
-                      })
-                      if (typeof navigator !== "undefined" && navigator.clipboard) {
-                        navigator.clipboard.writeText(msg.text)
-                        setCopiedModalShare(true)
-                        setTimeout(() => setCopiedModalShare(false), 2000)
+                        if (typeof navigator !== "undefined" && navigator.clipboard) {
+                          navigator.clipboard.writeText(msg.text)
+                          setCopiedModalShare(true)
+                          setTimeout(() => setCopiedModalShare(false), 2000)
+                        }
+                      } finally {
+                        setActionBusy(null)
                       }
                     }}
                     className="h-10 gap-1.5 rounded-lg border-primary/30 bg-background font-semibold shadow-xs hover:bg-accent"
                   >
-                    {copiedModalShare ? (
+                    {actionBusy === "copy" ? (
+                      <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                    ) : copiedModalShare ? (
                       <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
                     ) : (
                       <Copy className="size-4 text-muted-foreground" />
                     )}
-                    <span>{copiedModalShare ? (locale === "ar" ? "تم النسخ!" : "Copied!") : (locale === "ar" ? "نسخ" : "Copy")}</span>
+                    <span>
+                      {actionBusy === "copy"
+                        ? (locale === "ar" ? "جاري النسخ..." : "Copying...")
+                        : copiedModalShare
+                        ? (locale === "ar" ? "تم النسخ!" : "Copied!")
+                        : (locale === "ar" ? "نسخ" : "Copy")}
+                    </span>
                   </Button>
                 </div>
               </div>
