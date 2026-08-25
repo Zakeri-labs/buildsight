@@ -17,7 +17,81 @@ type PhotonFeature = {
   properties?: Record<string, string | number | undefined>
 }
 
-type PhotonResponse = { features?: PhotonFeature[] }
+function isGoogleMapsUrl(input: string): boolean {
+  if (!input) return false
+  const trimmed = input.trim()
+  if (!/^https?:\/\//i.test(trimmed)) return false
+  return (
+    /maps\.app\.goo\.gl/i.test(trimmed) ||
+    /goo\.gl\/maps/i.test(trimmed) ||
+    /maps\.google\./i.test(trimmed) ||
+    /google\.[a-z.]+\/maps/i.test(trimmed) ||
+    /g\.co\/maps/i.test(trimmed)
+  )
+}
+
+function extractCoordinatesFromUrl(url: string): { latitude: number; longitude: number } | null {
+  if (!url) return null
+
+  // 1. Match @lat,lng
+  const atMatch = /@(-?\d+\.\d+),(-?\d+\.\d+)/.exec(url)
+  if (atMatch) {
+    const lat = Number(atMatch[1])
+    const lon = Number(atMatch[2])
+    if (Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      return { latitude: lat, longitude: lon }
+    }
+  }
+
+  // 2. Match ?q=lat,lng or ?ll=lat,lng or ?query=lat,lng
+  const paramMatch = /[?&](?:q|ll|query)=(-?\d+\.\d+),(-?\d+\.\d+)/i.exec(url)
+  if (paramMatch) {
+    const lat = Number(paramMatch[1])
+    const lon = Number(paramMatch[2])
+    if (Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      return { latitude: lat, longitude: lon }
+    }
+  }
+
+  // 3. Match /place/lat,lng
+  const placeMatch = /\/place\/(-?\d+\.\d+),(-?\d+\.\d+)/i.exec(url)
+  if (placeMatch) {
+    const lat = Number(placeMatch[1])
+    const lon = Number(placeMatch[2])
+    if (Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      return { latitude: lat, longitude: lon }
+    }
+  }
+
+  // 4. Match plain decimal coords in URL path/query
+  const plainCoordMatch = /(-?\d{1,2}\.\d+)[,\s]+(-?\d{1,3}\.\d+)/.exec(url)
+  if (plainCoordMatch) {
+    const lat = Number(plainCoordMatch[1])
+    const lon = Number(plainCoordMatch[2])
+    if (Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      return { latitude: lat, longitude: lon }
+    }
+  }
+
+  return null
+}
+
+async function resolveGoogleMapsUrl(url: string): Promise<string> {
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, Like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+      signal: AbortSignal.timeout(6_000),
+    })
+    return response.url || url
+  } catch {
+    return url
+  }
+}
 
 const cache = new Map<string, CacheEntry>()
 let requestQueue: Promise<unknown> = Promise.resolve()
@@ -147,7 +221,52 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid coordinates." }, { status: 400 })
   }
 
-  if (!isReverse && query.length > 200) {
+  if (!isReverse && isGoogleMapsUrl(query)) {
+    let coords = extractCoordinatesFromUrl(query)
+
+    if (!coords) {
+      const expandedUrl = await resolveGoogleMapsUrl(query)
+      coords = extractCoordinatesFromUrl(expandedUrl)
+    }
+
+    if (!coords) {
+      return NextResponse.json(
+        { error: "Unable to detect location from this Google Maps link. Please enter the address manually." },
+        { status: 400 },
+      )
+    }
+
+    const reverseKey = `reverse:${locale}:${coords.latitude.toFixed(5)}:${coords.longitude.toFixed(5)}`
+    const cachedReverse = getCached(reverseKey)
+    if (cachedReverse) return NextResponse.json({ results: cachedReverse })
+
+    const base = providerBaseUrl()
+    const reverseUrl = `${base}/reverse?lat=${encodeURIComponent(coords.latitude)}&lon=${encodeURIComponent(coords.longitude)}&lang=${locale}`
+
+    try {
+      const response = await rateLimitedFetch(reverseUrl, locale)
+      if (!response.ok) {
+        return NextResponse.json({ error: "Geocoding service unavailable." }, { status: 503 })
+      }
+      const body = (await response.json()) as PhotonResponse
+      const results = normalize(body.features)
+      if (results.length === 0) {
+        results.push({
+          id: `maps-url-${coords.latitude}-${coords.longitude}`,
+          label: `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          kind: "location",
+        })
+      }
+      setCached(reverseKey, results)
+      return NextResponse.json({ results })
+    } catch {
+      return NextResponse.json({ error: "Geocoding service unavailable." }, { status: 503 })
+    }
+  }
+
+  if (!isReverse && query.length > 500) {
     return NextResponse.json({ error: "Location query is too long." }, { status: 400 })
   }
 
