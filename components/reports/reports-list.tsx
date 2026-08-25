@@ -157,25 +157,12 @@ export function ReportsList({
 
                       {/* 7. Actions */}
                       <td className="px-4 py-3 align-middle text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-2 shrink-0">
-                          <Link
-                            href={report.href}
-                            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 text-xs")}
-                          >
-                            {t.reports.viewReport}
-                          </Link>
-                          <Link
-                            href={`${report.href}?pdf=1`}
-                            target="_blank"
-                            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-8 px-2 text-xs")}
-                            title="Export PDF"
-                          >
-                            <Download className="size-3.5" />
-                            <span className="sr-only sm:not-sr-only sm:inline-block ms-1 text-xs">
-                              {t.reports.export}
-                            </span>
-                          </Link>
-                        </div>
+                        <Link
+                          href={report.href}
+                          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 text-xs")}
+                        >
+                          {t.reports.viewReport}
+                        </Link>
                       </td>
                     </tr>
                   )
