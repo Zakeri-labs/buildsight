@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, useTransition, type ChangeEvent } from "react"
+import { useEffect, useMemo, useRef, useState, useTransition, type ChangeEvent } from "react"
 import { Check, ChevronDown, MapPinned, Search, Trash2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -12,11 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -100,6 +95,34 @@ export function ScheduleSiteVisitDialog({
   const [error, setError] = useState("")
   const [pending, startTransition] = useTransition()
   const [isMobileProjectSelect, setIsMobileProjectSelect] = useState(false)
+  const projectDropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!projectMenuOpen) return
+
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
+      if (projectDropdownRef.current && !projectDropdownRef.current.contains(event.target as Node)) {
+        setProjectMenuOpen(false)
+        setProjectSearch("")
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setProjectMenuOpen(false)
+        setProjectSearch("")
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    document.addEventListener("touchstart", handleClickOutside)
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("touchstart", handleClickOutside)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [projectMenuOpen])
 
   const selectedProject = useMemo(
     () => fixedProject ?? projects.find((project) => project.id === projectId) ?? projects[0] ?? null,
@@ -285,95 +308,83 @@ export function ScheduleSiteVisitDialog({
                 </div>
               </>
             ) : (
-              <DropdownMenu
-                open={projectMenuOpen}
-                onOpenChange={(nextOpen) => {
-                  if (pending) return
-                  setProjectMenuOpen(nextOpen)
-                  if (!nextOpen) setProjectSearch("")
-                }}
-              >
-                <DropdownMenuTrigger
+              <div className="relative" ref={projectDropdownRef}>
+                <button
+                  type="button"
                   disabled={pending || projects.length === 0}
-                  className="flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-3 py-2 text-sm font-medium outline-none transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 max-sm:min-h-10"
+                  onClick={() => {
+                    if (pending) return
+                    setProjectMenuOpen((open) => {
+                      if (open) setProjectSearch("")
+                      return !open
+                    })
+                  }}
+                  className="flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-3 py-2 text-sm font-medium outline-none transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 max-sm:min-h-10 text-left"
                 >
                   <span className="truncate">{selectedProject?.name ?? "Select project"}</span>
-                  <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align={isMobileProjectSelect ? "start" : "center"}
-                  sideOffset={4}
-                  className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[280px] max-w-[calc(100vw-2rem)] max-h-[min(20rem,var(--available-height))] overflow-y-auto p-0 shadow-md"
-                >
-                  <div className="sticky top-0 z-10 bg-popover p-2 pb-1.5 border-b border-border/60">
-                    <div className="relative flex items-center">
-                      <Search className="absolute left-2.5 size-3.5 text-muted-foreground pointer-events-none" />
-                      <input
-                        type="text"
-                        value={projectSearch}
-                        onChange={(e) => setProjectSearch(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key !== "Escape" && e.key !== "ArrowDown" && e.key !== "ArrowUp") {
-                            e.stopPropagation()
-                          }
-                        }}
-                        onKeyDownCapture={(e) => {
-                          if (e.key !== "Escape" && e.key !== "ArrowDown" && e.key !== "ArrowUp") {
-                            e.stopPropagation()
-                          }
-                        }}
-                        onKeyUp={(e) => e.stopPropagation()}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => e.stopPropagation()}
-                        placeholder="Search projects..."
-                        className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring"
-                      />
+                  <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-200", projectMenuOpen && "rotate-180")} />
+                </button>
+
+                {projectMenuOpen ? (
+                  <div className="absolute left-0 top-full z-50 mt-1 w-full min-w-[280px] max-h-60 overflow-y-auto rounded-lg border border-border/80 bg-popover text-popover-foreground shadow-lg">
+                    <div className="sticky top-0 z-10 bg-popover p-2 pb-1.5 border-b border-border/60">
+                      <div className="relative flex items-center">
+                        <Search className="absolute left-2.5 size-3.5 text-muted-foreground pointer-events-none" />
+                        <input
+                          type="text"
+                          value={projectSearch}
+                          onChange={(e) => setProjectSearch(e.target.value)}
+                          placeholder="Search projects..."
+                          autoFocus
+                          className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="p-1 space-y-0.5">
+                      {filteredProjects.length === 0 ? (
+                        <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                          No projects found
+                        </div>
+                      ) : (
+                        filteredProjects.map((project) => {
+                          const isSelected = project.id === selectedProject?.id
+                          return (
+                            <button
+                              key={project.id}
+                              type="button"
+                              onClick={() => {
+                                changeProject(project.id)
+                              }}
+                              className={cn(
+                                "flex w-full min-w-0 items-center justify-between gap-3 rounded-md px-2.5 py-2 text-sm text-left transition-colors outline-none",
+                                isSelected
+                                  ? "bg-primary text-primary-foreground font-medium"
+                                  : "hover:bg-accent hover:text-accent-foreground text-foreground",
+                              )}
+                            >
+                              <span className="truncate">{project.name}</span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {project.code ? (
+                                  <span
+                                    className={cn(
+                                      "text-xs font-mono",
+                                      isSelected ? "text-primary-foreground/90" : "text-muted-foreground",
+                                    )}
+                                  >
+                                    {project.code}
+                                  </span>
+                                ) : null}
+                                {isSelected ? <Check className="size-4 shrink-0" /> : null}
+                              </div>
+                            </button>
+                          )
+                        })
+                      )}
                     </div>
                   </div>
-
-                  <div className="p-1 space-y-0.5">
-                    {filteredProjects.length === 0 ? (
-                      <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-                        No projects found
-                      </div>
-                    ) : (
-                      filteredProjects.map((project) => {
-                        const isSelected = project.id === selectedProject?.id
-                        return (
-                          <button
-                            key={project.id}
-                            type="button"
-                            onClick={() => {
-                              changeProject(project.id)
-                            }}
-                            className={cn(
-                              "flex w-full min-w-0 items-center justify-between gap-3 rounded-md px-2.5 py-2 text-sm text-left transition-colors outline-none",
-                              isSelected
-                                ? "bg-primary text-primary-foreground font-medium"
-                                : "hover:bg-accent hover:text-accent-foreground text-foreground",
-                            )}
-                          >
-                            <span className="truncate">{project.name}</span>
-                            <div className="flex items-center gap-2 shrink-0">
-                              {project.code ? (
-                                <span
-                                  className={cn(
-                                    "text-xs font-mono",
-                                    isSelected ? "text-primary-foreground/90" : "text-muted-foreground",
-                                  )}
-                                >
-                                  {project.code}
-                                </span>
-                              ) : null}
-                              {isSelected ? <Check className="size-4 shrink-0" /> : null}
-                            </div>
-                          </button>
-                        )
-                      })
-                    )}
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                ) : null}
+              </div>
             )}
           </div>
 
