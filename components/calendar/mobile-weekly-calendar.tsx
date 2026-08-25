@@ -176,6 +176,7 @@ export function MobileWeeklyCalendar({
   onToday,
   onScheduleVisit,
   onClientRequestClick,
+  onEditVisit,
 }: {
   selectedDate: Date
   today: Date

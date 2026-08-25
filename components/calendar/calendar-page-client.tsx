@@ -170,7 +170,15 @@ export function CalendarPageClient({
 
   function openScheduleDialog(date: string) {
     if (!data.scheduling.canSchedule) return
+    setEditingEvent(null)
     setScheduleDate(date)
+    setSuccess(null)
+    setScheduleDialogOpen(true)
+  }
+
+  function openEditDialog(event: CalendarEventViewModel) {
+    setEditingEvent(event)
+    setScheduleDate(event.date)
     setSuccess(null)
     setScheduleDialogOpen(true)
   }
