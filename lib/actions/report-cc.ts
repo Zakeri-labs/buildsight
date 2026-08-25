@@ -282,13 +282,16 @@ export async function saveReportCcRecipientsAction(input: {
       ? `/projects/${input.projectId}/stages/${stage.id}/terms/${response.project_stage_term_id}/reports/${input.responseId}`
       : `/projects/${input.projectId}/stages/${stage.id}/reports/${input.responseId}`
     const href = input.context === "translation" ? `${reportPath}/translate` : reportPath
-    const emailRecipients = inserted.map((row) => {
-      if (row.recipient_type === "internal") {
-        const candidate = candidateById.get(row.user_id)
-        return { recipientRowId: row.id, name: candidate?.name ?? "Project member", email: candidate?.email ?? null, internal: true }
-      }
-      return { recipientRowId: row.id, name: row.external_name, email: row.external_email, internal: false }
-    })
+    const emailRecipients = inserted
+      .map((row) => {
+        if (row.recipient_type === "internal") {
+          const candidate = candidateById.get(row.user_id)
+          return { recipientRowId: row.id, name: candidate?.name ?? "Project member", email: candidate?.email?.trim() ?? null, internal: true }
+        }
+        return { recipientRowId: row.id, name: row.external_name, email: row.external_email?.trim() ?? null, internal: false }
+      })
+      .filter((recipient) => Boolean(recipient.email && recipient.email.includes("@")))
+
     if (emailRecipients.length) {
       after(async () => {
         try {

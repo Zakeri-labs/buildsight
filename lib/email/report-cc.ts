@@ -24,7 +24,7 @@ export async function sendReportCcEmails(input: ReportCcEmailInput) {
   const results: Array<{ recipientRowId: string; status: "sent" | "skipped_unconfigured" | "skipped_no_email" | "failed" }> = []
 
   for (const recipient of input.recipients) {
-    if (!recipient.email?.trim()) {
+    if (!recipient.email?.trim() || !recipient.email.includes("@")) {
       results.push({ recipientRowId: recipient.recipientRowId, status: "skipped_no_email" })
       continue
     }
