@@ -15,7 +15,7 @@ export const CALENDAR_PENDING_REQUEST_STATUS = "pending" as const
 const SCHEDULED_VISIT_STATUSES = ["scheduled"] as const
 const TODAY_VISIT_STATUSES = ["scheduled", "completed"] as const
 const CALENDAR_VISIT_STATUSES = ["scheduled", "completed", "cancelled"] as const
-const CALENDAR_REQUEST_COLUMNS = "id, project_id, requested_by, client_request_id, status, preferred_date, is_asap, preferred_time, purpose, notes, scheduled_date, scheduled_time, report_visit_number, created_at"
+const CALENDAR_REQUEST_COLUMNS = "id, project_id, requested_by, scheduled_by, client_request_id, status, preferred_date, is_asap, preferred_time, purpose, notes, scheduled_date, scheduled_time, scheduled_notes, report_visit_number, created_at"
 
 export type CalendarProjectAccessMode = "admin" | "supervisor" | "viewer_owner"
 export type CalendarProjectScopeRow = {
@@ -570,6 +570,13 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
       const isCancelled = row.status === "cancelled"
       const isCompleted = row.status === "completed"
       const explicitlyFromClientRequest = isValidCalendarUuid(row.client_request_id)
+      const projectScope = projectById.get(row.project_id)
+      const isAdmin = projectScope?.accessMode === "admin"
+      const isCreator = row.scheduled_by === userId || row.requested_by === userId
+      const isUpcoming = row.scheduled_date >= today
+      const isScheduled = row.status === "scheduled"
+      const canEdit = isUpcoming && isScheduled && (isAdmin || isCreator)
+
       events.push({
         id: row.id,
         projectId: row.project_id,
@@ -585,6 +592,10 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
         timeLabel: clockTime(row.scheduled_time),
         sortMinutes: scheduledTimeSortMinutes(row.scheduled_time),
         secondaryLabel: isCancelled ? "Cancelled" : isCompleted ? "Completed" : "Site Visit",
+        scheduledBy: row.scheduled_by ?? null,
+        requestedBy: row.requested_by ?? null,
+        notes: typeof row.scheduled_notes === "string" && row.scheduled_notes.trim() ? row.scheduled_notes.trim() : (typeof row.notes === "string" && row.notes.trim() ? row.notes.trim() : null),
+        canEdit,
       })
     }
 

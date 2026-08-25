@@ -14,6 +14,11 @@ export type CalendarEventViewModel = {
   timeLabel: string | null
   sortMinutes: number
   secondaryLabel: string
+  scheduledBy?: string | null
+  requestedBy?: string | null
+  notes?: string | null
+  assignedUserIds?: string[]
+  canEdit?: boolean
 }
 
 export type CalendarClientRequestViewModel = {

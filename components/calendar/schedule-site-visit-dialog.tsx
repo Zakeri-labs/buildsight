@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, useTransition, type ChangeEvent } from "react"
-import { Check, ChevronDown, MapPinned, Search } from "lucide-react"
+import { Check, ChevronDown, MapPinned, Search, Trash2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -22,9 +22,12 @@ import { Label } from "@/components/ui/label"
 import {
   approveCalendarClientVisitRequestAction,
   createDirectSiteVisitAction,
+  updateScheduledSiteVisitAction,
+  updateSiteVisitStatusAction,
 } from "@/lib/actions/site-visits"
 import type {
   CalendarClientRequestViewModel,
+  CalendarEventViewModel,
   CalendarSchedulingProjectViewModel,
 } from "@/lib/calendar/types"
 import { localDateInputValue } from "@/lib/site-visits/format"
@@ -49,12 +52,22 @@ function displayRequestedDate(value: string) {
   }).format(date)
 }
 
+function normalizeTimeValue(value: string | null | undefined): string {
+  if (!value) return ""
+  const trimmed = value.trim()
+  if (TIME_PATTERN.test(trimmed)) return trimmed
+  const match = /^(\d{1,2}):(\d{2})/.exec(trimmed)
+  if (match) return `${match[1].padStart(2, "0")}:${match[2]}`
+  return ""
+}
+
 export function ScheduleSiteVisitDialog({
   open,
   onOpenChange,
   projects,
   initialDate,
   request = null,
+  editVisit = null,
   onScheduled,
   onRefreshRequired,
 }: {
@@ -63,25 +76,34 @@ export function ScheduleSiteVisitDialog({
   projects: CalendarSchedulingProjectViewModel[]
   initialDate: string
   request?: CalendarClientRequestViewModel | null
+  editVisit?: CalendarEventViewModel | null
   onScheduled: () => Promise<void> | void
   onRefreshRequired?: () => Promise<void> | void
 }) {
-  const requestProject = request ? projects.find((project) => project.id === request.projectId) ?? null : null
-  const [projectId, setProjectId] = useState(request?.projectId ?? projects[0]?.id ?? "")
+  const isEditMode = Boolean(editVisit)
+  const isRequestApproval = Boolean(request)
+  const fixedProject = editVisit
+    ? projects.find((project) => project.id === editVisit.projectId) ?? null
+    : request
+      ? projects.find((project) => project.id === request.projectId) ?? null
+      : null
+
+  const [projectId, setProjectId] = useState(editVisit?.projectId ?? request?.projectId ?? projects[0]?.id ?? "")
   const [projectSearch, setProjectSearch] = useState("")
   const [projectMenuOpen, setProjectMenuOpen] = useState(false)
-  const [date, setDate] = useState(request?.requestedDate ?? initialDate)
-  const [time, setTime] = useState("")
-  const [notes, setNotes] = useState(request?.notes ?? "")
-  const [assignedUserIds, setAssignedUserIds] = useState<string[]>([])
-  const [mobileNotesExpanded, setMobileNotesExpanded] = useState(false)
+  const [date, setDate] = useState(editVisit?.date ?? request?.requestedDate ?? initialDate)
+  const [time, setTime] = useState(normalizeTimeValue(editVisit?.timeLabel))
+  const [notes, setNotes] = useState(editVisit?.notes ?? request?.notes ?? "")
+  const [assignedUserIds, setAssignedUserIds] = useState<string[]>(editVisit?.assignedUserIds ?? [])
+  const [mobileNotesExpanded, setMobileNotesExpanded] = useState(Boolean(editVisit?.notes))
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
   const [error, setError] = useState("")
   const [pending, startTransition] = useTransition()
   const [isMobileProjectSelect, setIsMobileProjectSelect] = useState(false)
 
   const selectedProject = useMemo(
-    () => requestProject ?? projects.find((project) => project.id === projectId) ?? projects[0] ?? null,
-    [projectId, projects, requestProject],
+    () => fixedProject ?? projects.find((project) => project.id === projectId) ?? projects[0] ?? null,
+    [projectId, projects, fixedProject],
   )
 
   const filteredProjects = useMemo(() => {
@@ -96,18 +118,20 @@ export function ScheduleSiteVisitDialog({
 
   useEffect(() => {
     if (!open) return
-    setProjectId((current) => request?.projectId ?? (
-      projects.some((project) => project.id === current) ? current : projects[0]?.id ?? ""
-    ))
+    const targetProjectId = editVisit?.projectId ?? request?.projectId ?? (
+      projects.some((project) => project.id === projectId) ? projectId : projects[0]?.id ?? ""
+    )
+    setProjectId(targetProjectId)
     setProjectSearch("")
     setProjectMenuOpen(false)
-    setDate(request?.requestedDate ?? initialDate)
-    setTime("")
-    setNotes(request?.notes ?? "")
-    setAssignedUserIds([])
-    setMobileNotesExpanded(false)
+    setDate(editVisit?.date ?? request?.requestedDate ?? initialDate)
+    setTime(normalizeTimeValue(editVisit?.timeLabel))
+    setNotes(editVisit?.notes ?? request?.notes ?? "")
+    setAssignedUserIds(editVisit?.assignedUserIds ?? [])
+    setMobileNotesExpanded(Boolean(editVisit?.notes))
+    setConfirmCancelOpen(false)
     setError("")
-  }, [open, initialDate, projects, request])
+  }, [open, initialDate, projects, request, editVisit])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 639px)")
@@ -119,7 +143,7 @@ export function ScheduleSiteVisitDialog({
   }, [])
 
   function changeProject(value: unknown) {
-    if (request) return
+    if (isEditMode || request) return
     setProjectId(String(value))
     setProjectSearch("")
     setProjectMenuOpen(false)
@@ -161,21 +185,32 @@ export function ScheduleSiteVisitDialog({
 
     setError("")
     startTransition(async () => {
-      const result = request
-        ? await approveCalendarClientVisitRequestAction({
-            requestId: request.id,
-            scheduledDate: date,
-            scheduledTime: time,
-            notes,
-            assignedUserIds: submittedAssignedUserIds,
-          })
-        : await createDirectSiteVisitAction({
-            projectId,
-            scheduledDate: date,
-            scheduledTime: time,
-            notes,
-            assignedUserIds: submittedAssignedUserIds,
-          })
+      let result
+      if (isEditMode && editVisit) {
+        result = await updateScheduledSiteVisitAction({
+          requestId: editVisit.id,
+          scheduledDate: date,
+          scheduledTime: time,
+          notes,
+          assignedUserIds: submittedAssignedUserIds,
+        })
+      } else if (isRequestApproval && request) {
+        result = await approveCalendarClientVisitRequestAction({
+          requestId: request.id,
+          scheduledDate: date,
+          scheduledTime: time,
+          notes,
+          assignedUserIds: submittedAssignedUserIds,
+        })
+      } else {
+        result = await createDirectSiteVisitAction({
+          projectId,
+          scheduledDate: date,
+          scheduledTime: time,
+          notes,
+          assignedUserIds: submittedAssignedUserIds,
+        })
+      }
 
       if (result.ok === false) {
         setError(result.error)
@@ -189,8 +224,26 @@ export function ScheduleSiteVisitDialog({
     })
   }
 
-  const isRequestApproval = Boolean(request)
-  const projectIsFixed = isRequestApproval || projects.length === 1
+  function handleCancelVisit() {
+    if (!editVisit || pending) return
+    setError("")
+    startTransition(async () => {
+      const result = await updateSiteVisitStatusAction({
+        requestId: editVisit.id,
+        status: "cancelled",
+      })
+      if (result.ok === false) {
+        setError(result.error)
+        setConfirmCancelOpen(false)
+        return
+      }
+      await onScheduled()
+      setConfirmCancelOpen(false)
+      onOpenChange(false)
+    })
+  }
+
+  const projectIsFixed = isEditMode || isRequestApproval || projects.length === 1
   const showRequestedDateWarning = Boolean(
     request?.requestedDate && DATE_PATTERN.test(date) && date !== request.requestedDate,
   )
@@ -199,15 +252,22 @@ export function ScheduleSiteVisitDialog({
     <Dialog open={open} onOpenChange={(nextOpen: boolean) => {
       if (pending) return
       onOpenChange(nextOpen)
-      if (!nextOpen) setError("")
+      if (!nextOpen) {
+        setError("")
+        setConfirmCancelOpen(false)
+      }
     }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg max-sm:w-[calc(100vw-1rem)] max-sm:max-w-none max-sm:max-h-[calc(100dvh-1rem)] max-sm:gap-2.5 max-sm:p-4">
         <DialogHeader className="max-sm:-mx-4 max-sm:gap-0.5 max-sm:border-b max-sm:border-border/70 max-sm:px-4 max-sm:pb-3">
-          <DialogTitle>Schedule Site Visit</DialogTitle>
+          <DialogTitle>
+            {isEditMode ? "Edit Site Visit" : "Schedule Site Visit"}
+          </DialogTitle>
           <DialogDescription className="max-sm:hidden">
-            {isRequestApproval
-              ? "Confirm the schedule for this Client Visit Request. The client's requested values remain unchanged."
-              : "Schedule a direct Site Visit for an authorized project."}
+            {isEditMode
+              ? "Update visit schedule and details for this site visit."
+              : isRequestApproval
+                ? "Confirm the schedule for this Client Visit Request."
+                : "Schedule a direct Site Visit for an authorized project."}
           </DialogDescription>
         </DialogHeader>
 
@@ -387,14 +447,58 @@ export function ScheduleSiteVisitDialog({
             )}
           </div>
 
+          {confirmCancelOpen ? (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs space-y-2">
+              <p className="font-semibold text-destructive">
+                Are you sure you want to cancel this site visit?
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleCancelVisit}
+                  disabled={pending}
+                  className="h-8 text-xs"
+                >
+                  {pending ? "Cancelling..." : "Yes, Cancel Visit"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfirmCancelOpen(false)}
+                  disabled={pending}
+                  className="h-8 text-xs"
+                >
+                  Keep Visit
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           {error ? <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p> : null}
         </div>
 
         <DialogFooter className="max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:grid max-sm:grid-cols-2 max-sm:gap-2 max-sm:bg-background/95 max-sm:pt-3 max-sm:pb-[calc(0.5rem+env(safe-area-inset-bottom))] max-sm:backdrop-blur-sm">
+          {isEditMode && !confirmCancelOpen ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmCancelOpen(true)}
+              disabled={pending}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive max-sm:order-3 max-sm:col-span-2"
+            >
+              <Trash2 className="size-4 me-1.5" />
+              Cancel Visit
+            </Button>
+          ) : null}
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>Cancel</Button>
           <Button type="button" onClick={submit} disabled={pending || !projectId || !date || !time}>
             {pending ? (
-              "Scheduling..."
+              isEditMode ? "Saving..." : "Scheduling..."
+            ) : isEditMode ? (
+              "Save Changes"
             ) : isRequestApproval ? (
               <>
                 <span className="sm:hidden">Schedule Visit</span>

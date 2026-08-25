@@ -340,6 +340,92 @@ export async function scheduleSiteVisitAction(input: {
   }
 }
 
+export async function updateScheduledSiteVisitAction(input: {
+  requestId: string
+  scheduledDate: string
+  scheduledTime: string
+  notes?: string | null
+  assignedUserIds?: string[]
+}): Promise<SiteVisitActionResult> {
+  if (!UUID_PATTERN.test(input.requestId)) return { ok: false, error: "Invalid site visit request." }
+  if (!DATE_PATTERN.test(input.scheduledDate) || !TIME_PATTERN.test(input.scheduledTime)) {
+    return { ok: false, error: "Select a valid visit date and time." }
+  }
+  if (input.scheduledDate < currentCalendarDateKey()) {
+    return { ok: false, error: "Visit date cannot be in the past." }
+  }
+  const assignedUserIds = Array.from(new Set(input.assignedUserIds ?? []))
+  if (assignedUserIds.some((id) => !UUID_PATTERN.test(id))) {
+    return { ok: false, error: "One or more assigned participants are invalid." }
+  }
+
+  try {
+    const actorId = await getUserIdOrThrow()
+    const admin = createAdminClient()
+    const { data: request, error: requestError } = await admin
+      .from("site_visit_requests")
+      .select("id, project_id, status, scheduled_by, requested_by, scheduled_date")
+      .eq("id", input.requestId)
+      .maybeSingle()
+    if (requestError) throw requestError
+    if (!request) return { ok: false, error: "Site visit request not found." }
+    if (request.status !== "scheduled") {
+      return { ok: false, error: "Only scheduled site visits can be edited." }
+    }
+    if (request.scheduled_date && request.scheduled_date < currentCalendarDateKey()) {
+      return { ok: false, error: "Past visits cannot be modified." }
+    }
+
+    const projectScope = await resolveCalendarProjectScope(actorId)
+    const scopedProject = projectScope.find((p) => p.id === request.project_id)
+    const isAdmin = scopedProject?.accessMode === "admin"
+    const isCreator = request.scheduled_by === actorId || request.requested_by === actorId
+
+    if (!isAdmin && !isCreator) {
+      return { ok: false, error: "You do not have permission to edit this site visit." }
+    }
+
+    const { error: updateError } = await admin
+      .from("site_visit_requests")
+      .update({
+        scheduled_date: input.scheduledDate,
+        scheduled_time: input.scheduledTime,
+        scheduled_notes: cleanText(input.notes, 4000) || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.requestId)
+    if (updateError) throw updateError
+
+    if (assignedUserIds.length >= 0) {
+      await admin.from("site_visit_request_assignees").delete().eq("request_id", input.requestId)
+      if (assignedUserIds.length > 0) {
+        const rows = assignedUserIds.map((id) => ({ request_id: input.requestId, user_id: id }))
+        await admin.from("site_visit_request_assignees").insert(rows)
+      }
+    }
+
+    await audit({
+      actorId,
+      action: "site_visit.updated",
+      entityType: "site_visit_request",
+      entityId: input.requestId,
+      projectId: request.project_id,
+      metadata: {
+        scheduledDate: input.scheduledDate,
+        scheduledTime: input.scheduledTime,
+        assignedUserIds,
+      },
+    })
+
+    revalidateSiteVisitPaths(request.project_id, input.requestId)
+    revalidatePath("/calendar")
+    return { ok: true, requestId: input.requestId }
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: error.message }
+    return { ok: false, error: error instanceof Error ? error.message : "Unable to update the site visit." }
+  }
+}
+
 
 export async function createDirectSiteVisitAction(input: {
   projectId: string

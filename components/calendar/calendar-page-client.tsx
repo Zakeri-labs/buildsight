@@ -58,6 +58,7 @@ export function CalendarPageClient({
   const [needsInitialReload, setNeedsInitialReload] = useState(Boolean(initialError))
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
   const [scheduleDate, setScheduleDate] = useState(() => currentCalendarDateKey())
+  const [editingEvent, setEditingEvent] = useState<CalendarEventViewModel | null>(null)
   const [selectedRequest, setSelectedRequest] = useState<CalendarClientRequestViewModel | null>(null)
   const [requestDetailsOpen, setRequestDetailsOpen] = useState(false)
   const [selectedDayDetailsDate, setSelectedDayDetailsDate] = useState<string | null>(null)
@@ -303,6 +304,7 @@ export function CalendarPageClient({
               onToday={showTodayOnMobile}
               onScheduleVisit={() => openScheduleDialog(currentCalendarDateKey())}
               onClientRequestClick={openClientRequestById}
+              onEditVisit={openEditDialog}
             />
           </div>
           <div className="hidden md:block">{desktopCalendarLayout}</div>
@@ -312,9 +314,13 @@ export function CalendarPageClient({
       {data.scheduling.canSchedule ? (
         <ScheduleSiteVisitDialog
           open={scheduleDialogOpen}
-          onOpenChange={setScheduleDialogOpen}
+          onOpenChange={(open) => {
+            setScheduleDialogOpen(open)
+            if (!open) setEditingEvent(null)
+          }}
           projects={data.scheduling.projects}
           initialDate={scheduleDate}
+          editVisit={editingEvent}
           onScheduled={refreshAfterDirectSchedule}
         />
       ) : null}
@@ -325,6 +331,7 @@ export function CalendarPageClient({
         date={selectedDayDetailsDate}
         events={selectedDayEvents}
         onClientRequestClick={openClientRequestById}
+        onEditVisit={openEditDialog}
       />
 
       <ClientVisitRequestWorkflow
