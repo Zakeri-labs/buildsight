@@ -700,6 +700,42 @@ export type AttachmentRegistration = {
   sortOrder?: number
 }
 
+export async function uploadStageEvidenceAction(formData: FormData): Promise<StageActionResult<{ path: string }>> {
+  try {
+    const projectId = formData.get("projectId") as string
+    const responseId = formData.get("responseId") as string
+    const path = formData.get("path") as string
+    const file = formData.get("file") as File | null
+
+    if (!projectId || !responseId || !path || !file) {
+      return { ok: false, error: "Invalid upload parameters." }
+    }
+    if (path.includes("..") || !path.startsWith(`${projectId}/${responseId}/`)) {
+      return { ok: false, error: "Invalid upload storage path." }
+    }
+
+    await assertProjectMember(projectId)
+    const admin = createAdminClient()
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+
+    const { error: uploadErr } = await admin.storage
+      .from("project-stage-evidence")
+      .upload(path, buffer, {
+        contentType: file.type || "application/octet-stream",
+        upsert: true,
+      })
+
+    if (uploadErr) {
+      return { ok: false, error: uploadErr.message }
+    }
+
+    return { ok: true, data: { path } }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to upload file." }
+  }
+}
+
 export async function registerResponseAttachmentsAction(input: {
   projectId: string
   responseId: string

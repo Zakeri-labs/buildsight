@@ -1,5 +1,6 @@
 import { STAGE_EVIDENCE_BUCKET } from "@/lib/stages/execution"
 import { uploadStorageAsset } from "@/lib/documents/storage-upload"
+import { uploadStageEvidenceAction } from "@/lib/actions/project-stages"
 
 export async function uploadStageEvidence(
   file: File,
@@ -8,6 +9,23 @@ export async function uploadStageEvidence(
   onProgress: (progress: number) => void,
   contentType = file.type || "application/octet-stream",
 ): Promise<void> {
-  return uploadStorageAsset(file, path, accessToken, onProgress, STAGE_EVIDENCE_BUCKET)
+  try {
+    await uploadStorageAsset(file, path, accessToken, onProgress, STAGE_EVIDENCE_BUCKET)
+  } catch (err) {
+    const parts = path.split("/")
+    if (parts.length >= 2) {
+      const formData = new FormData()
+      formData.append("projectId", parts[0])
+      formData.append("responseId", parts[1])
+      formData.append("path", path)
+      formData.append("file", file)
+      const res = await uploadStageEvidenceAction(formData)
+      if (res.ok) {
+        onProgress(100)
+        return
+      }
+    }
+    throw err
+  }
 }
 
