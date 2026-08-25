@@ -15,7 +15,11 @@ import { useCurrentUser } from "@/components/current-user-provider"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { calendarDateFromKey, calendarMonthKey, currentCalendarDateKey } from "@/lib/calendar/date"
-import type { CalendarClientRequestViewModel, CalendarDataViewModel } from "@/lib/calendar/types"
+import type {
+  CalendarClientRequestViewModel,
+  CalendarDataViewModel,
+  CalendarEventViewModel,
+} from "@/lib/calendar/types"
 
 function monthStart(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1)
