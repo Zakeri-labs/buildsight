@@ -340,6 +340,30 @@ export async function scheduleSiteVisitAction(input: {
   }
 }
 
+async function checkEditOrCancelPermission(
+  actorId: string,
+  request: { project_id: string; scheduled_by?: string | null; requested_by?: string | null },
+): Promise<{ allowed: boolean; isAdmin: boolean; isCreator: boolean }> {
+  const projectScope = await resolveCalendarProjectScope(actorId)
+  const scopedProject = projectScope.find((p) => p.id === request.project_id)
+  const isAdmin = scopedProject?.accessMode === "admin"
+  const isCreator = Boolean(
+    (request.scheduled_by && request.scheduled_by === actorId) ||
+      (request.requested_by && request.requested_by === actorId),
+  )
+
+  if (isAdmin || isCreator) {
+    return { allowed: true, isAdmin, isCreator }
+  }
+
+  try {
+    await assertSiteVisitManager(request.project_id)
+    return { allowed: true, isAdmin: false, isCreator: false }
+  } catch {
+    return { allowed: false, isAdmin: false, isCreator: false }
+  }
+}
+
 export async function updateScheduledSiteVisitAction(input: {
   requestId: string
   scheduledDate: string
@@ -376,12 +400,8 @@ export async function updateScheduledSiteVisitAction(input: {
       return { ok: false, error: "Past visits cannot be modified." }
     }
 
-    const projectScope = await resolveCalendarProjectScope(actorId)
-    const scopedProject = projectScope.find((p) => p.id === request.project_id)
-    const isAdmin = scopedProject?.accessMode === "admin"
-    const isCreator = request.scheduled_by === actorId || request.requested_by === actorId
-
-    if (!isAdmin && !isCreator) {
+    const { allowed } = await checkEditOrCancelPermission(actorId, request)
+    if (!allowed) {
       return { ok: false, error: "You do not have permission to edit this site visit." }
     }
 
@@ -756,12 +776,17 @@ export async function updateSiteVisitStatusAction(input: {
     const admin = createAdminClient()
     const { data: request, error: requestError } = await admin
       .from("site_visit_requests")
-      .select("id, project_id, status")
+      .select("id, project_id, status, scheduled_by, requested_by")
       .eq("id", input.requestId)
       .maybeSingle()
     if (requestError) throw requestError
     if (!request) return { ok: false, error: "Site visit request not found." }
-    const actorId = await assertSiteVisitManager(request.project_id)
+
+    const actorId = await getUserIdOrThrow()
+    const { allowed } = await checkEditOrCancelPermission(actorId, request)
+    if (!allowed) {
+      return { ok: false, error: "You do not have permission to manage site visits for this project." }
+    }
 
     if (input.status === "completed" && request.status !== "scheduled") {
       return { ok: false, error: "Only a scheduled site visit can be marked completed." }
