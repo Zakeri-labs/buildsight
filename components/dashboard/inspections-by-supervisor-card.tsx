@@ -117,7 +117,8 @@ function SupervisorVisitDialog({
         render={
           <button
             type="button"
-            className="min-w-0 truncate text-left font-medium text-foreground transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            title={supervisor.name}
+            className="block w-full min-w-0 truncate text-left font-medium text-foreground transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           />
         }
       >
@@ -289,11 +290,11 @@ export function CompletedVisitsBySupervisorCard({
 
                   return (
                     <li key={supervisor.supervisorId} className="py-2.5 first:pt-0 last:pb-0">
-                      <div className="flex items-baseline justify-between gap-3 text-sm">
-                        <div className="min-w-0 flex-1">
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 text-sm">
+                        <div className="min-w-0">
                           <SupervisorVisitDialog supervisor={supervisor} dateRangeLabel={dateRangeLabel} />
                         </div>
-                        <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">
+                        <span className="shrink-0 whitespace-nowrap text-xs font-semibold tabular-nums text-foreground">
                           {supervisor.completedVisitCount} of {supervisorTotal}
                         </span>
                       </div>
