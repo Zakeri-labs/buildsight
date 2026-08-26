@@ -294,7 +294,7 @@ export function ScheduleSiteVisitDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid min-w-0 gap-4 max-sm:gap-3.5">
+        <div className="grid min-w-0 gap-4 max-sm:gap-3.5 max-sm:pb-14">
           <div className="grid gap-2">
             <Label>Project</Label>
             {projectIsFixed && selectedProject ? (
@@ -397,7 +397,17 @@ export function ScheduleSiteVisitDialog({
           <div className="grid min-w-0 gap-3 sm:grid-cols-2 sm:gap-4 max-sm:gap-3.5">
             <div className="grid gap-2">
               <Label htmlFor="calendar-visit-date">Visit Date</Label>
-              <Input id="calendar-visit-date" type="date" min={localDateInputValue()} value={date} onChange={(event: ChangeEvent<HTMLInputElement>) => setDate(event.target.value)} disabled={pending} className="h-10" />
+              <Input
+                id="calendar-visit-date"
+                type="date"
+                dir="ltr"
+                lang="en-US"
+                min={localDateInputValue()}
+                value={date}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => setDate(event.target.value)}
+                disabled={pending}
+                className="h-10 [direction:ltr] [text-align:start]"
+              />
               {showRequestedDateWarning && request?.requestedDate ? (
                 <p className="hidden items-center gap-1 text-xs font-medium text-amber-700 max-sm:flex dark:text-amber-400">
                   <span aria-hidden="true">⚠</span>
@@ -414,7 +424,16 @@ export function ScheduleSiteVisitDialog({
                   </span>
                 ) : null}
               </div>
-              <Input id="calendar-visit-time" type="time" value={time} onChange={(event: ChangeEvent<HTMLInputElement>) => setTime(event.target.value)} disabled={pending} className="h-10" />
+              <Input
+                id="calendar-visit-time"
+                type="time"
+                dir="ltr"
+                lang="en-US"
+                value={time}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => setTime(event.target.value)}
+                disabled={pending}
+                className="h-10 [direction:ltr] [text-align:start]"
+              />
             </div>
           </div>
 
@@ -461,7 +480,7 @@ export function ScheduleSiteVisitDialog({
           {error ? <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p> : null}
         </div>
 
-        <DialogFooter className="max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:bg-background/95 max-sm:pt-3 max-sm:pb-[calc(0.5rem+env(safe-area-inset-bottom))] max-sm:backdrop-blur-sm">
+        <DialogFooter className="max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:-mx-4 max-sm:px-4 max-sm:bg-background/95 max-sm:pt-2.5 max-sm:pb-[calc(0.5rem+env(safe-area-inset-bottom))] max-sm:backdrop-blur-sm max-sm:border-t max-sm:border-border/60">
           {confirmCancelOpen ? (
             <div className="flex w-full flex-col gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs">
               <p className="font-semibold text-destructive">
