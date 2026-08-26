@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireOnboarded } from "@/lib/auth/session"
 import { getSelectedProjectId } from "@/lib/project-scope"
-import { getAppNotificationFeed } from "@/lib/notifications/server"
+import { getAppNotificationFeed, markNotificationAsRead } from "@/lib/notifications/server"
 
 export const dynamic = "force-dynamic"
 
@@ -15,3 +15,19 @@ export async function GET() {
     return NextResponse.json({ canNotify: false, items: [] }, { status: 403, headers: { "Cache-Control": "no-store" } })
   }
 }
+
+export async function POST(request: Request) {
+  try {
+    const session = await requireOnboarded()
+    const body = (await request.json().catch(() => ({}))) as { notificationKey?: string }
+    const key = body.notificationKey?.trim()
+    if (!key) {
+      return NextResponse.json({ error: "Notification key required" }, { status: 400 })
+    }
+    await markNotificationAsRead({ userId: session.userId, notificationKey: key })
+    return NextResponse.json({ success: true })
+  } catch {
+    return NextResponse.json({ error: "Failed to mark notification read" }, { status: 500 })
+  }
+}
+

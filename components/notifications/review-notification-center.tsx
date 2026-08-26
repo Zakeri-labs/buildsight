@@ -149,6 +149,30 @@ export function ReviewNotificationCenter({
     }
   }
 
+  const handleNotificationItemClick = useCallback(
+    (item: AppNotificationItem, event: React.MouseEvent) => {
+      event.preventDefault()
+
+      setFeed((current) => {
+        const nextItems = current.items.filter((i) => i.notificationKey !== item.notificationKey)
+        const nextFeed = { ...current, items: nextItems }
+        feedRef.current = nextFeed
+        return nextFeed
+      })
+
+      void fetch("/api/review-notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notificationKey: item.notificationKey }),
+      }).catch(() => {
+        // Ignore background persistence errors to prevent navigation blockage
+      })
+
+      router.push(item.href)
+    },
+    [router],
+  )
+
   const pendingCount = feed.items.length
 
   return (
@@ -194,7 +218,11 @@ export function ReviewNotificationCenter({
           feed.items.slice(0, 12).map((item) => {
             const Icon = item.kind === "site_visit" ? MapPinned : item.kind === "report_cc" ? Mail : ClipboardCheck
             return (
-              <DropdownMenuItem key={item.notificationKey} render={<Link href={item.href} />} className="block cursor-pointer px-2.5 py-2.5">
+              <DropdownMenuItem
+                key={item.notificationKey}
+                onClick={(event) => handleNotificationItemClick(item, event)}
+                className="block cursor-pointer px-2.5 py-2.5"
+              >
                 <div className="flex items-start gap-3">
                   <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary"><Icon className="size-4" /></span>
                   <div className="min-w-0 flex-1">
