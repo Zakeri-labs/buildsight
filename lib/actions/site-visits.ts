@@ -6,6 +6,7 @@ import { sendSiteVisitRequestEmails } from "@/lib/email/site-visit"
 import { assertSiteVisitManager, assertSiteVisitRequester } from "@/lib/site-visits/access"
 import type { SiteVisitPreferredTime, SiteVisitStatus } from "@/lib/site-visits/types"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { isUserProjectSupervisor } from "@/lib/auth/project-access"
 import { getCalendarSchedulingProjects, resolveCalendarProjectScope } from "@/lib/calendar/server"
 import { currentCalendarDateKey } from "@/lib/calendar/date"
 
@@ -481,17 +482,17 @@ export async function createDirectSiteVisitAction(input: {
     if (accessMode === "viewer_owner") {
       throw new AuthzError("Viewer Owners may request a Site Visit but cannot schedule one directly.")
     }
-    if (accessMode === "supervisor" && scopedProject.assignedSupervisorId !== actorId) {
-      throw new AuthzError("You are not the assigned Supervisor for this project.")
+    if (accessMode === "supervisor") {
+      const isSupervisor = await isUserProjectSupervisor(actorId, input.projectId)
+      if (!isSupervisor) {
+        throw new AuthzError("You are not the assigned Supervisor for this project.")
+      }
     }
 
     const schedulingProjects = await getCalendarSchedulingProjects({ userId: actorId, projects: projectScope })
     const selectedProject = schedulingProjects.find((project) => project.id === input.projectId)
     if (!selectedProject) {
       throw new AuthzError("This project is not available for direct Site Visit scheduling.")
-    }
-    if (accessMode === "supervisor" && selectedProject.supervisor.id !== actorId) {
-      throw new AuthzError("You are not the assigned Supervisor for this project.")
     }
 
     const validParticipantIds = new Set(selectedProject.participants.map((participant) => participant.id))
@@ -614,8 +615,11 @@ async function resolveCalendarClientRequestForAction(requestId: string) {
   if (scopedProject.accessMode === "viewer_owner") {
     throw new AuthzError("Viewer Owners may request Site Visits but cannot approve, schedule, or reject Client Visit Requests.")
   }
-  if (scopedProject.accessMode === "supervisor" && scopedProject.assignedSupervisorId !== actorId) {
-    throw new AuthzError("You are not the assigned Project Supervisor for this project.")
+  if (scopedProject.accessMode === "supervisor") {
+    const isSupervisor = await isUserProjectSupervisor(actorId, request.project_id)
+    if (!isSupervisor) {
+      throw new AuthzError("You are not the assigned Project Supervisor for this project.")
+    }
   }
 
   return { actorId, admin, request, projectScope, scopedProject }
@@ -652,9 +656,6 @@ export async function approveCalendarClientVisitRequestAction(input: {
     const selectedProject = schedulingProjects.find((project) => project.id === request.project_id)
     if (!selectedProject) {
       return { ok: false, error: "The project must have an assigned Project Supervisor before this request can be scheduled." }
-    }
-    if (scopedProject.accessMode === "supervisor" && selectedProject.supervisor.id !== actorId) {
-      throw new AuthzError("You are not the assigned Project Supervisor for this project.")
     }
 
     const validParticipantIds = new Set(selectedProject.participants.map((participant) => participant.id))

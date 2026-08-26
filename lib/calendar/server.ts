@@ -352,7 +352,6 @@ export async function getCalendarSchedulingProjects({ userId, projects }: {
 
   const schedulableProjects = projects.filter((project) =>
     isValidCalendarUuid(project.id) &&
-    isValidCalendarUuid(project.assignedSupervisorId) &&
     (project.accessMode === "admin" || project.accessMode === "supervisor"),
   )
   if (!schedulableProjects.length) return []
@@ -437,7 +436,7 @@ export async function getCalendarSchedulingProjects({ userId, projects }: {
       }
     }
 
-    const supervisorId = project.assignedSupervisorId as string
+    const supervisorId = isValidCalendarUuid(project.assignedSupervisorId) ? project.assignedSupervisorId : userId
     const supervisor = person(supervisorId, "Project Supervisor")
     people.set(supervisorId, supervisor)
 
