@@ -172,147 +172,18 @@ export type TaskRow = {
 }
 
 /** All projects for the supervising org, ordered for display. */
-export async function getOrgProjects(orgId: string, userId?: string): Promise<DomainProject[]> {
-  try {
-    if (!isProjectUuid(orgId) || (userId !== undefined && !isProjectUuid(userId))) return []
-    const admin = createAdminClient()
-  const projectColumns =
-    "id, name, code, location, latitude, longitude, status, assigned_supervisor_id, project_type, supervision_type, supervision_type_other, plot_no, supervision_start_date, priority, included_structure_visits, included_finishing_visits, structure_supervision_fee, finishing_supervision_fee, received_amount, outstanding_amount, next_payment_amount, next_payment_due_date, invoice_reference_payment_note, initial_remarks, region, description, image, our_role, contractor, consultant, client, start_date, target_handover, contract_value, progress_planned, progress_actual, progress_delay, supervising_organization_id, sort_order"
-
-  let data: any[] | null = null
-  if (!userId) {
-    const result = await admin
-      .from("projects")
-      .select(projectColumns)
-      .eq("supervising_organization_id", orgId)
-      .order("sort_order", { ascending: true })
-      .order("name", { ascending: true })
-    if (result.error) throw result.error
-    data = result.data
-  } else {
-    const { data: userMemberships, error: userMembershipsError } = await admin
-      .from("organization_memberships")
-      .select("role, organization_id")
-      .eq("user_id", userId)
-      .eq("status", "active")
-    if (userMembershipsError) throw userMembershipsError
-
-    const matchedMembership = (userMemberships ?? []).find((m: any) => m.organization_id === orgId)
-    const effectiveRole = matchedMembership?.role ?? (userMemberships ?? [])[0]?.role
-
-    if (effectiveRole === "viewer") {
-      // Viewer scope is intentionally narrower than generic organization access:
-      // only immutable Owner links for this exact authenticated Viewer are allowed.
-      const projectIds = await getViewerOwnedProjectIds(userId, orgId)
-      if (!projectIds.length) data = []
-      else {
-        const result = await admin
-          .from("projects")
-          .select(projectColumns)
-          .eq("supervising_organization_id", orgId)
-          .in("id", projectIds)
-          .order("sort_order", { ascending: true })
-          .order("name", { ascending: true })
-        if (result.error) throw result.error
-        data = result.data
-      }
-    } else if (effectiveRole === "org_member") {
-      // Members use canonical explicit Project Supervisor/User assignments
-      // (via assigned_supervisor_id, assigned_user_id, project_participants, or project_user_memberships).
-      // Keeping this server-side prevents unrelated organization projects from
-      // reaching Member lists, aggregate counts, shell project options, or
-      // direct project detail lookups.
-      const [participantResult, membershipResult, assignedUserResult] = await Promise.all([
-        admin
-          .from("project_participants")
-          .select("project_id")
-          .eq("key_contact_user_id", userId)
-          .eq("status", "active"),
-        admin
-          .from("project_user_memberships")
-          .select("project_id")
-          .eq("user_id", userId)
-          .eq("status", "active"),
-        admin
-          .from("projects")
-          .select("id")
-          .eq("assigned_user_id", userId)
-          .eq("supervising_organization_id", orgId),
-      ])
-
-      if (participantResult.error) throw participantResult.error
-      if (membershipResult.error) throw membershipResult.error
-      if (assignedUserResult.error) throw assignedUserResult.error
-
-      const memberProjectIds = Array.from(
-        new Set([
-          ...(participantResult.data ?? []).map((row: any) => row.project_id),
-          ...(membershipResult.data ?? []).map((row: any) => row.project_id),
-          ...(assignedUserResult.data ?? []).map((row: any) => row.id),
-        ].filter((id): id is string => typeof id === "string" && id.length > 0)),
-      )
-
-      let query = admin
-        .from("projects")
-        .select(projectColumns)
-        .eq("supervising_organization_id", orgId)
-
-      if (memberProjectIds.length > 0) {
-        query = query.or(`assigned_supervisor_id.eq.${userId},id.in.(${memberProjectIds.join(",")})`)
-      } else {
-        query = query.eq("assigned_supervisor_id", userId)
-      }
-
-      const result = await query
-        .order("sort_order", { ascending: true })
-        .order("name", { ascending: true })
-
-      if (result.error) throw result.error
-      data = result.data
-    } else {
-      const [orgMembershipResult, projectMembershipResult, participantResult] = await Promise.all([
-        admin.from("organization_memberships").select("organization_id").eq("user_id", userId).eq("status", "active"),
-        admin.from("project_user_memberships").select("project_id").eq("user_id", userId).eq("status", "active"),
-        admin.from("project_participants").select("project_id").eq("key_contact_user_id", userId).eq("status", "active"),
-      ])
-      if (orgMembershipResult.error) throw orgMembershipResult.error
-      if (projectMembershipResult.error) throw projectMembershipResult.error
-      if (participantResult.error) throw participantResult.error
-
-      const organizationIds = Array.from(new Set([orgId, ...(orgMembershipResult.data ?? []).map((row: any) => row.organization_id as string)]))
-      const [projectOrgResult, supervisedResult] = await Promise.all([
-        organizationIds.length
-          ? admin.from("project_organization_memberships").select("project_id").in("organization_id", organizationIds).eq("status", "active")
-          : Promise.resolve({ data: [] as any[], error: null }),
-        organizationIds.length
-          ? admin.from("projects").select("id").in("supervising_organization_id", organizationIds)
-          : Promise.resolve({ data: [] as any[], error: null }),
-      ])
-      if (projectOrgResult.error) throw projectOrgResult.error
-      if (supervisedResult.error) throw supervisedResult.error
-
-      const projectIds = Array.from(new Set([
-        ...(projectMembershipResult.data ?? []).map((row: any) => row.project_id as string),
-        ...(participantResult.data ?? []).map((row: any) => row.project_id as string),
-        ...(projectOrgResult.data ?? []).map((row: any) => row.project_id as string),
-        ...(supervisedResult.data ?? []).map((row: any) => row.id as string),
-      ]))
-      if (!projectIds.length) data = []
-      else {
-        const result = await admin
-          .from("projects")
-          .select(projectColumns)
-          .in("id", projectIds)
-          .order("sort_order", { ascending: true })
-          .order("name", { ascending: true })
-        if (result.error) throw result.error
-        data = result.data
-      }
+export async function hydrateProjectProgressAndImages(
+  admin: ReturnType<typeof createAdminClient>,
+  projectRows: any[],
+): Promise<{ calculatedProgress: Map<string, number>; imageByProject: Map<string, string> }> {
+  const projectIds = projectRows.map((project: any) => project.id)
+  if (!projectIds.length) {
+    return {
+      calculatedProgress: new Map<string, number>(),
+      imageByProject: new Map<string, string>(),
     }
   }
 
-  const projectRows = data ?? []
-  const projectIds = projectRows.map((project: any) => project.id)
   let activeStageRowsResult: { data: any[] | null; error: any } = projectIds.length
     ? await admin.from("project_stages").select("id, project_id, name, status, is_pre_completed").in("project_id", projectIds).neq("status", "disabled")
     : { data: [] as any[], error: null }
@@ -468,6 +339,205 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
     const calculatedPct = projectTotalCheckboxes > 0 ? Math.round((projectCheckedCheckboxes / projectTotalCheckboxes) * 100) : 0
     calculatedProgress.set(projectId, calculatedPct)
   }
+
+  return { calculatedProgress, imageByProject }
+}
+
+export async function getOrgProjects(
+  orgId: string,
+  userId?: string,
+  options?: { skipProgress?: boolean },
+): Promise<DomainProject[]> {
+  try {
+    if (!isProjectUuid(orgId) || (userId !== undefined && !isProjectUuid(userId))) return []
+    const admin = createAdminClient()
+  const projectColumns =
+    "id, name, code, location, latitude, longitude, status, assigned_supervisor_id, project_type, supervision_type, supervision_type_other, plot_no, supervision_start_date, priority, included_structure_visits, included_finishing_visits, structure_supervision_fee, finishing_supervision_fee, received_amount, outstanding_amount, next_payment_amount, next_payment_due_date, invoice_reference_payment_note, initial_remarks, region, description, image, our_role, contractor, consultant, client, start_date, target_handover, contract_value, progress_planned, progress_actual, progress_delay, supervising_organization_id, sort_order"
+
+  let data: any[] | null = null
+  if (!userId) {
+    const result = await admin
+      .from("projects")
+      .select(projectColumns)
+      .eq("supervising_organization_id", orgId)
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true })
+    if (result.error) throw result.error
+    data = result.data
+  } else {
+    const { data: userMemberships, error: userMembershipsError } = await admin
+      .from("organization_memberships")
+      .select("role, organization_id")
+      .eq("user_id", userId)
+      .eq("status", "active")
+    if (userMembershipsError) throw userMembershipsError
+
+    const matchedMembership = (userMemberships ?? []).find((m: any) => m.organization_id === orgId)
+    const effectiveRole = matchedMembership?.role ?? (userMemberships ?? [])[0]?.role
+
+    if (effectiveRole === "viewer") {
+      // Viewer scope is intentionally narrower than generic organization access:
+      // only immutable Owner links for this exact authenticated Viewer are allowed.
+      const projectIds = await getViewerOwnedProjectIds(userId, orgId)
+      if (!projectIds.length) data = []
+      else {
+        const result = await admin
+          .from("projects")
+          .select(projectColumns)
+          .eq("supervising_organization_id", orgId)
+          .in("id", projectIds)
+          .order("sort_order", { ascending: true })
+          .order("name", { ascending: true })
+        if (result.error) throw result.error
+        data = result.data
+      }
+    } else if (effectiveRole === "org_member") {
+      // Members use canonical explicit Project Supervisor/User assignments
+      // (via assigned_supervisor_id, assigned_user_id, project_participants, or project_user_memberships).
+      // Keeping this server-side prevents unrelated organization projects from
+      // reaching Member lists, aggregate counts, shell project options, or
+      // direct project detail lookups.
+      const [participantResult, membershipResult, assignedUserResult] = await Promise.all([
+        admin
+          .from("project_participants")
+          .select("project_id")
+          .eq("key_contact_user_id", userId)
+          .eq("status", "active"),
+        admin
+          .from("project_user_memberships")
+          .select("project_id")
+          .eq("user_id", userId)
+          .eq("status", "active"),
+        admin
+          .from("projects")
+          .select("id")
+          .eq("assigned_user_id", userId)
+          .eq("supervising_organization_id", orgId),
+      ])
+
+      if (participantResult.error) throw participantResult.error
+      if (membershipResult.error) throw membershipResult.error
+      if (assignedUserResult.error) throw assignedUserResult.error
+
+      const memberProjectIds = Array.from(
+        new Set([
+          ...(participantResult.data ?? []).map((row: any) => row.project_id),
+          ...(membershipResult.data ?? []).map((row: any) => row.project_id),
+          ...(assignedUserResult.data ?? []).map((row: any) => row.id),
+        ].filter((id): id is string => typeof id === "string" && id.length > 0)),
+      )
+
+      let query = admin
+        .from("projects")
+        .select(projectColumns)
+        .eq("supervising_organization_id", orgId)
+
+      if (memberProjectIds.length > 0) {
+        query = query.or(`assigned_supervisor_id.eq.${userId},id.in.(${memberProjectIds.join(",")})`)
+      } else {
+        query = query.eq("assigned_supervisor_id", userId)
+      }
+
+      const result = await query
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true })
+
+      if (result.error) throw result.error
+      data = result.data
+    } else {
+      const [orgMembershipResult, projectMembershipResult, participantResult] = await Promise.all([
+        admin.from("organization_memberships").select("organization_id").eq("user_id", userId).eq("status", "active"),
+        admin.from("project_user_memberships").select("project_id").eq("user_id", userId).eq("status", "active"),
+        admin.from("project_participants").select("project_id").eq("key_contact_user_id", userId).eq("status", "active"),
+      ])
+      if (orgMembershipResult.error) throw orgMembershipResult.error
+      if (projectMembershipResult.error) throw projectMembershipResult.error
+      if (participantResult.error) throw participantResult.error
+
+      const organizationIds = Array.from(new Set([orgId, ...(orgMembershipResult.data ?? []).map((row: any) => row.organization_id as string)]))
+      const [projectOrgResult, supervisedResult] = await Promise.all([
+        organizationIds.length
+          ? admin.from("project_organization_memberships").select("project_id").in("organization_id", organizationIds).eq("status", "active")
+          : Promise.resolve({ data: [] as any[], error: null }),
+        organizationIds.length
+          ? admin.from("projects").select("id").in("supervising_organization_id", organizationIds)
+          : Promise.resolve({ data: [] as any[], error: null }),
+      ])
+      if (projectOrgResult.error) throw projectOrgResult.error
+      if (supervisedResult.error) throw supervisedResult.error
+
+      const projectIds = Array.from(new Set([
+        ...(projectMembershipResult.data ?? []).map((row: any) => row.project_id as string),
+        ...(participantResult.data ?? []).map((row: any) => row.project_id as string),
+        ...(projectOrgResult.data ?? []).map((row: any) => row.project_id as string),
+        ...(supervisedResult.data ?? []).map((row: any) => row.id as string),
+      ]))
+      if (!projectIds.length) data = []
+      else {
+        const result = await admin
+          .from("projects")
+          .select(projectColumns)
+          .in("id", projectIds)
+          .order("sort_order", { ascending: true })
+          .order("name", { ascending: true })
+        if (result.error) throw result.error
+        data = result.data
+      }
+    }
+  }
+
+  const projectRows = data ?? []
+  if (options?.skipProgress) {
+    const legacyImageCounts = new Map<string, number>()
+    for (const project of projectRows as any[]) {
+      const legacyImage = project.image?.trim()
+      if (legacyImage) legacyImageCounts.set(legacyImage, (legacyImageCounts.get(legacyImage) ?? 0) + 1)
+    }
+
+    return projectRows.map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      code: p.code,
+      location: p.location,
+      latitude: p.latitude,
+      longitude: p.longitude,
+      status: p.status,
+      supervisingOrganizationId:
+        typeof p.supervising_organization_id === "string" ? p.supervising_organization_id : null,
+      assignedSupervisorId: typeof p.assigned_supervisor_id === "string" ? p.assigned_supervisor_id : null,
+      projectType: p.project_type,
+      supervisionType: p.supervision_type,
+      supervisionTypeOther: p.supervision_type_other,
+      plotNo: p.plot_no,
+      supervisionStartDate: p.supervision_start_date,
+      priority: p.priority,
+      includedStructureVisits: p.included_structure_visits,
+      includedFinishingVisits: p.included_finishing_visits,
+      structureSupervisionFee: p.structure_supervision_fee == null ? null : Number(p.structure_supervision_fee),
+      finishingSupervisionFee: p.finishing_supervision_fee == null ? null : Number(p.finishing_supervision_fee),
+      receivedAmount: p.received_amount == null ? null : Number(p.received_amount),
+      outstandingAmount: p.outstanding_amount == null ? null : Number(p.outstanding_amount),
+      nextPaymentAmount: p.next_payment_amount == null ? null : Number(p.next_payment_amount),
+      nextPaymentDueDate: p.next_payment_due_date,
+      invoiceReferencePaymentNote: p.invoice_reference_payment_note,
+      initialRemarks: p.initial_remarks,
+      region: p.region,
+      description: p.description,
+      image: p.image?.trim() && legacyImageCounts.get(p.image.trim()) === 1 ? p.image : null,
+      ourRole: p.our_role,
+      contractor: p.contractor,
+      consultant: p.consultant,
+      client: p.client,
+      startDate: p.start_date,
+      targetHandover: p.target_handover,
+      contractValue: p.contract_value,
+      progressPlanned: p.progress_planned ?? 0,
+      progressActual: 0,
+      progressDelay: p.progress_delay ?? 0,
+    }))
+  }
+
+  const { calculatedProgress, imageByProject } = await hydrateProjectProgressAndImages(admin, projectRows)
   const legacyImageCounts = new Map<string, number>()
   for (const project of projectRows as any[]) {
     const legacyImage = project.image?.trim()
@@ -545,8 +615,13 @@ function normalizeProjectScope(value: string | null): string | null {
 
 // Resolve the set of project ids in scope. A selected project is never
 // allowed to fall back to organisation-wide data when it is missing or stale.
-async function resolveScopedProjects(orgId: string, projectId: string | null, userId?: string) {
-  const projects = await getOrgProjects(orgId, userId)
+async function resolveScopedProjects(
+  orgId: string,
+  projectId: string | null,
+  userId?: string,
+  options?: { skipProgress?: boolean },
+) {
+  const projects = await getOrgProjects(orgId, userId, options)
   const requestedScope = normalizeProjectScope(projectId)
   const selectedProject = requestedScope
     ? projects.find((project) => project.id === requestedScope || project.code === requestedScope) ?? null
@@ -746,7 +821,7 @@ export async function getDashboardData(
       ids,
       requestedSpecificProject,
       selectedProjectId,
-    } = await resolveScopedProjects(validOrgId, projectId, validUserId)
+    } = await resolveScopedProjects(validOrgId, projectId, validUserId, { skipProgress: true })
     const names = nameMap(projects)
     const canLoadProjectFeeds = !requestedSpecificProject || Boolean(selectedProjectId)
     const scopedSupervisingOrgIds = validUuidList(
@@ -1352,7 +1427,7 @@ export async function getDashboardData(
       firstOwnerByProject.set(ownerProjectId, ownerName)
     }
 
-    const projectRows = scoped.map((p) => {
+    const candidateProjects = scoped.map((p) => {
       const pStageReports = (termResponses ?? []).filter((r: any) => r.project_id === p.id)
       const pStageReportsCount = pStageReports.length
       let latestReportAt = 0
@@ -1368,8 +1443,32 @@ export async function getDashboardData(
         inspections.filter((r) => r.project_id === p.id).length,
         pStageReportsCount,
       )
-      const pRfis = rfis.filter((r) => r.project_id === p.id).length
+
+      return {
+        project: p,
+        inspectionsCount: pInsps,
+        latestReportAt,
+      }
+    })
+
+    const top5Candidates = candidateProjects
+      .filter((item) => item.inspectionsCount > 0 || item.latestReportAt > 0)
+      .sort((a, b) => b.latestReportAt - a.latestReportAt)
+      .slice(0, 5)
+
+    const top5ProjectRows = top5Candidates.map((item) => item.project)
+    const { calculatedProgress: top5ProgressMap, imageByProject: top5ImageMap } =
+      await hydrateProjectProgressAndImages(admin, top5ProjectRows)
+
+    const legacyImageCounts = new Map<string, number>()
+    for (const project of scoped as any[]) {
+      const legacyImage = project.image?.trim()
+      if (legacyImage) legacyImageCounts.set(legacyImage, (legacyImageCounts.get(legacyImage) ?? 0) + 1)
+    }
+
+    const recentProjectsWithReports = top5Candidates.map(({ project: p, inspectionsCount: pInsps, latestReportAt }) => {
       const pVos = vos.filter((r) => r.project_id === p.id).length
+      const pRfis = rfis.filter((r) => r.project_id === p.id).length
       const supervisor = p.assignedSupervisorId
         ? supervisorNameById.get(p.assignedSupervisorId) ?? null
         : null
@@ -1380,14 +1479,16 @@ export async function getDashboardData(
       return {
         id: p.id,
         name: p.name,
-        image: p.image,
+        image:
+          top5ImageMap.get(p.id) ??
+          (p.image?.trim() && legacyImageCounts.get(p.image.trim()) === 1 ? p.image : null),
         ownerClient: firstOwnerByProject.get(p.id) ?? null,
         supervisor,
         role: p.ourRole ?? "Supervising Consultant",
         inspections: pInsps,
         rfis: pRfis,
         vos: pVos,
-        progress: p.progressActual,
+        progress: top5ProgressMap.get(p.id) ?? 0,
         canEdit,
         latestReportAt,
         edit: canEdit
@@ -1420,11 +1521,6 @@ export async function getDashboardData(
           : null,
       }
     })
-
-    const recentProjectsWithReports = projectRows
-      .filter((p) => p.inspections > 0 || p.latestReportAt > 0)
-      .sort((a, b) => b.latestReportAt - a.latestReportAt)
-      .slice(0, 5)
 
     const reviewTasks: TaskRow[] = reviewFeed.items.map((item) => ({
       id: `review:${item.id}`,
