@@ -1016,7 +1016,7 @@ export async function getDashboardData(
       (linkedStages ?? []).map((stage: any) => [stage.id as string, stage.name as string]),
     )
     const scopedProjectById = new Map(scoped.map((project) => [project.id, project]))
-    const completedVisitDetailById = new Map<
+    const visitDetailById = new Map<
       string,
       {
         id: string
@@ -1025,27 +1025,38 @@ export async function getDashboardData(
         projectCode: string | null
         visitNumber: number | null
         stageName: string | null
-        completedAt: string
+        status: "completed" | "scheduled"
+        completedAt: string | null
+        scheduledDate: string | null
+        scheduledTime: string | null
       }
     >()
 
-    for (const visit of completedSiteVisits as any[]) {
+    for (const visit of (dashboardSiteVisits as any[])) {
       const visitId = asUuid(visit.id)
       const visitProjectId = asUuid(visit.projectId)
-      const completedAt = typeof visit.completedAt === "string" ? visit.completedAt : null
-      if (!visitId || !visitProjectId || !completedAt) continue
+      const isCompleted = visit.status === "completed" && Boolean(visit.completedAt)
+      const isScheduled = visit.status === "scheduled"
+      if (!visitId || !visitProjectId || (!isCompleted && !isScheduled)) continue
 
       const project = scopedProjectById.get(visitProjectId)
       const linkedReport = linkedReportByVisitId.get(visitId)
       const reservedVisitNumber = Number.isInteger(visit.reportVisitNumber) ? visit.reportVisitNumber : null
-      completedVisitDetailById.set(visitId, {
+      const completedAt = typeof visit.completedAt === "string" ? visit.completedAt : null
+      const scheduledDate = typeof visit.scheduledDate === "string" ? visit.scheduledDate : null
+      const scheduledTime = typeof visit.scheduledTime === "string" ? visit.scheduledTime : null
+
+      visitDetailById.set(visitId, {
         id: visitId,
         projectId: visitProjectId,
         projectName: project?.name ?? "Project",
         projectCode: project?.code ?? null,
         visitNumber: linkedReport?.visitNumber ?? reservedVisitNumber,
         stageName: linkedReport ? stageNameById.get(linkedReport.projectStageId) ?? null : null,
+        status: isCompleted ? "completed" : "scheduled",
         completedAt,
+        scheduledDate,
+        scheduledTime,
       })
     }
 
@@ -1139,8 +1150,8 @@ export async function getDashboardData(
     const completedVisitsBySupervisor = Array.from(supervisorAggregation.values())
       .filter((item) => item.totalVisitIds.size > 0)
       .map((item) => {
-        const visits = Array.from(item.completedVisitIds)
-          .map((visitId) => completedVisitDetailById.get(visitId))
+        const visits = Array.from(item.totalVisitIds)
+          .map((visitId) => visitDetailById.get(visitId))
           .filter((visit): visit is {
             id: string
             projectId: string
@@ -1148,11 +1159,27 @@ export async function getDashboardData(
             projectCode: string | null
             visitNumber: number | null
             stageName: string | null
-            completedAt: string
+            status: "completed" | "scheduled"
+            completedAt: string | null
+            scheduledDate: string | null
+            scheduledTime: string | null
           } => Boolean(visit))
           .sort((a, b) => {
-            const timeDifference = new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
-            return timeDifference || b.id.localeCompare(a.id)
+            if (a.status !== b.status) {
+              return a.status === "scheduled" ? -1 : 1
+            }
+            if (a.status === "scheduled") {
+              const dateA = a.scheduledDate ?? "9999-99-99"
+              const dateB = b.scheduledDate ?? "9999-99-99"
+              const dateDiff = dateA.localeCompare(dateB)
+              if (dateDiff) return dateDiff
+              const timeA = a.scheduledTime ?? "99:99"
+              const timeB = b.scheduledTime ?? "99:99"
+              return timeA.localeCompare(timeB) || a.id.localeCompare(b.id)
+            }
+            const timeA = a.completedAt ? new Date(a.completedAt).getTime() : 0
+            const timeB = b.completedAt ? new Date(b.completedAt).getTime() : 0
+            return timeB - timeA || b.id.localeCompare(a.id)
           })
 
         return {

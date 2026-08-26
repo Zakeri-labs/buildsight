@@ -12,6 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
 
 export type SupervisorCompletedVisitDetail = {
   id: string
@@ -20,7 +21,10 @@ export type SupervisorCompletedVisitDetail = {
   projectCode: string | null
   visitNumber: number | null
   stageName: string | null
-  completedAt: string
+  status?: "completed" | "scheduled"
+  completedAt?: string | null
+  scheduledDate?: string | null
+  scheduledTime?: string | null
 }
 
 export type SupervisorCompletedVisitSummary = {
@@ -52,8 +56,46 @@ function formatCompletedAt(iso: string) {
   }
 }
 
+function formatVisitDate(dateStr: string | null | undefined) {
+  if (!dateStr) return "—"
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim())
+  if (!match) {
+    const d = new Date(dateStr)
+    if (Number.isNaN(d.getTime())) return dateStr
+    return new Intl.DateTimeFormat("en-GB", {
+      timeZone: APPLICATION_TIME_ZONE,
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(d)
+  }
+  const [, year, month, day] = match
+  const d = new Date(Number(year), Number(month) - 1, Number(day))
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: APPLICATION_TIME_ZONE,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(d)
+}
+
+function formatVisitTime(timeStr: string | null | undefined) {
+  if (!timeStr) return null
+  const trimmed = timeStr.trim()
+  const match = /^(\d{1,2}):(\d{2})/.exec(trimmed)
+  if (!match) return trimmed
+  const hour = Number(match[1])
+  const minute = Number(match[2])
+  const date = new Date(2026, 0, 1, hour, minute)
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date)
+}
+
 function visitNumberLabel(value: number | null) {
-  return value && value > 0 ? `Visit ${String(value).padStart(3, "0")}` : "Completed Visit"
+  return value && value > 0 ? `Visit ${String(value).padStart(3, "0")}` : null
 }
 
 function SupervisorVisitDialog({
@@ -63,6 +105,12 @@ function SupervisorVisitDialog({
   supervisor: SupervisorCompletedVisitSummary
   dateRangeLabel: string
 }) {
+  const completedCount = supervisor.completedVisitCount
+  const totalCount = supervisor.totalVisitCount && supervisor.totalVisitCount > 0
+    ? supervisor.totalVisitCount
+    : supervisor.completedVisitCount
+  const scheduledCount = Math.max(0, totalCount - completedCount)
+
   return (
     <Dialog>
       <DialogTrigger
@@ -78,15 +126,13 @@ function SupervisorVisitDialog({
       <DialogContent className="flex max-h-[min(82dvh,680px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[38rem]">
         <DialogHeader className="border-b px-5 py-4 pe-12">
           <DialogTitle className="text-base font-semibold">
-            Completed Visits — {supervisor.name}
+            Site Visits — {supervisor.name}
           </DialogTitle>
           <DialogDescription className="space-y-0.5">
-            <span className="block">
-              {supervisor.completedVisitCount} {supervisor.completedVisitCount === 1 ? "Completed Visit" : "Completed Visits"}
-              {" • "}
-              {supervisor.projectCount} {supervisor.projectCount === 1 ? "Project" : "Projects"}
+            <span className="block font-medium text-foreground/90">
+              {completedCount} Completed • {scheduledCount} Scheduled • {supervisor.projectCount} {supervisor.projectCount === 1 ? "Project" : "Projects"}
             </span>
-            <span className="block">{dateRangeLabel}</span>
+            <span className="block text-xs text-muted-foreground">{dateRangeLabel}</span>
           </DialogDescription>
         </DialogHeader>
 
@@ -94,37 +140,65 @@ function SupervisorVisitDialog({
           {supervisor.visits.length ? (
             <ul className="divide-y divide-border/70">
               {supervisor.visits.map((visit) => {
-                const completed = formatCompletedAt(visit.completedAt)
-                const secondary = [
-                  visit.projectCode,
-                  visit.stageName,
-                  completed.date,
-                  completed.time,
-                ].filter(Boolean).join(" • ")
+                const isCompleted = visit.status === "completed"
+                let dateLabel = "—"
+                let timeLabel: string | null = null
+
+                if (isCompleted && visit.completedAt) {
+                  const formatted = formatCompletedAt(visit.completedAt)
+                  dateLabel = formatted.date
+                  timeLabel = formatted.time
+                } else if (visit.scheduledDate) {
+                  dateLabel = formatVisitDate(visit.scheduledDate)
+                  timeLabel = formatVisitTime(visit.scheduledTime)
+                }
+
+                const dateTimeText = [dateLabel, timeLabel].filter(Boolean).join(" • ")
 
                 return (
                   <li key={visit.id} className="py-3 first:pt-2 last:pb-2">
-                    <div className="flex min-w-0 items-baseline gap-3">
-                      <p
-                        className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground"
-                        title={visit.projectName}
-                      >
-                        {visit.projectName}
-                      </p>
-                      <span className="shrink-0 text-xs font-medium tabular-nums text-foreground">
-                        {visitNumberLabel(visit.visitNumber)}
-                      </span>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground"
+                          title={visit.projectName}
+                        >
+                          {visit.projectName}
+                        </p>
+                        {visit.projectCode ? (
+                          <p className="mt-0.5 truncate text-xs font-mono text-muted-foreground" title={visit.projectCode}>
+                            {visit.projectCode}
+                          </p>
+                        ) : null}
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {dateTimeText}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium",
+                            isCompleted
+                              ? "bg-success/15 text-success dark:bg-success/20"
+                              : "bg-info/15 text-info dark:bg-info/20",
+                          )}
+                        >
+                          {isCompleted ? "Completed" : "Scheduled"}
+                        </span>
+                        {visit.visitNumber ? (
+                          <span className="text-[11px] font-medium text-muted-foreground">
+                            {visitNumberLabel(visit.visitNumber)}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground" title={secondary}>
-                      {secondary || "Completed visit"}
-                    </p>
                   </li>
                 )
               })}
             </ul>
           ) : (
             <div className="py-8 text-sm text-muted-foreground">
-              No completed visits found for this Supervisor in the selected scope.
+              No site visits found for this Supervisor in the selected scope.
             </div>
           )}
         </div>
