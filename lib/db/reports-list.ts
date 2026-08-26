@@ -2,6 +2,7 @@ import "server-only"
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getOrgProjects } from "@/lib/db/domain"
+import type { DashboardDateRange } from "@/lib/dashboard/date-range"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 
@@ -33,10 +34,6 @@ export type PaginatedReportsResult = {
   totalReports: number
   currentPage: number
   totalPages: number
-  summary: {
-    totalReports: number
-    openIssues: number
-  }
 }
 
 export async function getPaginatedReportsList({
@@ -44,11 +41,13 @@ export async function getPaginatedReportsList({
   organizationId,
   page = 1,
   pageSize = 30,
+  dateRange = null,
 }: {
   userId: string
   organizationId?: string
   page?: number
   pageSize?: number
+  dateRange?: DashboardDateRange | null
 }): Promise<PaginatedReportsResult> {
   const safePage = Math.max(1, Math.floor(page) || 1)
   const offset = (safePage - 1) * pageSize
@@ -64,7 +63,6 @@ export async function getPaginatedReportsList({
     }
 
     if (!projectIds.length) {
-      // Fallback: Query projects user belongs to or supervisor of
       const { data: userProjects } = await admin
         .from("projects")
         .select("id")
@@ -78,38 +76,48 @@ export async function getPaginatedReportsList({
         totalReports: 0,
         currentPage: 1,
         totalPages: 1,
-        summary: { totalReports: 0, openIssues: 0 },
       }
     }
 
     const validStatuses = ["submitted", "under_review", "approved", "rejected", "completed"]
 
-    // 2. Count total reports matching filter
-    const { count: totalCount } = await admin
+    // Construct server-side date range condition matching visible Report date (submitted_at, fallback created_at)
+    let dateOrClause: string | null = null
+    if (dateRange && dateRange.startUtc && dateRange.endExclusiveUtc) {
+      const { startUtc, endExclusiveUtc } = dateRange
+      dateOrClause = `and(submitted_at.gte.${startUtc},submitted_at.lt.${endExclusiveUtc}),and(submitted_at.is.null,created_at.gte.${startUtc},created_at.lt.${endExclusiveUtc})`
+    }
+
+    // 2. Count total reports matching project, status AND date range
+    let countQuery = admin
       .from("term_responses")
       .select("id", { count: "exact", head: true })
       .in("project_id", projectIds)
       .is("project_stage_term_id", null)
       .in("status", validStatuses)
 
+    if (dateOrClause) {
+      countQuery = countQuery.or(dateOrClause)
+    }
+
+    const { count: totalCount } = await countQuery
+
     const totalReports = totalCount ?? 0
     const totalPages = Math.max(1, Math.ceil(totalReports / pageSize))
 
-    // 3. Count open issues (rejected/under_review) for summary card
-    const { count: openIssuesCount } = await admin
-      .from("term_responses")
-      .select("id", { count: "exact", head: true })
-      .in("project_id", projectIds)
-      .is("project_stage_term_id", null)
-      .in("status", ["under_review", "rejected"])
-
-    // 4. Fetch paginated reports list with lightweight column selection
-    const { data: responses, error: responseErr } = await admin
+    // 3. Fetch paginated reports list with server-side date range filter
+    let dataQuery = admin
       .from("term_responses")
       .select("id, project_id, project_stage_id, report_number, report_title, subject, visit_number, status, created_by, created_at, submitted_at, completed_at")
       .in("project_id", projectIds)
       .is("project_stage_term_id", null)
       .in("status", validStatuses)
+
+    if (dateOrClause) {
+      dataQuery = dataQuery.or(dateOrClause)
+    }
+
+    const { data: responses, error: responseErr } = await dataQuery
       .order("submitted_at", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
       .range(offset, offset + pageSize - 1)
@@ -120,7 +128,6 @@ export async function getPaginatedReportsList({
         totalReports,
         currentPage: safePage,
         totalPages,
-        summary: { totalReports, openIssues: openIssuesCount ?? 0 },
       }
     }
 
@@ -202,10 +209,6 @@ export async function getPaginatedReportsList({
       totalReports,
       currentPage: safePage,
       totalPages,
-      summary: {
-        totalReports,
-        openIssues: openIssuesCount ?? 0,
-      },
     }
   } catch (err) {
     console.error("[getPaginatedReportsList] Error:", err)
@@ -214,7 +217,6 @@ export async function getPaginatedReportsList({
       totalReports: 0,
       currentPage: 1,
       totalPages: 1,
-      summary: { totalReports: 0, openIssues: 0 },
     }
   }
 }

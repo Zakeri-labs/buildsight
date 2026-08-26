@@ -1,14 +1,17 @@
 "use client"
 
 import Link from "next/link"
-import { FileText, Download, ClipboardCheck, ChevronLeft, ChevronRight, Building2, MapPin } from "lucide-react"
+import { useSearchParams } from "next/navigation"
+import { FileText, ChevronLeft, ChevronRight } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { PageHeader } from "@/components/dashboard/page-header"
+import { DateRangePill } from "@/components/dashboard/date-range-pill"
 import { ToneBadge } from "@/components/status-badge"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import type { DashboardDateRange } from "@/lib/dashboard/date-range"
 import type { ListReportItem } from "@/lib/db/reports-list"
 
 function formatSubmissionDate(iso: string | null) {
@@ -43,10 +46,7 @@ export type ReportsListProps = {
   totalReports: number
   currentPage: number
   totalPages: number
-  summary: {
-    totalReports: number
-    openIssues: number
-  }
+  dateRange?: DashboardDateRange
 }
 
 export function ReportsList({
@@ -54,20 +54,35 @@ export function ReportsList({
   totalReports,
   currentPage,
   totalPages,
-  summary,
+  dateRange,
 }: ReportsListProps) {
   const { t } = useI18n()
+  const searchParams = useSearchParams()
+
+  function pageUrl(page: number) {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set("page", String(page))
+    return `/reports?${params.toString()}`
+  }
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title={t.reports.title}
-        subtitle={t.reports.subtitle}
-      />
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <SummaryCard icon={FileText} label={t.reports.totalReports} value={summary.totalReports} tone="text-info" />
-        <SummaryCard icon={ClipboardCheck} label={t.reports.openIssues} value={summary.openIssues} tone="text-destructive" />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <PageHeader
+          title={t.reports.title}
+          subtitle={t.reports.subtitle}
+        />
+        {dateRange ? (
+          <DateRangePill
+            preset={dateRange.preset}
+            label={dateRange.label}
+            startDate={dateRange.startDate}
+            endDate={dateRange.endDate}
+            showAllTime={false}
+            ariaLabel={`Reports date range: ${dateRange.label}`}
+            dialogDescription="Choose inclusive calendar dates for reports."
+          />
+        ) : null}
       </div>
 
       {reports.length ? (
@@ -191,7 +206,7 @@ export function ReportsList({
 
           <div className="flex items-center gap-2">
             <Link
-              href={`/reports?page=${currentPage - 1}`}
+              href={pageUrl(currentPage - 1)}
               aria-disabled={currentPage <= 1}
               className={cn(
                 buttonVariants({ variant: "outline", size: "sm" }),
@@ -207,7 +222,7 @@ export function ReportsList({
             </span>
 
             <Link
-              href={`/reports?page=${currentPage + 1}`}
+              href={pageUrl(currentPage + 1)}
               aria-disabled={currentPage >= totalPages}
               className={cn(
                 buttonVariants({ variant: "outline", size: "sm" }),
@@ -221,31 +236,5 @@ export function ReportsList({
         </div>
       )}
     </div>
-  )
-}
-
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-  tone,
-}: {
-  icon: React.ElementType
-  label: string
-  value: number
-  tone: string
-}) {
-  return (
-    <Card>
-      <CardContent className="flex items-center gap-4 p-5">
-        <span className="flex size-12 items-center justify-center rounded-xl bg-muted">
-          <Icon className={`size-6 ${tone}`} />
-        </span>
-        <div className="flex flex-col">
-          <span className="text-2xl font-semibold tabular-nums">{value}</span>
-          <span className="text-sm text-muted-foreground">{label}</span>
-        </div>
-      </CardContent>
-    </Card>
   )
 }

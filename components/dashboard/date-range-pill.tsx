@@ -73,6 +73,7 @@ export function DateRangePill({
     params.set("range", nextPreset)
     params.delete("from")
     params.delete("to")
+    params.delete("page")
     const query = params.toString()
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
   }
@@ -98,6 +99,7 @@ export function DateRangePill({
     params.set("range", "custom")
     params.set("from", from)
     params.set("to", to)
+    params.delete("page")
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
     setCustomOpen(false)
   }
