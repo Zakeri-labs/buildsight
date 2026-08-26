@@ -43,26 +43,12 @@ begin
     raise exception 'Project not found';
   end if;
 
-  if target_supervisor_id is null and not exists (
-    select 1
-    from public.project_participants participant
-    where participant.project_id = target_project_id
-      and participant.status = 'active'
-      and participant.participant_type in ('consultancy', 'supervisor')
-  ) then
+  if target_supervisor_id is null then
     raise exception 'Project Supervisor is not assigned';
   end if;
 
   if not (
     target_supervisor_id = actor_id
-    or exists (
-      select 1
-      from public.project_participants participant
-      where participant.project_id = target_project_id
-        and participant.key_contact_user_id = actor_id
-        and participant.status = 'active'
-        and participant.participant_type in ('consultancy', 'supervisor')
-    )
     or exists (
       select 1
       from public.project_user_memberships membership
