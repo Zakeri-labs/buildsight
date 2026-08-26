@@ -1129,15 +1129,15 @@ export async function getDashboardData(
       if (!isCompleted && !isScheduled) continue
 
       existing.totalVisitIds.add(visitId)
+      existing.projectIds.add(visitProjectId)
       if (isCompleted) {
         existing.completedVisitIds.add(visitId)
-        existing.projectIds.add(visitProjectId)
       }
       supervisorAggregation.set(supervisorId, existing)
     }
 
     const completedVisitsBySupervisor = Array.from(supervisorAggregation.values())
-      .filter((item) => item.completedVisitIds.size > 0)
+      .filter((item) => item.totalVisitIds.size > 0)
       .map((item) => {
         const visits = Array.from(item.completedVisitIds)
           .map((visitId) => completedVisitDetailById.get(visitId))
@@ -1166,10 +1166,11 @@ export async function getDashboardData(
       })
       .sort((a, b) =>
         b.completedVisitCount - a.completedVisitCount ||
+        b.totalVisitCount - a.totalVisitCount ||
         a.name.localeCompare(b.name) ||
         a.supervisorId.localeCompare(b.supervisorId),
       )
-      .slice(0, 4)
+      .slice(0, 6)
 
     // Visit Compliance is independent of the Dashboard activity range. Its recurring
     // baseline is the latest completed Site Visit for the Project, then the persisted

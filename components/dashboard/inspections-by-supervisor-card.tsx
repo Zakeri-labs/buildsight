@@ -195,14 +195,7 @@ export function CompletedVisitsBySupervisorCard({
           <h2 className="text-base font-semibold text-foreground">Completed Visits by Supervisor</h2>
 
           <div className="mt-3 flex min-h-0 flex-1 flex-col justify-center">
-            {completed === 0 ? (
-              <div className="py-6 text-sm">
-                <p className="font-medium text-foreground">No completed visits</p>
-                <p className="mt-1 text-muted-foreground">
-                  No completed site visits were recorded for the selected scope.
-                </p>
-              </div>
-            ) : supervisors.length ? (
+            {supervisors.length ? (
               <ul className="divide-y divide-border/70">
                 {supervisors.map((supervisor) => {
                   const supervisorTotal =
@@ -248,9 +241,9 @@ export function CompletedVisitsBySupervisorCard({
               </ul>
             ) : (
               <div className="py-6 text-sm">
-                <p className="font-medium text-foreground">Completed visits found</p>
+                <p className="font-medium text-foreground">No visits</p>
                 <p className="mt-1 text-muted-foreground">
-                  No assigned Supervisor data is available for the completed visits in this scope.
+                  No site visits were recorded for the selected scope.
                 </p>
               </div>
             )}
