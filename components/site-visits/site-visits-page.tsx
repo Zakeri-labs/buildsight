@@ -12,6 +12,9 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
+import { DateRangePill } from "@/components/dashboard/date-range-pill"
+import type { DashboardDateRange } from "@/lib/dashboard/date-range"
+
 function dateTime(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -32,7 +35,13 @@ function compactPreferredVisit(input: {
   return `${label} · ${preferredTimeLabel(input.preferredTime)}`
 }
 
-export function SiteVisitsPage({ data }: { data: SiteVisitPageData }) {
+export function SiteVisitsPage({
+  data,
+  dateRange,
+}: {
+  data: SiteVisitPageData
+  dateRange?: DashboardDateRange
+}) {
   const currentUser = useCurrentUser()
   const isMember = currentUser.role === "org_member"
   const [search, setSearch] = useState("")
@@ -70,7 +79,20 @@ export function SiteVisitsPage({ data }: { data: SiteVisitPageData }) {
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative min-w-0 flex-1 sm:max-w-md"><Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event: ChangeEvent<HTMLInputElement>) => setSearch(event.target.value)} placeholder="Search site visits..." className="h-10 ps-9" /></div>
-        <Select value={status} onValueChange={(value: unknown) => setStatus(String(value) as "all" | SiteVisitStatus)}><SelectTrigger className="h-10 w-full sm:w-44"><SelectValue>{(value: unknown) => String(value) === "all" ? "All Statuses" : String(value).charAt(0).toUpperCase() + String(value).slice(1)}</SelectValue></SelectTrigger><SelectContent><SelectItem value="all">All Statuses</SelectItem><SelectItem value="pending">Pending</SelectItem><SelectItem value="scheduled">Scheduled</SelectItem><SelectItem value="completed">Completed</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent></Select>
+        <div className="flex flex-wrap items-center gap-3">
+          <Select value={status} onValueChange={(value: unknown) => setStatus(String(value) as "all" | SiteVisitStatus)}><SelectTrigger className="h-10 w-full sm:w-44"><SelectValue>{(value: unknown) => String(value) === "all" ? "All Statuses" : String(value).charAt(0).toUpperCase() + String(value).slice(1)}</SelectValue></SelectTrigger><SelectContent><SelectItem value="all">All Statuses</SelectItem><SelectItem value="pending">Pending</SelectItem><SelectItem value="scheduled">Scheduled</SelectItem><SelectItem value="completed">Completed</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent></Select>
+          {dateRange ? (
+            <DateRangePill
+              preset={dateRange.preset}
+              label={dateRange.label}
+              startDate={dateRange.startDate}
+              endDate={dateRange.endDate}
+              showAllTime={false}
+              ariaLabel={`Site visits date range: ${dateRange.label}`}
+              dialogDescription="Choose inclusive calendar dates for site visit requests."
+            />
+          ) : null}
+        </div>
       </div>
 
       {isMember ? <p className="-mt-2 text-xs font-medium text-muted-foreground md:hidden">{filtered.length} {filtered.length === 1 ? "Request" : "Requests"}</p> : null}

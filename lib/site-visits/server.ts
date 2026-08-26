@@ -1,5 +1,5 @@
-import "server-only"
-
+import { currentCalendarDateKey } from "@/lib/calendar/date"
+import type { DashboardDateRange } from "@/lib/dashboard/date-range"
 import { roleLabel } from "@/lib/db/types"
 import { preferredVisitLabel } from "@/lib/site-visits/format"
 import {
@@ -196,10 +196,12 @@ const REQUEST_COLUMNS =
 export async function getSiteVisitPageData({
   userId,
   projectId,
+  dateRange = null,
   memberSupervisorOnly = false,
 }: {
   userId: string
   projectId: string | null
+  dateRange?: DashboardDateRange | null
   memberSupervisorOnly?: boolean
 }): Promise<SiteVisitPageData> {
   const admin = createAdminClient()
@@ -224,11 +226,31 @@ export async function getSiteVisitPageData({
 
   let rows: any[] = []
   if (scopedProjectIds.length) {
-    const { data, error } = await admin
+    let query = admin
       .from("site_visit_requests")
       .select(REQUEST_COLUMNS)
       .in("project_id", scopedProjectIds)
-      .order("created_at", { ascending: false })
+
+    if (dateRange && dateRange.startDate && dateRange.endDate) {
+      const { startDate, endDate } = dateRange
+      const today = currentCalendarDateKey()
+      const includesToday = startDate <= today && today <= endDate
+
+      const orConditions = [
+        `and(scheduled_date.gte.${startDate},scheduled_date.lte.${endDate})`,
+        `and(scheduled_date.is.null,preferred_date.gte.${startDate},preferred_date.lte.${endDate})`,
+      ]
+
+      if (includesToday) {
+        orConditions.push(
+          `and(scheduled_date.is.null,preferred_date.is.null,is_asap.eq.true,status.eq.pending)`
+        )
+      }
+
+      query = query.or(orConditions.join(","))
+    }
+
+    const { data, error } = await query.order("created_at", { ascending: false })
     if (error) throw error
     rows = (data ?? []).filter((row: any) => access.get(row.project_id)?.canManage || row.requested_by === userId)
   }

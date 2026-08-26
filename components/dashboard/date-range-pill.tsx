@@ -27,9 +27,12 @@ type DateRangePillProps = {
   label: string
   startDate: string | null
   endDate: string | null
+  ariaLabel?: string
+  dialogDescription?: string
+  showAllTime?: boolean
 }
 
-const PRESET_OPTIONS: { value: Exclude<DashboardDateRangePreset, "custom">; label: string }[] = [
+const DEFAULT_PRESET_OPTIONS: { value: Exclude<DashboardDateRangePreset, "custom">; label: string }[] = [
   { value: "today", label: "Today" },
   { value: "last7", label: "Last 7 Days" },
   { value: "last30", label: "Last 30 Days" },
@@ -37,7 +40,15 @@ const PRESET_OPTIONS: { value: Exclude<DashboardDateRangePreset, "custom">; labe
   { value: "all", label: "All Time" },
 ]
 
-export function DateRangePill({ preset, label, startDate, endDate }: DateRangePillProps) {
+export function DateRangePill({
+  preset,
+  label,
+  startDate,
+  endDate,
+  ariaLabel = `Dashboard date range: ${label}`,
+  dialogDescription = "Choose inclusive calendar dates for Dashboard activity.",
+  showAllTime = true,
+}: DateRangePillProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -45,6 +56,10 @@ export function DateRangePill({ preset, label, startDate, endDate }: DateRangePi
   const [from, setFrom] = useState(startDate ?? "")
   const [to, setTo] = useState(endDate ?? "")
   const [customError, setCustomError] = useState<string | null>(null)
+
+  const presetOptions = showAllTime
+    ? DEFAULT_PRESET_OPTIONS
+    : DEFAULT_PRESET_OPTIONS.filter((option) => option.value !== "all")
 
   useEffect(() => {
     if (preset === "custom") {
@@ -94,7 +109,7 @@ export function DateRangePill({ preset, label, startDate, endDate }: DateRangePi
           render={
             <button
               type="button"
-              aria-label={`Dashboard date range: ${label}`}
+              aria-label={ariaLabel}
               className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
             >
               <Calendar className="size-4 text-muted-foreground" />
@@ -104,7 +119,7 @@ export function DateRangePill({ preset, label, startDate, endDate }: DateRangePi
           }
         />
         <DropdownMenuContent align="end" className="w-48">
-          {PRESET_OPTIONS.map((option) => (
+          {presetOptions.map((option) => (
             <DropdownMenuItem
               key={option.value}
               onClick={() => navigateToRange(option.value)}
@@ -125,7 +140,7 @@ export function DateRangePill({ preset, label, startDate, endDate }: DateRangePi
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Custom Range</DialogTitle>
-            <DialogDescription>Choose inclusive calendar dates for Dashboard activity.</DialogDescription>
+            <DialogDescription>{dialogDescription}</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 sm:grid-cols-2">
