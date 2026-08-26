@@ -327,19 +327,18 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
     ? await admin.from("project_images").select("project_id, storage_path").in("project_id", projectIds).eq("order_index", 0)
     : { data: [] as any[] }
   const activeStageIds = (activeStageRows ?? []).map((stage: any) => stage.id as string)
-  const [{ data: progressTermRows }, { data: responseRows }] = activeStageIds.length
+  const [progressTermResult, checklistCountsRpcResult] = activeStageIds.length && projectIds.length
     ? await Promise.all([
         admin
           .from("project_stage_terms")
           .select("id, project_stage_id, parent_term_id, is_required, status, is_active")
           .in("project_stage_id", activeStageIds)
           .eq("is_active", true),
-        admin
-          .from("term_responses")
-          .select("id, project_id, project_stage_id, response_content")
-          .in("project_id", projectIds),
+        admin.rpc("get_project_stage_checklist_counts", { target_project_ids: projectIds }),
       ])
-    : [{ data: [] }, { data: [] }]
+    : [{ data: [] }, { data: null, error: true }]
+
+  const progressTermRows = progressTermResult.data ?? []
   const imageByProject = new Map(
     (imageRows ?? []).map((image: any) => [image.project_id as string, image.storage_path as string]),
   )
@@ -349,12 +348,42 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
     rows.push(term)
     termsByStage.set((term as any).project_stage_id, rows)
   }
-  const responsesByStage = new Map<string, any[]>()
-  for (const resp of responseRows ?? []) {
-    if (!resp.project_stage_id) continue
-    const rows = responsesByStage.get(resp.project_stage_id) ?? []
-    rows.push(resp)
-    responsesByStage.set(resp.project_stage_id, rows)
+
+  const stageCountsMap = new Map<string, { total: number; checked: number }>()
+
+  if (!checklistCountsRpcResult.error && Array.isArray(checklistCountsRpcResult.data)) {
+    for (const row of checklistCountsRpcResult.data as any[]) {
+      if (row?.project_stage_id) {
+        stageCountsMap.set(row.project_stage_id, {
+          total: Number(row.report_checklist_total ?? 0),
+          checked: Number(row.stage_checked ?? 0),
+        })
+      }
+    }
+  } else {
+    // Safety Fallback: Query term_responses if RPC is unavailable
+    const { data: responseRows } = projectIds.length
+      ? await admin
+          .from("term_responses")
+          .select("id, project_id, project_stage_id, response_content")
+          .in("project_id", projectIds)
+      : { data: [] as any[] }
+
+    for (const resp of responseRows ?? []) {
+      if (!resp.project_stage_id) continue
+      const existing = stageCountsMap.get(resp.project_stage_id) ?? { total: 0, checked: 0 }
+      const checklist = resp.response_content?.checklist ?? []
+      const checklistArr = typeof checklist === "string" ? (() => { try { return JSON.parse(checklist) } catch { return [] } })() : checklist
+      if (Array.isArray(checklistArr)) {
+        for (const item of checklistArr) {
+          existing.total++
+          if (item?.checked === true || item?.result === "pass") {
+            existing.checked++
+          }
+        }
+      }
+      stageCountsMap.set(resp.project_stage_id, existing)
+    }
   }
 
   const calculatedProgress = new Map<string, number>()
@@ -379,18 +408,10 @@ export async function getOrgProjects(orgId: string, userId?: string): Promise<Do
 
       // Check DB responses if dbStage exists
       if (dbStage) {
-        const stageResponses = responsesByStage.get(dbStage.id) ?? []
-        for (const resp of stageResponses) {
-          const checklist = resp.response_content?.checklist ?? []
-          const checklistArr = typeof checklist === "string" ? (() => { try { return JSON.parse(checklist) } catch { return [] } })() : checklist
-          if (Array.isArray(checklistArr)) {
-            for (const item of checklistArr) {
-              reportChecklistTotal++
-              if (item?.checked === true || item?.result === "pass") {
-                stageChecked++
-              }
-            }
-          }
+        const counts = stageCountsMap.get(dbStage.id)
+        if (counts) {
+          reportChecklistTotal = counts.total
+          stageChecked = counts.checked
         }
       }
 
