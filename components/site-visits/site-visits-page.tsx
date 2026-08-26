@@ -54,7 +54,13 @@ export function SiteVisitsPage({
     return data.requests.filter((request) => {
       if (status !== "all" && request.status !== status) return false
       if (!query) return true
-      return [request.projectName, request.requestedBy, request.purpose, siteVisitRequestCode(request.id)].some((value) => value.toLowerCase().includes(query))
+      return [
+        request.projectName,
+        request.projectCode ?? "",
+        request.requestedBy,
+        request.purpose,
+        siteVisitRequestCode(request.id),
+      ].some((value) => value.toLowerCase().includes(query))
     })
   }, [data.requests, search, status])
 
@@ -100,7 +106,40 @@ export function SiteVisitsPage({
       {filtered.length ? (
         <>
           <div className="hidden overflow-hidden rounded-2xl border bg-card md:block">
-            <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="border-b bg-muted/35 text-xs font-semibold text-muted-foreground"><tr><th className="px-4 py-3 text-start">Request ID</th><th className="px-4 py-3 text-start">Project</th>{data.canManageAny ? <th className="px-4 py-3 text-start">Requested By</th> : null}<th className="px-4 py-3 text-start">Preferred Visit</th><th className="px-4 py-3 text-start">Status</th><th className="px-4 py-3 text-start">Created Date</th><th className="px-4 py-3 text-end">Actions</th></tr></thead><tbody className="divide-y">{filtered.map((request) => <tr key={request.id} className="hover:bg-muted/20"><td className="px-4 py-3.5 font-mono text-xs">{siteVisitRequestCode(request.id)}</td><td className="px-4 py-3.5 font-medium">{request.projectName}</td>{data.canManageAny ? <td className="px-4 py-3.5 text-muted-foreground">{request.requestedBy}</td> : null}<td className="px-4 py-3.5 text-muted-foreground">{preferredVisitLabel(request)}</td><td className="px-4 py-3.5"><SiteVisitStatusBadge status={request.status} /></td><td className="px-4 py-3.5 text-muted-foreground">{dateTime(request.createdAt)}</td><td className="px-4 py-3.5 text-end"><Link href={`/site-visits/${request.id}?project=${encodeURIComponent(request.projectId)}`} className="inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium hover:bg-muted">View Request<ChevronRight className="size-3.5" /></Link></td></tr>)}</tbody></table></div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] text-sm">
+                <thead className="border-b bg-muted/35 text-xs font-semibold text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3 text-start min-w-[160px]">Project</th>
+                    <th className="px-4 py-3 text-start min-w-[180px] whitespace-nowrap">Project Code</th>
+                    {data.canManageAny ? <th className="px-4 py-3 text-start">Requested By</th> : null}
+                    <th className="px-4 py-3 text-start">Preferred Visit</th>
+                    <th className="px-4 py-3 text-start">Status</th>
+                    <th className="px-4 py-3 text-start">Created Date</th>
+                    <th className="px-4 py-3 text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {filtered.map((request) => (
+                    <tr key={request.id} className="hover:bg-muted/20">
+                      <td className="px-4 py-3.5 font-medium">{request.projectName}</td>
+                      <td className="px-4 py-3.5 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                        {request.projectCode || "—"}
+                      </td>
+                      {data.canManageAny ? <td className="px-4 py-3.5 text-muted-foreground">{request.requestedBy}</td> : null}
+                      <td className="px-4 py-3.5 text-muted-foreground">{preferredVisitLabel(request)}</td>
+                      <td className="px-4 py-3.5"><SiteVisitStatusBadge status={request.status} /></td>
+                      <td className="px-4 py-3.5 text-muted-foreground">{dateTime(request.createdAt)}</td>
+                      <td className="px-4 py-3.5 text-end">
+                        <Link href={`/site-visits/${request.id}?project=${encodeURIComponent(request.projectId)}`} className="inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium hover:bg-muted">
+                          View Request<ChevronRight className="size-3.5" />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
           {isMember ? (
             <div className="grid gap-2 md:hidden">

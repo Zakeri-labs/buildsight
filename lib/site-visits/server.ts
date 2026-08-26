@@ -167,6 +167,7 @@ async function hydrateSiteVisitRows({
       id: row.id,
       projectId: row.project_id,
       projectName: projectAccess?.name ?? "Unknown project",
+      projectCode: projectAccess?.code ?? null,
       requestedById: row.requested_by,
       requestedBy: personName(profileById.get(row.requested_by)),
       status: row.status as SiteVisitStatus,

@@ -24,6 +24,7 @@ export type SiteVisitListItem = {
   id: string
   projectId: string
   projectName: string
+  projectCode: string | null
   requestedById: string
   requestedBy: string
   status: SiteVisitStatus
