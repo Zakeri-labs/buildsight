@@ -62,6 +62,7 @@ import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
 import { ReportDownloadSection } from "@/components/stages/report-download-section"
 import type { ProjectStageAttachment, ProjectStageApproval, ProjectStagePerson, ProjectStageTranslationSummary } from "@/lib/db/project-stages"
 import type { ProjectCcCandidate, ReportCcRecipient, ReportCcSelection } from "@/lib/report-cc/types"
+import type { ReportPdfDiagnosticError } from "@/lib/stage-translations/types"
 import {
   EMPTY_TERM_RESPONSE_CONTENT,
   REPORT_TYPES,
@@ -496,6 +497,7 @@ export function InspectionReportForm({
   const [pendingDocuments, setPendingDocuments] = useState<PendingFile[]>([])
   const [busy, setBusy] = useState<"draft" | "progress" | "submit" | "approve" | "reject" | "inline" | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [diagnosticError, setDiagnosticError] = useState<ReportPdfDiagnosticError | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [submitModalOpen, setSubmitModalOpen] = useState(false)
   type SubmitStep = { label: string; status: "pending" | "active" | "done" | "error" }
@@ -910,7 +912,18 @@ export function InspectionReportForm({
               }
             }
           } catch (pdfErr) {
+            const techMsg = pdfErr instanceof Error ? pdfErr.message : String(pdfErr)
             console.warn("Client PDF generation warning during submit:", pdfErr)
+            setDiagnosticError({
+              success: false,
+              stage: "pdf_rendering",
+              code: "CLIENT_PDF_GEN_FAILED",
+              message: locale === "ar" ? "تعذر إنشاء ملفات PDF تلقائياً." : "Client PDF generation failed.",
+              technicalMessage: techMsg,
+              traceId: id || responseId || "unknown_trace",
+              timestamp: new Date().toISOString(),
+              retryable: true,
+            })
           }
 
           try {
@@ -940,6 +953,16 @@ export function InspectionReportForm({
     } catch (saveError) {
       const errMsg = saveError instanceof Error ? saveError.message : "Unable to save the report."
       setError(errMsg)
+      setDiagnosticError({
+        success: false,
+        stage: isSubmitMode ? "report_submission" : "db_finalization",
+        code: "REPORT_SAVE_FAILED",
+        message: locale === "ar" ? "فشل حفظ أو إرسال التقرير." : "Report submission or save failed.",
+        technicalMessage: errMsg,
+        traceId: responseId || "new_submission",
+        timestamp: new Date().toISOString(),
+        retryable: true,
+      })
       setSubmitSteps((prev) => {
         const activeIdx = prev.findIndex((s) => s.status === "active")
         const targetIdx = activeIdx !== -1 ? activeIdx : prev.findIndex((s) => s.status === "pending")
@@ -1855,6 +1878,22 @@ export function InspectionReportForm({
                     <p className="mt-1.5 font-medium leading-relaxed">
                       {error || (locale === "ar" ? "حدث خطأ غير متوقع أثناء إرسال التقرير." : "An error occurred while submitting the report.")}
                     </p>
+                    {diagnosticError ? (
+                      <details className="mt-2 cursor-pointer rounded-lg bg-red-100/70 p-2 font-mono text-[10px] text-red-900 dark:bg-red-900/40 dark:text-red-100">
+                        <summary className="font-sans font-semibold underline">
+                          {locale === "ar" ? "تفاصيل التشخيص الفني" : "Technical Diagnostic Details"}
+                        </summary>
+                        <div className="mt-1 space-y-0.5">
+                          <div>Stage: <span className="font-bold">{diagnosticError.stage}</span></div>
+                          <div>Code: <span className="font-bold">{diagnosticError.code}</span></div>
+                          <div>Trace ID: <span className="font-bold">{diagnosticError.traceId}</span></div>
+                          {diagnosticError.technicalMessage ? (
+                            <div className="break-all">Detail: {diagnosticError.technicalMessage}</div>
+                          ) : null}
+                          <div>Time: {new Date(diagnosticError.timestamp).toLocaleTimeString()}</div>
+                        </div>
+                      </details>
+                    ) : null}
                     <div className="mt-3">
                       <Button
                         type="button"

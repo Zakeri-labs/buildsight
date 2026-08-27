@@ -85,10 +85,15 @@ export async function POST(request: NextRequest) {
         } catch (error) {
           await markStageTranslationGenerationFailure({ projectId, stageId, responseId }).catch(() => undefined)
           console.error("[stage-translation] background generation failed", {
+            traceId: responseId,
             projectId,
             stageId,
             responseId,
+            translationId: prepared.translationId,
+            stage: "ai_translation",
+            code: "AI_TRANSLATION_FAILED",
             message: error instanceof Error ? error.message : String(error),
+            timestamp: new Date().toISOString(),
           })
         }
       })
@@ -103,6 +108,12 @@ export async function POST(request: NextRequest) {
       started: prepared.shouldRun,
     }, { headers: { "Cache-Control": "no-store" } })
   } catch (error) {
+    console.error("[stage-translation] API request error", {
+      stage: "ai_translation",
+      code: error instanceof AuthzError ? "FORBIDDEN" : "API_ERROR",
+      message: error instanceof Error ? error.message : "Unable to process request",
+      timestamp: new Date().toISOString(),
+    })
     return NextResponse.json({ error: error instanceof AuthzError ? error.message : error instanceof Error ? error.message : "Unable to start translation." }, { status: error instanceof AuthzError ? 403 : 500 })
   }
 }

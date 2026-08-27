@@ -214,6 +214,12 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to store the generated PDF."
     const status = error instanceof AuthzError ? 403 : 400
+    console.error("[stage-translation-pdf] PDF storage operation failed", {
+      stage: "storage_upload",
+      code: "STORAGE_OPERATION_FAILED",
+      message,
+      timestamp: new Date().toISOString(),
+    })
     return NextResponse.json({ error: message }, { status, headers: { "Cache-Control": "no-store" } })
   }
 }

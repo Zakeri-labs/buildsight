@@ -77,3 +77,21 @@ export type StageTranslationPageData = {
   }
   translation: StageTranslationRecord | null
 }
+
+export type ReportPdfDiagnosticError = {
+  success: false
+  stage:
+    | "report_submission"
+    | "translation_job_enqueue"
+    | "ai_translation"
+    | "pdf_rendering"
+    | "storage_upload"
+    | "db_finalization"
+    | "pdf_download"
+  code: string
+  message: string
+  technicalMessage?: string
+  traceId: string
+  timestamp: string
+  retryable?: boolean
+}

@@ -5,8 +5,9 @@ import { AlertCircle, Check, Copy, Download, FileDown, Loader2, RotateCw, Share2
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import type { ProjectStageTranslationSummary } from "@/lib/db/project-stages"
+import type { ReportPdfDiagnosticError } from "@/lib/stage-translations/types"
 import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto-generation"
-import { exportTranslationPdf, downloadPdfBlob, storeTranslationPdf } from "@/lib/stage-translations/client-pdf"
+import { exportTranslationPdf, downloadPdfBlob, storeTranslationPdf, ensureBilingualPdfStored } from "@/lib/stage-translations/client-pdf"
 import { buildShareMessage, buildWhatsAppShareUrl } from "@/lib/stage-translations/whatsapp-share"
 import { cn } from "@/lib/utils"
 
@@ -46,6 +47,7 @@ export function ReportDownloadSection({
   const [downloading, setDownloading] = useState<"original" | "bilingual" | null>(null)
   const [sharing, setSharing] = useState(false)
   const [copiedShare, setCopiedShare] = useState(false)
+  const [diagnosticError, setDiagnosticError] = useState<ReportPdfDiagnosticError | null>(null)
 
   const hasStoredPdf = Boolean(translation?.bilingualPdfPath || translation?.originalPdfPath)
   const status = translation?.status ?? "pending"
@@ -281,7 +283,18 @@ export function ReportDownloadSection({
         }).catch(() => undefined)
       }
     } catch (err) {
+      const technicalMessage = err instanceof Error ? err.message : String(err)
       console.error("PDF download error:", err)
+      setDiagnosticError({
+        success: false,
+        stage: "pdf_download",
+        code: "PDF_DOWNLOAD_FAILED",
+        message: locale === "ar" ? "تعذر تنزيل ملف PDF." : "Unable to download PDF.",
+        technicalMessage,
+        traceId: responseId,
+        timestamp: new Date().toISOString(),
+        retryable: true,
+      })
     } finally {
       setDownloading(null)
     }
@@ -532,12 +545,36 @@ export function ReportDownloadSection({
                 onClick={handleRetry}
                 className="h-9 size-9 text-muted-foreground hover:text-foreground"
               >
-                <RotateCw className="size-3.5" />
+                <RotateCw className="size-4" />
               </Button>
             </>
           )}
         </div>
       </div>
+      {diagnosticError ? (
+        <div className="mx-5 mb-4 rounded-lg border border-amber-300 bg-amber-50/80 p-3 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 sm:mx-6">
+          <div className="flex items-center justify-between gap-2 font-semibold">
+            <span className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
+              <AlertCircle className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+              {diagnosticError.message}
+            </span>
+            <span className="text-[10px] text-muted-foreground">{new Date(diagnosticError.timestamp).toLocaleTimeString()}</span>
+          </div>
+          <details className="mt-1.5 cursor-pointer">
+            <summary className="text-[11px] font-medium text-amber-800 underline dark:text-amber-300">
+              {locale === "ar" ? "تفاصيل التشخيص الفني" : "Technical Diagnostic Details"}
+            </summary>
+            <div className="mt-1 space-y-0.5 font-mono text-[10px] text-muted-foreground">
+              <div>Stage: <span className="font-semibold text-foreground">{diagnosticError.stage}</span></div>
+              <div>Code: <span className="font-semibold text-foreground">{diagnosticError.code}</span></div>
+              <div>Trace ID: <span className="font-semibold text-foreground">{diagnosticError.traceId}</span></div>
+              {diagnosticError.technicalMessage ? (
+                <div className="break-all">Detail: {diagnosticError.technicalMessage}</div>
+              ) : null}
+            </div>
+          </details>
+        </div>
+      ) : null}
     </Card>
   )
 }
