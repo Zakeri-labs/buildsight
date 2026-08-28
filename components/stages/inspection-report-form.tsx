@@ -961,6 +961,7 @@ function truncateFilename(filename: string, maxLen = 22): string {
             await ensureBilingualPdfStored({
               projectId: project.id,
               stageId: result.data.projectStageId,
+              termId: isDirectStageReport ? undefined : reportDefinition.id,
               responseId: id,
             })
           } catch (stErr) {
@@ -1701,6 +1702,7 @@ function truncateFilename(filename: string, maxLen = 22): string {
                             await ensureBilingualPdfStored({
                               projectId: project.id,
                               stageId: stgId,
+                              termId: isDirectStageReport ? undefined : reportDefinition.id,
                               responseId: respId,
                               existingPath: translation?.bilingualPdfPath,
                             }).catch(() => null)
@@ -1738,6 +1740,7 @@ function truncateFilename(filename: string, maxLen = 22): string {
                           await ensureBilingualPdfStored({
                             projectId: project.id,
                             stageId: stgId,
+                            termId: isDirectStageReport ? undefined : reportDefinition.id,
                             responseId: respId,
                             existingPath: translation?.bilingualPdfPath,
                           }).catch(() => null)
@@ -1787,6 +1790,7 @@ function truncateFilename(filename: string, maxLen = 22): string {
                           await ensureBilingualPdfStored({
                             projectId: project.id,
                             stageId: stgId,
+                            termId: isDirectStageReport ? undefined : reportDefinition.id,
                             responseId: respId,
                             existingPath: translation?.bilingualPdfPath,
                           }).catch(() => null)

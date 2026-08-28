@@ -338,6 +338,7 @@ export async function storeTranslationPdf(input: {
 export async function ensureBilingualPdfStored(input: {
   projectId: string
   stageId?: string
+  termId?: string | null
   responseId?: string
   existingPath?: string | null
 }): Promise<{ storagePath: string | null; translation?: any }> {
@@ -348,6 +349,7 @@ export async function ensureBilingualPdfStored(input: {
     const params = new URLSearchParams({
       projectId: input.projectId,
       stageId: input.stageId || "",
+      ...(input.termId ? { termId: input.termId } : {}),
       responseId: input.responseId,
     })
     const res = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })

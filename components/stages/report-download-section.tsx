@@ -133,7 +133,8 @@ export function ReportDownloadSection({
     }
     const res = await ensureBilingualPdfStored({
       projectId,
-      stageId: termId || stageId,
+      stageId,
+      termId: termId || undefined,
       responseId,
       existingPath: translation?.bilingualPdfPath,
     })
@@ -260,7 +261,8 @@ export function ReportDownloadSection({
         if (!storedPath || !transId) {
           const params = new URLSearchParams({
             projectId,
-            stageId: termId || stageId,
+            stageId,
+            ...(termId ? { termId } : {}),
             responseId,
             statusOnly: "1",
             background: "1",
@@ -291,7 +293,7 @@ export function ReportDownloadSection({
       // Fallback export if storage path creation failed
       const params = new URLSearchParams({
         projectId,
-        stageId: termId || stageId,
+        stageId,
         responseId,
         ...(termId ? { termId } : {}),
       })
