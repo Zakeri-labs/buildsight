@@ -7,7 +7,7 @@ export type DiagnosticEvent = {
 
 const STORAGE_PREFIX = "buildsight-debug-report-pipeline:"
 export const DEBUG_TIMELINE_EVENT = "buildsight:debug-timeline-updated"
-const MAX_EVENTS = 300
+const MAX_EVENTS = 500
 
 let clientSessionId = ""
 

@@ -668,25 +668,24 @@ export function InspectionReportForm({
         const chunkResults = await Promise.all(
           chunk.map(async (item, chunkOffset) => {
             const index = i + chunkOffset
-            logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_STARTED", {
-              fileIndex: index,
-              filename: item.file.name,
-              kind,
-            })
+            const imageKey = `img_${index + 1}`
+            const startTime = Date.now()
 
             let fileToUpload = item.file
             let mimeType = item.file.type
 
             if (kind === "evidence_image") {
               try {
-                fileToUpload = await optimizeEvidenceImageFile(item.file, { responseId: id })
+                fileToUpload = await optimizeEvidenceImageFile(item.file, { responseId: id, imageKey })
                 mimeType = "image/jpeg"
               } catch (optError) {
                 const optErrMessage = optError instanceof Error ? optError.message : String(optError)
                 logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_FAILED", {
+                  imageKey,
                   fileIndex: index,
                   filename: item.file.name,
-                  error: optErrMessage,
+                  sanitizedError: optErrMessage,
+                  durationMs: Date.now() - startTime,
                 })
                 console.warn(`Image optimization failed for ${item.file.name}:`, optError)
                 return null
@@ -694,6 +693,16 @@ export function InspectionReportForm({
             } else {
               mimeType = resolveStageDocumentMimeType(item.file) ?? "application/octet-stream"
             }
+
+            logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_STARTED", {
+              imageKey,
+              fileIndex: index,
+              filename: item.file.name,
+              actualUploadedFilename: fileToUpload.name,
+              actualUploadedMime: mimeType,
+              actualUploadedBytes: fileToUpload.size,
+              kind,
+            })
 
             const folder = kind === "evidence_image" ? "evidence" : "documents"
             const safeName = sanitizeEvidenceFileName(fileToUpload.name)
@@ -724,18 +733,25 @@ export function InspectionReportForm({
               }
             }
             if (lastError) {
+              const errStr = lastError instanceof Error ? lastError.message : String(lastError)
               logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_FAILED", {
+                imageKey,
                 fileIndex: index,
                 filename: fileToUpload.name,
-                error: lastError instanceof Error ? lastError.message : String(lastError),
+                sanitizedError: errStr,
+                durationMs: Date.now() - startTime,
               })
               console.warn(`File upload skipped for ${fileToUpload.name}:`, lastError)
               return null
             }
             logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_SUCCESS", {
+              imageKey,
               fileIndex: index,
               filename: fileToUpload.name,
-              path,
+              storagePath: path,
+              actualUploadedBytes: fileToUpload.size,
+              actualUploadedMime: mimeType,
+              durationMs: Date.now() - startTime,
             })
             return {
               path,
@@ -758,8 +774,24 @@ export function InspectionReportForm({
         }
       }
       if (registrations.length > 0) {
+        logDiagnosticEvent(id, "IMAGE_ATTACHMENT_REGISTER_STARTED", {
+          responseId: id,
+          totalAttachments: registrations.length,
+          kind,
+        })
         const registered = await registerResponseAttachmentsAction({ projectId: project.id, responseId: id, attachments: registrations })
-        if (!registered.ok) throw new Error(registered.error)
+        if (!registered.ok) {
+          logDiagnosticEvent(id, "IMAGE_ATTACHMENT_REGISTER_FAILED", {
+            responseId: id,
+            sanitizedError: registered.error,
+          })
+          throw new Error(registered.error)
+        }
+        logDiagnosticEvent(id, "IMAGE_ATTACHMENT_REGISTER_SUCCESS", {
+          responseId: id,
+          registeredCount: registered.data.ids.length,
+          attachmentIds: registered.data.ids,
+        })
         const newAttachments: ProjectStageAttachment[] = registrations.map((item, index) => ({
           id: registered.data.ids[index] ?? crypto.randomUUID(),
           storagePath: item.storagePath,

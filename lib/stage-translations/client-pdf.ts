@@ -678,25 +678,223 @@ async function normalizeImage(dataUrl: string, isPngHint = false): Promise<Loade
   }
 }
 
-function loadImage(src: string) {
+export interface PdfImageMeta {
+  pdfKind?: PdfKind
+  responseId?: string
+  imageKey?: string
+  filename?: string
+  attachmentId?: string
+  storagePath?: string
+  imageIndex?: number
+  totalImages?: number
+}
+
+function loadImage(src: string, meta?: PdfImageMeta) {
   const cached = imageCache.get(src)
   if (cached) return cached
+
+  const pdfKind = meta?.pdfKind || "original"
+  const responseId = meta?.responseId || "unknown"
+  const filename = meta?.filename || src.split("/").pop()?.split("?")[0] || "evidence-image"
+  const imageKey = meta?.imageKey || meta?.attachmentId || `img_${Math.random().toString(36).slice(2, 8)}`
+  const startTime = Date.now()
+
+  logDiagnosticEvent(responseId, "PDF_IMAGE_PROCESS_STARTED", {
+    pdfKind,
+    imageKey,
+    attachmentId: meta?.attachmentId || null,
+    filename,
+    storagePath: meta?.storagePath || null,
+    sourceType: src.startsWith("data:") ? "data_url" : "http_url",
+    imageIndex: meta?.imageIndex ?? null,
+    totalImages: meta?.totalImages ?? null,
+  })
+
   const cleanPath = src.split("?")[0].toLowerCase()
   const isJpeg = src.startsWith("data:image/jpeg") || src.startsWith("data:image/jpg") || cleanPath.endsWith(".jpg") || cleanPath.endsWith(".jpeg")
   const isPng = !isJpeg
-  const promise = (async () => {
+
+  logDiagnosticEvent(responseId, "PDF_IMAGE_SOURCE_RESOLVED", {
+    pdfKind,
+    imageKey,
+    filename,
+    sourceType: src.startsWith("data:") ? "data_url" : "http_url",
+    pathPresence: Boolean(meta?.storagePath),
+    urlPresence: Boolean(src),
+    cleanPath,
+  })
+
+  const promise = (async (): Promise<LoadedImage | null> => {
+    let failedStage = ""
+    let exactReason = ""
+    let httpStatus = 0
+    let blobBytes = 0
+    let blobMime = ""
+
     try {
-      const rawDataUrl = src.startsWith("data:")
-        ? src
-        : await fetch(src, { cache: "no-store", credentials: "same-origin" }).then(async (response) => {
-            if (!response.ok) throw new Error(`Image request failed with status ${response.status}.`)
-            return dataUrlFromBlob(await response.blob())
+      let rawDataUrl = ""
+      if (src.startsWith("data:")) {
+        rawDataUrl = src
+        blobBytes = Math.round((src.length * 3) / 4)
+        blobMime = src.slice(5, src.indexOf(";"))
+      } else {
+        failedStage = "fetch"
+        logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_STARTED", {
+          pdfKind,
+          imageKey,
+          filename,
+          sourceType: "http_url",
+        })
+
+        const fetchStart = Date.now()
+        const response = await fetch(src, { cache: "no-store", credentials: "same-origin" })
+        httpStatus = response.status
+
+        if (!response.ok) {
+          exactReason = `http_status_${response.status}`
+          logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_FAILED", {
+            pdfKind,
+            imageKey,
+            filename,
+            httpStatus: response.status,
+            sanitizedError: `HTTP ${response.status}`,
+            durationMs: Date.now() - fetchStart,
           })
-      return await normalizeImage(rawDataUrl, isPng)
-    } catch {
+          throw new Error(`Image request failed with status ${response.status}.`)
+        }
+
+        const blob = await response.blob()
+        blobBytes = blob.size
+        blobMime = blob.type
+
+        logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_SUCCESS", {
+          pdfKind,
+          imageKey,
+          filename,
+          httpStatus: response.status,
+          contentType: blob.type,
+          blobBytes: blob.size,
+          durationMs: Date.now() - fetchStart,
+        })
+
+        logDiagnosticEvent(responseId, "PDF_IMAGE_BLOB_READY", {
+          pdfKind,
+          imageKey,
+          filename,
+          blobBytes: blob.size,
+          blobMime: blob.type,
+          expectedMime: isPng ? "image/png" : "image/jpeg",
+          filenameExtension: filename.split(".").pop(),
+        })
+
+        rawDataUrl = await dataUrlFromBlob(blob)
+      }
+
+      // Decode step
+      failedStage = "decode"
+      logDiagnosticEvent(responseId, "PDF_IMAGE_DECODE_STARTED", {
+        pdfKind,
+        imageKey,
+        filename,
+        blobBytes,
+        blobMime,
+      })
+
+      const decodeStart = Date.now()
+      let decodedImg: HTMLImageElement | null = null
+      try {
+        decodedImg = await decodeImage(rawDataUrl)
+      } catch (decodeErr) {
+        const errStr = decodeErr instanceof Error ? decodeErr.message : String(decodeErr)
+        exactReason = `decode_failed: ${errStr}`
+        logDiagnosticEvent(responseId, "PDF_IMAGE_DECODE_FAILED", {
+          pdfKind,
+          imageKey,
+          filename,
+          blobMime,
+          blobBytes,
+          sanitizedError: errStr,
+          durationMs: Date.now() - decodeStart,
+        })
+        throw decodeErr
+      }
+
+      const decodedWidth = decodedImg.naturalWidth || decodedImg.width
+      const decodedHeight = decodedImg.naturalHeight || decodedImg.height
+
+      logDiagnosticEvent(responseId, "PDF_IMAGE_DECODE_SUCCESS", {
+        pdfKind,
+        imageKey,
+        filename,
+        decodedWidth,
+        decodedHeight,
+        durationMs: Date.now() - decodeStart,
+      })
+
+      // Conversion step
+      failedStage = "conversion"
+      logDiagnosticEvent(responseId, "PDF_IMAGE_CONVERSION_STARTED", {
+        pdfKind,
+        imageKey,
+        filename,
+        targetMaxDimension: 1800,
+      })
+
+      const convStart = Date.now()
+      let loaded: LoadedImage | null = null
+      try {
+        loaded = await normalizeImage(rawDataUrl, isPng)
+      } catch (convErr) {
+        const errStr = convErr instanceof Error ? convErr.message : String(convErr)
+        exactReason = `conversion_failed: ${errStr}`
+        logDiagnosticEvent(responseId, "PDF_IMAGE_CONVERSION_FAILED", {
+          pdfKind,
+          imageKey,
+          filename,
+          sanitizedError: errStr,
+          durationMs: Date.now() - convStart,
+        })
+        throw convErr
+      }
+
+      logDiagnosticEvent(responseId, "PDF_IMAGE_CONVERSION_SUCCESS", {
+        pdfKind,
+        imageKey,
+        filename,
+        outputFormat: isPng ? "image/png" : "image/jpeg",
+        resultingWidth: loaded.width,
+        resultingHeight: loaded.height,
+        durationMs: Date.now() - convStart,
+      })
+
+      logDiagnosticEvent(responseId, "PDF_IMAGE_PROCESS_SUCCESS", {
+        pdfKind,
+        imageKey,
+        filename,
+        totalDurationMs: Date.now() - startTime,
+      })
+
+      return loaded
+    } catch (err) {
+      const errMessage = err instanceof Error ? err.message : String(err)
+      if (!exactReason) exactReason = errMessage
+
+      logDiagnosticEvent(responseId, "PDF_IMAGE_FILENAME_FALLBACK", {
+        pdfKind,
+        imageKey,
+        filename,
+        exactReason,
+        failedStage: failedStage || "fetch",
+        httpStatus: httpStatus || undefined,
+        blobBytes: blobBytes || undefined,
+        blobMime: blobMime || undefined,
+        sanitizedError: errMessage,
+      })
+
       return null
     }
   })()
+
   imageCache.set(src, promise)
   return promise
 }
@@ -2176,8 +2374,13 @@ function renderTable(flow: Flow, block: Extract<PdfBlock, { type: "table" }>, se
   renderNativeVectorTable(flow, rawHeaders, rawBodyRows)
 }
 
-async function renderImageBlock(flow: Flow, block: Extract<PdfBlock, { type: "image" }>, preferredWidth?: number) {
-  const image = await loadImage(block.src)
+async function renderImageBlock(
+  flow: Flow,
+  block: Extract<PdfBlock, { type: "image" }>,
+  preferredWidth?: number,
+  meta?: PdfImageMeta
+) {
+  const image = await loadImage(block.src, meta)
   if (!image) {
     renderParagraph(flow, block.caption || (flow.rtl ? "تعذر تحميل الصورة." : "Image unavailable."))
     return
@@ -2201,7 +2404,50 @@ async function renderImageBlock(flow: Flow, block: Extract<PdfBlock, { type: "im
       : flow.x
   flow.doc.setDrawColor(203, 213, 225)
   flow.doc.rect(x - 0.5, flow.y - 0.5, width + 1, height + 1)
-  flow.doc.addImage(image.dataUrl, "JPEG", x, flow.y, width, height, undefined, "FAST")
+
+  const pdfKind = meta?.pdfKind || "original"
+  const responseId = meta?.responseId || "unknown"
+  const filename = meta?.filename || block.src.split("/").pop()?.split("?")[0] || "image.jpg"
+  const imageKey = meta?.imageKey || `img_${Math.random().toString(36).slice(2, 8)}`
+  const embedStart = Date.now()
+
+  logDiagnosticEvent(responseId, "PDF_IMAGE_EMBED_STARTED", {
+    pdfKind,
+    imageKey,
+    filename,
+    sourceWidth: image.width,
+    sourceHeight: image.height,
+    renderedWidth: width,
+    renderedHeight: height,
+    jsPdfFormat: "JPEG",
+  })
+
+  try {
+    flow.doc.addImage(image.dataUrl, "JPEG", x, flow.y, width, height, undefined, "FAST")
+    logDiagnosticEvent(responseId, "PDF_IMAGE_EMBED_SUCCESS", {
+      pdfKind,
+      imageKey,
+      filename,
+      durationMs: Date.now() - embedStart,
+    })
+  } catch (embedErr) {
+    const errStr = embedErr instanceof Error ? embedErr.message : String(embedErr)
+    logDiagnosticEvent(responseId, "PDF_IMAGE_EMBED_FAILED", {
+      pdfKind,
+      imageKey,
+      filename,
+      sanitizedError: errStr,
+      durationMs: Date.now() - embedStart,
+    })
+    logDiagnosticEvent(responseId, "PDF_IMAGE_FILENAME_FALLBACK", {
+      pdfKind,
+      imageKey,
+      filename,
+      exactReason: `embed_failed: ${errStr}`,
+      failedStage: "embed",
+    })
+  }
+
   flow.y += height + 2
   if (block.caption) {
     setLanguage(flow.doc, flow.rtl, 7.5, false)
@@ -2264,14 +2510,40 @@ function renderSectionTitle(flow: Flow, title: string) {
   flow.y += 5
 }
 
-async function renderImageGrid(flow: Flow, images: NonNullable<PdfSectionTemplate["images"]>, sourceVisuals: boolean) {
+async function renderImageGrid(
+  flow: Flow,
+  images: NonNullable<PdfSectionTemplate["images"]>,
+  sourceVisuals: boolean,
+  contextMeta?: { pdfKind?: PdfKind; responseId?: string }
+) {
+  const pdfKind = contextMeta?.pdfKind || "original"
+  const responseId = contextMeta?.responseId || "unknown"
+  const gridStart = Date.now()
+
+  let totalImages = images.length
+  let embeddedImages = 0
+  let fallbackImages = 0
+  let fetchFailures = 0
+  let decodeFailures = 0
+  let embedFailures = 0
+
   if (!images.length) {
     renderParagraph(flow, flow.rtl ? "لا توجد صور." : "No images recorded.")
     return
   }
   if (sourceVisuals) {
-    for (const image of images) {
-      await renderImageBlock(flow, { type: "image", ...image }, flow.width)
+    for (let idx = 0; idx < images.length; idx += 1) {
+      const image = images[idx]
+      const imageKey = (image as any).id || `img_${idx + 1}`
+      const filename = (image as any).originalFilename || image.src.split("/").pop()?.split("?")[0] || `image_${idx + 1}.jpg`
+      await renderImageBlock(flow, { type: "image", ...image }, flow.width, {
+        pdfKind,
+        responseId,
+        imageKey,
+        filename,
+        imageIndex: idx,
+        totalImages: images.length,
+      })
     }
     return
   }
@@ -2283,7 +2555,21 @@ async function renderImageGrid(flow: Flow, images: NonNullable<PdfSectionTemplat
 
   for (let i = 0; i < images.length; i += 2) {
     const pair = images.slice(i, i + 2)
-    const loadedPair = await Promise.all(pair.map((img) => loadImage(img.src)))
+    const loadedPair = await Promise.all(
+      pair.map((img, idx) => {
+        const globalIdx = i + idx
+        const imageKey = (img as any).id || `img_${globalIdx + 1}`
+        const filename = (img as any).originalFilename || img.src.split("/").pop()?.split("?")[0] || `image_${globalIdx + 1}.jpg`
+        return loadImage(img.src, {
+          pdfKind,
+          responseId,
+          imageKey,
+          filename,
+          imageIndex: globalIdx,
+          totalImages: images.length,
+        })
+      })
+    )
 
     let rowH = 0
     const dimensions = loadedPair.map((img, idx) => {
@@ -2301,10 +2587,14 @@ async function renderImageGrid(flow: Flow, images: NonNullable<PdfSectionTemplat
       const img = loadedPair[idx]
       const block = pair[idx]
       const dim = dimensions[idx]
+      const globalIdx = i + idx
+      const imageKey = (block as any).id || `img_${globalIdx + 1}`
+      const filename = (block as any).originalFilename || block.src.split("/").pop()?.split("?")[0] || `image_${globalIdx + 1}.jpg`
       const col = flow.rtl ? (pair.length === 1 ? 0 : 1 - idx) : idx
       const x = flow.x + col * (colWidth + gap)
 
       if (!img) {
+        fallbackImages += 1
         setLanguage(flow.doc, flow.rtl, 7.5, false)
         flow.doc.setTextColor(100, 116, 139)
         writePdfText(flow.doc, block.caption || (flow.rtl ? "تعذر تحميل الصورة." : "Image unavailable."), x, flow.y, { align: flow.rtl ? "right" : "left" }, flow.rtl)
@@ -2313,7 +2603,47 @@ async function renderImageGrid(flow: Flow, images: NonNullable<PdfSectionTemplat
 
       flow.doc.setDrawColor(226, 232, 240)
       flow.doc.rect(x - 0.5, flow.y - 0.5, dim.w + 1, dim.h + 1)
-      flow.doc.addImage(img.dataUrl, "JPEG", x, flow.y, dim.w, dim.h, undefined, "FAST")
+
+      const embedStart = Date.now()
+      logDiagnosticEvent(responseId, "PDF_IMAGE_EMBED_STARTED", {
+        pdfKind,
+        imageKey,
+        filename,
+        sourceWidth: img.width,
+        sourceHeight: img.height,
+        renderedWidth: dim.w,
+        renderedHeight: dim.h,
+        jsPdfFormat: "JPEG",
+      })
+
+      try {
+        flow.doc.addImage(img.dataUrl, "JPEG", x, flow.y, dim.w, dim.h, undefined, "FAST")
+        embeddedImages += 1
+        logDiagnosticEvent(responseId, "PDF_IMAGE_EMBED_SUCCESS", {
+          pdfKind,
+          imageKey,
+          filename,
+          durationMs: Date.now() - embedStart,
+        })
+      } catch (embedErr) {
+        embedFailures += 1
+        fallbackImages += 1
+        const errStr = embedErr instanceof Error ? embedErr.message : String(embedErr)
+        logDiagnosticEvent(responseId, "PDF_IMAGE_EMBED_FAILED", {
+          pdfKind,
+          imageKey,
+          filename,
+          sanitizedError: errStr,
+          durationMs: Date.now() - embedStart,
+        })
+        logDiagnosticEvent(responseId, "PDF_IMAGE_FILENAME_FALLBACK", {
+          pdfKind,
+          imageKey,
+          filename,
+          exactReason: `embed_failed: ${errStr}`,
+          failedStage: "embed",
+        })
+      }
 
       if (block.caption) {
         setLanguage(flow.doc, flow.rtl, 7.5, false)
@@ -2327,6 +2657,17 @@ async function renderImageGrid(flow: Flow, images: NonNullable<PdfSectionTemplat
     }
     flow.y += rowH + 4
   }
+
+  logDiagnosticEvent(responseId, "PDF_IMAGES_SUMMARY", {
+    pdfKind,
+    totalImages,
+    embeddedImages,
+    fallbackImages,
+    fetchFailures,
+    decodeFailures,
+    embedFailures,
+    totalDurationMs: Date.now() - gridStart,
+  })
 }
 
 
@@ -3430,7 +3771,10 @@ async function buildLanguagePdfBlob(
       if (section.imageTitle) {
         renderHeading(flow, { type: "heading", level: 3, text: section.imageTitle })
       }
-      await renderImageGrid(flow, galleryImages, section.key === "source-visuals")
+      await renderImageGrid(flow, galleryImages, section.key === "source-visuals", {
+        pdfKind: template.language === "ar" ? "arabic" : "original",
+        responseId: (template as any).responseId || "unknown",
+      })
     }
 
     flow.y += 4
@@ -4176,8 +4520,19 @@ async function renderBilingualImageGrid(
   flow: Flow,
   images: PdfImageTemplate[],
   arabicImages: PdfImageTemplate[] = [],
+  contextMeta?: { responseId?: string }
 ) {
   if (!images.length) return
+  const pdfKind = "bilingual"
+  const responseId = contextMeta?.responseId || "unknown"
+  const gridStart = Date.now()
+
+  let totalImages = images.length
+  let embeddedImages = 0
+  let fallbackImages = 0
+  let fetchFailures = 0
+  let decodeFailures = 0
+  let embedFailures = 0
 
   const gap = 4
   const colWidth = (flow.width - gap) / 2
@@ -4186,7 +4541,21 @@ async function renderBilingualImageGrid(
   for (let i = 0; i < images.length; i += 2) {
     const pair = images.slice(i, i + 2)
     const arPair = arabicImages.slice(i, i + 2)
-    const loadedPair = await Promise.all(pair.map((img) => loadImage(img.src)))
+    const loadedPair = await Promise.all(
+      pair.map((img, idx) => {
+        const globalIdx = i + idx
+        const imageKey = (img as any).id || `img_${globalIdx + 1}`
+        const filename = (img as any).originalFilename || img.src.split("/").pop()?.split("?")[0] || `image_${globalIdx + 1}.jpg`
+        return loadImage(img.src, {
+          pdfKind: "bilingual",
+          responseId,
+          imageKey,
+          filename,
+          imageIndex: globalIdx,
+          totalImages: images.length,
+        })
+      })
+    )
 
     let rowH = 0
     const dimensions = loadedPair.map((img, idx) => {
@@ -4205,16 +4574,67 @@ async function renderBilingualImageGrid(
       const engBlock = pair[idx]
       const arBlock = arPair[idx]
       const dim = dimensions[idx]
+      const globalIdx = i + idx
+      const imageKey = (engBlock as any).id || `img_${globalIdx + 1}`
+      const filename = (engBlock as any).originalFilename || engBlock.src.split("/").pop()?.split("?")[0] || `image_${globalIdx + 1}.jpg`
       const x = flow.x + idx * (colWidth + gap)
 
       if (!img) {
+        fallbackImages += 1
+        logDiagnosticEvent(responseId, "PDF_IMAGE_FILENAME_FALLBACK", {
+          pdfKind: "bilingual",
+          imageKey,
+          filename,
+          exactReason: "image_null_from_load",
+          failedStage: "renderBilingualImageGrid",
+        })
         renderBilingualTextRow(flow, engBlock.caption || "Image unavailable.", arBlock?.caption || "", { style: "body" })
         continue
       }
 
       flow.doc.setDrawColor(226, 232, 240)
       flow.doc.rect(x - 0.5, flow.y - 0.5, dim.w + 1, dim.h + 1)
-      flow.doc.addImage(img.dataUrl, "JPEG", x, flow.y, dim.w, dim.h, undefined, "FAST")
+
+      const embedStart = Date.now()
+      logDiagnosticEvent(responseId, "PDF_IMAGE_EMBED_STARTED", {
+        pdfKind: "bilingual",
+        imageKey,
+        filename,
+        sourceWidth: img.width,
+        sourceHeight: img.height,
+        renderedWidth: dim.w,
+        renderedHeight: dim.h,
+        jsPdfFormat: "JPEG",
+      })
+
+      try {
+        flow.doc.addImage(img.dataUrl, "JPEG", x, flow.y, dim.w, dim.h, undefined, "FAST")
+        embeddedImages += 1
+        logDiagnosticEvent(responseId, "PDF_IMAGE_EMBED_SUCCESS", {
+          pdfKind: "bilingual",
+          imageKey,
+          filename,
+          durationMs: Date.now() - embedStart,
+        })
+      } catch (embedErr) {
+        embedFailures += 1
+        fallbackImages += 1
+        const errStr = embedErr instanceof Error ? embedErr.message : String(embedErr)
+        logDiagnosticEvent(responseId, "PDF_IMAGE_EMBED_FAILED", {
+          pdfKind: "bilingual",
+          imageKey,
+          filename,
+          sanitizedError: errStr,
+          durationMs: Date.now() - embedStart,
+        })
+        logDiagnosticEvent(responseId, "PDF_IMAGE_FILENAME_FALLBACK", {
+          pdfKind: "bilingual",
+          imageKey,
+          filename,
+          exactReason: `embed_failed: ${errStr}`,
+          failedStage: "embed",
+        })
+      }
 
       if (engBlock.caption || arBlock?.caption) {
         const engCap = engBlock.caption || ""
@@ -4235,6 +4655,17 @@ async function renderBilingualImageGrid(
     }
     flow.y += rowH + 4
   }
+
+  logDiagnosticEvent(responseId, "PDF_IMAGES_SUMMARY", {
+    pdfKind: "bilingual",
+    totalImages,
+    embeddedImages,
+    fallbackImages,
+    fetchFailures,
+    decodeFailures,
+    embedFailures,
+    totalDurationMs: Date.now() - gridStart,
+  })
 }
 
 function pairedBlocksByEnglishStructure(englishBlocks: PdfBlock[], arabicBlocks: PdfBlock[]) {
@@ -4495,7 +4926,7 @@ async function buildNativeBilingualPdfBlob(input: {
 
     if (galleryImages.length) {
       renderBilingualTextRow(flow, engSection.imageTitle || "Images", arSection?.imageTitle || "", { style: "heading" })
-      await renderBilingualImageGrid(flow, galleryImages, arabicGalleryImages)
+      await renderBilingualImageGrid(flow, galleryImages, arabicGalleryImages, { responseId: data.response.id })
     }
 
     flow.y += 4
@@ -4731,10 +5162,8 @@ export async function exportTranslationPdf({
     }
 
     const rawEnglishTemplate = buildLanguagePdfTemplate({ data, translation, language: "en", sourceDocument, ccRecipientsList: ccRecipients, ccRecipients: ccMetadata })
-    // Static company/footer lines are already drawn by the fixed PDF footer.
-    // Remove them from attachment body content in both languages before the
-    // English structure becomes the canonical mirrored document schema.
     const englishTemplate = stripStaticFooterFromDocumentTemplate(rawEnglishTemplate, sourceDocument)
+    ;(englishTemplate as any).responseId = respId
 
     if (kind === "original") {
       validateTemplateAssets(englishTemplate, sourceDocument)
@@ -4751,6 +5180,7 @@ export async function exportTranslationPdf({
     const rawArabicTemplate = buildLanguagePdfTemplate({ data, translation, language: "ar", sourceDocument, ccRecipientsList: ccRecipients, ccRecipients: ccMetadata })
     const footerCleanArabicTemplate = stripStaticFooterFromDocumentTemplate(rawArabicTemplate, sourceDocument)
     const arabicTemplate = synchronizeMirroredDocumentStructures(englishTemplate, footerCleanArabicTemplate)
+    ;(arabicTemplate as any).responseId = respId
 
     if (kind === "arabic" || kind === "bilingual") {
       if (!translation?.translatedContent) {

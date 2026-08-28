@@ -4,6 +4,7 @@ export interface OptimizeEvidenceOptions {
   maxDimension?: number
   quality?: number
   responseId?: string
+  imageKey?: string
 }
 
 /**
@@ -23,17 +24,20 @@ export async function optimizeEvidenceImageFile(
   file: File,
   options: OptimizeEvidenceOptions = {},
 ): Promise<File> {
+  const startTime = Date.now()
   const maxDimension = options.maxDimension ?? 1280
   const quality = options.quality ?? 0.80
   const responseId = options.responseId ?? "unknown"
+  const imageKey = options.imageKey ?? `img_${Math.random().toString(36).slice(2, 8)}`
   const originalFilename = file.name || "evidence-image.jpg"
-  const originalSize = file.size
+  const originalBytes = file.size
   const originalMime = file.type || "unknown"
 
   logDiagnosticEvent(responseId, "IMAGE_OPTIMIZATION_STARTED", {
-    filename: originalFilename,
-    originalSize,
+    imageKey,
+    originalFilename,
     originalMime,
+    originalBytes,
     maxDimension,
     quality,
   })
@@ -43,6 +47,7 @@ export async function optimizeEvidenceImageFile(
   let sourceWidth = 0
   let sourceHeight = 0
   let cleanupObjectUrl: string | null = null
+  let decodeStrategy = "unknown"
 
   try {
     if (typeof createImageBitmap === "function") {
@@ -50,6 +55,7 @@ export async function optimizeEvidenceImageFile(
         bitmap = await createImageBitmap(file, { imageOrientation: "from-image" })
         sourceWidth = bitmap.width
         sourceHeight = bitmap.height
+        decodeStrategy = "createImageBitmap"
       } catch {
         bitmap = null
       }
@@ -67,11 +73,19 @@ export async function optimizeEvidenceImageFile(
       await loadPromise
       sourceWidth = imgElement.naturalWidth || imgElement.width
       sourceHeight = imgElement.naturalHeight || imgElement.height
+      decodeStrategy = "HTMLImageElement"
     }
 
     if (!sourceWidth || !sourceHeight) {
       throw new Error(`Invalid image dimensions (${sourceWidth}x${sourceHeight})`)
     }
+
+    logDiagnosticEvent(responseId, "IMAGE_OPTIMIZATION_DECODED", {
+      imageKey,
+      originalWidth: sourceWidth,
+      originalHeight: sourceHeight,
+      decodeStrategy,
+    })
 
     const maxEdge = Math.max(sourceWidth, sourceHeight)
     const scale = Math.min(1, maxDimension / maxEdge)
@@ -116,27 +130,31 @@ export async function optimizeEvidenceImageFile(
     })
 
     logDiagnosticEvent(responseId, "IMAGE_OPTIMIZATION_SUCCESS", {
+      imageKey,
       originalFilename,
       optimizedFilename,
-      originalSize,
-      optimizedSize: optimizedFile.size,
+      originalMime,
+      optimizedMime: "image/jpeg",
+      originalBytes,
+      optimizedBytes: optimizedFile.size,
       originalWidth: sourceWidth,
       originalHeight: sourceHeight,
       optimizedWidth: targetWidth,
       optimizedHeight: targetHeight,
-      originalMime,
-      optimizedMime: "image/jpeg",
-      quality,
       resized,
+      quality,
+      durationMs: Date.now() - startTime,
     })
 
     return optimizedFile
   } catch (error) {
     const errMessage = error instanceof Error ? error.message : String(error)
     logDiagnosticEvent(responseId, "IMAGE_OPTIMIZATION_FAILED", {
+      imageKey,
       filename: originalFilename,
       mimeType: originalMime,
       error: errMessage,
+      durationMs: Date.now() - startTime,
     })
     throw new Error(`IMAGE_OPTIMIZATION_FAILED for ${originalFilename}: ${errMessage}`)
   } finally {
