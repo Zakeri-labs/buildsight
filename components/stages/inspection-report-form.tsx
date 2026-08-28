@@ -1750,16 +1750,37 @@ function truncateFilename(filename: string, maxLen = 22): string {
                       setActionBusy("bilingual_pdf")
                       const respId = submitResult?.responseId || responseId
                       const stgId = submitResult?.stageId || resolvedStageId
-                      logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_CLICK")
+                      const clickId = "bil_" + Math.random().toString(36).slice(2, 6)
+
+                      logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_CLICK", {
+                        clickId,
+                        readyPdfsBilingualPresent: Boolean(readyPdfs?.bilingual),
+                        translationLocalStatus: translation?.status || null,
+                        localBilingualPdfPath: translation?.bilingualPdfPath || null,
+                      })
 
                       try {
                         if (readyPdfs?.bilingual) {
-                          logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_SOURCE", { source: "memory_blob" })
-                          downloadPdfBlob(readyPdfs.bilingual.blob, readyPdfs.bilingual.filename)
-                        } else {
-                          logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_SOURCE", {
-                            source: translation?.bilingualPdfPath ? "stored_pdf" : "generated_on_click",
+                          logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_SOURCE", { clickId, source: "memory_blob" })
+                          downloadPdfBlob(readyPdfs.bilingual.blob, readyPdfs.bilingual.filename, {
+                            responseId: respId,
+                            caller: "ready_modal_button",
+                            clickId,
+                            kind: "bilingual",
                           })
+                          logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_BRANCH_RESULT", {
+                            clickId,
+                            branch: "memory_blob",
+                            result: "download_triggered",
+                          })
+                        } else {
+                          const initialSource = translation?.bilingualPdfPath ? "stored_pdf" : "generated_on_click"
+                          logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_SOURCE", {
+                            clickId,
+                            source: initialSource,
+                            note: "source_represents_intended_branch_selection_not_actual_download_outcome",
+                          })
+
                           if (respId && project?.id) {
                             await ensureBilingualPdfStored({
                               projectId: project.id,
@@ -1770,8 +1791,30 @@ function truncateFilename(filename: string, maxLen = 22): string {
                               caller: "ready_modal_button",
                             }).catch(() => null)
                           }
+
                           const query = translation?.id ? `translationId=${translation.id}` : `responseId=${respId}`
-                          window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&${query}&kind=bilingual`)
+                          const endpointPath = `/api/stage-translations/pdf?projectId=${project.id}&${query}&kind=bilingual`
+
+                          logDiagnosticEvent(respId, "BROWSER_DOWNLOAD_STORED_STARTED", {
+                            clickId,
+                            caller: "ready_modal_button",
+                            kind: "bilingual",
+                            endpointPath,
+                          })
+                          logDiagnosticEvent(respId, "BROWSER_DOWNLOAD_STORED_TRIGGERED", {
+                            clickId,
+                            caller: "ready_modal_button",
+                            kind: "bilingual",
+                            endpointPath,
+                          })
+                          logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_BRANCH_RESULT", {
+                            clickId,
+                            branch: "stored_endpoint",
+                            result: "download_triggered",
+                            endpointPath,
+                          })
+
+                          window.location.assign(endpointPath)
                         }
 
                         // Diagnostic-only server snapshot after modal download (non-blocking)
@@ -1790,6 +1833,7 @@ function truncateFilename(filename: string, maxLen = 22): string {
                               logServerEventsIfPresent(respId, p)
                               const rec = p?.data?.translation
                               logDiagnosticEvent(respId, "POST_MODAL_DOWNLOAD_SERVER_STATE", {
+                                clickId,
                                 translationStatus: rec?.status || "missing",
                                 translatedContentPresent: Boolean(rec?.translatedContent),
                                 originalPdfPathPresent: Boolean(rec?.originalPdfPath),

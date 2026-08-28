@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { assertProjectMember, assertProjectReviewer, audit, AuthzError } from "@/lib/auth/guards"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { pushServerDiagnosticEvent } from "@/lib/stage-translations/generate"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -81,10 +82,10 @@ function expectedStoragePrefix(translation: TranslationRow, projectId: string, k
 }
 
 export async function GET(request: NextRequest) {
+  const responseId = request.nextUrl.searchParams.get("responseId")
   try {
     const projectId = request.nextUrl.searchParams.get("projectId")
     const translationId = request.nextUrl.searchParams.get("translationId")
-    const responseId = request.nextUrl.searchParams.get("responseId")
     const kindParam = request.nextUrl.searchParams.get("kind")
     const kind: PdfKind = validKind(kindParam) ? kindParam : "bilingual"
     const isShared = request.nextUrl.searchParams.get("share") === "1" || request.nextUrl.searchParams.get("public") === "1"
@@ -110,23 +111,56 @@ export async function GET(request: NextRequest) {
       translation = data as TranslationRow | null
     }
 
-    if (!translation) return NextResponse.json({ error: "Translation record not found." }, { status: 404 })
+    const actualResponseId = translation?.response_id || responseId
+    pushServerDiagnosticEvent(actualResponseId, "PDF_DOWNLOAD_GET_RECEIVED", {
+      projectId,
+      translationId: translation?.id || translationId || null,
+      kind,
+      hasTranslationRow: Boolean(translation),
+      status: translation?.translation_status || null,
+      requestedColumnPath: translation ? translation[PDF_COLUMNS[kind]] || null : null,
+    })
+
+    if (!translation) {
+      pushServerDiagnosticEvent(actualResponseId, "PDF_DOWNLOAD_GET_NOT_FOUND", { kind, reason: "translation_row_missing" })
+      return NextResponse.json({ error: "Translation record not found." }, { status: 404 })
+    }
 
     if (!isShared) {
       await assertProjectMember(projectId)
       if (!(await translationScopeIsActive(admin, translation))) await assertProjectReviewer(projectId)
     }
 
-    const storagePath = translation[PDF_COLUMNS[kind]] || translation.bilingual_pdf_url || translation.original_pdf_url
-    if (!storagePath) return NextResponse.json({ error: "The requested PDF has not been generated." }, { status: 404 })
+    const directPath = translation[PDF_COLUMNS[kind]]
+    const storagePath = directPath || translation.bilingual_pdf_url || translation.original_pdf_url
+    if (!storagePath) {
+      pushServerDiagnosticEvent(actualResponseId, "PDF_DOWNLOAD_GET_NOT_FOUND", { kind, reason: "no_pdf_paths_exist" })
+      return NextResponse.json({ error: "The requested PDF has not been generated." }, { status: 404 })
+    }
 
+    const usedFallback = directPath !== storagePath
     const downloadName = storagePath.split("/").pop()?.replace(/^.*?-\d+-/, "") || `${kind}-report.pdf`
     const { data: signed, error: signedError } = await admin.storage.from(BUCKET).createSignedUrl(storagePath, 60 * 60 * 24 * 7, { download: downloadName })
-    if (signedError || !signed?.signedUrl) return NextResponse.json({ error: "The stored PDF is unavailable." }, { status: 404 })
+    if (signedError || !signed?.signedUrl) {
+      pushServerDiagnosticEvent(actualResponseId, "PDF_DOWNLOAD_GET_FAILED", { kind, error: signedError?.message || "createSignedUrl_failed" })
+      return NextResponse.json({ error: "The stored PDF is unavailable." }, { status: 404 })
+    }
+
+    pushServerDiagnosticEvent(actualResponseId, "PDF_DOWNLOAD_GET_REDIRECT", {
+      kind,
+      redirect: true,
+      usedFallback,
+      requestedKind: kind,
+      downloadFilename: downloadName,
+      targetColumnPath: directPath || null,
+      actualServedPath: storagePath,
+    })
+
     return NextResponse.redirect(signed.signedUrl, { status: 302, headers: { "Cache-Control": "private, max-age=300" } })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to download the stored PDF."
     const status = error instanceof AuthzError ? 403 : 400
+    pushServerDiagnosticEvent(responseId, "PDF_DOWNLOAD_GET_FAILED", { error: message, status })
     return NextResponse.json({ error: message }, { status, headers: { "Cache-Control": "no-store" } })
   }
 }

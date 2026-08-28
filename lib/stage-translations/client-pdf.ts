@@ -268,7 +268,28 @@ export function formatReportPdfFilename(
   return `${safeProjectName}-${dateFormatted}-${languageType}.pdf`
 }
 
-export function downloadPdfBlob(blob: Blob, filename: string) {
+export function downloadPdfBlob(
+  blob: Blob,
+  filename: string,
+  options: { responseId?: string; caller?: string; clickId?: string; kind?: string } = {},
+) {
+  const kind = options.kind || "unknown"
+  logDiagnosticEvent(options.responseId, "BROWSER_DOWNLOAD_BLOB_STARTED", {
+    caller: options.caller || "downloadPdfBlob",
+    clickId: options.clickId || null,
+    kind,
+    filename,
+    blobSize: blob.size,
+    blobType: blob.type,
+  })
+  if (kind === "bilingual") {
+    logDiagnosticEvent(options.responseId, "BILINGUAL_DOWNLOAD_FILENAME", {
+      filename,
+      source: "memory_blob",
+      clickId: options.clickId || null,
+    })
+  }
+
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.href = url
@@ -278,6 +299,13 @@ export function downloadPdfBlob(blob: Blob, filename: string) {
   link.click()
   link.remove()
   window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
+
+  logDiagnosticEvent(options.responseId, "BROWSER_DOWNLOAD_BLOB_TRIGGERED", {
+    caller: options.caller || "downloadPdfBlob",
+    clickId: options.clickId || null,
+    kind,
+    filename,
+  })
 }
 
 export async function storeTranslationPdf(input: {
