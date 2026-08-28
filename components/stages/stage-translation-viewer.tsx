@@ -37,6 +37,7 @@ import { statusLabel, statusTone } from "@/lib/stages/execution"
 import type { ReportCcRecipient } from "@/lib/report-cc/types"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
 
 const SECTION_LABELS: Array<{ key: TranslationSectionKey; en: string; ar: string }> = [
   { key: "observation", en: "Observation / Work Progress", ar: "المعاينة وسير العمل" },
@@ -300,7 +301,21 @@ export function StageTranslationViewer({
     setError(null)
     try {
       const params = new URLSearchParams({ projectId: data.project.id, translationId: translation.id, kind })
-      window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
+      const endpointPath = `/api/stage-translations/pdf?${params.toString()}`
+
+      logDiagnosticEvent(data.response.id, "BROWSER_DOWNLOAD_STORED_STARTED", {
+        caller: "stage_translation_viewer",
+        kind,
+        translationId: translation.id,
+        endpointPath,
+      })
+      logDiagnosticEvent(data.response.id, "BROWSER_DOWNLOAD_STORED_TRIGGERED", {
+        caller: "stage_translation_viewer",
+        kind,
+        endpointPath,
+      })
+
+      window.location.assign(endpointPath)
     } finally {
       window.setTimeout(() => setBusy(null), 500)
     }

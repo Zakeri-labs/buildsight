@@ -158,6 +158,7 @@ export function ReportDownloadSection({
       termId: termId || undefined,
       responseId,
       existingPath: translation?.bilingualPdfPath,
+      caller: "report_download_section",
     })
 
     logDiagnosticEvent(responseId, "PAGE_BILINGUAL_SERVER_LOOKUP_RESULT", {

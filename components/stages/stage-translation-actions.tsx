@@ -214,7 +214,21 @@ export function StageTranslationActions({
     const existing = pdfPath(translation, kind)
     if (existing && translation.id) {
       const params = new URLSearchParams({ projectId, translationId: translation.id, kind })
-      window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
+      const endpointPath = `/api/stage-translations/pdf?${params.toString()}`
+
+      logDiagnosticEvent(responseId, "BROWSER_DOWNLOAD_STORED_STARTED", {
+        caller: "stage_translation_actions",
+        kind,
+        translationId: translation.id,
+        endpointPath,
+      })
+      logDiagnosticEvent(responseId, "BROWSER_DOWNLOAD_STORED_TRIGGERED", {
+        caller: "stage_translation_actions",
+        kind,
+        endpointPath,
+      })
+
+      window.location.assign(endpointPath)
       return
     }
 

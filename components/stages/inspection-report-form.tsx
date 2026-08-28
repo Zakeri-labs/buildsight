@@ -949,6 +949,8 @@ export function InspectionReportForm({
                     kind: "original",
                     blob: originalPdf.blob,
                     filename: originalPdf.filename,
+                    responseId: id,
+                    caller: "submit_flow",
                   }).catch(() => null)
                 }
 
@@ -969,12 +971,17 @@ export function InspectionReportForm({
                       kind: "bilingual",
                       blob: bilingualPdf.blob,
                       filename: bilingualPdf.filename,
+                      responseId: id,
+                      caller: "submit_flow",
                     }).catch(() => null)
                   }
                 }
               }
             }
           } catch (pdfErr) {
+            logDiagnosticEvent(id, "SUBMIT_PDF_GEN_ERROR", {
+              error: pdfErr instanceof Error ? pdfErr.message : String(pdfErr),
+            })
             console.warn("Client PDF generation warning during submit:", pdfErr)
           }
 
@@ -983,8 +990,12 @@ export function InspectionReportForm({
               projectId: project.id,
               stageId: result.data.projectStageId,
               responseId: id,
+              caller: "submit_flow",
             })
           } catch (stErr) {
+            logDiagnosticEvent(id, "SUBMIT_BILINGUAL_ENSURE_ERROR", {
+              error: stErr instanceof Error ? stErr.message : String(stErr),
+            })
             console.warn("Auto-store bilingual PDF warning during submit:", stErr)
           }
 
