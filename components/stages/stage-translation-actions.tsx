@@ -117,7 +117,19 @@ export function StageTranslationActions({
       bilingualPdfPath: translation.bilingualPdfPath || null,
       hasTranslatedContent: Boolean(translation.translatedContent),
     })
-  }, [responseId, translation.status, isFullyReady, isProcessing, stale, translation.originalPdfPath, translation.bilingualPdfPath, translation.translatedContent])
+    logDiagnosticEvent(responseId, "READINESS_CHECK", {
+      component: "StageTranslationActions",
+      isDirectStage,
+      statusCompleted: translation.status === "completed",
+      stale,
+      translatedContentPresent: Boolean(translation.translatedContent),
+      originalPdfPresent: Boolean(translation.originalPdfPath),
+      bilingualPdfPresent: Boolean(translation.bilingualPdfPath),
+      arabicPdfPresent: Boolean(translation.arabicPdfPath),
+      allGeneratedPdfsReady,
+      result: isFullyReady,
+    })
+  }, [responseId, translation.status, isFullyReady, isProcessing, stale, translation.originalPdfPath, translation.bilingualPdfPath, translation.arabicPdfPath, translation.translatedContent, isDirectStage, allGeneratedPdfsReady])
 
   useEffect(() => {
     if (isFullyReady || isFailed) {

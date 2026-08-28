@@ -902,6 +902,7 @@ function truncateFilename(filename: string, maxLen = 22): string {
               const transRecord = pageData?.translation
 
               if (pageData && transRecord) {
+                logDiagnosticEvent(id, "ORIGINAL_PDF_RENDER_STARTED", { caller: "submit_flow" })
                 const originalPdf = await exportTranslationPdf({
                   data: pageData,
                   translation: transRecord,
@@ -909,6 +910,7 @@ function truncateFilename(filename: string, maxLen = 22): string {
                   ccRecipients: payload?.ccRecipients ?? [],
                   appendClosingBlock: true,
                 })
+                logDiagnosticEvent(id, "ORIGINAL_PDF_RENDER_SUCCESS", { caller: "submit_flow" })
                 generatedPdfs.original = originalPdf
 
                 if (transRecord.id) {
@@ -918,10 +920,12 @@ function truncateFilename(filename: string, maxLen = 22): string {
                     kind: "original",
                     blob: originalPdf.blob,
                     filename: originalPdf.filename,
+                    responseId: id,
                   }).catch(() => null)
                 }
 
                 if (transRecord.status === "completed" && transRecord.translatedContent) {
+                  logDiagnosticEvent(id, "BILINGUAL_PDF_RENDER_STARTED", { caller: "submit_flow" })
                   const bilingualPdf = await exportTranslationPdf({
                     data: pageData,
                     translation: transRecord,
@@ -929,6 +933,7 @@ function truncateFilename(filename: string, maxLen = 22): string {
                     ccRecipients: payload?.ccRecipients ?? [],
                     appendClosingBlock: true,
                   })
+                  logDiagnosticEvent(id, "BILINGUAL_PDF_RENDER_SUCCESS", { caller: "submit_flow" })
                   generatedPdfs.bilingual = bilingualPdf
 
                   if (transRecord.id) {
@@ -938,13 +943,21 @@ function truncateFilename(filename: string, maxLen = 22): string {
                       kind: "bilingual",
                       blob: bilingualPdf.blob,
                       filename: bilingualPdf.filename,
+                      responseId: id,
                     }).catch(() => null)
                   }
+                } else {
+                  logDiagnosticEvent(id, "BILINGUAL_PDF_RENDER_SKIPPED", {
+                    reason: transRecord.status !== "completed" ? "translation_status_not_completed" : "translated_content_missing",
+                    status: transRecord.status,
+                    hasTranslatedContent: Boolean(transRecord.translatedContent),
+                  })
                 }
               }
             }
           } catch (pdfErr) {
             const techMsg = pdfErr instanceof Error ? pdfErr.message : String(pdfErr)
+            logDiagnosticEvent(id, "ORIGINAL_PDF_RENDER_FAILED", { error: techMsg })
             console.warn("Client PDF generation warning during submit:", pdfErr)
             setDiagnosticError({
               success: false,
@@ -964,8 +977,11 @@ function truncateFilename(filename: string, maxLen = 22): string {
               stageId: result.data.projectStageId,
               termId: isDirectStageReport ? undefined : reportDefinition.id,
               responseId: id,
+              caller: "submit_flow",
             })
           } catch (stErr) {
+            const techMsg = stErr instanceof Error ? stErr.message : String(stErr)
+            logDiagnosticEvent(id, "SUBMIT_BILINGUAL_ENSURE_ERROR", { error: techMsg })
             console.warn("Auto-store bilingual PDF warning during submit:", stErr)
           }
 
@@ -978,6 +994,39 @@ function truncateFilename(filename: string, maxLen = 22): string {
       }
 
       if (isSubmitMode) {
+        logDiagnosticEvent(id, "READY_MODAL_OPENED", {
+          readyOriginalPdfBlob: Boolean(generatedPdfs.original),
+          readyBilingualPdfBlob: Boolean(generatedPdfs.bilingual),
+          translationLocalStatus: translation?.status || null,
+          localOriginalPdfPath: translation?.originalPdfPath || null,
+          localBilingualPdfPath: translation?.bilingualPdfPath || null,
+          localHasTranslatedContent: Boolean(translation?.translatedContent),
+        })
+
+        // Diagnostic-only server state snapshot (non-blocking, no behavior changes)
+        const snapParams = new URLSearchParams({
+          projectId: project.id,
+          stageId: routeStageId,
+          ...(isDirectStageReport ? {} : { termId: reportDefinition.id }),
+          responseId: id,
+          statusOnly: "1",
+          background: "1",
+        })
+        fetch(`/api/stage-translations?${snapParams.toString()}`, { cache: "no-store" })
+          .then((r) => r.json())
+          .then((p) => {
+            logServerEventsIfPresent(id, p)
+            const rec = p?.data?.translation
+            logDiagnosticEvent(id, "READY_MODAL_SERVER_STATE", {
+              translationStatus: rec?.status || "missing",
+              translatedContentPresent: Boolean(rec?.translatedContent),
+              originalPdfPathPresent: Boolean(rec?.originalPdfPath),
+              bilingualPdfPathPresent: Boolean(rec?.bilingualPdfPath),
+              generatedAt: rec?.generatedAt || null,
+            })
+          })
+          .catch(() => null)
+
         setSubmitResult({ responseId: id, stageId: routeStageId })
       } else {
         router.replace(`/projects/${project.id}/stages/${routeStageId}/reports/${id}`)
@@ -1699,12 +1748,18 @@ function truncateFilename(filename: string, maxLen = 22): string {
                     disabled={actionBusy !== null}
                     onClick={async () => {
                       setActionBusy("bilingual_pdf")
+                      const respId = submitResult?.responseId || responseId
+                      const stgId = submitResult?.stageId || resolvedStageId
+                      logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_CLICK")
+
                       try {
                         if (readyPdfs?.bilingual) {
+                          logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_SOURCE", { source: "memory_blob" })
                           downloadPdfBlob(readyPdfs.bilingual.blob, readyPdfs.bilingual.filename)
                         } else {
-                          const respId = submitResult?.responseId || responseId
-                          const stgId = submitResult?.stageId || resolvedStageId
+                          logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_SOURCE", {
+                            source: translation?.bilingualPdfPath ? "stored_pdf" : "generated_on_click",
+                          })
                           if (respId && project?.id) {
                             await ensureBilingualPdfStored({
                               projectId: project.id,
@@ -1712,10 +1767,37 @@ function truncateFilename(filename: string, maxLen = 22): string {
                               termId: isDirectStageReport ? undefined : reportDefinition.id,
                               responseId: respId,
                               existingPath: translation?.bilingualPdfPath,
+                              caller: "ready_modal_button",
                             }).catch(() => null)
                           }
                           const query = translation?.id ? `translationId=${translation.id}` : `responseId=${respId}`
                           window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&${query}&kind=bilingual`)
+                        }
+
+                        // Diagnostic-only server snapshot after modal download (non-blocking)
+                        if (respId && project?.id) {
+                          const snapParams = new URLSearchParams({
+                            projectId: project.id,
+                            stageId: stgId,
+                            ...(isDirectStageReport ? {} : { termId: reportDefinition.id }),
+                            responseId: respId,
+                            statusOnly: "1",
+                            background: "1",
+                          })
+                          fetch(`/api/stage-translations?${snapParams.toString()}`, { cache: "no-store" })
+                            .then((r) => r.json())
+                            .then((p) => {
+                              logServerEventsIfPresent(respId, p)
+                              const rec = p?.data?.translation
+                              logDiagnosticEvent(respId, "POST_MODAL_DOWNLOAD_SERVER_STATE", {
+                                translationStatus: rec?.status || "missing",
+                                translatedContentPresent: Boolean(rec?.translatedContent),
+                                originalPdfPathPresent: Boolean(rec?.originalPdfPath),
+                                bilingualPdfPathPresent: Boolean(rec?.bilingualPdfPath),
+                                generatedAt: rec?.generatedAt || null,
+                              })
+                            })
+                            .catch(() => null)
                         }
                       } finally {
                         setActionBusy(null)

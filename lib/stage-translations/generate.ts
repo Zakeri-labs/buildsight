@@ -362,6 +362,28 @@ async function createSignedUrl(path: string) {
 }
 
 
+const serverEventsStore = new Map<string, Array<{ name: string; details: Record<string, unknown> }>>()
+
+export function pushServerDiagnosticEvent(
+  responseId: string | null | undefined,
+  name: string,
+  details: Record<string, unknown> = {},
+) {
+  if (!responseId) return
+  const list = serverEventsStore.get(responseId) || []
+  list.push({ name, details })
+  if (list.length > 50) list.shift()
+  serverEventsStore.set(responseId, list)
+  console.log(`[server-debug-timeline] [${responseId.slice(0, 8)}] ${name}`, details)
+}
+
+export function consumeServerDiagnosticEvents(responseId: string | null | undefined) {
+  if (!responseId) return []
+  const list = serverEventsStore.get(responseId) || []
+  serverEventsStore.delete(responseId)
+  return list
+}
+
 const PENDING_GENERATION_STALE_MS = 5 * 60 * 1000
 const SUBMITTED_REPORT_STATUSES = new Set(["submitted", "under_review", "rejected", "approved", "completed"])
 
@@ -542,6 +564,18 @@ export async function markStageTranslationGenerationFailure(input: {
   stageId: string
   responseId: string
 }) {
+  pushServerDiagnosticEvent(input.responseId, "TRANSLATION_FAILURE_MARKED", {
+    originatingFunction: "markStageTranslationGenerationFailure",
+    responseId: input.responseId,
+    previousStatus: "pending",
+    nextStatus: "failed",
+  })
+  pushServerDiagnosticEvent(input.responseId, "TRANSLATION_STATUS_TRANSITION", {
+    previousStatus: "pending",
+    nextStatus: "failed",
+    responseId: input.responseId,
+    caller: "markStageTranslationGenerationFailure",
+  })
   const admin = createAdminClient()
   const { error } = await admin
     .from("translation_documents")
@@ -562,6 +596,22 @@ export async function markStageTranslationPdfFailure(input: {
   const pageData = await loadStageTranslationPageData(input.projectId, input.stageId, input.actorId, input.responseId)
   if (!pageData?.translation?.id || !pageData.translation.translatedContent) return
   if (pageData.translation.originalPdfPath && pageData.translation.bilingualPdfPath) return
+
+  pushServerDiagnosticEvent(input.responseId, "TRANSLATION_FAILURE_MARKED", {
+    originatingFunction: "markStageTranslationPdfFailure",
+    responseId: input.responseId,
+    translationId: pageData.translation.id,
+    previousStatus: pageData.translation.status,
+    nextStatus: "failed",
+  })
+  pushServerDiagnosticEvent(input.responseId, "TRANSLATION_STATUS_TRANSITION", {
+    previousStatus: pageData.translation.status,
+    nextStatus: "failed",
+    responseId: input.responseId,
+    translationId: pageData.translation.id,
+    caller: "markStageTranslationPdfFailure",
+  })
+
   const admin = createAdminClient()
   const { error } = await admin
     .from("translation_documents")
@@ -716,7 +766,17 @@ export async function generateStageTranslation(input: {
     translationId = data.id
   }
 
+  pushServerDiagnosticEvent(input.responseId, "SERVER_TRANSLATION_STARTED", {
+    responseId: input.responseId,
+    projectId: input.projectId,
+    stageId: input.stageId,
+    termId: input.termId || null,
+  })
+
   try {
+    pushServerDiagnosticEvent(input.responseId, "SERVER_TRANSLATION_OPENAI_STARTED", {
+      model: OPENAI_CONFIG.reportTranslationModel,
+    })
     const response = await fetch(OPENAI_RESPONSES_URL, {
       method: "POST",
       headers: {
@@ -742,7 +802,19 @@ export async function generateStageTranslation(input: {
     })
 
     const payload = await response.json().catch(() => null)
-    if (!response.ok) throw new Error(payload?.error?.message || `OpenAI request failed with status ${response.status}.`)
+    if (!response.ok) {
+      const errorMsg = payload?.error?.message || `OpenAI request failed with status ${response.status}.`
+      pushServerDiagnosticEvent(input.responseId, "SERVER_TRANSLATION_OPENAI_FAILED", {
+        status: response.status,
+        error: errorMsg,
+      })
+      throw new Error(errorMsg)
+    }
+
+    pushServerDiagnosticEvent(input.responseId, "SERVER_TRANSLATION_OPENAI_SUCCESS", {
+      status: response.status,
+    })
+
     const text = outputText(payload)
     if (!text) throw new Error("The AI service returned an empty translation.")
 
@@ -761,6 +833,10 @@ export async function generateStageTranslation(input: {
       pageData.translation?.bilingualPdfPath,
     ].filter((value): value is string => Boolean(value))
 
+    pushServerDiagnosticEvent(input.responseId, "SERVER_TRANSLATION_DB_FINALIZE_STARTED", {
+      translationId,
+    })
+
     const { error } = await admin
       .from("translation_documents")
       .update({
@@ -775,6 +851,18 @@ export async function generateStageTranslation(input: {
       })
       .eq("id", translationId)
     if (error) throw error
+
+    pushServerDiagnosticEvent(input.responseId, "SERVER_TRANSLATION_DB_FINALIZE_SUCCESS", {
+      translationId,
+      status: "completed",
+    })
+    pushServerDiagnosticEvent(input.responseId, "TRANSLATION_STATUS_TRANSITION", {
+      previousStatus: "pending",
+      nextStatus: "completed",
+      responseId: input.responseId,
+      translationId,
+      caller: "generateStageTranslation",
+    })
 
     if (previousPdfPaths.length) await admin.storage.from(TRANSLATION_BUCKET).remove(previousPdfPaths).catch(() => undefined)
 
@@ -800,6 +888,18 @@ export async function generateStageTranslation(input: {
       bilingualPdfPath: null,
     }
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    pushServerDiagnosticEvent(input.responseId, "SERVER_TRANSLATION_FAILED", {
+      error: errorMsg,
+      translationId,
+    })
+    pushServerDiagnosticEvent(input.responseId, "TRANSLATION_STATUS_TRANSITION", {
+      previousStatus: "pending",
+      nextStatus: "failed",
+      responseId: input.responseId,
+      translationId,
+      caller: "generateStageTranslation_catch",
+    })
     await admin
       .from("translation_documents")
       .update({ translation_status: "failed", updated_at: new Date().toISOString() })

@@ -9,6 +9,7 @@ import {
   markStageTranslationGenerationFailure,
   markStageTranslationPdfFailure,
   prepareStageTranslationGeneration,
+  consumeServerDiagnosticEvents,
 } from "@/lib/stage-translations/generate"
 
 export const runtime = "nodejs"
@@ -36,7 +37,11 @@ export async function GET(request: NextRequest) {
       statusOnly ? Promise.resolve([]) : loadReportCcRecipients(projectId, responseId, "report"),
     ])
     if (!data) return NextResponse.json({ error: "Report not found." }, { status: 404 })
-    return NextResponse.json({ data, ccRecipients }, { headers: { "Cache-Control": "no-store" } })
+    const serverEvents = consumeServerDiagnosticEvents(responseId)
+    return NextResponse.json(
+      { data, ccRecipients, debug: { serverEvents } },
+      { headers: { "Cache-Control": "no-store" } },
+    )
   } catch (error) {
     return NextResponse.json({ error: error instanceof AuthzError ? error.message : error instanceof Error ? error.message : "Unable to load translation." }, { status: error instanceof AuthzError ? 403 : 500 })
   }
@@ -99,6 +104,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    const serverEvents = consumeServerDiagnosticEvents(responseId)
     return NextResponse.json({
       translation: {
         id: prepared.translationId,
@@ -108,6 +114,7 @@ export async function POST(request: NextRequest) {
       started: prepared.shouldRun,
       debug: {
         reason: prepared.reason || "unknown",
+        serverEvents,
       },
     }, { headers: { "Cache-Control": "no-store" } })
   } catch (error) {

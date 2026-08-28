@@ -104,7 +104,7 @@ export function enqueueStageTranslationJob(job: StageTranslationJob) {
   })
 }
 
-export function removeStageTranslationJob(job: StageTranslationJob) {
+export function removeStageTranslationJob(job: StageTranslationJob, reason = "completed") {
   if (typeof window === "undefined") return
   const key = jobKey(job)
   const remaining = readStageTranslationJobs().filter((item) => jobKey(item) !== key)
@@ -113,6 +113,7 @@ export function removeStageTranslationJob(job: StageTranslationJob) {
     projectId: job.projectId,
     stageId: job.stageId,
     responseId: job.responseId,
+    reason,
     remainingQueueLength: remaining.length,
   })
 }
@@ -316,7 +317,11 @@ export async function processStageTranslationJob(job: StageTranslationJob) {
           await wait(POLL_MS)
           continue
         }
-        removeStageTranslationJob(normalized)
+        logDiagnosticEvent(normalized.responseId, "WORKER_EXIT_FAILED_STATE", {
+          reason: "failed_no_retry",
+          status: "failed",
+        })
+        removeStageTranslationJob(normalized, "failed_no_retry")
         return
       }
 
@@ -334,7 +339,7 @@ export async function processStageTranslationJob(job: StageTranslationJob) {
 
       if (record.status === "completed") {
         if (allPdfPaths(record)) {
-          removeStageTranslationJob(normalized)
+          removeStageTranslationJob(normalized, "all_required_pdfs_ready")
           return
         }
         try {
@@ -345,11 +350,11 @@ export async function processStageTranslationJob(job: StageTranslationJob) {
             continue
           }
           if (allPdfPaths(pdfRecord)) {
-            removeStageTranslationJob(normalized)
+            removeStageTranslationJob(normalized, "all_required_pdfs_ready")
             return
           }
           const completed = await generateMissingPdfs(normalized, pdfSnapshot.data, pdfRecord, pdfSnapshot.ccRecipients)
-          if (allPdfPaths(completed)) removeStageTranslationJob(normalized)
+          if (allPdfPaths(completed)) removeStageTranslationJob(normalized, "all_required_pdfs_ready")
           return
         } catch (error) {
           console.error("[stage-translation] automatic PDF preparation failed", {

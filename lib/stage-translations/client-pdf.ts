@@ -17,6 +17,7 @@ import type { StageTranslationPageData, StageTranslationRecord } from "@/lib/sta
 import type { ReportCcRecipient } from "@/lib/report-cc/types"
 import { createClient as createSupabaseClient } from "@/lib/supabase/client"
 import { getOrganizationProfile, fetchOrganizationProfileFromDb } from "@/lib/organization/profile"
+import { logDiagnosticEvent, logServerEventsIfPresent } from "@/lib/stage-translations/debug-timeline"
 
 const JSPDF_SCRIPT_ID = "buildsight-jspdf"
 const JSPDF_SCRIPT_URLS = [
@@ -285,7 +286,15 @@ export async function storeTranslationPdf(input: {
   kind: PdfKind
   blob: Blob
   filename: string
+  responseId?: string
 }) {
+  const isOriginal = input.kind === "original"
+  logDiagnosticEvent(input.responseId, isOriginal ? "ORIGINAL_PDF_STORE_STARTED" : "BILINGUAL_PDF_STORE_STARTED", {
+    translationId: input.translationId,
+    blobSize: input.blob.size,
+    filename: input.filename,
+  })
+
   if (input.blob.size <= 0 || input.blob.size > MAX_PDF_BYTES) {
     throw new Error("The generated PDF is empty or exceeds the 60 MB Storage limit.")
   }
@@ -305,20 +314,30 @@ export async function storeTranslationPdf(input: {
   })
   const prepared = await prepareResponse.json().catch(() => null)
   if (!prepareResponse.ok || !prepared?.storagePath || !prepared?.token) {
-    throw new Error(prepared?.error || "Unable to prepare Supabase Storage upload.")
+    const err = prepared?.error || "Unable to prepare Supabase Storage upload."
+    logDiagnosticEvent(input.responseId, isOriginal ? "ORIGINAL_PDF_PREPARE_FAILED" : "BILINGUAL_PDF_PREPARE_FAILED", { error: err })
+    throw new Error(err)
   }
+
+  logDiagnosticEvent(input.responseId, isOriginal ? "ORIGINAL_PDF_PREPARE_SUCCESS" : "BILINGUAL_PDF_PREPARE_SUCCESS", { storagePath: prepared.storagePath })
 
   const storagePath = String(prepared.storagePath)
   const token = String(prepared.token)
   const supabase = createSupabaseClient()
+  logDiagnosticEvent(input.responseId, isOriginal ? "ORIGINAL_PDF_UPLOAD_STARTED" : "BILINGUAL_PDF_UPLOAD_STARTED", { storagePath })
   const { error: uploadError } = await supabase.storage
     .from(TRANSLATION_BUCKET)
     .uploadToSignedUrl(storagePath, token, input.blob, {
       contentType: "application/pdf",
       cacheControl: "3600",
     })
-  if (uploadError) throw new Error(`Supabase Storage upload failed: ${uploadError.message}`)
+  if (uploadError) {
+    logDiagnosticEvent(input.responseId, isOriginal ? "ORIGINAL_PDF_UPLOAD_FAILED" : "BILINGUAL_PDF_UPLOAD_FAILED", { error: uploadError.message })
+    throw new Error(`Supabase Storage upload failed: ${uploadError.message}`)
+  }
+  logDiagnosticEvent(input.responseId, isOriginal ? "ORIGINAL_PDF_UPLOAD_SUCCESS" : "BILINGUAL_PDF_UPLOAD_SUCCESS", { storagePath })
 
+  logDiagnosticEvent(input.responseId, isOriginal ? "ORIGINAL_PDF_FINALIZE_STARTED" : "BILINGUAL_PDF_FINALIZE_STARTED", { storagePath })
   const finalizeResponse = await fetch("/api/stage-translations/pdf", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -331,7 +350,12 @@ export async function storeTranslationPdf(input: {
     }),
   })
   const finalized = await finalizeResponse.json().catch(() => null)
-  if (!finalizeResponse.ok) throw new Error(finalized?.error || "The PDF was uploaded, but its saved path could not be finalized.")
+  if (!finalizeResponse.ok) {
+    const err = finalized?.error || "The PDF was uploaded, but its saved path could not be finalized."
+    logDiagnosticEvent(input.responseId, isOriginal ? "ORIGINAL_PDF_FINALIZE_FAILED" : "BILINGUAL_PDF_FINALIZE_FAILED", { error: err })
+    throw new Error(err)
+  }
+  logDiagnosticEvent(input.responseId, isOriginal ? "ORIGINAL_PDF_FINALIZE_SUCCESS" : "BILINGUAL_PDF_FINALIZE_SUCCESS", { storagePath: finalized.storagePath || storagePath })
   return String(finalized.storagePath || storagePath)
 }
 
@@ -341,9 +365,21 @@ export async function ensureBilingualPdfStored(input: {
   termId?: string | null
   responseId?: string
   existingPath?: string | null
+  caller?: string
 }): Promise<{ storagePath: string | null; translation?: any }> {
-  if (input.existingPath) return { storagePath: input.existingPath }
-  if (!input.projectId || !input.responseId) return { storagePath: null }
+  logDiagnosticEvent(input.responseId, "ENSURE_BILINGUAL_STARTED", {
+    caller: input.caller || "unknown",
+    existingPath: input.existingPath || null,
+  })
+
+  if (input.existingPath) {
+    logDiagnosticEvent(input.responseId, "ENSURE_BILINGUAL_STORED_EXISTING", { existingPath: input.existingPath })
+    return { storagePath: input.existingPath }
+  }
+  if (!input.projectId || !input.responseId) {
+    logDiagnosticEvent(input.responseId, "ENSURE_BILINGUAL_FAILED", { reason: "missing_projectId_or_responseId" })
+    return { storagePath: null }
+  }
 
   try {
     const params = new URLSearchParams({
@@ -353,15 +389,35 @@ export async function ensureBilingualPdfStored(input: {
       responseId: input.responseId,
     })
     const res = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
-    if (!res.ok) return { storagePath: null }
+    if (!res.ok) {
+      logDiagnosticEvent(input.responseId, "ENSURE_BILINGUAL_FAILED", { stage: "lookup", http: res.status })
+      return { storagePath: null }
+    }
     const payload = await res.json()
+    logServerEventsIfPresent(input.responseId, payload)
     const data = payload?.data
-    if (!data || !data.translation?.id) return { storagePath: null }
+    if (!data || !data.translation?.id) {
+      logDiagnosticEvent(input.responseId, "ENSURE_BILINGUAL_FAILED", { stage: "no_data_or_translation_id" })
+      return { storagePath: null }
+    }
+
+    logDiagnosticEvent(input.responseId, "ENSURE_BILINGUAL_TRANSLATION_LOOKUP", {
+      http: res.status,
+      translationStatus: data.translation.status,
+      translatedContentPresent: Boolean(data.translation.translatedContent),
+      bilingualPdfPath: data.translation.bilingualPdfPath || null,
+    })
 
     if (data.translation?.bilingualPdfPath) {
+      logDiagnosticEvent(input.responseId, "ENSURE_BILINGUAL_STORED_EXISTING", { bilingualPdfPath: data.translation.bilingualPdfPath })
       return { storagePath: data.translation.bilingualPdfPath, translation: data.translation }
     }
 
+    logDiagnosticEvent(input.responseId, "ENSURE_BILINGUAL_GENERATION_STARTED", {
+      translationId: data.translation.id,
+    })
+
+    logDiagnosticEvent(input.responseId, "BILINGUAL_PDF_RENDER_STARTED", { caller: "ensureBilingualPdfStored" })
     const pdfResult = await exportTranslationPdf({
       data,
       translation: data.translation,
@@ -369,6 +425,7 @@ export async function ensureBilingualPdfStored(input: {
       ccRecipients: payload?.ccRecipients ?? [],
       appendClosingBlock: true,
     })
+    logDiagnosticEvent(input.responseId, "BILINGUAL_PDF_RENDER_SUCCESS", { caller: "ensureBilingualPdfStored" })
 
     const storedPath = await storeTranslationPdf({
       projectId: input.projectId,
@@ -376,6 +433,7 @@ export async function ensureBilingualPdfStored(input: {
       kind: "bilingual",
       blob: pdfResult.blob,
       filename: pdfResult.filename,
+      responseId: input.responseId,
     })
 
     const updatedTranslation = {
@@ -388,6 +446,8 @@ export async function ensureBilingualPdfStored(input: {
 
     return { storagePath: storedPath, translation: updatedTranslation }
   } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err)
+    logDiagnosticEvent(input.responseId, "ENSURE_BILINGUAL_FAILED", { error: errorMsg })
     console.error("Auto-generate bilingual PDF error before share:", err)
     return { storagePath: null }
   }

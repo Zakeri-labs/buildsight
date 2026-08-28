@@ -9,7 +9,7 @@ export type DiagnosticEvent = {
 
 const STORAGE_PREFIX = "buildsight-debug-report-pipeline:"
 export const DEBUG_TIMELINE_EVENT = "buildsight:debug-timeline-updated"
-const MAX_EVENTS = 250
+const MAX_EVENTS = 350
 
 let clientSessionId = ""
 
@@ -131,4 +131,21 @@ export function formatDiagnosticLogAsText(responseId: string | null | undefined)
       return `${e.num} ${e.time} ${e.name} ${detailStr}`
     })
     .join("\n")
+}
+
+export function logServerEventsIfPresent(
+  responseId: string | null | undefined,
+  payload: Record<string, unknown> | null | undefined,
+) {
+  if (typeof window === "undefined" || !responseId || !payload) return
+  const debug = payload.debug as Record<string, unknown> | undefined
+  if (!debug) return
+
+  if (Array.isArray(debug.serverEvents)) {
+    for (const item of debug.serverEvents) {
+      if (item && typeof item === "object" && typeof item.name === "string") {
+        logDiagnosticEvent(responseId, item.name, (item.details as Record<string, unknown>) || {})
+      }
+    }
+  }
 }
