@@ -58,6 +58,7 @@ import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto
 import { exportTranslationPdf, storeTranslationPdf, downloadPdfBlob, ensureBilingualPdfStored } from "@/lib/stage-translations/client-pdf"
 import { buildWhatsAppShareUrl, buildShareMessage } from "@/lib/stage-translations/whatsapp-share"
 import { StageTranslationActions } from "@/components/stages/stage-translation-actions"
+import { optimizeEvidenceImageFile } from "@/lib/stages/optimize-evidence-image"
 import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
 import { ReportDownloadSection } from "@/components/stages/report-download-section"
 import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
@@ -664,26 +665,36 @@ export function InspectionReportForm({
               filename: item.file.name,
               kind,
             })
-            const folder = kind === "evidence_image" ? "evidence" : "documents"
-            const safeName = sanitizeEvidenceFileName(item.file.name)
-            const path = `${project.id}/${id}/${folder}/${crypto.randomUUID()}-${safeName}`
+
+            let fileToUpload = item.file
             let mimeType = item.file.type
+
             if (kind === "evidence_image") {
-              if (!mimeType || !mimeType.startsWith("image/")) {
-                const ext = item.file.name.toLowerCase().match(/\.[^.]+$/)?.[0]
-                if (ext === ".jpg" || ext === ".jpeg") mimeType = "image/jpeg"
-                else if (ext === ".png") mimeType = "image/png"
-                else if (ext === ".webp") mimeType = "image/webp"
-                else if (ext === ".gif") mimeType = "image/gif"
-                else mimeType = "image/jpeg"
+              try {
+                fileToUpload = await optimizeEvidenceImageFile(item.file, { responseId: id })
+                mimeType = "image/jpeg"
+              } catch (optError) {
+                const optErrMessage = optError instanceof Error ? optError.message : String(optError)
+                logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_FAILED", {
+                  fileIndex: index,
+                  filename: item.file.name,
+                  error: optErrMessage,
+                })
+                console.warn(`Image optimization failed for ${item.file.name}:`, optError)
+                return null
               }
             } else {
               mimeType = resolveStageDocumentMimeType(item.file) ?? "application/octet-stream"
             }
+
+            const folder = kind === "evidence_image" ? "evidence" : "documents"
+            const safeName = sanitizeEvidenceFileName(fileToUpload.name)
+            const path = `${project.id}/${id}/${folder}/${crypto.randomUUID()}-${safeName}`
+
             let lastError: any = null
             for (let attempt = 1; attempt <= 2; attempt++) {
               try {
-                await uploadStageEvidence(item.file, path, session.access_token, (progress) => {
+                await uploadStageEvidence(fileToUpload, path, session.access_token, (progress) => {
                   const update = (rows: PendingFile[]) => rows.map((row) => row.id === item.id ? { ...row, progress } : row)
                   if (kind === "evidence_image") setPendingImages(update)
                   else setPendingDocuments(update)
@@ -698,24 +709,24 @@ export function InspectionReportForm({
             if (lastError) {
               logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_FAILED", {
                 fileIndex: index,
-                filename: item.file.name,
+                filename: fileToUpload.name,
                 error: lastError instanceof Error ? lastError.message : String(lastError),
               })
-              console.warn(`File upload skipped for ${item.file.name}:`, lastError)
+              console.warn(`File upload skipped for ${fileToUpload.name}:`, lastError)
               return null
             }
             logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_SUCCESS", {
               fileIndex: index,
-              filename: item.file.name,
+              filename: fileToUpload.name,
               path,
             })
             return {
               path,
               registration: {
                 storagePath: path,
-                originalFilename: item.file.name,
+                originalFilename: fileToUpload.name,
                 mimeType,
-                sizeBytes: item.file.size,
+                sizeBytes: fileToUpload.size,
                 attachmentKind: kind,
                 sortOrder: existingAttachments.length + index,
               },
@@ -1114,12 +1125,13 @@ export function InspectionReportForm({
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error("Your session has expired. Sign in again.")
-      const storagePath = `${project.id}/${id}/inline/${crypto.randomUUID()}-${sanitizeEvidenceFileName(file.name)}`
-      await uploadStageEvidence(file, storagePath, session.access_token, () => undefined)
+      const optimized = await optimizeEvidenceImageFile(file, { responseId: id })
+      const storagePath = `${project.id}/${id}/inline/${crypto.randomUUID()}-${sanitizeEvidenceFileName(optimized.name)}`
+      await uploadStageEvidence(optimized, storagePath, session.access_token, () => undefined, "image/jpeg")
       const registered = await registerResponseAttachmentsAction({
         projectId: project.id,
         responseId: id,
-        attachments: [{ storagePath, originalFilename: file.name, mimeType: file.type, sizeBytes: file.size, attachmentKind: "inline_image" }],
+        attachments: [{ storagePath, originalFilename: optimized.name, mimeType: "image/jpeg", sizeBytes: optimized.size, attachmentKind: "inline_image" }],
       })
       if (!registered.ok) {
         await supabase.storage.from("project-stage-evidence").remove([storagePath])
