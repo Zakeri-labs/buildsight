@@ -223,7 +223,7 @@ export function StageTranslationViewer({
   )
 
   const allGeneratedPdfsReady = Boolean(
-    translation?.originalPdfPath && translation?.arabicPdfPath && translation?.bilingualPdfPath,
+    translation?.originalPdfPath && translation?.bilingualPdfPath,
   )
   const generationComplete = Boolean(
     translation?.status === "completed" && translation?.translatedContent && allGeneratedPdfsReady && !translationIsStale,
