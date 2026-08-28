@@ -82,6 +82,7 @@ export type ReportPdfDiagnosticError = {
   success: false
   stage:
     | "report_submission"
+    | "image_upload"
     | "translation_job_enqueue"
     | "ai_translation"
     | "pdf_rendering"

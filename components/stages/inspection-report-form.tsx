@@ -497,7 +497,22 @@ export function InspectionReportForm({
   const [pendingDocuments, setPendingDocuments] = useState<PendingFile[]>([])
   const [busy, setBusy] = useState<"draft" | "progress" | "submit" | "approve" | "reject" | "inline" | null>(null)
   const [error, setError] = useState<string | null>(null)
+function truncateFilename(filename: string, maxLen = 22): string {
+  if (!filename || filename.length <= maxLen) return filename
+  const lastDot = filename.lastIndexOf(".")
+  const ext = lastDot !== -1 ? filename.slice(lastDot) : ""
+  const nameWithoutExt = lastDot !== -1 ? filename.slice(0, lastDot) : filename
+  const availableNameLen = Math.max(4, maxLen - ext.length - 3)
+  return `${nameWithoutExt.slice(0, availableNameLen)}...${ext}`
+}
+
   const [diagnosticError, setDiagnosticError] = useState<ReportPdfDiagnosticError | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<{
+    completed: number
+    total: number
+    currentFile?: string
+    kind: "evidence_image" | "document"
+  } | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [submitModalOpen, setSubmitModalOpen] = useState(false)
   type SubmitStep = { label: string; status: "pending" | "active" | "done" | "error" }
@@ -608,7 +623,12 @@ export function InspectionReportForm({
     return result.data
   }
 
-  const uploadFiles = async (id: string, files: PendingFile[], kind: "evidence_image" | "document") => {
+  const uploadFiles = async (
+    id: string,
+    files: PendingFile[],
+    kind: "evidence_image" | "document",
+    onProgress?: (completed: number, total: number, currentFile?: string) => void,
+  ) => {
     const validFiles = files.filter((item) => item.file && item.file.size > 0)
     if (!validFiles.length) return
     const supabase = createClient()
@@ -616,6 +636,8 @@ export function InspectionReportForm({
     if (!session) throw new Error("Your session has expired. Sign in again.")
     const registrations: AttachmentRegistration[] = []
     const uploadedPaths: string[] = []
+    let completedCount = 0
+    onProgress?.(0, validFiles.length, validFiles[0]?.file.name)
     try {
       const BATCH_SIZE = 3
       for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
@@ -658,6 +680,8 @@ export function InspectionReportForm({
               console.warn(`File upload skipped for ${item.file.name}:`, lastError)
               return null
             }
+            completedCount += 1
+            onProgress?.(completedCount, validFiles.length, item.file.name)
             return {
               path,
               registration: {
@@ -708,15 +732,20 @@ export function InspectionReportForm({
   }
 
   const updateStep = (steps: SubmitStep[], index: number, status: SubmitStep["status"]) => {
-    const next = [...steps]
-    next[index] = { ...next[index], status }
+    const next = steps.map((s, i) => i === index ? { ...s, status } : s)
     setSubmitSteps(next)
     return next
   }
 
   const save = async (mode: "draft" | "progress" | "submit") => {
+    if (busy) return
+    setBusy(mode)
+    setError(null)
+    setDiagnosticError(null)
+    setUploadProgress(null)
     if (!reportTitle.trim()) {
       setError(locale === "ar" ? "عنوان التقرير مطلوب." : "Report title is required.")
+      setBusy(null)
       return
     }
     if (mode === "submit") {
@@ -728,12 +757,12 @@ export function InspectionReportForm({
       )
       if (validationError) {
         setError(validationError)
+        setBusy(null)
         return
       }
     }
     setError(null)
     setSuccess(null)
-    setBusy(mode)
 
     const isSubmitMode = mode === "submit"
     const hasImages = pendingImages.length > 0
@@ -780,7 +809,9 @@ export function InspectionReportForm({
 
       if (hasImages) {
         if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
-        await uploadFiles(id, pendingImages, "evidence_image")
+        await uploadFiles(id, pendingImages, "evidence_image", (completed, total, currentFile) => {
+          setUploadProgress({ completed, total, currentFile, kind: "evidence_image" })
+        })
         if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
       }
       if (hasDocs) {
@@ -1858,15 +1889,36 @@ export function InspectionReportForm({
                         </span>
                       )}
                     </span>
-                    <span className={cn(
-                      "text-sm leading-tight",
-                      step.status === "done" && "text-muted-foreground line-through",
-                      step.status === "active" && "font-semibold text-foreground",
-                      step.status === "pending" && "text-muted-foreground",
-                      step.status === "error" && "font-semibold text-red-600 dark:text-red-400",
-                    )}>
-                      {step.label}
-                    </span>
+                    <div className="flex flex-col gap-1 w-full min-w-0">
+                      <span className={cn(
+                        "text-sm leading-tight",
+                        step.status === "done" && "text-muted-foreground line-through",
+                        step.status === "active" && "font-semibold text-foreground",
+                        step.status === "pending" && "text-muted-foreground",
+                        step.status === "error" && "font-semibold text-red-600 dark:text-red-400",
+                      )}>
+                        {step.label}
+                      </span>
+                      {step.status === "active" && uploadProgress && (step.label.includes("Uploading") || step.label.includes("رفع")) ? (
+                        <div className="mt-0.5 space-y-1 text-xs">
+                          <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-muted-foreground">
+                            <span className="truncate max-w-[190px] sm:max-w-[260px]" title={uploadProgress.currentFile}>
+                              {uploadProgress.completed} of {uploadProgress.total}
+                              {uploadProgress.currentFile ? ` · ${truncateFilename(uploadProgress.currentFile, 22)}` : ""}
+                            </span>
+                            <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+                              {Math.round((uploadProgress.completed / uploadProgress.total) * 100)}%
+                            </span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-blue-100 dark:bg-blue-950/60">
+                            <div
+                              className="h-full bg-primary transition-all duration-200 ease-out rounded-full"
+                              style={{ width: `${Math.min(100, Math.max(0, Math.round((uploadProgress.completed / uploadProgress.total) * 100)))}%` }}
+                            />
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 ))}
                 {(submitSteps.some((s) => s.status === "error") || error) ? (
