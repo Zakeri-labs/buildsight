@@ -131,14 +131,18 @@ export async function GET(request: NextRequest) {
       if (!(await translationScopeIsActive(admin, translation))) await assertProjectReviewer(projectId)
     }
 
-    const directPath = translation[PDF_COLUMNS[kind]]
-    const storagePath = directPath || translation.bilingual_pdf_url || translation.original_pdf_url
+    const storagePath = translation[PDF_COLUMNS[kind]] || null
     if (!storagePath) {
-      pushServerDiagnosticEvent(actualResponseId, "PDF_DOWNLOAD_GET_NOT_FOUND", { kind, reason: "no_pdf_paths_exist" })
-      return NextResponse.json({ error: "The requested PDF has not been generated." }, { status: 404 })
+      pushServerDiagnosticEvent(actualResponseId, "PDF_DOWNLOAD_GET_NOT_FOUND", { kind, reason: "requested_kind_pdf_not_found" })
+      const errorMsg = kind === "bilingual"
+        ? "Bilingual translation content is not ready for Bilingual PDF generation."
+        : "The requested English PDF has not been generated."
+      return NextResponse.json(
+        { error: errorMsg, code: kind === "bilingual" ? "BILINGUAL_PDF_NOT_READY" : "PDF_NOT_READY" },
+        { status: 404, headers: { "Cache-Control": "no-store" } }
+      )
     }
 
-    const usedFallback = directPath !== storagePath
     const downloadName = storagePath.split("/").pop()?.replace(/^.*?-\d+-/, "") || `${kind}-report.pdf`
     const { data: signed, error: signedError } = await admin.storage.from(BUCKET).createSignedUrl(storagePath, 60 * 60 * 24 * 7, { download: downloadName })
     if (signedError || !signed?.signedUrl) {
@@ -149,10 +153,10 @@ export async function GET(request: NextRequest) {
     pushServerDiagnosticEvent(actualResponseId, "PDF_DOWNLOAD_GET_REDIRECT", {
       kind,
       redirect: true,
-      usedFallback,
+      usedFallback: false,
       requestedKind: kind,
       downloadFilename: downloadName,
-      targetColumnPath: directPath || null,
+      targetColumnPath: storagePath,
       actualServedPath: storagePath,
     })
 

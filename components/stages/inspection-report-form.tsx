@@ -1702,12 +1702,18 @@ function truncateFilename(filename: string, maxLen = 22): string {
                   <span className="flex size-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
                     <CheckCircle2 className="size-4" />
                   </span>
-                  {locale === "ar" ? "تم إرسال التقرير وجاهز للتحميل!" : "Report & PDFs Ready!"}
+                  {Boolean(readyPdfs?.bilingual || translation?.bilingualPdfPath)
+                    ? (locale === "ar" ? "تم إرسال التقرير وجاهز للتحميل!" : "Report & PDFs Ready!")
+                    : (locale === "ar" ? "تم إرسال التقرير بنجاح!" : "Report Submitted!")}
                 </DialogTitle>
                 <DialogDescription className="text-xs">
-                  {locale === "ar"
-                    ? "تم إرسال التقرير وإنشاء كافة ملفات PDF بنجاح. انقر أدناه للتحميل المباشر."
-                    : "Your report has been submitted and all PDF documents are ready for instant download."}
+                  {Boolean(readyPdfs?.bilingual || translation?.bilingualPdfPath)
+                    ? (locale === "ar"
+                        ? "تم إرسال التقرير وإنشاء كافة ملفات PDF بنجاح. انقر أدناه للتحميل المباشر."
+                        : "Your report has been submitted and all PDF documents are ready for instant download.")
+                    : (locale === "ar"
+                        ? "تم إرسال التقرير بنجاح. ملف PDF الإنجليزي جاهز، وجاري إعداد الملف المزدوج."
+                        : "Your report has been submitted successfully. English PDF is ready; Bilingual PDF is preparing in the background.")}
                 </DialogDescription>
               </DialogHeader>
               <div className="mt-4 space-y-2">
@@ -1743,7 +1749,7 @@ function truncateFilename(filename: string, maxLen = 22): string {
 
                   <Button
                     type="button"
-                    variant="default"
+                    variant={Boolean(readyPdfs?.bilingual || translation?.bilingualPdfPath) ? "default" : "outline"}
                     size="sm"
                     disabled={actionBusy !== null}
                     onClick={async () => {
@@ -1773,25 +1779,22 @@ function truncateFilename(filename: string, maxLen = 22): string {
                             branch: "memory_blob",
                             result: "download_triggered",
                           })
-                        } else {
-                          const initialSource = translation?.bilingualPdfPath ? "stored_pdf" : "generated_on_click"
-                          logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_SOURCE", {
-                            clickId,
-                            source: initialSource,
-                            note: "source_represents_intended_branch_selection_not_actual_download_outcome",
-                          })
+                          return
+                        }
 
-                          if (respId && project?.id) {
-                            await ensureBilingualPdfStored({
-                              projectId: project.id,
-                              stageId: stgId,
-                              termId: isDirectStageReport ? undefined : reportDefinition.id,
-                              responseId: respId,
-                              existingPath: translation?.bilingualPdfPath,
-                              caller: "ready_modal_button",
-                            }).catch(() => null)
-                          }
+                        let storedPath = translation?.bilingualPdfPath || null
+                        if (!storedPath && respId && project?.id) {
+                          const res = await ensureBilingualPdfStored({
+                            projectId: project.id,
+                            stageId: stgId,
+                            termId: isDirectStageReport ? undefined : reportDefinition.id,
+                            responseId: respId,
+                            caller: "ready_modal_button",
+                          }).catch(() => ({ storagePath: null }))
+                          storedPath = res?.storagePath || null
+                        }
 
+                        if (storedPath) {
                           const query = translation?.id ? `translationId=${translation.id}` : `responseId=${respId}`
                           const endpointPath = `/api/stage-translations/pdf?projectId=${project.id}&${query}&kind=bilingual`
 
@@ -1815,6 +1818,17 @@ function truncateFilename(filename: string, maxLen = 22): string {
                           })
 
                           window.location.assign(endpointPath)
+                        } else {
+                          logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_BRANCH_RESULT", {
+                            clickId,
+                            branch: "ensure_bilingual",
+                            result: "bilingual_not_ready_prevented_download",
+                          })
+                          setError(
+                            locale === "ar"
+                              ? "ملف PDF المزدوج قيد الإعداد في الخلفية. يرجى الانتظار بضع ثوانٍ وإعادة المحاولة."
+                              : "Bilingual PDF is still preparing in the background. Please try again in a few seconds."
+                          )
                         }
 
                         // Diagnostic-only server snapshot after modal download (non-blocking)
@@ -1854,7 +1868,11 @@ function truncateFilename(filename: string, maxLen = 22): string {
                     ) : (
                       <Download className="size-4" />
                     )}
-                    <span>Bilingual PDF</span>
+                    <span>
+                      {Boolean(readyPdfs?.bilingual || translation?.bilingualPdfPath)
+                        ? "Bilingual PDF"
+                        : "Bilingual PDF (Preparing...)"}
+                    </span>
                   </Button>
                 </div>
 
