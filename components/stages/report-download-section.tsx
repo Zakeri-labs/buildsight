@@ -113,9 +113,9 @@ export function ReportDownloadSection({
       Date.now() - new Date(translation.generatedAt).getTime() > FIVE_DAYS_MS,
   )
 
-  async function ensureBilingualPdfReady(): Promise<string | null> {
-    if (translation?.bilingualPdfPath) {
-      return translation.bilingualPdfPath
+  async function ensureBilingualPdfReady(): Promise<{ storagePath: string | null; translationId: string | null }> {
+    if (translation?.bilingualPdfPath && translation?.id) {
+      return { storagePath: translation.bilingualPdfPath, translationId: translation.id }
     }
     const res = await ensureBilingualPdfStored({
       projectId,
@@ -126,7 +126,10 @@ export function ReportDownloadSection({
     if (res.translation) {
       setTranslation((current) => ({ ...(current || {}), ...res.translation }))
     }
-    return res.storagePath
+    return {
+      storagePath: res.storagePath,
+      translationId: res.translation?.id || translation?.id || null,
+    }
   }
 
   async function handleWhatsAppShare() {
@@ -222,14 +225,15 @@ export function ReportDownloadSection({
   async function handleDownload(kind: "original" | "bilingual") {
     if (downloading) return
     setDownloading(kind)
+    setDiagnosticError(null)
 
     try {
       if (kind === "bilingual") {
-        const storedPath = await ensureBilingualPdfReady()
-        if (storedPath && translation?.id) {
+        const { storagePath, translationId } = await ensureBilingualPdfReady()
+        if (storagePath && translationId) {
           const params = new URLSearchParams({
             projectId,
-            translationId: translation.id,
+            translationId,
             kind: "bilingual",
           })
           window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
@@ -237,11 +241,31 @@ export function ReportDownloadSection({
           return
         }
       } else {
-        const storedPath = translation?.originalPdfPath
-        if (storedPath && translation?.id) {
+        let storedPath = translation?.originalPdfPath
+        let transId = translation?.id
+        if (!storedPath || !transId) {
           const params = new URLSearchParams({
             projectId,
-            translationId: translation.id,
+            stageId: termId || stageId,
+            responseId,
+            statusOnly: "1",
+            background: "1",
+          })
+          const res = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" }).catch(() => null)
+          if (res?.ok) {
+            const payload = await res.json().catch(() => null)
+            if (payload?.data?.translation) {
+              setTranslation((current) => ({ ...(current || {}), ...payload.data.translation }))
+              storedPath = payload.data.translation.originalPdfPath
+              transId = payload.data.translation.id
+            }
+          }
+        }
+
+        if (storedPath && transId) {
+          const params = new URLSearchParams({
+            projectId,
+            translationId: transId,
             kind: "original",
           })
           window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)

@@ -167,7 +167,7 @@ async function markPdfFailure(job: StageTranslationJob) {
 }
 
 function allPdfPaths(record: StageTranslationRecord) {
-  return Boolean(record.originalPdfPath && record.arabicPdfPath && record.bilingualPdfPath)
+  return Boolean(record.originalPdfPath && record.bilingualPdfPath)
 }
 
 async function generateMissingPdfs(
@@ -178,9 +178,9 @@ async function generateMissingPdfs(
 ) {
   const { exportTranslationPdf, storeTranslationPdf } = await import("@/lib/stage-translations/client-pdf")
   let current = { ...record }
-  const kinds: Array<"original" | "arabic" | "bilingual"> = ["original", "arabic", "bilingual"]
+  const kinds: Array<"original" | "bilingual"> = ["original", "bilingual"]
   for (const kind of kinds) {
-    const existingPath = kind === "original" ? current.originalPdfPath : kind === "arabic" ? current.arabicPdfPath : current.bilingualPdfPath
+    const existingPath = kind === "original" ? current.originalPdfPath : current.bilingualPdfPath
     if (existingPath) continue
     const exported = await exportTranslationPdf({
       data,
@@ -199,7 +199,6 @@ async function generateMissingPdfs(
     current = {
       ...current,
       originalPdfPath: kind === "original" ? storagePath : current.originalPdfPath,
-      arabicPdfPath: kind === "arabic" ? storagePath : current.arabicPdfPath,
       bilingualPdfPath: kind === "bilingual" ? storagePath : current.bilingualPdfPath,
     }
   }

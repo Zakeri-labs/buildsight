@@ -72,7 +72,7 @@ async function translationScopeIsActive(admin: ReturnType<typeof createAdminClie
 
 function ensureTranslationReady(translation: TranslationRow, kind: PdfKind) {
   if (kind !== "original" && (translation.translation_status !== "completed" || !translation.translated_content)) {
-    throw new Error("Generate the Arabic translation before storing this PDF.")
+    throw new Error("Bilingual translation content is not ready for Bilingual PDF generation.")
   }
 }
 

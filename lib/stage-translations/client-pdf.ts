@@ -4650,7 +4650,7 @@ export async function exportTranslationPdf({
   const arabicTemplate = synchronizeMirroredDocumentStructures(englishTemplate, footerCleanArabicTemplate)
 
   if (kind === "arabic" || kind === "bilingual") {
-    if (!translation?.translatedContent) throw new Error("Generate the Arabic translation before exporting the Arabic or Bilingual PDF.")
+    if (!translation?.translatedContent) throw new Error("Bilingual translation content is not ready for Bilingual PDF generation.")
   }
 
   if (kind === "arabic") {

@@ -79,7 +79,7 @@ export function StageTranslationActions({
   )
 
   const allGeneratedPdfsReady = Boolean(
-    translation?.originalPdfPath && translation?.arabicPdfPath && translation?.bilingualPdfPath,
+    translation?.originalPdfPath && translation?.bilingualPdfPath,
   )
 
   const isFullyReady = Boolean(

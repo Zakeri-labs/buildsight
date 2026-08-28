@@ -554,7 +554,7 @@ export async function markStageTranslationPdfFailure(input: {
 }) {
   const pageData = await loadStageTranslationPageData(input.projectId, input.stageId, input.actorId, input.responseId)
   if (!pageData?.translation?.id || !pageData.translation.translatedContent) return
-  if (pageData.translation.originalPdfPath && pageData.translation.arabicPdfPath && pageData.translation.bilingualPdfPath) return
+  if (pageData.translation.originalPdfPath && pageData.translation.bilingualPdfPath) return
   const admin = createAdminClient()
   const { error } = await admin
     .from("translation_documents")
