@@ -4657,7 +4657,7 @@ async function renderBilingualImageGrid(
         flow.doc.setTextColor(100, 116, 139)
         writePdfText(flow.doc, capLinesEng, x, flow.y + dim.h + 2.5, { align: "left", lineHeightFactor: 1.1 }, false)
 
-        if (arCap) {
+        if (arCap && arCap.trim() !== engCap.trim()) {
           const capLinesAr = textLines(flow.doc, arCap, dim.w)
           setLanguage(flow.doc, true, 7.2, false)
           flow.doc.setTextColor(100, 116, 139)
