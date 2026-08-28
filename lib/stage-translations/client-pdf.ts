@@ -3472,10 +3472,11 @@ function synchronizeStructuredTable(source: StructuredPdfTable | undefined, tran
   }
 }
 
-function imageStructureKey(image: PdfImageTemplate) {
+function imageStructureKey(image: PdfImageTemplate, index?: number) {
   return [
+    image.id ?? image.src ?? "",
     image.sourcePage ?? 0,
-    image.sourceOrder ?? 0,
+    image.sourceOrder ?? index ?? 0,
     image.flowTarget ?? "gallery",
     image.sectionKey ?? "",
   ].join(":")
@@ -3483,10 +3484,10 @@ function imageStructureKey(image: PdfImageTemplate) {
 
 function synchronizeSectionImages(source: PdfImageTemplate[] | undefined, translated: PdfImageTemplate[] | undefined) {
   if (!source?.length) return undefined
-  const translatedByKey = new Map((translated ?? []).map((image) => [imageStructureKey(image), image]))
+  const translatedByKey = new Map((translated ?? []).map((image, index) => [imageStructureKey(image, index), image]))
   return source.map((image, index) => ({
     ...image,
-    caption: translatedByKey.get(imageStructureKey(image))?.caption ?? translated?.[index]?.caption ?? "",
+    caption: translatedByKey.get(imageStructureKey(image, index))?.caption ?? translated?.[index]?.caption ?? image.caption ?? "",
   }))
 }
 
