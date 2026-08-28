@@ -6,6 +6,7 @@ import {
   readStageTranslationJobs,
   STAGE_TRANSLATION_JOB_EVENT,
 } from "@/lib/stage-translations/client-auto-generation"
+import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
 
 export function StageTranslationBackgroundWorker() {
   const draining = useRef(false)
@@ -20,6 +21,11 @@ export function StageTranslationBackgroundWorker() {
         const jobs = readStageTranslationJobs()
         for (const job of jobs) {
           if (disposed) break
+          logDiagnosticEvent(job.responseId, "WORKER_JOB_DETECTED", {
+            projectId: job.projectId,
+            stageId: job.stageId,
+            responseId: job.responseId,
+          })
           try {
             await processStageTranslationJob(job)
           } catch (error) {

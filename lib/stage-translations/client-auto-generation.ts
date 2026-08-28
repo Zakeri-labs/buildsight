@@ -2,6 +2,7 @@
 
 import type { StageTranslationPageData, StageTranslationRecord } from "@/lib/stage-translations/types"
 import type { ReportCcRecipient } from "@/lib/report-cc/types"
+import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
 
 const STORAGE_KEY = "buildsight-stage-translation-jobs-v1"
 export const STAGE_TRANSLATION_JOB_EVENT = "buildsight:stage-translation-job"
@@ -81,6 +82,15 @@ export function enqueueStageTranslationJob(job: StageTranslationJob) {
       ? jobs.map((item) => jobKey(item) === key ? { ...item, retry: item.retry || normalized.retry } : item)
       : [...jobs, normalized]
     writeJobs(next)
+
+    logDiagnosticEvent(normalized.responseId, "JOB_ENQUEUED", {
+      projectId: normalized.projectId,
+      stageId: normalized.stageId,
+      responseId: normalized.responseId,
+      retry: normalized.retry,
+      queueLength: next.length,
+    })
+
     window.dispatchEvent(new CustomEvent(STAGE_TRANSLATION_JOB_EVENT))
   } catch {
     // The immediate job below can still run even if persistence/event delivery
@@ -99,7 +109,14 @@ export function enqueueStageTranslationJob(job: StageTranslationJob) {
 export function removeStageTranslationJob(job: StageTranslationJob) {
   if (typeof window === "undefined") return
   const key = jobKey(job)
-  writeJobs(readStageTranslationJobs().filter((item) => jobKey(item) !== key))
+  const remaining = readStageTranslationJobs().filter((item) => jobKey(item) !== key)
+  writeJobs(remaining)
+  logDiagnosticEvent(job.responseId, "JOB_REMOVED", {
+    projectId: job.projectId,
+    stageId: job.stageId,
+    responseId: job.responseId,
+    remainingQueueLength: remaining.length,
+  })
 }
 
 function clearRetryFlag(job: StageTranslationJob) {
@@ -120,18 +137,55 @@ async function loadTranslation(job: StageTranslationJob, includeRecipients = fal
     background: "1",
     ...(includeRecipients ? {} : { statusOnly: "1" }),
   })
+
+  logDiagnosticEvent(job.responseId, "TRANSLATION_STATUS_REQUEST", {
+    projectId: job.projectId,
+    stageId: job.stageId,
+    includeRecipients,
+  })
+
   const response = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
   const payload = await response.json().catch(() => null) as TranslationPayload | null
+
   if (!response.ok) {
+    logDiagnosticEvent(job.responseId, "TRANSLATION_STATUS_RESULT", {
+      httpStatus: response.status,
+      error: payload?.error || "http_failed",
+    })
     const error = new Error(payload?.error || "Unable to check translation status.") as Error & { status?: number }
     error.status = response.status
     throw error
   }
-  if (!payload?.data) throw new Error("Translation status is unavailable.")
+  if (!payload?.data) {
+    logDiagnosticEvent(job.responseId, "TRANSLATION_STATUS_RESULT", {
+      httpStatus: response.status,
+      error: "payload_missing_data",
+    })
+    throw new Error("Translation status is unavailable.")
+  }
+
+  const rec = payload.data.translation
+  logDiagnosticEvent(job.responseId, "TRANSLATION_STATUS_RESULT", {
+    httpStatus: response.status,
+    translationStatus: rec?.status || "missing",
+    translatedContentPresent: Boolean(rec?.translatedContent),
+    originalPdfPathPresent: Boolean(rec?.originalPdfPath),
+    bilingualPdfPathPresent: Boolean(rec?.bilingualPdfPath),
+    arabicPdfPathPresent: Boolean(rec?.arabicPdfPath),
+    generatedAt: rec?.generatedAt || null,
+  })
+
   return { data: payload.data, ccRecipients: payload.ccRecipients ?? [] }
 }
 
 async function startTranslation(job: StageTranslationJob, retry: boolean) {
+  logDiagnosticEvent(job.responseId, "TRANSLATION_POST", {
+    caller: "client_auto_generation",
+    action: retry ? "retry" : "start",
+    projectId: job.projectId,
+    stageId: job.stageId,
+  })
+
   const response = await fetch("/api/stage-translations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -144,84 +198,105 @@ async function startTranslation(job: StageTranslationJob, retry: boolean) {
     }),
   })
   const payload = await response.json().catch(() => null)
+
+  logDiagnosticEvent(job.responseId, "TRANSLATION_POST_RESULT", {
+    httpStatus: response.status,
+    shouldRun: payload?.started,
+    status: payload?.translation?.status,
+    reason: payload?.debug?.reason || payload?.reason,
+    translationId: payload?.translation?.id,
+    error: payload?.error,
+  })
+
   if (!response.ok) throw new Error(payload?.error || "Unable to start translation.")
 }
 
 async function markPdfFailure(job: StageTranslationJob) {
-  try {
-    const response = await fetch("/api/stage-translations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "pdf-failed",
-        projectId: job.projectId,
-        stageId: job.stageId,
-        responseId: job.responseId,
-        background: true,
-      }),
-    })
-    return response.ok
-  } catch {
-    return false
-  }
+  const response = await fetch("/api/stage-translations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "pdf-failed",
+      projectId: job.projectId,
+      stageId: job.stageId,
+      responseId: job.responseId,
+      background: true,
+    }),
+  })
+  return response.ok
 }
 
 function allPdfPaths(record: StageTranslationRecord) {
-  return Boolean(record.originalPdfPath && record.arabicPdfPath && record.bilingualPdfPath)
+  return Boolean(record.originalPdfPath && record.bilingualPdfPath)
 }
 
 async function generateMissingPdfs(
   job: StageTranslationJob,
   data: StageTranslationPageData,
-  record: StageTranslationRecord,
+  translation: StageTranslationRecord,
   ccRecipients: ReportCcRecipient[],
 ) {
-  const { exportTranslationPdf, storeTranslationPdf } = await import("@/lib/stage-translations/client-pdf")
-  let current = { ...record }
-  const kinds: Array<"original" | "arabic" | "bilingual"> = ["original", "arabic", "bilingual"]
-  for (const kind of kinds) {
-    const existingPath = kind === "original" ? current.originalPdfPath : kind === "arabic" ? current.arabicPdfPath : current.bilingualPdfPath
-    if (existingPath) continue
-    const exported = await exportTranslationPdf({
+  let currentRecord = translation
+  if (!currentRecord.originalPdfPath) {
+    const originalPdf = await exportTranslationPdf({
       data,
-      translation: current,
-      kind,
+      translation: currentRecord,
+      kind: "original",
       ccRecipients,
       appendClosingBlock: true,
     })
-    const storagePath = await storeTranslationPdf({
+    const originalPdfPath = await storeTranslationPdf({
       projectId: job.projectId,
-      translationId: current.id,
-      kind,
-      blob: exported.blob,
-      filename: exported.filename,
+      translationId: currentRecord.id,
+      kind: "original",
+      blob: originalPdf.blob,
+      filename: originalPdf.filename,
     })
-    current = {
-      ...current,
-      originalPdfPath: kind === "original" ? storagePath : current.originalPdfPath,
-      arabicPdfPath: kind === "arabic" ? storagePath : current.arabicPdfPath,
-      bilingualPdfPath: kind === "bilingual" ? storagePath : current.bilingualPdfPath,
-    }
+    currentRecord = { ...currentRecord, originalPdfPath }
   }
-  return current
+  if (!currentRecord.bilingualPdfPath) {
+    const bilingualPdf = await exportTranslationPdf({
+      data,
+      translation: currentRecord,
+      kind: "bilingual",
+      ccRecipients,
+      appendClosingBlock: true,
+    })
+    const bilingualPdfPath = await storeTranslationPdf({
+      projectId: job.projectId,
+      translationId: currentRecord.id,
+      kind: "bilingual",
+      blob: bilingualPdf.blob,
+      filename: bilingualPdf.filename,
+    })
+    currentRecord = { ...currentRecord, bilingualPdfPath }
+  }
+  return currentRecord
 }
 
-/**
- * Resume a queued Stage translation/PDF job using the existing browser PDF
- * renderer. Translation itself is durable server background work; this queue
- * persists across in-app navigation and reloads so PDF preparation continues
- * while the user keeps using the application.
- */
 export async function processStageTranslationJob(job: StageTranslationJob) {
-  if (typeof window === "undefined") return
   const normalized = normalizeJob(job)
   if (!normalized) return
   const key = jobKey(normalized)
-  if (activeJobs.has(key)) return
+  if (activeJobs.has(key)) {
+    logDiagnosticEvent(normalized.responseId, "WORKER_PROCESS_SKIPPED", {
+      reason: "job_already_active",
+      key,
+    })
+    return
+  }
+
   activeJobs.add(key)
+  logDiagnosticEvent(normalized.responseId, "WORKER_PROCESS_START", {
+    key,
+    projectId: normalized.projectId,
+    stageId: normalized.stageId,
+    retry: normalized.retry,
+  })
+
+  let retryRequested = Boolean(normalized.retry)
 
   try {
-    let retryRequested = Boolean(normalized.retry)
     let startRequested = false
 
     for (let cycle = 0; cycle < MAX_POLL_CYCLES; cycle += 1) {
@@ -244,6 +319,13 @@ export async function processStageTranslationJob(job: StageTranslationJob) {
       const responseUpdatedAt = new Date(snapshot.data.response.updatedAt).getTime()
       const stale = Boolean(generatedAt && responseUpdatedAt > generatedAt)
 
+      logDiagnosticEvent(normalized.responseId, "STALE_CHECK", {
+        caller: "processStageTranslationJob",
+        responseUpdatedAt: snapshot.data.response.updatedAt,
+        generatedAt: record?.generatedAt || null,
+        stale,
+      })
+
       if (!record || stale) {
         if (!startRequested) {
           await startTranslation(normalized, retryRequested)
@@ -264,6 +346,9 @@ export async function processStageTranslationJob(job: StageTranslationJob) {
           await wait(POLL_MS)
           continue
         }
+        logDiagnosticEvent(normalized.responseId, "WORKER_EXIT_FAILED_STATE", {
+          status: "failed",
+        })
         removeStageTranslationJob(normalized)
         return
       }
@@ -319,5 +404,8 @@ export async function processStageTranslationJob(job: StageTranslationJob) {
     }
   } finally {
     activeJobs.delete(key)
+    logDiagnosticEvent(normalized.responseId, "WORKER_COMPLETE", {
+      key,
+    })
   }
 }

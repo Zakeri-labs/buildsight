@@ -9,6 +9,7 @@ import { downloadPdfBlob, exportTranslationPdf, storeTranslationPdf } from "@/li
 import type { StageTranslationPageData } from "@/lib/stage-translations/types"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
 
 const COPY = {
   en: {
@@ -92,6 +93,44 @@ export function StageTranslationActions({
   const isProcessing = !isFullyReady && !isFailed
 
   useEffect(() => {
+    if (initialTranslation) {
+      setTranslation((current) => ({
+        ...current,
+        ...initialTranslation,
+        bilingualPdfPath: initialTranslation.bilingualPdfPath ?? current.bilingualPdfPath,
+        originalPdfPath: initialTranslation.originalPdfPath ?? current.originalPdfPath,
+        arabicPdfPath: initialTranslation.arabicPdfPath ?? current.arabicPdfPath,
+        translatedContent: initialTranslation.translatedContent ?? current.translatedContent,
+      }))
+    }
+  }, [initialTranslation])
+
+  useEffect(() => {
+    logDiagnosticEvent(responseId, "TRANSLATION_UI_STATE", {
+      status: translation.status,
+      isFullyReady,
+      isProcessing,
+      stale,
+      originalPdfPath: translation.originalPdfPath || null,
+      bilingualPdfPath: translation.bilingualPdfPath || null,
+      hasTranslatedContent: Boolean(translation.translatedContent),
+    })
+
+    logDiagnosticEvent(responseId, "READINESS_CHECK", {
+      component: "StageTranslationActions",
+      isDirectStage,
+      statusCompleted: translation.status === "completed",
+      stale,
+      translatedContentPresent: Boolean(translation.translatedContent),
+      originalPdfPresent: Boolean(translation.originalPdfPath),
+      bilingualPdfPresent: Boolean(translation.bilingualPdfPath),
+      arabicPdfPresent: Boolean(translation.arabicPdfPath),
+      allGeneratedPdfsReady,
+      result: isFullyReady,
+    })
+  }, [responseId, translation.status, isFullyReady, isProcessing, stale, translation.originalPdfPath, translation.bilingualPdfPath, translation.arabicPdfPath, translation.translatedContent, isDirectStage, allGeneratedPdfsReady])
+
+  useEffect(() => {
     if (isFullyReady || isFailed) {
       return
     }
@@ -138,161 +177,127 @@ export function StageTranslationActions({
     const params = new URLSearchParams({ projectId, stageId, termId, responseId })
     const response = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
     const payload = await response.json().catch(() => null)
-    if (!response.ok) throw new Error(payload?.error || copy.failed)
-    const data = payload?.data as StageTranslationPageData | undefined
-    const record = data?.translation
-    if (!data || !record || record.status !== "completed") throw new Error(copy.failed)
-    if (kind !== "original" && !record.translatedContent) throw new Error(copy.failed)
+    if (!response.ok || !payload?.data) throw new Error(payload?.error || copy.failed)
 
-    const isStale = Boolean(
-      record.generatedAt && new Date(data.response.updatedAt).getTime() > new Date(record.generatedAt).getTime(),
-    )
-    if (kind !== "original" && isStale) throw new Error(copy.stale)
-
-    const exported = await exportTranslationPdf({ data, translation: record, kind, appendClosingBlock: true })
-    const storagePath = await storeTranslationPdf({
-      projectId,
-      translationId: record.id,
+    const pageData = payload.data as StageTranslationPageData
+    const pdf = await exportTranslationPdf({
+      data: pageData,
+      translation: pageData.translation,
       kind,
-      blob: exported.blob,
-      filename: exported.filename,
+      ccRecipients: payload.ccRecipients ?? [],
+      appendClosingBlock: true,
     })
-    setTranslation((current) => ({
-      ...current,
-      id: record.id,
-      status: record.status,
-      generatedAt: record.generatedAt,
-      translatedContent: record.translatedContent,
-      originalPdfPath: kind === "original" ? storagePath : current.originalPdfPath,
-      arabicPdfPath: kind === "arabic" ? storagePath : current.arabicPdfPath,
-      bilingualPdfPath: kind === "bilingual" ? storagePath : current.bilingualPdfPath,
-    }))
-    downloadPdfBlob(exported.blob, exported.filename)
+
+    downloadPdfBlob(pdf.blob, pdf.filename)
+
+    if (pageData.translation?.id) {
+      const savedPath = await storeTranslationPdf({
+        projectId,
+        translationId: pageData.translation.id,
+        kind,
+        blob: pdf.blob,
+        filename: pdf.filename,
+      })
+      setTranslation((current) => ({
+        ...current,
+        id: pageData.translation!.id,
+        status: "completed",
+        generatedAt: pageData.translation!.generatedAt ?? new Date().toISOString(),
+        originalPdfPath: kind === "original" ? savedPath : current.originalPdfPath,
+        arabicPdfPath: kind === "arabic" ? savedPath : current.arabicPdfPath,
+        bilingualPdfPath: kind === "bilingual" ? savedPath : current.bilingualPdfPath,
+      }))
+    }
   }
 
-  const [downloading, setDownloading] = useState<PdfKind | null>(null)
-
-  async function download(kind: PdfKind) {
-    if (busy || downloading || (kind !== "original" && stale)) return
-    setError(null)
-    setDownloading(kind)
-    const storedPath = pdfPath(translation, kind)
-    if (isDirectStage) {
-      if (!storedPath || !translation.id) {
-        setError(copy.preparing)
-        setDownloading(null)
-        return
-      }
+  function handleDownload(kind: PdfKind) {
+    const existing = pdfPath(translation, kind)
+    if (existing && translation.id) {
       const params = new URLSearchParams({ projectId, translationId: translation.id, kind })
       window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
-      // Clear after a moment — browser starts downloading
-      setTimeout(() => setDownloading(null), 2000)
-      return
-    }
-    if (storedPath && kind !== "original") {
-      const params = new URLSearchParams({ projectId, translationId: translation.id, kind })
-      window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
-      setTimeout(() => setDownloading(null), 2000)
       return
     }
 
     setBusy(kind)
-    try {
-      await generateAndStore(kind)
-    } catch (downloadError) {
-      setError(downloadError instanceof Error ? downloadError.message : copy.failed)
-    } finally {
-      setBusy(null)
-      setDownloading(null)
-    }
+    setError(null)
+    generateAndStore(kind)
+      .catch((err) => setError(err instanceof Error ? err.message : copy.failed))
+      .finally(() => setBusy(null))
   }
 
-  const btnSize = inHeader ? "sm" : "xs"
-  const translateBtnClass = inHeader ? "bg-white text-primary hover:bg-white/90 font-medium" : ""
-  const downloadBtnClass = inHeader
-    ? "border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-    : ""
+  const translateHref = `/projects/${projectId}/stages/${stageId}/terms/${termId}/translate?responseId=${responseId}`
 
-  const isTranslated = Boolean(
-    translation?.status === "completed" && translation?.generatedAt && (isDirectStage || translation?.translatedContent)
-  )
-
-  const untranslatedHint = locale === "ar" ? "ترجم التقرير أولاً لتفعيل التنزيل" : "Translate report first to enable PDF download"
-  const directOriginalReady = !isDirectStage || Boolean(translation.originalPdfPath && translation.id && !stale)
-  const directArabicReady = !isDirectStage || Boolean(translation.arabicPdfPath && translation.id && !stale)
-  const directBilingualReady = !isDirectStage || Boolean(translation.bilingualPdfPath && translation.id && !stale)
+  if (inHeader) {
+    return (
+      <div className="flex items-center gap-2">
+        <Link
+          href={translateHref}
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5 text-xs font-medium")}
+        >
+          <Languages className="size-3.5" />
+          <span>{copy.translate}</span>
+        </Link>
+      </div>
+    )
+  }
 
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1.5", inHeader ? "w-full sm:w-auto items-stretch sm:items-end" : "items-end")} onClick={(event) => event.stopPropagation()}>
-      <div className={cn(
-        "items-center gap-1.5",
-        inHeader
-          ? "flex w-full justify-end sm:grid sm:grid-cols-[1fr_auto_1fr] sm:w-auto"
-          : "grid grid-cols-[1fr_auto_1fr] w-full sm:flex sm:w-auto sm:justify-start"
-      )}>
-        <Link
-          href={
-            !termId || termId === stageId
-              ? `/projects/${projectId}/stages/${stageId}/reports/${responseId}/translate`
-              : `/projects/${projectId}/stages/${stageId}/terms/${termId}/reports/${responseId}/translate`
-          }
-          className={cn(buttonVariants({ size: btnSize, variant: inHeader ? "secondary" : "secondary" }), "h-8 min-w-0 px-2 text-xs font-semibold gap-1.5 justify-center", translateBtnClass)}
-        >
-          {isProcessing ? <Loader2 className="size-3.5 animate-spin shrink-0" /> : <Languages className="size-3.5 shrink-0" />}
-          <span className="truncate sm:inline hidden">{copy.translate}</span>
-        </Link>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
-          size={btnSize}
+          type="button"
           variant="outline"
-          className={cn("h-8 shrink-0 px-2.5 text-xs font-semibold gap-1.5 justify-center hidden sm:flex", downloadBtnClass)}
-          disabled={busy !== null || downloading !== null || !directOriginalReady}
-          title={!directOriginalReady ? copy.preparing : copy.english}
-          onClick={() => void download("original")}
+          size="sm"
+          disabled={busy !== null}
+          onClick={() => handleDownload("original")}
+          className="h-8 gap-1.5 text-xs font-medium"
         >
-          {downloading === "original" || busy === "original" ? <Loader2 className="size-3.5 animate-spin shrink-0" /> : <Download className="size-3.5 shrink-0" />}
+          {busy === "original" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
           <span>{copy.english}</span>
         </Button>
-        <Button
-          size={btnSize}
-          variant="outline"
-          className={cn("h-8 min-w-0 px-2 text-xs font-semibold gap-1.5 justify-center hidden sm:flex", downloadBtnClass, (!isTranslated || !directBilingualReady) && "opacity-50 cursor-not-allowed")}
-          disabled={busy !== null || downloading !== null || !isTranslated || stale || !directBilingualReady}
-          title={!directBilingualReady ? copy.preparing : !isTranslated ? untranslatedHint : stale ? copy.stale : copy.bilingual}
-          onClick={() => void download("bilingual")}
-        >
-          {downloading === "bilingual" || busy === "bilingual" ? <Loader2 className="size-3.5 animate-spin shrink-0" /> : <Download className="size-3.5 shrink-0" />}
-          <span className="truncate">{copy.bilingual}</span>
-        </Button>
-      </div>
-      {error ? <p role="alert" className={cn("max-w-md text-end text-[11px]", inHeader ? "text-amber-200" : "text-red-600")}>{error}</p> : null}
-      {stale ? <p className={cn("max-w-md text-end text-[11px]", inHeader ? "text-amber-200" : "text-amber-700")}>{copy.stale}</p> : null}
 
-      {isFullyReady ? (
-        <div className="fixed inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom duration-500 ease-out border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-18px_rgba(0,0,0,0.45)] backdrop-blur md:hidden">
-          <div className="mx-auto grid h-14 max-w-lg grid-cols-2 gap-2 px-3 py-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-10 min-w-0 px-2 text-xs font-bold gap-1.5 text-foreground dark:text-foreground bg-background hover:bg-accent border-input shadow-xs disabled:opacity-50"
-              onClick={() => void download("original")}
-              disabled={busy !== null || downloading !== null || !directOriginalReady}
-            >
-              {downloading === "original" || busy === "original" ? <Loader2 className="size-3.5 animate-spin text-foreground" /> : <Download className="size-3.5 text-foreground stroke-[2.5]" />}
-              <span className="text-foreground font-bold">EN</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-10 min-w-0 px-2 text-xs font-bold gap-1.5 text-foreground dark:text-foreground bg-background hover:bg-accent border-input shadow-xs disabled:opacity-50"
-              onClick={() => void download("bilingual")}
-              disabled={busy !== null || downloading !== null || !isTranslated || stale || !directBilingualReady}
-            >
-              {downloading === "bilingual" || busy === "bilingual" ? <Loader2 className="size-3.5 animate-spin text-foreground" /> : <Download className="size-3.5 text-foreground stroke-[2.5]" />}
-              <span className="text-foreground font-bold">EN / AR</span>
-            </Button>
-          </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={busy !== null || !isFullyReady}
+          onClick={() => handleDownload("bilingual")}
+          className="h-8 gap-1.5 text-xs font-medium"
+        >
+          {busy === "bilingual" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+          <span>{copy.bilingual}</span>
+        </Button>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={busy !== null || !isFullyReady}
+          onClick={() => handleDownload("arabic")}
+          className="h-8 gap-1.5 text-xs font-medium"
+        >
+          {busy === "arabic" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+          <span>{copy.arabic}</span>
+        </Button>
+
+        <Link
+          href={translateHref}
+          className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-8 gap-1.5 text-xs text-muted-foreground")}
+        >
+          <Languages className="size-3.5" />
+          <span>{copy.translate}</span>
+        </Link>
+      </div>
+
+      {isProcessing && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin" />
+          <span>{copy.preparing}</span>
         </div>
-      ) : null}
+      )}
+
+      {stale && <p className="text-xs text-amber-600 dark:text-amber-400">{copy.stale}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   )
 }

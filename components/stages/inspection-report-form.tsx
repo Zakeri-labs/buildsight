@@ -60,6 +60,7 @@ import { buildWhatsAppShareUrl, buildShareMessage } from "@/lib/stage-translatio
 import { StageTranslationActions } from "@/components/stages/stage-translation-actions"
 import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
 import { ReportDownloadSection } from "@/components/stages/report-download-section"
+import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
 import type { ProjectStageAttachment, ProjectStageApproval, ProjectStagePerson, ProjectStageTranslationSummary } from "@/lib/db/project-stages"
 import type { ProjectCcCandidate, ReportCcRecipient, ReportCcSelection } from "@/lib/report-cc/types"
 import {
@@ -540,6 +541,19 @@ export function InspectionReportForm({
     }
   }, [response])
 
+  useEffect(() => {
+    if (submitModalOpen && submitResult?.responseId) {
+      logDiagnosticEvent(submitResult.responseId, "READY_MODAL_OPENED", {
+        readyOriginalPdfBlob: Boolean(readyPdfs?.original),
+        readyBilingualPdfBlob: Boolean(readyPdfs?.bilingual),
+        translationLocalStatus: translation?.status || null,
+        localOriginalPdfPath: translation?.originalPdfPath || null,
+        localBilingualPdfPath: translation?.bilingualPdfPath || null,
+        localHasTranslatedContent: Boolean(translation?.translatedContent),
+      })
+    }
+  }, [submitModalOpen, submitResult?.responseId, readyPdfs?.original, readyPdfs?.bilingual, translation?.status, translation?.originalPdfPath, translation?.bilingualPdfPath, translation?.translatedContent])
+
   const evidenceImages = existingAttachments.filter((item) => item.attachmentKind === "evidence_image")
   const documentAttachments = existingAttachments.filter((item) => item.attachmentKind === "document")
   const statusLocked = status === "approved" || status === "completed"
@@ -609,6 +623,10 @@ export function InspectionReportForm({
   const uploadFiles = async (id: string, files: PendingFile[], kind: "evidence_image" | "document") => {
     const validFiles = files.filter((item) => item.file && item.file.size > 0)
     if (!validFiles.length) return
+    logDiagnosticEvent(id, "IMAGE_UPLOAD_PHASE_STARTED", {
+      totalFiles: validFiles.length,
+      kind,
+    })
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) throw new Error("Your session has expired. Sign in again.")
@@ -621,6 +639,11 @@ export function InspectionReportForm({
         const chunkResults = await Promise.all(
           chunk.map(async (item, chunkOffset) => {
             const index = i + chunkOffset
+            logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_STARTED", {
+              fileIndex: index,
+              filename: item.file.name,
+              kind,
+            })
             const folder = kind === "evidence_image" ? "evidence" : "documents"
             const safeName = sanitizeEvidenceFileName(item.file.name)
             const path = `${project.id}/${id}/${folder}/${crypto.randomUUID()}-${safeName}`
@@ -653,9 +676,19 @@ export function InspectionReportForm({
               }
             }
             if (lastError) {
+              logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_FAILED", {
+                fileIndex: index,
+                filename: item.file.name,
+                error: lastError instanceof Error ? lastError.message : String(lastError),
+              })
               console.warn(`File upload skipped for ${item.file.name}:`, lastError)
               return null
             }
+            logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_SUCCESS", {
+              fileIndex: index,
+              filename: item.file.name,
+              path,
+            })
             return {
               path,
               registration: {
@@ -697,6 +730,11 @@ export function InspectionReportForm({
       } else {
         setPendingDocuments((current) => current.filter((row) => !validFiles.some((f) => f.id === row.id)))
       }
+      logDiagnosticEvent(id, "IMAGE_UPLOAD_PHASE_COMPLETE", {
+        totalFiles: validFiles.length,
+        completedCount: registrations.length,
+        kind,
+      })
     } catch (uploadError) {
       if (uploadedPaths.length) {
         await supabase.storage.from("project-stage-evidence").remove(uploadedPaths).catch(() => undefined)
@@ -756,10 +794,29 @@ export function InspectionReportForm({
       let stepIdx = 0
       if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
 
+      logDiagnosticEvent(responseId || null, "SUBMIT_STARTED", {
+        mode,
+        isSubmitMode,
+        isDirectStageReport,
+        projectId: project.id,
+      })
+
+      logDiagnosticEvent(responseId || null, "REPORT_SAVE_STARTED", {
+        projectId: project.id,
+        isDirectStageReport,
+        mode,
+      })
+
       // Ensure the report record exists in DB first so attachments & CC recipients can be linked
       const savedResponse = await ensureResponse(mode === "progress" ? "in_progress" : "draft")
       const id = savedResponse.responseId
       let routeStageId = savedResponse.projectStageId
+
+      logDiagnosticEvent(id, "REPORT_SAVE_SUCCESS", {
+        projectId: project.id,
+        responseId: id,
+        stageId: routeStageId,
+      })
 
       if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
 
@@ -815,6 +872,14 @@ export function InspectionReportForm({
         setVisitNumber(result.data.visitNumber)
         setStatus(result.data.status as ResponseStatus)
         setSuccess(copy.submitted)
+
+        logDiagnosticEvent(id, "REPORT_SUBMITTED", {
+          projectId: project.id,
+          stageId: routeStageId,
+          responseId: id,
+          status: result.data.status,
+          isDirectStageReport,
+        })
 
         if (isDirectStageReport && isSubmitMode) {
           steps = updateStep(steps, stepIdx, "active")
@@ -939,6 +1004,9 @@ export function InspectionReportForm({
       }
     } catch (saveError) {
       const errMsg = saveError instanceof Error ? saveError.message : "Unable to save the report."
+      logDiagnosticEvent(responseId || null, "REPORT_SAVE_FAILED", {
+        error: errMsg,
+      })
       setError(errMsg)
       setSubmitSteps((prev) => {
         const activeIdx = prev.findIndex((s) => s.status === "active")
@@ -1566,17 +1634,24 @@ export function InspectionReportForm({
         open={submitModalOpen}
         onOpenChange={(open) => {
           if (!open && submitResult) {
-            setSubmitModalOpen(false)
             const targetStageId = submitResult.stageId
             const targetResponseId = submitResult.responseId
+            logDiagnosticEvent(targetResponseId, "READY_MODAL_CLOSE_REQUESTED", { method: "X" })
+            setSubmitModalOpen(false)
             setSubmitResult(null)
             setReadyPdfs(null)
+            logDiagnosticEvent(targetResponseId, "READY_PDFS_MEMORY_CLEARED")
             if (targetStageId && targetResponseId) {
               const targetPath = `/projects/${project.id}/stages/${targetStageId}/reports/${targetResponseId}`
               if (typeof window !== "undefined" && window.location.pathname !== targetPath) {
+                logDiagnosticEvent(targetResponseId, "ROUTER_REPLACE", { targetPath })
+                logDiagnosticEvent(targetResponseId, "READY_MODAL_CLOSED", { method: "X" })
                 router.replace(targetPath)
+                return
               }
             }
+            logDiagnosticEvent(targetResponseId, "ROUTER_REFRESH")
+            logDiagnosticEvent(targetResponseId, "READY_MODAL_CLOSED", { method: "X" })
             router.refresh()
           }
         }}
@@ -1636,12 +1711,25 @@ export function InspectionReportForm({
                     disabled={actionBusy !== null}
                     onClick={async () => {
                       setActionBusy("bilingual_pdf")
+                      const respId = submitResult?.responseId || responseId
+                      const stgId = submitResult?.stageId || resolvedStageId
+                      const clickId = "bil_" + Math.random().toString(36).slice(2, 6)
+
+                      logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_CLICK", {
+                        clickId,
+                        readyPdfsBilingualPresent: Boolean(readyPdfs?.bilingual),
+                        translationLocalStatus: translation?.status || null,
+                        localBilingualPdfPath: translation?.bilingualPdfPath || null,
+                      })
+
                       try {
                         if (readyPdfs?.bilingual) {
+                          logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_BRANCH_SELECTED", { clickId, branch: "memory_blob" })
                           downloadPdfBlob(readyPdfs.bilingual.blob, readyPdfs.bilingual.filename)
                         } else {
-                          const respId = submitResult?.responseId || responseId
-                          const stgId = submitResult?.stageId || resolvedStageId
+                          const initialSource = translation?.bilingualPdfPath ? "stored_endpoint" : "ensure_bilingual"
+                          logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_BRANCH_SELECTED", { clickId, branch: initialSource })
+
                           if (respId && project?.id) {
                             await ensureBilingualPdfStored({
                               projectId: project.id,
@@ -1780,17 +1868,24 @@ export function InspectionReportForm({
                   type="button"
                   className="w-full"
                   onClick={() => {
-                    const targetStageId = submitResult.stageId
-                    const targetResponseId = submitResult.responseId
+                    const targetStageId = submitResult?.stageId
+                    const targetResponseId = submitResult?.responseId
+                    logDiagnosticEvent(targetResponseId, "READY_MODAL_CLOSE_REQUESTED", { method: "CloseAndViewReport" })
                     setSubmitModalOpen(false)
                     setSubmitResult(null)
                     setReadyPdfs(null)
+                    logDiagnosticEvent(targetResponseId, "READY_PDFS_MEMORY_CLEARED")
                     if (targetStageId && targetResponseId) {
                       const targetPath = `/projects/${project.id}/stages/${targetStageId}/reports/${targetResponseId}`
                       if (typeof window !== "undefined" && window.location.pathname !== targetPath) {
+                        logDiagnosticEvent(targetResponseId, "ROUTER_REPLACE", { targetPath })
+                        logDiagnosticEvent(targetResponseId, "READY_MODAL_CLOSED", { method: "CloseAndViewReport" })
                         router.replace(targetPath)
+                        return
                       }
                     }
+                    logDiagnosticEvent(targetResponseId, "ROUTER_REFRESH")
+                    logDiagnosticEvent(targetResponseId, "READY_MODAL_CLOSED", { method: "CloseAndViewReport" })
                     router.refresh()
                   }}
                 >

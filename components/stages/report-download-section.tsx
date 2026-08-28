@@ -6,9 +6,11 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import type { ProjectStageTranslationSummary } from "@/lib/db/project-stages"
 import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto-generation"
-import { exportTranslationPdf, downloadPdfBlob, storeTranslationPdf } from "@/lib/stage-translations/client-pdf"
+import { exportTranslationPdf, downloadPdfBlob, storeTranslationPdf, ensureBilingualPdfStored } from "@/lib/stage-translations/client-pdf"
 import { buildShareMessage, buildWhatsAppShareUrl } from "@/lib/stage-translations/whatsapp-share"
 import { cn } from "@/lib/utils"
+import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
+import { DebugTimelinePanel } from "@/components/stages/debug-timeline-panel"
 
 export function ReportDownloadSection({
   projectId,
@@ -58,6 +60,30 @@ export function ReportDownloadSection({
       responseUpdatedAt &&
       new Date(responseUpdatedAt).getTime() > new Date(translation.generatedAt).getTime(),
   )
+
+  useEffect(() => {
+    logDiagnosticEvent(responseId, "DOWNLOAD_SECTION_STATE", {
+      localStatus: translation?.status || null,
+      initialPropStatus: initialTranslation?.status || null,
+      originalPathPresence: Boolean(translation?.originalPdfPath),
+      bilingualPathPresence: Boolean(translation?.bilingualPdfPath),
+      translatedContentPresence: Boolean(translation?.translatedContent),
+    })
+  }, [responseId, translation?.status, initialTranslation?.status, translation?.originalPdfPath, translation?.bilingualPdfPath, translation?.translatedContent])
+
+  useEffect(() => {
+    if (initialTranslation) {
+      setTranslation((current) => {
+        if (!current) return initialTranslation
+        return {
+          ...current,
+          ...initialTranslation,
+          bilingualPdfPath: initialTranslation.bilingualPdfPath || current.bilingualPdfPath,
+          originalPdfPath: initialTranslation.originalPdfPath || current.originalPdfPath,
+        }
+      })
+    }
+  }, [initialTranslation])
 
   useEffect(() => {
     if (isCompleted && !isStale) return
@@ -112,15 +138,32 @@ export function ReportDownloadSection({
   )
 
   async function ensureBilingualPdfReady(): Promise<string | null> {
-    if (translation?.bilingualPdfPath) {
-      return translation.bilingualPdfPath
-    }
+    const hasLocal = Boolean(translation?.bilingualPdfPath)
+    logDiagnosticEvent(responseId, "PAGE_BILINGUAL_LOCAL_CHECK", {
+      pathExists: hasLocal,
+      bilingualPdfPath: translation?.bilingualPdfPath || null,
+    })
+    if (translation?.bilingualPdfPath) return translation.bilingualPdfPath
+
+    logDiagnosticEvent(responseId, "PAGE_BILINGUAL_SERVER_LOOKUP_STARTED", {
+      projectId,
+      stageId,
+      termId: termId || null,
+      responseId,
+    })
+
     const res = await ensureBilingualPdfStored({
       projectId,
-      stageId: termId || stageId,
+      stageId,
+      termId: termId || undefined,
       responseId,
       existingPath: translation?.bilingualPdfPath,
     })
+
+    logDiagnosticEvent(responseId, "PAGE_BILINGUAL_SERVER_LOOKUP_RESULT", {
+      storagePath: res.storagePath,
+    })
+
     if (res.translation) {
       setTranslation((current) => ({ ...(current || {}), ...res.translation }))
     }
@@ -221,10 +264,21 @@ export function ReportDownloadSection({
     if (downloading) return
     setDownloading(kind)
 
+    if (kind === "bilingual") {
+      logDiagnosticEvent(responseId, "PAGE_BILINGUAL_CLICK", {
+        kind,
+        localBilingualPdfPath: translation?.bilingualPdfPath || null,
+      })
+    }
+
     try {
       if (kind === "bilingual") {
         const storedPath = await ensureBilingualPdfReady()
         if (storedPath && translation?.id) {
+          logDiagnosticEvent(responseId, "PAGE_BILINGUAL_STORED_DOWNLOAD_SELECTED", {
+            storedPath,
+            translationId: translation.id,
+          })
           const params = new URLSearchParams({
             projectId,
             translationId: translation.id,
@@ -248,6 +302,12 @@ export function ReportDownloadSection({
         }
       }
 
+      if (kind === "bilingual") {
+        logDiagnosticEvent(responseId, "PAGE_BILINGUAL_FALLBACK_SELECTED", {
+          reason: "stored_path_creation_or_lookup_returned_null",
+        })
+      }
+
       // Fallback export if storage path creation failed
       const params = new URLSearchParams({
         projectId,
@@ -260,6 +320,13 @@ export function ReportDownloadSection({
       const payload = await res.json()
       const data = payload?.data
       if (!data) throw new Error("Report data unavailable.")
+
+      if (kind === "bilingual") {
+        logDiagnosticEvent(responseId, "PAGE_BILINGUAL_EXPORT_STARTED", {
+          hasData: Boolean(data),
+          hasTranslation: Boolean(data.translation),
+        })
+      }
 
       const pdfResult = await exportTranslationPdf({
         data,
@@ -281,6 +348,11 @@ export function ReportDownloadSection({
         }).catch(() => undefined)
       }
     } catch (err) {
+      if (kind === "bilingual") {
+        logDiagnosticEvent(responseId, "PAGE_BILINGUAL_DOWNLOAD_FAILED", {
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
       console.error("PDF download error:", err)
     } finally {
       setDownloading(null)
@@ -289,183 +361,121 @@ export function ReportDownloadSection({
 
   if (variant === "sticky") {
     return (
-      <div className="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto">
-        {isFailed ? (
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            disabled={retryBusy}
-            onClick={handleRetry}
-            className="h-9 gap-1.5 rounded-lg text-xs font-semibold shadow-xs"
-          >
-            {retryBusy ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCw className="size-3.5" />}
-            <span>{locale === "ar" ? "إعادة محاولة إنشاء PDF" : "Retry PDF Generation"}</span>
-          </Button>
-        ) : isPending || retryBusy ? (
-          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin text-primary" />
-            <span>{locale === "ar" ? "جارٍ إعداد PDF..." : "Preparing PDF..."}</span>
-          </div>
-        ) : (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={sharing}
-              onClick={handleWhatsAppShare}
-              className="h-9 gap-1.5 rounded-lg border-emerald-500/40 bg-emerald-50/60 px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-100/80 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60 shadow-xs"
-            >
-              {sharing ? <Loader2 className="size-3.5 animate-spin text-emerald-600" /> : <Share2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />}
-              <span>{locale === "ar" ? "مشاركة" : "Share"}</span>
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={sharing}
-              onClick={handleCopyShare}
-              className="h-9 gap-1.5 rounded-lg border-primary/30 bg-background px-3 text-xs font-semibold shadow-xs hover:bg-accent"
-            >
-              {copiedShare ? (
-                <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-              ) : (
-                <Copy className="size-3.5 text-muted-foreground" />
-              )}
-              <span>{copiedShare ? (locale === "ar" ? "تم النسخ!" : "Copied!") : (locale === "ar" ? "نسخ" : "Copy")}</span>
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={downloading !== null}
-              onClick={() => handleDownload("original")}
-              className="h-9 gap-1.5 rounded-lg px-3 text-xs font-semibold shadow-xs"
-            >
-              {downloading === "original" ? (
-                <Loader2 className="size-3.5 animate-spin text-primary" />
-              ) : (
-                <Download className="size-3.5 text-primary" />
-              )}
-              <span>English PDF</span>
-            </Button>
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              disabled={downloading !== null}
-              onClick={() => handleDownload("bilingual")}
-              className="h-9 gap-1.5 rounded-lg px-3 text-xs font-semibold shadow-xs"
-            >
-              {downloading === "bilingual" ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Download className="size-3.5" />
-              )}
-              <span>Bilingual PDF</span>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              title={locale === "ar" ? "إعادة محاولة / توليد الترجمة" : "Regenerate PDF"}
-              onClick={handleRetry}
-              className="h-9 size-9 text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <RotateCw className="size-3.5" />
-            </Button>
-          </>
-        )}
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={downloading !== null}
+          onClick={() => handleDownload("original")}
+          className="h-8 gap-1.5 rounded-lg text-xs font-semibold"
+        >
+          {downloading === "original" ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Download className="size-3.5" />
+          )}
+          <span>English PDF</span>
+        </Button>
+        <Button
+          type="button"
+          variant="default"
+          size="sm"
+          disabled={downloading !== null}
+          onClick={() => handleDownload("bilingual")}
+          className="h-8 gap-1.5 rounded-lg text-xs font-semibold"
+        >
+          {downloading === "bilingual" ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Download className="size-3.5" />
+          )}
+          <span>Bilingual PDF</span>
+        </Button>
       </div>
     )
   }
 
   return (
-    <Card
-      className={cn(
-        "overflow-hidden p-3 sm:p-4 transition-colors",
-        isFailed
-          ? "border-amber-300 bg-amber-50/80 dark:border-amber-900/60 dark:bg-amber-950/30"
-          : "border-primary/30 bg-primary/5",
-      )}
-    >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <span
-            className={cn(
-              "flex size-10 shrink-0 items-center justify-center rounded-xl",
-              isFailed
-                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-                : "bg-primary/10 text-primary",
-            )}
-          >
-            {isFailed ? (
-              <AlertCircle className="size-5" />
-            ) : isPending || retryBusy ? (
-              <Loader2 className="size-5 animate-spin" />
-            ) : (
-              <FileDown className="size-5" />
-            )}
-          </span>
+    <Card className="p-4 sm:p-5">
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-xs font-bold text-foreground sm:text-sm">
-              {isFailed
-                ? locale === "ar"
-                  ? "تعذر إكمال إعداد PDF التقرير"
-                  : "PDF Preparation Incomplete"
-                : isPending || retryBusy
-                  ? locale === "ar"
-                    ? "جارٍ ترجمة وإعداد ملفات PDF..."
-                    : "Preparing Translation & PDFs..."
-                  : locale === "ar"
-                    ? "تحميل ملف PDF للتقرير"
-                    : "Download Report PDF"}
+            <h3 className="text-sm font-semibold text-foreground">
+              {locale === "ar" ? "ملفات PDF للتقرير والترجمة" : "Report PDFs & Translation"}
             </h3>
-            <p className="text-[11px] text-muted-foreground">
-              {isFailed
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {isCompleted
                 ? locale === "ar"
-                  ? "التقرير المحفوظ آمن. يمكنك اضغط إعادة المحاولة لبدء الإعداد فوراً."
-                  : "The submitted report is saved safely. Click retry to generate PDFs."
-                : isPending || retryBusy
+                  ? "تنزيل أو مشاركة وثائق التقرير المعتمدة."
+                  : "Download or share the official report documents."
+                : isPending
                   ? locale === "ar"
-                    ? "قد تستغرق العملية چند لحظة. ستظهر أزرار التحميل تلقائياً عند الاكتمال."
-                    : "Please wait a moment. Download buttons will appear automatically."
+                    ? "الترجمة والملفات قيد المعالجة التلقائية."
+                    : "Translation and PDFs are generating automatically in the background."
                   : locale === "ar"
-                    ? "تنزيل تقرير المعاينة المعتمد بالإنجليزية أو دوزبانه"
-                    : "Download official inspection report in English or bilingual format"}
+                    ? "تعذر إكمال عملية الترجمة التلقائية."
+                    : "Automatic translation processing was not completed."}
             </p>
           </div>
+          {isStale && (
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+              <AlertCircle className="size-3.5" />
+              <span>{locale === "ar" ? "محتوى التقرير مُعدّل" : "Report Content Updated"}</span>
+            </div>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-          {isFailed ? (
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              disabled={retryBusy}
-              onClick={handleRetry}
-              className="h-9 gap-2 rounded-xl px-4 text-xs font-bold shadow-xs"
-            >
-              {retryBusy ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <RotateCw className="size-4" />
-              )}
-              <span>{locale === "ar" ? "إعادة محاولة إنشاء PDF" : "Retry PDF Generation"}</span>
-            </Button>
-          ) : isPending || retryBusy ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled
-              className="h-9 gap-2 rounded-xl border-primary/20 bg-background px-3 text-xs font-semibold"
-            >
-              <Loader2 className="size-4 animate-spin text-primary" />
-              <span>{locale === "ar" ? "جارٍ المعالجة..." : "Processing..."}</span>
-            </Button>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+          {isPending ? (
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="size-4 animate-spin text-primary" />
+                <span>{locale === "ar" ? "جاري الترجمة وإعداد ملفات PDF..." : "Translating & generating PDFs..."}</span>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={downloading !== null}
+                onClick={() => handleDownload("original")}
+                className="h-8 gap-1.5 rounded-lg text-xs font-semibold"
+              >
+                {downloading === "original" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+                <span>English PDF</span>
+              </Button>
+            </div>
+          ) : isFailed ? (
+            <div className="flex items-center justify-between w-full gap-2">
+              <div className="flex items-center gap-2 text-xs text-destructive">
+                <AlertCircle className="size-4" />
+                <span>{locale === "ar" ? "تعذر إنشاء الترجمة تلقائياً." : "Automatic translation generation failed."}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={downloading !== null}
+                  onClick={() => handleDownload("original")}
+                  className="h-8 gap-1.5 rounded-lg text-xs font-semibold"
+                >
+                  {downloading === "original" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+                  <span>English PDF</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={retryBusy}
+                  onClick={handleRetry}
+                  className="h-8 gap-1.5 rounded-lg text-xs font-semibold"
+                >
+                  {retryBusy ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCw className="size-3.5" />}
+                  <span>{locale === "ar" ? "إعادة المحاولة" : "Retry"}</span>
+                </Button>
+              </div>
+            </div>
           ) : (
             <>
               <Button
@@ -537,6 +547,8 @@ export function ReportDownloadSection({
             </>
           )}
         </div>
+
+        <DebugTimelinePanel responseId={responseId} />
       </div>
     </Card>
   )
