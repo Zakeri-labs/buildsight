@@ -50,27 +50,27 @@ export function DebugTimelinePanel({ responseId }: { responseId: string | null |
   }
 
   return (
-    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-800 dark:bg-slate-900/50">
-      <div className="flex items-center justify-between">
+    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-2.5 sm:p-3 text-xs dark:border-slate-800 dark:bg-slate-900/50">
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-1.5 font-mono text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+          className="flex items-center gap-1.5 font-mono text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white text-left min-w-0"
         >
-          {isOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-          <span>
+          {isOpen ? <ChevronDown className="size-4 shrink-0" /> : <ChevronRight className="size-4 shrink-0" />}
+          <span className="font-semibold text-xs sm:text-xs">
             Translation / PDF Debug Timeline ({events.length})
           </span>
         </button>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 justify-end">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={handleCopy}
             disabled={!events.length}
-            className="h-7 text-xs gap-1"
+            className="h-7 text-xs gap-1 px-2 sm:px-2.5"
           >
             {copied ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
             <span>{copied ? "Copied" : "Copy Debug Log"}</span>
@@ -81,10 +81,11 @@ export function DebugTimelinePanel({ responseId }: { responseId: string | null |
             size="sm"
             onClick={handleClear}
             disabled={!events.length}
-            className="h-7 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/30"
+            className="h-7 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/30 px-2 sm:px-2.5"
           >
             <Trash2 className="size-3" />
-            <span>Clear Log</span>
+            <span className="hidden xs:inline">Clear Log</span>
+            <span className="xs:hidden">Clear</span>
           </Button>
         </div>
       </div>

@@ -427,7 +427,7 @@ export function ReportDownloadSection({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3 sm:justify-between">
           {isPending ? (
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
