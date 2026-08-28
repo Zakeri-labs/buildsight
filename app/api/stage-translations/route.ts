@@ -106,6 +106,9 @@ export async function POST(request: NextRequest) {
         translatedContentReady: prepared.translatedContentReady,
       },
       started: prepared.shouldRun,
+      debug: {
+        reason: prepared.reason || "unknown",
+      },
     }, { headers: { "Cache-Control": "no-store" } })
   } catch (error) {
     console.error("[stage-translation] API request error", {

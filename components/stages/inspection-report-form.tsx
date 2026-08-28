@@ -56,6 +56,7 @@ import { saveReportCcRecipientsAction } from "@/lib/actions/report-cc"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto-generation"
 import { exportTranslationPdf, storeTranslationPdf, downloadPdfBlob, ensureBilingualPdfStored } from "@/lib/stage-translations/client-pdf"
+import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
 import { buildWhatsAppShareUrl, buildShareMessage } from "@/lib/stage-translations/whatsapp-share"
 import { StageTranslationActions } from "@/components/stages/stage-translation-actions"
 import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
@@ -1621,18 +1622,24 @@ function truncateFilename(filename: string, maxLen = 22): string {
         open={submitModalOpen}
         onOpenChange={(open) => {
           if (!open && submitResult) {
-            setSubmitModalOpen(false)
             const targetStageId = submitResult.stageId
             const targetResponseId = submitResult.responseId
+            logDiagnosticEvent(targetResponseId, "READY_MODAL_CLOSE_REQUESTED", { method: "X" })
+            setSubmitModalOpen(false)
             setSubmitResult(null)
             setReadyPdfs(null)
+            logDiagnosticEvent(targetResponseId, "READY_PDFS_MEMORY_CLEARED")
             if (targetStageId && targetResponseId) {
               const targetPath = `/projects/${project.id}/stages/${targetStageId}/reports/${targetResponseId}`
               if (typeof window !== "undefined" && window.location.pathname !== targetPath) {
+                logDiagnosticEvent(targetResponseId, "ROUTER_REPLACE", { targetPath })
+                logDiagnosticEvent(targetResponseId, "READY_MODAL_CLOSED", { method: "X" })
                 router.replace(targetPath)
                 return
               }
             }
+            logDiagnosticEvent(targetResponseId, "ROUTER_REFRESH")
+            logDiagnosticEvent(targetResponseId, "READY_MODAL_CLOSED", { method: "X" })
             router.refresh()
           }
         }}
@@ -1841,16 +1848,22 @@ function truncateFilename(filename: string, maxLen = 22): string {
                   onClick={() => {
                     const targetStageId = submitResult.stageId
                     const targetResponseId = submitResult.responseId
+                    logDiagnosticEvent(targetResponseId, "READY_MODAL_CLOSE_REQUESTED", { method: "CloseAndViewReport" })
                     setSubmitModalOpen(false)
                     setSubmitResult(null)
                     setReadyPdfs(null)
+                    logDiagnosticEvent(targetResponseId, "READY_PDFS_MEMORY_CLEARED")
                     if (targetStageId && targetResponseId) {
                       const targetPath = `/projects/${project.id}/stages/${targetStageId}/reports/${targetResponseId}`
                       if (typeof window !== "undefined" && window.location.pathname !== targetPath) {
+                        logDiagnosticEvent(targetResponseId, "ROUTER_REPLACE", { targetPath })
+                        logDiagnosticEvent(targetResponseId, "READY_MODAL_CLOSED", { method: "CloseAndViewReport" })
                         router.replace(targetPath)
                         return
                       }
                     }
+                    logDiagnosticEvent(targetResponseId, "ROUTER_REFRESH")
+                    logDiagnosticEvent(targetResponseId, "READY_MODAL_CLOSED", { method: "CloseAndViewReport" })
                     router.refresh()
                   }}
                 >

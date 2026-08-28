@@ -9,6 +9,7 @@ import { downloadPdfBlob, exportTranslationPdf, storeTranslationPdf } from "@/li
 import type { StageTranslationPageData } from "@/lib/stage-translations/types"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
 
 const COPY = {
   en: {
@@ -105,6 +106,18 @@ export function StageTranslationActions({
       }))
     }
   }, [initialTranslation])
+
+  useEffect(() => {
+    logDiagnosticEvent(responseId, "TRANSLATION_UI_STATE", {
+      status: translation.status,
+      isFullyReady,
+      isProcessing,
+      stale,
+      originalPdfPath: translation.originalPdfPath || null,
+      bilingualPdfPath: translation.bilingualPdfPath || null,
+      hasTranslatedContent: Boolean(translation.translatedContent),
+    })
+  }, [responseId, translation.status, isFullyReady, isProcessing, stale, translation.originalPdfPath, translation.bilingualPdfPath, translation.translatedContent])
 
   useEffect(() => {
     if (isFullyReady || isFailed) {

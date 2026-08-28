@@ -2,6 +2,7 @@
 
 import type { StageTranslationPageData, StageTranslationRecord } from "@/lib/stage-translations/types"
 import type { ReportCcRecipient } from "@/lib/report-cc/types"
+import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
 
 const STORAGE_KEY = "buildsight-stage-translation-jobs-v1"
 export const STAGE_TRANSLATION_JOB_EVENT = "buildsight:stage-translation-job"
@@ -81,6 +82,13 @@ export function enqueueStageTranslationJob(job: StageTranslationJob) {
       ? jobs.map((item) => jobKey(item) === key ? { ...item, retry: item.retry || normalized.retry } : item)
       : [...jobs, normalized]
     writeJobs(next)
+    logDiagnosticEvent(normalized.responseId, "JOB_ENQUEUED", {
+      projectId: normalized.projectId,
+      stageId: normalized.stageId,
+      responseId: normalized.responseId,
+      queueLength: next.length,
+      retry: Boolean(normalized.retry),
+    })
     window.dispatchEvent(new CustomEvent(STAGE_TRANSLATION_JOB_EVENT))
   } catch {
     // The immediate job below can still run even if persistence/event delivery
@@ -99,7 +107,14 @@ export function enqueueStageTranslationJob(job: StageTranslationJob) {
 export function removeStageTranslationJob(job: StageTranslationJob) {
   if (typeof window === "undefined") return
   const key = jobKey(job)
-  writeJobs(readStageTranslationJobs().filter((item) => jobKey(item) !== key))
+  const remaining = readStageTranslationJobs().filter((item) => jobKey(item) !== key)
+  writeJobs(remaining)
+  logDiagnosticEvent(job.responseId, "JOB_REMOVED", {
+    projectId: job.projectId,
+    stageId: job.stageId,
+    responseId: job.responseId,
+    remainingQueueLength: remaining.length,
+  })
 }
 
 function clearRetryFlag(job: StageTranslationJob) {
@@ -132,6 +147,14 @@ async function loadTranslation(job: StageTranslationJob, includeRecipients = fal
 }
 
 async function startTranslation(job: StageTranslationJob, retry: boolean) {
+  logDiagnosticEvent(job.responseId, "TRANSLATION_POST", {
+    source: "client_auto_generation",
+    projectId: job.projectId,
+    stageId: job.stageId,
+    responseId: job.responseId,
+    retry,
+  })
+
   if (!retry) {
     try {
       const snapshot = await loadTranslation(job)
@@ -140,6 +163,9 @@ async function startTranslation(job: StageTranslationJob, retry: boolean) {
       const responseUpdatedAt = snapshot?.data?.response?.updatedAt ? new Date(snapshot.data.response.updatedAt).getTime() : 0
       const fresh = Boolean(rec?.translatedContent && generatedAt && generatedAt >= responseUpdatedAt)
       if (rec?.status === "completed" && fresh && rec.originalPdfPath && rec.bilingualPdfPath) {
+        logDiagnosticEvent(job.responseId, "TRANSLATION_POST_SKIPPED", {
+          reason: "already_completed_and_fresh",
+        })
         return
       }
     } catch {
@@ -159,6 +185,11 @@ async function startTranslation(job: StageTranslationJob, retry: boolean) {
     }),
   })
   const payload = await response.json().catch(() => null)
+  logDiagnosticEvent(job.responseId, "TRANSLATION_POST_RESULT", {
+    http: response.status,
+    shouldRun: payload?.data?.shouldRun ?? payload?.shouldRun ?? false,
+    reason: payload?.debug?.reason || payload?.reason || "unknown",
+  })
   if (!response.ok) throw new Error(payload?.error || "Unable to start translation.")
 }
 
@@ -257,6 +288,13 @@ export async function processStageTranslationJob(job: StageTranslationJob) {
       const generatedAt = record?.generatedAt ? new Date(record.generatedAt).getTime() : 0
       const responseUpdatedAt = new Date(snapshot.data.response.updatedAt).getTime()
       const stale = Boolean(generatedAt && responseUpdatedAt > generatedAt)
+
+      logDiagnosticEvent(normalized.responseId, "STALE_CHECK", {
+        caller: "processStageTranslationJob",
+        responseUpdatedAt: snapshot.data.response.updatedAt,
+        generatedAt: record?.generatedAt || null,
+        stale,
+      })
 
       if (!record || stale) {
         if (!startRequested) {

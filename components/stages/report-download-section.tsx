@@ -10,6 +10,8 @@ import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto
 import { exportTranslationPdf, downloadPdfBlob, storeTranslationPdf, ensureBilingualPdfStored } from "@/lib/stage-translations/client-pdf"
 import { buildShareMessage, buildWhatsAppShareUrl } from "@/lib/stage-translations/whatsapp-share"
 import { cn } from "@/lib/utils"
+import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
+import { DebugTimelinePanel } from "@/components/stages/debug-timeline-panel"
 
 export function ReportDownloadSection({
   projectId,
@@ -128,15 +130,31 @@ export function ReportDownloadSection({
   )
 
   async function ensureBilingualPdfReady(): Promise<{ storagePath: string | null; translationId: string | null }> {
+    const hasLocal = Boolean(translation?.bilingualPdfPath && translation?.id)
+    logDiagnosticEvent(responseId, "BILINGUAL_LOCAL_CHECK", {
+      pathExists: hasLocal,
+      bilingualPdfPath: translation?.bilingualPdfPath || null,
+      translationId: translation?.id || null,
+    })
     if (translation?.bilingualPdfPath && translation?.id) {
       return { storagePath: translation.bilingualPdfPath, translationId: translation.id }
     }
+    logDiagnosticEvent(responseId, "BILINGUAL_SERVER_VERIFY_START", {
+      projectId,
+      stageId,
+      termId: termId || null,
+      responseId,
+    })
     const res = await ensureBilingualPdfStored({
       projectId,
       stageId,
       termId: termId || undefined,
       responseId,
       existingPath: translation?.bilingualPdfPath,
+    })
+    logDiagnosticEvent(responseId, "BILINGUAL_SERVER_VERIFY_RESULT", {
+      storagePath: res.storagePath,
+      translationId: res.translation?.id || translation?.id || null,
     })
     if (res.translation) {
       setTranslation((current) => ({ ...(current || {}), ...res.translation }))
@@ -242,10 +260,21 @@ export function ReportDownloadSection({
     setDownloading(kind)
     setDiagnosticError(null)
 
+    if (kind === "bilingual") {
+      logDiagnosticEvent(responseId, "BILINGUAL_CLICK", {
+        kind,
+        localBilingualPdfPath: translation?.bilingualPdfPath || null,
+      })
+    }
+
     try {
       if (kind === "bilingual") {
         const { storagePath, translationId } = await ensureBilingualPdfReady()
         if (storagePath && translationId) {
+          logDiagnosticEvent(responseId, "BILINGUAL_STORED_DOWNLOAD", {
+            storagePath,
+            translationId,
+          })
           const params = new URLSearchParams({
             projectId,
             translationId,
@@ -289,6 +318,11 @@ export function ReportDownloadSection({
           return
         }
       }
+
+      logDiagnosticEvent(responseId, "BILINGUAL_FALLBACK_GENERATION", {
+        kind,
+        reason: "stored_pdf_path_unresolved_or_missing",
+      })
 
       // Fallback export if storage path creation failed
       const params = new URLSearchParams({
@@ -615,6 +649,9 @@ export function ReportDownloadSection({
           </details>
         </div>
       ) : null}
+      <div className="px-5 pb-4 sm:px-6">
+        <DebugTimelinePanel responseId={responseId} />
+      </div>
     </Card>
   )
 }

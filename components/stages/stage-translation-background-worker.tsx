@@ -6,6 +6,7 @@ import {
   readStageTranslationJobs,
   STAGE_TRANSLATION_JOB_EVENT,
 } from "@/lib/stage-translations/client-auto-generation"
+import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
 
 export function StageTranslationBackgroundWorker() {
   const draining = useRef(false)
@@ -18,17 +19,41 @@ export function StageTranslationBackgroundWorker() {
       draining.current = true
       try {
         const jobs = readStageTranslationJobs()
-        for (const job of jobs) {
-          if (disposed) break
-          try {
-            await processStageTranslationJob(job)
-          } catch (error) {
-            console.error("[stage-translation] background worker paused", {
+        if (jobs.length > 0) {
+          for (const job of jobs) {
+            if (disposed) break
+            logDiagnosticEvent(job.responseId, "WORKER_JOB_DETECTED", {
               projectId: job.projectId,
               stageId: job.stageId,
               responseId: job.responseId,
-              message: error instanceof Error ? error.message : String(error),
+              queueLength: jobs.length,
             })
+            try {
+              logDiagnosticEvent(job.responseId, "WORKER_PROCESS_START", {
+                projectId: job.projectId,
+                stageId: job.stageId,
+                responseId: job.responseId,
+              })
+              await processStageTranslationJob(job)
+              logDiagnosticEvent(job.responseId, "WORKER_COMPLETE", {
+                projectId: job.projectId,
+                stageId: job.stageId,
+                responseId: job.responseId,
+              })
+            } catch (error) {
+              logDiagnosticEvent(job.responseId, "WORKER_ERROR", {
+                projectId: job.projectId,
+                stageId: job.stageId,
+                responseId: job.responseId,
+                error: error instanceof Error ? error.message : String(error),
+              })
+              console.error("[stage-translation] background worker paused", {
+                projectId: job.projectId,
+                stageId: job.stageId,
+                responseId: job.responseId,
+                message: error instanceof Error ? error.message : String(error),
+              })
+            }
           }
         }
       } finally {

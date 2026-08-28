@@ -370,6 +370,7 @@ type PreparedStageTranslation = {
   status: "pending" | "completed" | "failed"
   shouldRun: boolean
   translatedContentReady: boolean
+  reason?: string
 }
 
 function validDateMs(value: unknown) {
@@ -428,7 +429,7 @@ export async function prepareStageTranslationGeneration(input: {
       .single()
 
     if (!insertError && inserted?.id) {
-      return { translationId: inserted.id, status: "pending", shouldRun: true, translatedContentReady: false }
+      return { translationId: inserted.id, status: "pending", shouldRun: true, translatedContentReady: false, reason: "new" }
     }
 
     // A concurrent caller may have won the unique response_id insert. Do not
@@ -449,6 +450,7 @@ export async function prepareStageTranslationGeneration(input: {
         status,
         shouldRun: false,
         translatedContentReady: Boolean(concurrent.translated_content),
+        reason: "concurrent_insert_won",
       }
     }
     throw insertError
@@ -464,6 +466,7 @@ export async function prepareStageTranslationGeneration(input: {
       status: "completed",
       shouldRun: false,
       translatedContentReady: true,
+      reason: "already_completed_and_fresh",
     }
   }
 
@@ -483,6 +486,7 @@ export async function prepareStageTranslationGeneration(input: {
       status: resumed ? "completed" : "failed",
       shouldRun: false,
       translatedContentReady: true,
+      reason: "resume_pdf_failed",
     }
   }
 
@@ -492,6 +496,7 @@ export async function prepareStageTranslationGeneration(input: {
       status: "failed",
       shouldRun: false,
       translatedContentReady: Boolean(existing.translated_content),
+      reason: "failed_no_retry",
     }
   }
 
@@ -503,6 +508,7 @@ export async function prepareStageTranslationGeneration(input: {
         status: "pending",
         shouldRun: false,
         translatedContentReady: Boolean(existing.translated_content),
+        reason: "already_pending_active",
       }
     }
   }
@@ -527,6 +533,7 @@ export async function prepareStageTranslationGeneration(input: {
     status: claimed ? "pending" : status,
     shouldRun: Boolean(claimed),
     translatedContentReady: Boolean(existing.translated_content),
+    reason: claimed ? (stale ? "claimed_stale" : "claimed_reclaim") : "claim_lost_concurrent",
   }
 }
 
