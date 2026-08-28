@@ -672,7 +672,7 @@ async function normalizeImage(dataUrl: string, isPngHint = false): Promise<Loade
   }
   context.drawImage(image, 0, 0, canvas.width, canvas.height)
   return {
-    dataUrl: isPng ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", 0.84),
+    dataUrl: isPng ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", 0.80),
     width: canvas.width,
     height: canvas.height,
   }
@@ -711,8 +711,6 @@ function loadImage(src: string, meta?: PdfImageMeta) {
   })
 
   const cleanPath = src.split("?")[0].toLowerCase()
-  const isJpeg = src.startsWith("data:image/jpeg") || src.startsWith("data:image/jpg") || cleanPath.endsWith(".jpg") || cleanPath.endsWith(".jpeg")
-  const isPng = !isJpeg
 
   logDiagnosticEvent(responseId, "PDF_IMAGE_SOURCE_RESOLVED", {
     pdfKind,
@@ -730,13 +728,15 @@ function loadImage(src: string, meta?: PdfImageMeta) {
     let httpStatus = 0
     let blobBytes = 0
     let blobMime = ""
+    let isPng = false
 
     try {
       let rawDataUrl = ""
       if (src.startsWith("data:")) {
         rawDataUrl = src
         blobBytes = Math.round((src.length * 3) / 4)
-        blobMime = src.slice(5, src.indexOf(";"))
+        blobMime = src.slice(5, src.indexOf(";")).toLowerCase()
+        isPng = blobMime.includes("png") || blobMime.includes("webp")
       } else {
         failedStage = "fetch"
         logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_STARTED", {
@@ -765,7 +765,19 @@ function loadImage(src: string, meta?: PdfImageMeta) {
 
         const blob = await response.blob()
         blobBytes = blob.size
-        blobMime = blob.type
+        blobMime = blob.type ? blob.type.toLowerCase() : ""
+
+        // Authoritative MIME format classification
+        if (blobMime === "image/jpeg" || blobMime === "image/jpg") {
+          isPng = false
+        } else if (blobMime === "image/png" || blobMime === "image/webp") {
+          isPng = true
+        } else {
+          // Fallback if MIME is missing or generic (application/octet-stream)
+          const searchTarget = `${meta?.storagePath || ""}/${filename}/${src}`.toLowerCase()
+          const isJpegFallback = searchTarget.includes(".jpg") || searchTarget.includes(".jpeg")
+          isPng = !isJpegFallback
+        }
 
         logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_SUCCESS", {
           pdfKind,
