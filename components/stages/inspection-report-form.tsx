@@ -987,6 +987,39 @@ function truncateFilename(filename: string, maxLen = 22): string {
 
           setReadyPdfs(generatedPdfs)
           steps = updateStep(steps, stepIdx, "done")
+
+          logDiagnosticEvent(id, "READY_MODAL_OPENED", {
+            readyOriginalPdfBlob: Boolean(generatedPdfs.original),
+            readyBilingualPdfBlob: Boolean(generatedPdfs.bilingual),
+            translationLocalStatus: translation?.status || null,
+            localOriginalPdfPath: translation?.originalPdfPath || null,
+            localBilingualPdfPath: translation?.bilingualPdfPath || null,
+            localHasTranslatedContent: Boolean(translation?.translatedContent),
+          })
+
+          // Diagnostic-only server state snapshot (non-blocking, no behavior changes)
+          const snapParams = new URLSearchParams({
+            projectId: project.id,
+            stageId: routeStageId,
+            ...(isDirectStageReport ? {} : { termId: reportDefinition.id }),
+            responseId: id,
+            statusOnly: "1",
+            background: "1",
+          })
+          fetch(`/api/stage-translations?${snapParams.toString()}`, { cache: "no-store" })
+            .then((r) => r.json())
+            .then((p) => {
+              logServerEventsIfPresent(id, p)
+              const rec = p?.data?.translation
+              logDiagnosticEvent(id, "READY_MODAL_SERVER_STATE", {
+                translationStatus: rec?.status || "missing",
+                translatedContentPresent: Boolean(rec?.translatedContent),
+                originalPdfPathPresent: Boolean(rec?.originalPdfPath),
+                bilingualPdfPathPresent: Boolean(rec?.bilingualPdfPath),
+                generatedAt: rec?.generatedAt || null,
+              })
+            })
+            .catch(() => null)
         }
       } else {
         setStatus(mode === "progress" ? "in_progress" : "draft")
@@ -994,39 +1027,6 @@ function truncateFilename(filename: string, maxLen = 22): string {
       }
 
       if (isSubmitMode) {
-        logDiagnosticEvent(id, "READY_MODAL_OPENED", {
-          readyOriginalPdfBlob: Boolean(generatedPdfs.original),
-          readyBilingualPdfBlob: Boolean(generatedPdfs.bilingual),
-          translationLocalStatus: translation?.status || null,
-          localOriginalPdfPath: translation?.originalPdfPath || null,
-          localBilingualPdfPath: translation?.bilingualPdfPath || null,
-          localHasTranslatedContent: Boolean(translation?.translatedContent),
-        })
-
-        // Diagnostic-only server state snapshot (non-blocking, no behavior changes)
-        const snapParams = new URLSearchParams({
-          projectId: project.id,
-          stageId: routeStageId,
-          ...(isDirectStageReport ? {} : { termId: reportDefinition.id }),
-          responseId: id,
-          statusOnly: "1",
-          background: "1",
-        })
-        fetch(`/api/stage-translations?${snapParams.toString()}`, { cache: "no-store" })
-          .then((r) => r.json())
-          .then((p) => {
-            logServerEventsIfPresent(id, p)
-            const rec = p?.data?.translation
-            logDiagnosticEvent(id, "READY_MODAL_SERVER_STATE", {
-              translationStatus: rec?.status || "missing",
-              translatedContentPresent: Boolean(rec?.translatedContent),
-              originalPdfPathPresent: Boolean(rec?.originalPdfPath),
-              bilingualPdfPathPresent: Boolean(rec?.bilingualPdfPath),
-              generatedAt: rec?.generatedAt || null,
-            })
-          })
-          .catch(() => null)
-
         setSubmitResult({ responseId: id, stageId: routeStageId })
       } else {
         router.replace(`/projects/${project.id}/stages/${routeStageId}/reports/${id}`)
