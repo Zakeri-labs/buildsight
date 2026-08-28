@@ -92,6 +92,21 @@ export function StageTranslationActions({
   const isProcessing = !isFullyReady && !isFailed
 
   useEffect(() => {
+    if (initialTranslation) {
+      setTranslation((current) => ({
+        ...current,
+        ...initialTranslation,
+        id: initialTranslation.id || current.id,
+        status: initialTranslation.status || current.status,
+        generatedAt: initialTranslation.generatedAt || current.generatedAt,
+        originalPdfPath: initialTranslation.originalPdfPath ?? current.originalPdfPath,
+        bilingualPdfPath: initialTranslation.bilingualPdfPath ?? current.bilingualPdfPath,
+        translatedContent: initialTranslation.translatedContent ?? current.translatedContent,
+      }))
+    }
+  }, [initialTranslation])
+
+  useEffect(() => {
     if (isFullyReady || isFailed) {
       return
     }

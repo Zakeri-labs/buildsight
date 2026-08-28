@@ -132,6 +132,21 @@ async function loadTranslation(job: StageTranslationJob, includeRecipients = fal
 }
 
 async function startTranslation(job: StageTranslationJob, retry: boolean) {
+  if (!retry) {
+    try {
+      const snapshot = await loadTranslation(job)
+      const rec = snapshot?.data?.translation
+      const generatedAt = rec?.generatedAt ? new Date(rec.generatedAt).getTime() : 0
+      const responseUpdatedAt = snapshot?.data?.response?.updatedAt ? new Date(snapshot.data.response.updatedAt).getTime() : 0
+      const fresh = Boolean(rec?.translatedContent && generatedAt && generatedAt >= responseUpdatedAt)
+      if (rec?.status === "completed" && fresh && rec.originalPdfPath && rec.bilingualPdfPath) {
+        return
+      }
+    } catch {
+      // Ignore status check errors and proceed to API
+    }
+  }
+
   const response = await fetch("/api/stage-translations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
