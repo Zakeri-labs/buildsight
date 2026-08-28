@@ -1,5 +1,3 @@
-"use client"
-
 export type DiagnosticEvent = {
   num: string
   time: string
@@ -18,6 +16,36 @@ function getClientSessionId(): string {
     clientSessionId = "dbg_" + Math.random().toString(36).slice(2, 10)
   }
   return clientSessionId
+}
+
+export function logServerDiagnosticEvent(name: string, details: Record<string, unknown> = {}) {
+  try {
+    const now = new Date()
+    const hours = String(now.getHours()).padStart(2, "0")
+    const minutes = String(now.getMinutes()).padStart(2, "0")
+    const seconds = String(now.getSeconds()).padStart(2, "0")
+    const ms = String(now.getMilliseconds()).padStart(3, "0")
+    const time = `${hours}:${minutes}:${seconds}.${ms}`
+
+    const sanitizedDetails: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(details)) {
+      if (
+        k.toLowerCase().includes("key") ||
+        k.toLowerCase().includes("token") ||
+        k.toLowerCase().includes("secret") ||
+        k.toLowerCase().includes("auth") ||
+        k.toLowerCase().includes("cookie") ||
+        k.toLowerCase().includes("prompt")
+      ) {
+        sanitizedDetails[k] = Boolean(v)
+      } else {
+        sanitizedDetails[k] = v
+      }
+    }
+    console.log(`[stage-translation-server-diag] ${time} ${name}`, JSON.stringify(sanitizedDetails))
+  } catch {
+    // Fail silently
+  }
 }
 
 function shortenUuid(uuid: unknown): string {

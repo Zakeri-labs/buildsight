@@ -543,7 +543,10 @@ export function InspectionReportForm({
 
   useEffect(() => {
     if (submitModalOpen && submitResult?.responseId) {
-      logDiagnosticEvent(submitResult.responseId, "READY_MODAL_OPENED", {
+      const respId = submitResult.responseId
+      const stgId = submitResult.stageId
+
+      logDiagnosticEvent(respId, "READY_MODAL_OPENED", {
         readyOriginalPdfBlob: Boolean(readyPdfs?.original),
         readyBilingualPdfBlob: Boolean(readyPdfs?.bilingual),
         translationLocalStatus: translation?.status || null,
@@ -551,8 +554,25 @@ export function InspectionReportForm({
         localBilingualPdfPath: translation?.bilingualPdfPath || null,
         localHasTranslatedContent: Boolean(translation?.translatedContent),
       })
+
+      fetch(`/api/stage-translations?projectId=${project.id}&stageId=${stgId}&responseId=${respId}&background=1`, { cache: "no-store" })
+        .then((res) => res.json().then((payload) => ({ status: res.status, payload })))
+        .then(({ status, payload }) => {
+          const t = payload?.data?.translation
+          logDiagnosticEvent(respId, "READY_MODAL_SERVER_STATE", {
+            httpStatus: status,
+            translationStatus: t?.status || null,
+            translatedContentPresent: Boolean(t?.translatedContent),
+            originalPdfPathPresent: Boolean(t?.originalPdfPath),
+            bilingualPdfPathPresent: Boolean(t?.bilingualPdfPath),
+            generatedAt: t?.generatedAt || null,
+          })
+        })
+        .catch((err) => {
+          logDiagnosticEvent(respId, "READY_MODAL_SERVER_STATE", { error: String(err) })
+        })
     }
-  }, [submitModalOpen, submitResult?.responseId, readyPdfs?.original, readyPdfs?.bilingual, translation?.status, translation?.originalPdfPath, translation?.bilingualPdfPath, translation?.translatedContent])
+  }, [submitModalOpen, submitResult?.responseId, submitResult?.stageId, project.id, readyPdfs?.original, readyPdfs?.bilingual, translation?.status, translation?.originalPdfPath, translation?.bilingualPdfPath, translation?.translatedContent])
 
   const evidenceImages = existingAttachments.filter((item) => item.attachmentKind === "evidence_image")
   const documentAttachments = existingAttachments.filter((item) => item.attachmentKind === "document")
@@ -1736,7 +1756,13 @@ export function InspectionReportForm({
                       try {
                         if (readyPdfs?.bilingual) {
                           logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_BRANCH_SELECTED", { clickId, branch: "memory_blob" })
-                          downloadPdfBlob(readyPdfs.bilingual.blob, readyPdfs.bilingual.filename)
+                          downloadPdfBlob(readyPdfs.bilingual.blob, readyPdfs.bilingual.filename, {
+                            responseId: respId,
+                            caller: "ready_modal_button",
+                            clickId,
+                            kind: "bilingual",
+                          })
+                          logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_BRANCH_RESULT", { clickId, branch: "memory_blob", result: "download_triggered" })
                         } else {
                           const initialSource = translation?.bilingualPdfPath ? "stored_endpoint" : "ensure_bilingual"
                           logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_BRANCH_SELECTED", { clickId, branch: initialSource })
@@ -1747,13 +1773,56 @@ export function InspectionReportForm({
                               stageId: stgId,
                               responseId: respId,
                               existingPath: translation?.bilingualPdfPath,
+                              caller: "ready_modal_button",
                             }).catch(() => null)
                           }
                           const query = translation?.id ? `translationId=${translation.id}` : `responseId=${respId}`
-                          window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&${query}&kind=bilingual`)
+                          const endpointPath = `/api/stage-translations/pdf?projectId=${project.id}&${query}&kind=bilingual`
+
+                          logDiagnosticEvent(respId, "BROWSER_DOWNLOAD_STORED_STARTED", {
+                            clickId,
+                            caller: "ready_modal_button",
+                            kind: "bilingual",
+                            translationId: translation?.id || null,
+                            endpointPath,
+                          })
+                          logDiagnosticEvent(respId, "BROWSER_DOWNLOAD_STORED_TRIGGERED", {
+                            clickId,
+                            caller: "ready_modal_button",
+                            kind: "bilingual",
+                            endpointPath,
+                          })
+                          logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_BRANCH_RESULT", { clickId, branch: initialSource, result: "download_triggered" })
+
+                          window.location.assign(endpointPath)
                         }
+                      } catch (btnErr) {
+                        logDiagnosticEvent(respId, "READY_MODAL_BILINGUAL_BRANCH_RESULT", {
+                          clickId,
+                          branch: readyPdfs?.bilingual ? "memory_blob" : "stored_endpoint",
+                          result: "failed",
+                          error: btnErr instanceof Error ? btnErr.message : String(btnErr),
+                        })
                       } finally {
                         setActionBusy(null)
+                        if (respId && project?.id) {
+                          fetch(`/api/stage-translations?projectId=${project.id}&stageId=${stgId}&responseId=${respId}&background=1`, { cache: "no-store" })
+                            .then((res) => res.json().then((payload) => ({ status: res.status, payload })))
+                            .then(({ status, payload }) => {
+                              const t = payload?.data?.translation
+                              logDiagnosticEvent(respId, "POST_MODAL_DOWNLOAD_SERVER_STATE", {
+                                httpStatus: status,
+                                translationStatus: t?.status || null,
+                                translatedContentPresent: Boolean(t?.translatedContent),
+                                originalPdfPathPresent: Boolean(t?.originalPdfPath),
+                                bilingualPdfPathPresent: Boolean(t?.bilingualPdfPath),
+                                generatedAt: t?.generatedAt || null,
+                              })
+                            })
+                            .catch((err) => {
+                              logDiagnosticEvent(respId, "POST_MODAL_DOWNLOAD_SERVER_STATE", { error: String(err) })
+                            })
+                        }
                       }
                     }}
                     className="h-10 gap-2 rounded-lg font-semibold shadow-xs"

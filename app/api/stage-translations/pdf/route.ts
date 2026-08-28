@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { assertProjectMember, assertProjectReviewer, audit, AuthzError } from "@/lib/auth/guards"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { logServerDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -89,7 +90,16 @@ export async function GET(request: NextRequest) {
     const kind: PdfKind = validKind(kindParam) ? kindParam : "bilingual"
     const isShared = request.nextUrl.searchParams.get("share") === "1" || request.nextUrl.searchParams.get("public") === "1"
 
+    logServerDiagnosticEvent("PDF_DOWNLOAD_GET_RECEIVED", {
+      requestedKind: kind,
+      projectId,
+      translationId,
+      responseId,
+      isShared,
+    })
+
     if (!validUuid(projectId)) {
+      logServerDiagnosticEvent("PDF_DOWNLOAD_GET_FAILED", { reason: "invalid_projectId" })
       return NextResponse.json({ error: "Invalid PDF download request." }, { status: 400 })
     }
 
@@ -110,23 +120,89 @@ export async function GET(request: NextRequest) {
       translation = data as TranslationRow | null
     }
 
-    if (!translation) return NextResponse.json({ error: "Translation record not found." }, { status: 404 })
+    if (!translation) {
+      logServerDiagnosticEvent("PDF_DOWNLOAD_GET_NOT_FOUND", {
+        projectId,
+        translationId,
+        responseId,
+        reason: "translation_row_not_found",
+      })
+      return NextResponse.json({ error: "Translation record not found." }, { status: 404 })
+    }
+
+    logServerDiagnosticEvent("PDF_DOWNLOAD_GET_RECEIVED_DETAILS", {
+      requestedKind: kind,
+      translationId: translation.id,
+      responseId: translation.response_id,
+      translationStatus: translation.translation_status,
+      originalPdfPathPresent: Boolean(translation.original_pdf_url),
+      bilingualPdfPathPresent: Boolean(translation.bilingual_pdf_url),
+      arabicPdfPathPresent: Boolean(translation.arabic_pdf_url),
+    })
 
     if (!isShared) {
       await assertProjectMember(projectId)
       if (!(await translationScopeIsActive(admin, translation))) await assertProjectReviewer(projectId)
     }
 
-    const storagePath = translation[PDF_COLUMNS[kind]] || translation.bilingual_pdf_url || translation.original_pdf_url
-    if (!storagePath) return NextResponse.json({ error: "The requested PDF has not been generated." }, { status: 404 })
+    const primaryCol = PDF_COLUMNS[kind]
+    const primaryPath = translation[primaryCol]
+    const storagePath = primaryPath || translation.bilingual_pdf_url || translation.original_pdf_url
+
+    if (!storagePath) {
+      logServerDiagnosticEvent("PDF_DOWNLOAD_GET_NOT_FOUND", {
+        requestedKind: kind,
+        translationId: translation.id,
+        responseId: translation.response_id,
+        reason: "no_stored_pdf_path_available",
+      })
+      return NextResponse.json({ error: "The requested PDF has not been generated." }, { status: 404 })
+    }
+
+    const usedFallback = storagePath !== primaryPath
+    let selectedArtifactKind: string = kind
+    if (usedFallback) {
+      if (storagePath === translation.bilingual_pdf_url) selectedArtifactKind = "bilingual"
+      else if (storagePath === translation.original_pdf_url) selectedArtifactKind = "original"
+      else if (storagePath === translation.arabic_pdf_url) selectedArtifactKind = "arabic"
+    }
+
+    logServerDiagnosticEvent("PDF_DOWNLOAD_ARTIFACT_SELECTED", {
+      requestedKind: kind,
+      selectedArtifactKind,
+      usedFallback,
+      primaryPath: primaryPath || null,
+      storagePath,
+      responseId: translation.response_id,
+      translationId: translation.id,
+    })
 
     const downloadName = storagePath.split("/").pop()?.replace(/^.*?-\d+-/, "") || `${kind}-report.pdf`
     const { data: signed, error: signedError } = await admin.storage.from(BUCKET).createSignedUrl(storagePath, 60 * 60 * 24 * 7, { download: downloadName })
-    if (signedError || !signed?.signedUrl) return NextResponse.json({ error: "The stored PDF is unavailable." }, { status: 404 })
+    if (signedError || !signed?.signedUrl) {
+      logServerDiagnosticEvent("PDF_DOWNLOAD_GET_FAILED", {
+        requestedKind: kind,
+        storagePath,
+        error: signedError?.message || "missing_signed_url",
+      })
+      return NextResponse.json({ error: "The stored PDF is unavailable." }, { status: 404 })
+    }
+
+    logServerDiagnosticEvent("PDF_DOWNLOAD_GET_REDIRECT", {
+      requestedKind: kind,
+      selectedArtifactKind,
+      usedFallback,
+      downloadFilename: downloadName,
+      storagePath,
+      responseId: translation.response_id,
+      translationId: translation.id,
+    })
+
     return NextResponse.redirect(signed.signedUrl, { status: 302, headers: { "Cache-Control": "private, max-age=300" } })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to download the stored PDF."
     const status = error instanceof AuthzError ? 403 : 400
+    logServerDiagnosticEvent("PDF_DOWNLOAD_GET_FAILED", { error: message, status })
     return NextResponse.json({ error: message }, { status, headers: { "Cache-Control": "no-store" } })
   }
 }

@@ -10,6 +10,7 @@ import {
   markStageTranslationPdfFailure,
   prepareStageTranslationGeneration,
 } from "@/lib/stage-translations/generate"
+import { logServerDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -50,6 +51,16 @@ export async function POST(request: NextRequest) {
     const responseId = body.responseId
     const termId = typeof body.termId === "string" ? body.termId : null
     const action = typeof body.action === "string" ? body.action : "start"
+
+    logServerDiagnosticEvent("SERVER_TRANSLATION_POST_RECEIVED", {
+      projectId,
+      stageId,
+      responseId,
+      termId,
+      action,
+      background: body.background === true,
+    })
+
     if (!validUuid(projectId) || !validUuid(stageId) || !validUuid(responseId)) return NextResponse.json({ error: "A valid project, stage, and report are required." }, { status: 400 })
     if (!new Set(["start", "retry", "pdf-failed"]).has(action)) return NextResponse.json({ error: "Invalid translation action." }, { status: 400 })
 
@@ -66,6 +77,12 @@ export async function POST(request: NextRequest) {
     // The active workflow is direct Project -> Stage -> Report. Keep the old
     // Term route functional without making it part of the automatic Stage job.
     if (termId && validUuid(termId) && termId !== stageId) {
+      logServerDiagnosticEvent("SERVER_TRANSLATION_POST_DECISION", {
+        responseId,
+        termId,
+        shouldRun: true,
+        reason: "legacy_term_inline_run",
+      })
       const translation = await generateStageTranslation({ projectId, stageId, termId, responseId, actorId: userId })
       return NextResponse.json({ translation, started: true }, { headers: { "Cache-Control": "no-store" } })
     }
@@ -78,8 +95,26 @@ export async function POST(request: NextRequest) {
       retry: action === "retry",
     })
 
+    logServerDiagnosticEvent("SERVER_TRANSLATION_POST_DECISION", {
+      responseId,
+      translationId: prepared.translationId,
+      retry: action === "retry",
+      shouldRun: prepared.shouldRun,
+      status: prepared.status,
+      translatedContentReady: prepared.translatedContentReady,
+    })
+
     if (prepared.shouldRun) {
+      logServerDiagnosticEvent("SERVER_TRANSLATION_AFTER_SCHEDULED", {
+        responseId,
+        translationId: prepared.translationId,
+      })
+
       after(async () => {
+        logServerDiagnosticEvent("SERVER_TRANSLATION_AFTER_STARTED", {
+          responseId,
+          translationId: prepared.translationId,
+        })
         try {
           await generateStageTranslation({ projectId, stageId, responseId, actorId: userId })
         } catch (error) {

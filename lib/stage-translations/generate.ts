@@ -12,6 +12,7 @@ import type {
 import { sanitizeReportHtml } from "@/lib/stages/execution"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { OPENAI_CONFIG } from "@/lib/openai-config"
+import { logServerDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 const SIGNED_URL_TTL_SECONDS = 20 * 60
@@ -535,6 +536,19 @@ export async function markStageTranslationGenerationFailure(input: {
   stageId: string
   responseId: string
 }) {
+  logServerDiagnosticEvent("TRANSLATION_FAILURE_MARKED", {
+    caller: "markStageTranslationGenerationFailure",
+    projectId: input.projectId,
+    stageId: input.stageId,
+    responseId: input.responseId,
+  })
+  logServerDiagnosticEvent("TRANSLATION_STATUS_TRANSITION", {
+    caller: "markStageTranslationGenerationFailure",
+    responseId: input.responseId,
+    previousStatus: "pending",
+    nextStatus: "failed",
+    reason: "background_generation_failed",
+  })
   const admin = createAdminClient()
   const { error } = await admin
     .from("translation_documents")
@@ -555,6 +569,23 @@ export async function markStageTranslationPdfFailure(input: {
   const pageData = await loadStageTranslationPageData(input.projectId, input.stageId, input.actorId, input.responseId)
   if (!pageData?.translation?.id || !pageData.translation.translatedContent) return
   if (pageData.translation.originalPdfPath && pageData.translation.arabicPdfPath && pageData.translation.bilingualPdfPath) return
+
+  logServerDiagnosticEvent("TRANSLATION_FAILURE_MARKED", {
+    caller: "markStageTranslationPdfFailure",
+    projectId: input.projectId,
+    stageId: input.stageId,
+    responseId: input.responseId,
+    translationId: pageData.translation.id,
+  })
+  logServerDiagnosticEvent("TRANSLATION_STATUS_TRANSITION", {
+    caller: "markStageTranslationPdfFailure",
+    responseId: input.responseId,
+    translationId: pageData.translation.id,
+    previousStatus: pageData.translation.status || "completed",
+    nextStatus: "failed",
+    reason: "pdf_failure_reported",
+  })
+
   const admin = createAdminClient()
   const { error } = await admin
     .from("translation_documents")
@@ -574,6 +605,14 @@ export async function generateStageTranslation(input: {
   responseId: string
   actorId?: string
 }) {
+  logServerDiagnosticEvent("SERVER_TRANSLATION_STARTED", {
+    projectId: input.projectId,
+    stageId: input.stageId,
+    termId: input.termId || null,
+    responseId: input.responseId,
+    actorId: input.actorId || null,
+  })
+
   const userId = input.actorId ?? await assertProjectMember(input.projectId)
   const pageData = await loadStageTranslationPageData(input.projectId, input.stageId, userId, input.responseId, input.termId)
   if (!pageData) throw new Error("Save the inspection report before generating a translation.")
@@ -684,6 +723,16 @@ export async function generateStageTranslation(input: {
   }
 
   let translationId = pageData.translation?.id ?? null
+  const previousStatus = pageData.translation?.status || "none"
+
+  logServerDiagnosticEvent("TRANSLATION_STATUS_TRANSITION", {
+    caller: "generateStageTranslation",
+    responseId: input.responseId,
+    translationId: translationId || "new",
+    previousStatus,
+    nextStatus: "pending",
+  })
+
   if (translationId) {
     const { error } = await admin
       .from("translation_documents")
@@ -708,6 +757,12 @@ export async function generateStageTranslation(input: {
     if (error) throw error
     translationId = data.id
   }
+
+  logServerDiagnosticEvent("SERVER_TRANSLATION_OPENAI_STARTED", {
+    translationId,
+    responseId: input.responseId,
+    model: OPENAI_CONFIG.reportTranslationModel,
+  })
 
   try {
     const response = await fetch(OPENAI_RESPONSES_URL, {
@@ -735,7 +790,23 @@ export async function generateStageTranslation(input: {
     })
 
     const payload = await response.json().catch(() => null)
-    if (!response.ok) throw new Error(payload?.error?.message || `OpenAI request failed with status ${response.status}.`)
+    if (!response.ok) {
+      const errMsg = payload?.error?.message || `OpenAI request failed with status ${response.status}.`
+      logServerDiagnosticEvent("SERVER_TRANSLATION_OPENAI_FAILED", {
+        translationId,
+        responseId: input.responseId,
+        httpStatus: response.status,
+        error: errMsg,
+      })
+      throw new Error(errMsg)
+    }
+
+    logServerDiagnosticEvent("SERVER_TRANSLATION_OPENAI_SUCCESS", {
+      translationId,
+      responseId: input.responseId,
+      httpStatus: response.status,
+    })
+
     const text = outputText(payload)
     if (!text) throw new Error("The AI service returned an empty translation.")
 
@@ -754,6 +825,11 @@ export async function generateStageTranslation(input: {
       pageData.translation?.bilingualPdfPath,
     ].filter((value): value is string => Boolean(value))
 
+    logServerDiagnosticEvent("SERVER_TRANSLATION_DB_FINALIZE_STARTED", {
+      translationId,
+      responseId: input.responseId,
+    })
+
     const { error } = await admin
       .from("translation_documents")
       .update({
@@ -767,7 +843,31 @@ export async function generateStageTranslation(input: {
         updated_at: generatedAt,
       })
       .eq("id", translationId)
-    if (error) throw error
+
+    if (error) {
+      logServerDiagnosticEvent("SERVER_TRANSLATION_DB_FINALIZE_FAILED", {
+        translationId,
+        responseId: input.responseId,
+        error: error.message,
+      })
+      throw error
+    }
+
+    logServerDiagnosticEvent("SERVER_TRANSLATION_DB_FINALIZE_SUCCESS", {
+      translationId,
+      responseId: input.responseId,
+    })
+    logServerDiagnosticEvent("TRANSLATION_STATUS_TRANSITION", {
+      caller: "generateStageTranslation",
+      responseId: input.responseId,
+      translationId,
+      previousStatus: "pending",
+      nextStatus: "completed",
+    })
+    logServerDiagnosticEvent("SERVER_TRANSLATION_COMPLETED", {
+      translationId,
+      responseId: input.responseId,
+    })
 
     if (previousPdfPaths.length) await admin.storage.from(TRANSLATION_BUCKET).remove(previousPdfPaths).catch(() => undefined)
 
@@ -793,6 +893,20 @@ export async function generateStageTranslation(input: {
       bilingualPdfPath: null,
     }
   } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error)
+    logServerDiagnosticEvent("SERVER_TRANSLATION_FAILED", {
+      translationId,
+      responseId: input.responseId,
+      error: errMsg,
+    })
+    logServerDiagnosticEvent("TRANSLATION_STATUS_TRANSITION", {
+      caller: "generateStageTranslation_catch",
+      responseId: input.responseId,
+      translationId,
+      previousStatus: "pending",
+      nextStatus: "failed",
+      reason: errMsg,
+    })
     await admin
       .from("translation_documents")
       .update({ translation_status: "failed", updated_at: new Date().toISOString() })
