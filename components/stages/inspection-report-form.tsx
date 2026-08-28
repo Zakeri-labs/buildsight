@@ -1629,6 +1629,7 @@ function truncateFilename(filename: string, maxLen = 22): string {
               const targetPath = `/projects/${project.id}/stages/${targetStageId}/reports/${targetResponseId}`
               if (typeof window !== "undefined" && window.location.pathname !== targetPath) {
                 router.replace(targetPath)
+                return
               }
             }
             router.refresh()
@@ -1843,6 +1844,7 @@ function truncateFilename(filename: string, maxLen = 22): string {
                       const targetPath = `/projects/${project.id}/stages/${targetStageId}/reports/${targetResponseId}`
                       if (typeof window !== "undefined" && window.location.pathname !== targetPath) {
                         router.replace(targetPath)
+                        return
                       }
                     }
                     router.refresh()
