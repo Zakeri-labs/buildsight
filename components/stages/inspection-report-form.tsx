@@ -502,6 +502,14 @@ export function InspectionReportForm({
   const [submitModalOpen, setSubmitModalOpen] = useState(false)
   type SubmitStep = { label: string; status: "pending" | "active" | "done" | "error" }
   const [submitSteps, setSubmitSteps] = useState<SubmitStep[]>([])
+  const [uploadProgress, setUploadProgress] = useState<{
+    active: boolean
+    kind: "evidence_image" | "document"
+    currentIndex: number
+    totalCount: number
+    filename: string
+    progress: number
+  } | null>(null)
   const [submitResult, setSubmitResult] = useState<{ responseId: string; stageId: string } | null>(null)
   const [readyPdfs, setReadyPdfs] = useState<{
     original?: { blob: Blob; filename: string }
@@ -698,6 +706,15 @@ export function InspectionReportForm({
                   const update = (rows: PendingFile[]) => rows.map((row) => row.id === item.id ? { ...row, progress } : row)
                   if (kind === "evidence_image") setPendingImages(update)
                   else setPendingDocuments(update)
+
+                  setUploadProgress({
+                    active: true,
+                    kind,
+                    currentIndex: index + 1,
+                    totalCount: validFiles.length,
+                    filename: fileToUpload.name,
+                    progress,
+                  })
                 }, mimeType)
                 lastError = null
                 break
@@ -771,6 +788,8 @@ export function InspectionReportForm({
         await supabase.storage.from("project-stage-evidence").remove(uploadedPaths).catch(() => undefined)
       }
       throw uploadError
+    } finally {
+      setUploadProgress(null)
     }
   }
 
@@ -1998,41 +2017,73 @@ export function InspectionReportForm({
                 </DialogDescription>
               </DialogHeader>
               <div className="mt-1 space-y-2.5">
-                {submitSteps.map((step, idx) => (
-                  <div key={idx} className="flex items-center gap-3">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full">
-                      {step.status === "done" && (
-                        <span className="flex size-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
-                          <CheckCircle2 className="size-3.5" />
+                {submitSteps.map((step, idx) => {
+                  const isImageStep = step.label.includes("image") || step.label.includes("صورة") || step.label.includes("Uploading") || step.label.includes("رفع")
+                  const isDocStep = step.label.includes("document") || step.label.includes("مستند")
+                  const showProgress = step.status === "active" && uploadProgress?.active && (
+                    (isImageStep && uploadProgress.kind === "evidence_image") ||
+                    (isDocStep && uploadProgress.kind === "document")
+                  )
+
+                  return (
+                    <div key={idx} className="space-y-1">
+                      <div className="flex items-center gap-3">
+                        <span className="flex size-6 shrink-0 items-center justify-center rounded-full">
+                          {step.status === "done" && (
+                            <span className="flex size-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
+                              <CheckCircle2 className="size-3.5" />
+                            </span>
+                          )}
+                          {step.status === "active" && (
+                            <span className="flex size-6 items-center justify-center rounded-full bg-primary/10">
+                              <Loader2 className="size-3.5 animate-spin text-primary" />
+                            </span>
+                          )}
+                          {step.status === "pending" && (
+                            <span className="flex size-6 items-center justify-center rounded-full border border-border bg-muted">
+                              <span className="size-1.5 rounded-full bg-muted-foreground/40" />
+                            </span>
+                          )}
+                          {step.status === "error" && (
+                            <span className="flex size-6 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400">
+                              <AlertCircle className="size-3.5" />
+                            </span>
+                          )}
                         </span>
-                      )}
-                      {step.status === "active" && (
-                        <span className="flex size-6 items-center justify-center rounded-full bg-primary/10">
-                          <Loader2 className="size-3.5 animate-spin text-primary" />
+                        <span className={cn(
+                          "text-sm leading-tight",
+                          step.status === "done" && "text-muted-foreground line-through",
+                          step.status === "active" && "font-semibold text-foreground",
+                          step.status === "pending" && "text-muted-foreground",
+                          step.status === "error" && "font-semibold text-red-600 dark:text-red-400",
+                        )}>
+                          {step.label}
                         </span>
+                      </div>
+
+                      {showProgress && (
+                        <div className="ml-9 pr-1 space-y-1 animate-in fade-in duration-200">
+                          <div className="flex items-center justify-between text-xs text-muted-foreground gap-2">
+                            <span className="truncate font-medium text-foreground/80 text-[11px]" title={uploadProgress.filename}>
+                              {uploadProgress.totalCount > 1
+                                ? `${uploadProgress.currentIndex} of ${uploadProgress.totalCount} · ${uploadProgress.filename}`
+                                : uploadProgress.filename}
+                            </span>
+                            <span className="shrink-0 font-semibold tabular-nums text-primary text-[11px]">
+                              {uploadProgress.progress}%
+                            </span>
+                          </div>
+                          <div className="h-1 w-full overflow-hidden rounded-full bg-primary/15">
+                            <div
+                              className="h-full bg-primary transition-all duration-150 ease-out"
+                              style={{ width: `${Math.max(0, Math.min(100, uploadProgress.progress))}%` }}
+                            />
+                          </div>
+                        </div>
                       )}
-                      {step.status === "pending" && (
-                        <span className="flex size-6 items-center justify-center rounded-full border border-border bg-muted">
-                          <span className="size-1.5 rounded-full bg-muted-foreground/40" />
-                        </span>
-                      )}
-                      {step.status === "error" && (
-                        <span className="flex size-6 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400">
-                          <AlertCircle className="size-3.5" />
-                        </span>
-                      )}
-                    </span>
-                    <span className={cn(
-                      "text-sm leading-tight",
-                      step.status === "done" && "text-muted-foreground line-through",
-                      step.status === "active" && "font-semibold text-foreground",
-                      step.status === "pending" && "text-muted-foreground",
-                      step.status === "error" && "font-semibold text-red-600 dark:text-red-400",
-                    )}>
-                      {step.label}
-                    </span>
-                  </div>
-                ))}
+                    </div>
+                  )
+                })}
                 {(submitSteps.some((s) => s.status === "error") || error) ? (
                   <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
                     <div className="flex items-center gap-1.5 font-bold text-red-700 dark:text-red-300">
