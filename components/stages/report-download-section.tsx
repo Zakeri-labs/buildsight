@@ -62,6 +62,20 @@ export function ReportDownloadSection({
   )
 
   useEffect(() => {
+    if (initialTranslation) {
+      setTranslation((current) => {
+        if (!current) return initialTranslation
+        return {
+          ...current,
+          ...initialTranslation,
+          bilingualPdfPath: initialTranslation.bilingualPdfPath || current.bilingualPdfPath,
+          originalPdfPath: initialTranslation.originalPdfPath || current.originalPdfPath,
+        }
+      })
+    }
+  }, [initialTranslation])
+
+  useEffect(() => {
     if (isCompleted && !isStale) return
 
     let isMounted = true
