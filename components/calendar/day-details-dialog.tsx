@@ -80,7 +80,7 @@ function DayEventRow({
           {supervisor ? (
             <span
               className={cn(
-                "flex size-4 shrink-0 items-center justify-center rounded-full text-[8px] font-bold tracking-tighter shadow-2xs",
+                "flex size-5 shrink-0 items-center justify-center rounded-full text-[9.5px] font-bold tracking-tight shadow-2xs",
                 theme.bg,
                 theme.text,
               )}

@@ -102,7 +102,7 @@ function SupervisorLegend({ events }: { events: CalendarEventViewModel[] }) {
             <div key={supervisor.id} className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-foreground">
               <span
                 className={cn(
-                  "flex size-4 shrink-0 items-center justify-center rounded-full text-[8px] font-bold tracking-tighter shadow-2xs",
+                  "flex size-5 shrink-0 items-center justify-center rounded-full text-[9.5px] font-bold tracking-tight shadow-2xs",
                   theme.bg,
                   theme.text,
                 )}
@@ -137,7 +137,7 @@ function CalendarEventChip({
   return (
     <div
       className={cn(
-        "flex min-w-0 items-start gap-1 rounded-md border px-1.5 py-1 text-[10px] leading-tight",
+        "flex min-w-0 items-center gap-1.5 rounded-md border px-1.5 py-1 text-[10px] leading-tight",
         EVENT_STYLES[event.kind],
         canOpenRequest && "cursor-pointer hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       )}
@@ -159,7 +159,7 @@ function CalendarEventChip({
       {supervisor ? (
         <span
           className={cn(
-            "mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full text-[7px] font-bold tracking-tighter shadow-2xs transition-transform hover:scale-110",
+            "flex size-5 shrink-0 items-center justify-center rounded-full text-[9.5px] font-bold tracking-tight shadow-2xs transition-transform hover:scale-110",
             theme.bg,
             theme.text,
           )}
@@ -169,7 +169,7 @@ function CalendarEventChip({
         </span>
       ) : (
         <span
-          className="mt-1 size-1.5 shrink-0 rounded-full bg-slate-400/60 dark:bg-slate-500/60"
+          className="size-2 shrink-0 rounded-full bg-slate-400/60 dark:bg-slate-500/60"
           title="No supervisor assigned"
         />
       )}
