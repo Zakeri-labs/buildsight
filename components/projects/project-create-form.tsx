@@ -128,6 +128,27 @@ function optionalWholeNumber(value: string): number | null {
   return value === "" ? null : Number(value)
 }
 
+export function getMaxSequenceForYear(
+  year: number,
+  existingCodes: string[] = [],
+): number {
+  const yearRegex = new RegExp(`[/\\-_]${year}[/\\-_](\\d+)`, "i")
+  let maxSeq = year === 2026 ? 109 : 0
+
+  for (const c of existingCodes) {
+    if (!c) continue
+    const match = c.match(yearRegex)
+    if (match && match[1]) {
+      const num = parseInt(match[1], 10)
+      if (!isNaN(num) && num > maxSeq) {
+        maxSeq = num
+      }
+    }
+  }
+
+  return maxSeq
+}
+
 export function generateAutoProjectCode(
   orgName: string,
   startDateStr: string,
@@ -145,23 +166,60 @@ export function generateAutoProjectCode(
     year = new Date().getFullYear()
   }
 
-  const yearRegex = new RegExp(`[/\\-_]${year}[/\\-_](\\d+)`, "i")
-  let maxSeq = year === 2026 ? 109 : 0
-
-  for (const c of existingCodes) {
-    if (!c) continue
-    const match = c.match(yearRegex)
-    if (match && match[1]) {
-      const num = parseInt(match[1], 10)
-      if (!isNaN(num) && num > maxSeq) {
-        maxSeq = num
-      }
-    }
-  }
-
+  const maxSeq = getMaxSequenceForYear(year, existingCodes)
   const nextSeq = maxSeq + 1
   const paddedSeq = nextSeq < 100 ? String(nextSeq).padStart(3, "0") : String(nextSeq)
   return `${prefix}/sup/${year}/${paddedSeq}`
+}
+
+export function extractTargetYear(
+  codeStr: string,
+  startDateStr: string,
+): number {
+  const yearMatch = codeStr.match(/(?:^|[/\\-_])(20\d{2})(?:[/\\-_]|$)/)
+  if (yearMatch && yearMatch[1]) {
+    const parsedYear = parseInt(yearMatch[1], 10)
+    if (!isNaN(parsedYear) && parsedYear >= 2000 && parsedYear <= 2100) {
+      return parsedYear
+    }
+  }
+
+  if (startDateStr) {
+    const parsedDate = new Date(startDateStr)
+    if (!isNaN(parsedDate.getTime())) {
+      return parsedDate.getFullYear()
+    }
+  }
+
+  return new Date().getFullYear()
+}
+
+export function applyNextSuffix(
+  currentCode: string,
+  nextSeq: number,
+  targetYear: number,
+): string {
+  const trimmed = currentCode.trim()
+  if (!trimmed) {
+    return `Bonyan/sup/${targetYear}/${nextSeq}`
+  }
+
+  const trailingNumRegex = new RegExp(`([/\\-_]${targetYear}[/\\-_])\\d+$`, "i")
+  if (trailingNumRegex.test(trimmed)) {
+    return trimmed.replace(trailingNumRegex, `$1${nextSeq}`)
+  }
+
+  const trailingSepRegex = new RegExp(`([/\\-_]${targetYear}[/\\-_])$`, "i")
+  if (trailingSepRegex.test(trimmed)) {
+    return `${trimmed}${nextSeq}`
+  }
+
+  const yearEndRegex = new RegExp(`([/\\-_]${targetYear})$`, "i")
+  if (yearEndRegex.test(trimmed)) {
+    return `${trimmed}/${nextSeq}`
+  }
+
+  return `${trimmed}/${nextSeq}`
 }
 
 export function ProjectCreateForm({
@@ -200,6 +258,26 @@ export function ProjectCreateForm({
   const [completedUpToStageId, setCompletedUpToStageId] = useState<string>("none")
   const [templateStages, setTemplateStages] = useState<Array<{ id: string; name: string; sortOrder: number }>>(initialTemplateStages)
   const [priority, setPriority] = useState<ProjectPriorityValue>("medium")
+
+  const existingCodesSet = useMemo(() => {
+    return new Set(
+      (existingProjectCodes ?? []).map((c) => (c ? c.trim().toLowerCase() : "")).filter(Boolean),
+    )
+  }, [existingProjectCodes])
+
+  const isDuplicateCode = useMemo(() => {
+    const normalized = code.trim().toLowerCase()
+    return Boolean(normalized && existingCodesSet.has(normalized))
+  }, [code, existingCodesSet])
+
+  const targetYear = useMemo(() => {
+    return extractTargetYear(code, projectStartDate)
+  }, [code, projectStartDate])
+
+  const nextSuggestedSeq = useMemo(() => {
+    const maxSeq = getMaxSequenceForYear(targetYear, existingProjectCodes)
+    return maxSeq + 1
+  }, [targetYear, existingProjectCodes])
 
   useEffect(() => {
     if (initialTemplateStages.length > 0) {
@@ -309,6 +387,9 @@ export function ProjectCreateForm({
         namePlaceholder: "مثال: برج المرسى السكني",
         code: "رقم / رمز المشروع",
         codePlaceholder: "مثال: PRJ-009",
+        codeDuplicateWarning: "رقم / رمز المشروع مستخدم بالفعل",
+        nextCodeLabel: "التالي",
+        useCodeButton: "استخدام",
         projectType: "نوع المشروع",
         projectTypePlaceholder: "اختر نوع المشروع",
         supervisionType: "نوع الإشراف",
@@ -417,6 +498,9 @@ export function ProjectCreateForm({
         namePlaceholder: "e.g. Marina West Residences",
         code: "Project Number / Code",
         codePlaceholder: "e.g. PRJ-009",
+        codeDuplicateWarning: "Project code already exists",
+        nextCodeLabel: "Next",
+        useCodeButton: "Use",
         projectType: "Project Type",
         projectTypePlaceholder: "Select project type",
         supervisionType: "Supervision Type",
@@ -1055,17 +1139,45 @@ export function ProjectCreateForm({
                         />
                       </Field>
                       <Field label={copy.code} htmlFor="new-project-code" required>
-                        <Input
-                          id="new-project-code"
-                          value={code}
-                          onChange={(event) => {
-                            setCode(event.target.value)
-                            setCodeTouched(Boolean(event.target.value.trim()))
-                          }}
-                          placeholder={copy.codePlaceholder}
-                          disabled={pending}
-                          className="h-10"
-                        />
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Input
+                              id="new-project-code"
+                              value={code}
+                              onChange={(event) => {
+                                setCode(event.target.value)
+                                setCodeTouched(Boolean(event.target.value.trim()))
+                              }}
+                              placeholder={copy.codePlaceholder}
+                              disabled={pending}
+                              className="h-10 flex-1 min-w-[200px]"
+                            />
+                            <div className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg border bg-muted/40 px-2.5 text-xs font-medium">
+                              <span className="text-muted-foreground">
+                                {copy.nextCodeLabel}: <strong className="text-foreground">{nextSuggestedSeq}</strong>
+                              </span>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="h-6 px-2 text-[11px] font-semibold"
+                                onClick={() => {
+                                  const updated = applyNextSuffix(code, nextSuggestedSeq, targetYear)
+                                  setCode(updated)
+                                  setCodeTouched(true)
+                                }}
+                                disabled={pending}
+                              >
+                                {copy.useCodeButton}
+                              </Button>
+                            </div>
+                          </div>
+                          {isDuplicateCode ? (
+                            <p className="text-xs font-medium text-destructive">
+                              {copy.codeDuplicateWarning}
+                            </p>
+                          ) : null}
+                        </div>
                       </Field>
                       <div className="grid gap-4 sm:grid-cols-2">
                         <Field label={`${copy.plotNo} (${copy.optional})`} htmlFor="new-project-plot-no">
