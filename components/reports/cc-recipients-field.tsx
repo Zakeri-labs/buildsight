@@ -40,6 +40,39 @@ function comparableText(value: string | null | undefined) {
   return value?.trim().toLocaleLowerCase() ?? ""
 }
 
+export function isContractorCandidate(candidate: ProjectCcCandidate): boolean {
+  const role = (candidate.roleKey?.trim() || candidate.role.trim())
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s*\/\s*/g, " / ")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  return (
+    role === "contractor" ||
+    role.startsWith("contractor (") ||
+    role.includes("contractor")
+  )
+}
+
+export function isClientOwnerCandidate(candidate: ProjectCcCandidate): boolean {
+  const role = (candidate.roleKey?.trim() || candidate.role.trim())
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s*\/\s*/g, " / ")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  return (
+    role === "client / owner" ||
+    role === "owner / client" ||
+    role === "client" ||
+    role === "owner" ||
+    role.includes("client") ||
+    role.includes("owner")
+  )
+}
+
 function distinctRecipientDetails(
   values: Array<string | null | undefined>,
   excludedValues: Array<string | null | undefined> = [],
@@ -105,6 +138,10 @@ export function CcRecipientsField({
   const isAr = locale === "ar"
   const [isRecipientsExpanded, setIsRecipientsExpanded] = useState(false)
   const recipientsContentId = useId()
+
+  // Separate Show All toggles for Report To (defaults to Contractor) and CC (defaults to Client/Owner)
+  const [showAllReportTo, setShowAllReportTo] = useState(false)
+  const [showAllCc, setShowAllCc] = useState(false)
 
   // We maintain target groups: "reportTo" and "ccTo"
   const [reportToUserIds, setReportToUserIds] = useState<string[]>(() => value.reportToUserIds ?? value.internalUserIds.slice(0, 1))
@@ -267,22 +304,30 @@ export function CcRecipientsField({
     setDialogOpen(false)
   }
 
-  // Filter candidates per search
+  // Filter candidates per search & role default
   const filteredForReport = useMemo(() => {
+    let list = candidates
+    if (!showAllReportTo) {
+      list = list.filter(isContractorCandidate)
+    }
     const q = reportSearch.trim().toLowerCase()
-    if (!q) return candidates
-    return candidates.filter((c) =>
+    if (!q) return list
+    return list.filter((c) =>
       [c.name, c.phone ?? "", c.email ?? "", c.role, c.organizationName ?? ""].some((f) => f.toLowerCase().includes(q))
     )
-  }, [candidates, reportSearch])
+  }, [candidates, showAllReportTo, reportSearch])
 
   const filteredForCc = useMemo(() => {
+    let list = candidates
+    if (!showAllCc) {
+      list = list.filter(isClientOwnerCandidate)
+    }
     const q = ccSearch.trim().toLowerCase()
-    if (!q) return candidates
-    return candidates.filter((c) =>
+    if (!q) return list
+    return list.filter((c) =>
       [c.name, c.phone ?? "", c.email ?? "", c.role, c.organizationName ?? ""].some((f) => f.toLowerCase().includes(q))
     )
-  }, [candidates, ccSearch])
+  }, [candidates, showAllCc, ccSearch])
 
   // External recipients grouped
   const externalReportTo = useMemo(
@@ -414,20 +459,38 @@ export function CcRecipientsField({
                       })
                     ) : (
                       <p className="py-3 text-center text-xs text-muted-foreground">
-                        {isAr ? "لا يوجد مشاركون مطابقون." : "No matching participants."}
+                        {!showAllReportTo && !reportSearch.trim()
+                          ? (isAr ? "لم يتم العثور على مخاطبي المقاول." : "No contractor contacts found")
+                          : (isAr ? "لا يوجد مشاركون مطابقون." : "No matching participants.")}
                       </p>
                     )}
                   </div>
 
                   <DropdownMenuSeparator className="my-1.5" />
 
-                  <DropdownMenuItem
-                    onClick={() => openAddExternal("reportTo")}
-                    className="flex items-center gap-2 text-xs text-primary font-medium cursor-pointer"
-                  >
-                    <Plus className="size-3.5" />
-                    {isAr ? "+ افزودن مخاطب خارجی" : "+ Add External Contact"}
-                  </DropdownMenuItem>
+                  <div className="flex items-center justify-between gap-2 px-2 py-1 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => openAddExternal("reportTo")}
+                      className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline outline-none"
+                    >
+                      <Plus className="size-3.5 shrink-0" />
+                      <span>{isAr ? "+ افزودن مخاطب خارجی" : "+ Add External Contact"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setShowAllReportTo((prev) => !prev)
+                      }}
+                      className="text-[11px] font-medium text-muted-foreground hover:text-foreground hover:underline outline-none shrink-0"
+                    >
+                      {showAllReportTo
+                        ? (isAr ? "عرض أقل" : "Show less")
+                        : (isAr ? "عرض الكل" : "Show all")}
+                    </button>
+                  </div>
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -586,20 +649,38 @@ export function CcRecipientsField({
                       })
                     ) : (
                       <p className="py-3 text-center text-xs text-muted-foreground">
-                        {isAr ? "لا يوجد مشاركون مطابقون." : "No matching participants."}
+                        {!showAllCc && !ccSearch.trim()
+                          ? (isAr ? "لم يتم العثور على مخاطبي المالك / العميل." : "No client contacts found")
+                          : (isAr ? "لا يوجد مشاركون مطابقون." : "No matching participants.")}
                       </p>
                     )}
                   </div>
 
                   <DropdownMenuSeparator className="my-1.5" />
 
-                  <DropdownMenuItem
-                    onClick={() => openAddExternal("ccTo")}
-                    className="flex items-center gap-2 text-xs text-primary font-medium cursor-pointer"
-                  >
-                    <Plus className="size-3.5" />
-                    {isAr ? "+ افزودن مخاطب خارجی" : "+ Add External Contact"}
-                  </DropdownMenuItem>
+                  <div className="flex items-center justify-between gap-2 px-2 py-1 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => openAddExternal("ccTo")}
+                      className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline outline-none"
+                    >
+                      <Plus className="size-3.5 shrink-0" />
+                      <span>{isAr ? "+ افزودن مخاطب خارجی" : "+ Add External Contact"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setShowAllCc((prev) => !prev)
+                      }}
+                      className="text-[11px] font-medium text-muted-foreground hover:text-foreground hover:underline outline-none shrink-0"
+                    >
+                      {showAllCc
+                        ? (isAr ? "عرض أقل" : "Show less")
+                        : (isAr ? "عرض الكل" : "Show all")}
+                    </button>
+                  </div>
                 </DropdownMenuContent>
               </DropdownMenu>
 
