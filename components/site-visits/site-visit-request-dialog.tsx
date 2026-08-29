@@ -1,8 +1,8 @@
 "use client"
 
-import { useMemo, useState, useTransition, type ChangeEvent } from "react"
+import { useEffect, useMemo, useRef, useState, useTransition, type ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
-import { CalendarPlus, MapPinned } from "lucide-react"
+import { CalendarPlus, Check, ChevronDown, MapPinned, Search } from "lucide-react"
 import { createSiteVisitRequestAction } from "@/lib/actions/site-visits"
 import type { SiteVisitPreferredTime, SiteVisitProjectAccess } from "@/lib/site-visits/types"
 import { localDateInputValue } from "@/lib/site-visits/format"
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 
 function projectLabel(project: SiteVisitProjectAccess | null | undefined) {
   if (!project) return "Select project"
@@ -42,6 +43,10 @@ export function SiteVisitRequestDialog({
   const fixedProject = fixedProjectId ? requestProjects.find((project) => project.id === fixedProjectId) : null
   const [open, setOpen] = useState(false)
   const [projectId, setProjectId] = useState(fixedProject?.id ?? requestProjects[0]?.id ?? "")
+  const [projectSearchQuery, setProjectSearchQuery] = useState("")
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false)
+  const projectDropdownRef = useRef<HTMLDivElement>(null)
+
   const [preferredMode, setPreferredMode] = useState<"date" | "asap">("asap")
   const [preferredDate, setPreferredDate] = useState("")
   const [preferredTime, setPreferredTime] = useState<SiteVisitPreferredTime>("any_time")
@@ -51,10 +56,54 @@ export function SiteVisitRequestDialog({
   const [error, setError] = useState("")
   const [pending, startTransition] = useTransition()
 
+  useEffect(() => {
+    if (!projectMenuOpen) return
+
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
+      if (projectDropdownRef.current && !projectDropdownRef.current.contains(event.target as Node)) {
+        setProjectMenuOpen(false)
+        setProjectSearchQuery("")
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setProjectMenuOpen(false)
+        setProjectSearchQuery("")
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    document.addEventListener("touchstart", handleClickOutside)
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("touchstart", handleClickOutside)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [projectMenuOpen])
+
+  const selectedProject = useMemo(
+    () => fixedProject ?? requestProjects.find((project) => project.id === projectId) ?? requestProjects[0] ?? null,
+    [projectId, requestProjects, fixedProject],
+  )
+
+  const filteredProjects = useMemo(() => {
+    const query = projectSearchQuery.trim().toLowerCase()
+    if (!query) return requestProjects
+    return requestProjects.filter((project) => {
+      const matchName = project.name.toLowerCase().includes(query)
+      const matchCode = project.code ? project.code.toLowerCase().includes(query) : false
+      return matchName || matchCode
+    })
+  }, [projectSearchQuery, requestProjects])
+
   if (!requestProjects.length) return null
 
   function reset() {
     setProjectId(fixedProject?.id ?? requestProjects[0]?.id ?? "")
+    setProjectSearchQuery("")
+    setProjectMenuOpen(false)
     setPreferredMode("asap")
     setPreferredDate("")
     setPreferredTime("any_time")
@@ -88,7 +137,14 @@ export function SiteVisitRequestDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next: boolean) => { setOpen(next); if (!next) setError("") }}>
+    <Dialog open={open} onOpenChange={(next: boolean) => {
+      setOpen(next)
+      if (!next) {
+        setError("")
+        setProjectMenuOpen(false)
+        setProjectSearchQuery("")
+      }
+    }}>
       <DialogTrigger render={<Button type="button" variant={triggerVariant} size="lg" />}>
         <CalendarPlus className="size-4" />
         {triggerLabel}
@@ -103,12 +159,83 @@ export function SiteVisitRequestDialog({
           <div className="grid gap-2">
             <Label>Project</Label>
             {fixedProject ? (
-              <div className="flex min-h-10 items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm font-medium"><MapPinned className="size-4 shrink-0 text-primary" /><span className="min-w-0 break-words">{projectLabel(fixedProject)}</span></div>
+              <div className="flex min-h-10 items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm font-medium">
+                <MapPinned className="size-4 shrink-0 text-primary" />
+                <span className="min-w-0 break-words">{projectLabel(fixedProject)}</span>
+              </div>
             ) : (
-              <Select value={projectId} onValueChange={(value: unknown) => setProjectId(String(value))}>
-                <SelectTrigger className="h-auto min-h-10 w-full whitespace-normal py-2 text-left"><SelectValue className="line-clamp-none! whitespace-normal! break-words leading-4">{() => projectLabel(requestProjects.find((project) => project.id === projectId))}</SelectValue></SelectTrigger>
-                <SelectContent className="max-w-[calc(100vw-3rem)]">{requestProjects.map((project) => <SelectItem key={project.id} value={project.id} className="py-2 [&>span:first-child]:min-w-0 [&>span:first-child]:shrink [&>span:first-child]:whitespace-normal [&>span:first-child]:break-words">{projectLabel(project)}</SelectItem>)}</SelectContent>
-              </Select>
+              <div className="relative" ref={projectDropdownRef}>
+                <button
+                  type="button"
+                  disabled={pending || requestProjects.length === 0}
+                  onClick={() => {
+                    if (pending) return
+                    setProjectMenuOpen((prev) => {
+                      if (prev) setProjectSearchQuery("")
+                      return !prev
+                    })
+                  }}
+                  className="flex h-auto min-h-10 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-3 py-2 text-left text-sm font-medium outline-none transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="min-w-0 break-words leading-5">
+                    {projectLabel(selectedProject)}
+                  </span>
+                  <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-200", projectMenuOpen && "rotate-180")} />
+                </button>
+
+                {projectMenuOpen ? (
+                  <div className="absolute left-0 top-full z-50 mt-1 w-full min-w-[280px] max-h-60 overflow-y-auto rounded-lg border border-border/80 bg-popover text-popover-foreground shadow-lg">
+                    <div className="sticky top-0 z-10 border-b border-border/60 bg-popover p-2 pb-1.5">
+                      <div className="relative flex items-center">
+                        <Search className="pointer-events-none absolute left-2.5 size-3.5 text-muted-foreground" />
+                        <input
+                          type="text"
+                          value={projectSearchQuery}
+                          onChange={(e) => setProjectSearchQuery(e.target.value)}
+                          placeholder="Search projects..."
+                          autoFocus
+                          className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="p-1 space-y-0.5">
+                      {filteredProjects.length === 0 ? (
+                        <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                          No projects found
+                        </div>
+                      ) : (
+                        filteredProjects.map((project) => {
+                          const isSelected = project.id === selectedProject?.id
+                          return (
+                            <button
+                              key={project.id}
+                              type="button"
+                              onClick={() => {
+                                setProjectId(project.id)
+                                setProjectSearchQuery("")
+                                setProjectMenuOpen(false)
+                                setError("")
+                              }}
+                              className={cn(
+                                "flex w-full min-w-0 items-center justify-between gap-3 rounded-md px-2.5 py-2 text-left text-sm transition-colors outline-none",
+                                isSelected
+                                  ? "bg-primary text-primary-foreground font-medium"
+                                  : "hover:bg-accent hover:text-accent-foreground text-foreground",
+                              )}
+                            >
+                              <span className="min-w-0 break-words leading-5">
+                                {projectLabel(project)}
+                              </span>
+                              {isSelected ? <Check className="size-4 shrink-0" /> : null}
+                            </button>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             )}
           </div>
 
