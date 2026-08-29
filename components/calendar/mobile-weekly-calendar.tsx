@@ -97,6 +97,8 @@ function eventSortValue(event: CalendarEventViewModel) {
   return Number.MAX_SAFE_INTEGER
 }
 
+import { getSupervisorInitials, getSupervisorTheme } from "@/components/calendar/supervisor-theme"
+
 function MobileEventRow({
   event,
   onClientRequestClick,
@@ -108,6 +110,9 @@ function MobileEventRow({
 }) {
   const canOpenRequest = event.kind === "client_request" && Boolean(onClientRequestClick)
   const canEdit = Boolean(event.canEdit && onEditVisit)
+  const supervisor = event.supervisor
+  const theme = getSupervisorTheme(supervisor?.id)
+  const initials = supervisor?.name ? getSupervisorInitials(supervisor.name) : null
 
   const content = (
     <>
@@ -115,8 +120,26 @@ function MobileEventRow({
         {event.timeLabel ?? "—"}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-semibold text-foreground">{event.projectName}</p>
-        {event.secondaryLabel && event.secondaryLabel !== EVENT_STATUS_LABELS[event.kind] ? (
+        <div className="flex min-w-0 items-center gap-1.5">
+          {supervisor ? (
+            <span
+              className={cn(
+                "flex size-3.5 shrink-0 items-center justify-center rounded-full text-[7px] font-bold tracking-tighter shadow-2xs",
+                theme.bg,
+                theme.text,
+              )}
+              title={`Supervisor: ${supervisor.name}`}
+            >
+              {initials}
+            </span>
+          ) : null}
+          <p className="truncate text-xs font-semibold text-foreground">{event.projectName}</p>
+        </div>
+        {supervisor ? (
+          <p className="mt-0.5 truncate text-[10px] leading-3.5 opacity-75">
+            Sup: {supervisor.name}
+          </p>
+        ) : event.secondaryLabel && event.secondaryLabel !== EVENT_STATUS_LABELS[event.kind] ? (
           <p className="mt-0.5 truncate text-[10px] leading-3.5 opacity-75">{event.secondaryLabel}</p>
         ) : null}
       </div>

@@ -1,9 +1,11 @@
+import { useMemo } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import type { CalendarEventViewModel } from "@/lib/calendar/types"
 import { cn } from "@/lib/utils"
+import { getSupervisorInitials, getSupervisorTheme } from "@/components/calendar/supervisor-theme"
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const
 const MAX_VISIBLE_EVENTS = 2
@@ -74,6 +76,51 @@ function CalendarLegend() {
   )
 }
 
+function SupervisorLegend({ events }: { events: CalendarEventViewModel[] }) {
+  const supervisors = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>()
+    for (const event of events) {
+      if (event.supervisor?.id && event.supervisor?.name) {
+        map.set(event.supervisor.id, { id: event.supervisor.id, name: event.supervisor.name })
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [events])
+
+  if (supervisors.length === 0) return null
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border/40 pt-2" aria-label="Supervisor legend">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Supervisors:
+      </span>
+      <div className="flex flex-wrap items-center gap-2.5 overflow-x-auto py-0.5 max-w-full">
+        {supervisors.map((supervisor) => {
+          const theme = getSupervisorTheme(supervisor.id)
+          const initials = getSupervisorInitials(supervisor.name)
+          return (
+            <div key={supervisor.id} className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-foreground">
+              <span
+                className={cn(
+                  "flex size-4 shrink-0 items-center justify-center rounded-full text-[8px] font-bold tracking-tighter shadow-2xs",
+                  theme.bg,
+                  theme.text,
+                )}
+                aria-hidden="true"
+              >
+                {initials}
+              </span>
+              <span className="truncate max-w-[140px]" title={`Supervisor: ${supervisor.name}`}>
+                {supervisor.name}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function CalendarEventChip({
   event,
   onClientRequestClick,
@@ -83,11 +130,14 @@ function CalendarEventChip({
 }) {
   const details = [event.secondaryLabel, event.timeLabel].filter(Boolean).join(" · ")
   const canOpenRequest = event.kind === "client_request" && Boolean(onClientRequestClick)
+  const supervisor = event.supervisor
+  const theme = getSupervisorTheme(supervisor?.id)
+  const initials = supervisor?.name ? getSupervisorInitials(supervisor.name) : null
 
   return (
     <div
       className={cn(
-        "min-w-0 rounded-md border px-1.5 py-1 text-[10px] leading-tight",
+        "flex min-w-0 items-start gap-1 rounded-md border px-1.5 py-1 text-[10px] leading-tight",
         EVENT_STYLES[event.kind],
         canOpenRequest && "cursor-pointer hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       )}
@@ -103,11 +153,30 @@ function CalendarEventChip({
         keyboardEvent.stopPropagation()
         onClientRequestClick?.(event.id)
       }}
-      title={`${event.projectName}${details ? ` — ${details}` : ""}`}
-      aria-label={`${event.projectName}${details ? `, ${details}` : ""}`}
+      title={`${event.projectName}${details ? ` — ${details}` : ""}${supervisor ? `\nSupervisor: ${supervisor.name}` : "\nNo supervisor assigned"}`}
+      aria-label={`${event.projectName}${details ? `, ${details}` : ""}${supervisor ? `, Supervisor ${supervisor.name}` : ""}`}
     >
-      <span className="block truncate font-semibold">{event.projectName}</span>
-      <span className="mt-0.5 block truncate opacity-80">{details}</span>
+      {supervisor ? (
+        <span
+          className={cn(
+            "mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full text-[7px] font-bold tracking-tighter shadow-2xs transition-transform hover:scale-110",
+            theme.bg,
+            theme.text,
+          )}
+          title={`Supervisor: ${supervisor.name}`}
+        >
+          {initials}
+        </span>
+      ) : (
+        <span
+          className="mt-1 size-1.5 shrink-0 rounded-full bg-slate-400/60 dark:bg-slate-500/60"
+          title="No supervisor assigned"
+        />
+      )}
+      <div className="min-w-0 flex-1">
+        <span className="block truncate font-semibold">{event.projectName}</span>
+        <span className="mt-0.5 block truncate opacity-80">{details}</span>
+      </div>
     </div>
   )
 }
@@ -149,7 +218,7 @@ export function MonthlyCalendar({
 
   return (
     <Card className="min-w-0 gap-0 py-0">
-      <CardHeader className="gap-4 border-b px-4 py-4 sm:px-5">
+      <CardHeader className="gap-3 border-b px-4 py-4 sm:px-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold tracking-tight text-foreground" aria-live="polite">
@@ -188,6 +257,7 @@ export function MonthlyCalendar({
           </div>
         </div>
         <CalendarLegend />
+        <SupervisorLegend events={events} />
       </CardHeader>
 
       <CardContent className="px-0">

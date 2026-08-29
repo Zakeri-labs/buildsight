@@ -549,6 +549,13 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
       canApprove: schedulableProjectIds.has(row.project_id),
     }))
 
+    const projectSupervisorMap = new Map<string, { id: string; name: string }>()
+    for (const p of schedulingProjects) {
+      if (p.supervisor?.id && p.supervisor?.name) {
+        projectSupervisorMap.set(p.id, { id: p.supervisor.id, name: p.supervisor.name })
+      }
+    }
+
     const events: CalendarEventViewModel[] = []
     for (const row of pendingRangeRows) {
       if (typeof row.preferred_date !== "string") continue
@@ -561,6 +568,7 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
         timeLabel: preferredTimeLabel(row.preferred_time),
         sortMinutes: preferredTimeSortMinutes(row.preferred_time),
         secondaryLabel: "Client Request",
+        supervisor: projectSupervisorMap.get(row.project_id) ?? null,
       })
     }
 
@@ -595,6 +603,7 @@ export async function getCalendarData({ userId, monthKey }: { userId: string; mo
         requestedBy: row.requested_by ?? null,
         notes: typeof row.scheduled_notes === "string" && row.scheduled_notes.trim() ? row.scheduled_notes.trim() : (typeof row.notes === "string" && row.notes.trim() ? row.notes.trim() : null),
         canEdit,
+        supervisor: projectSupervisorMap.get(row.project_id) ?? null,
       })
     }
 

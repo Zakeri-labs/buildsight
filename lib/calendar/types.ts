@@ -19,6 +19,7 @@ export type CalendarEventViewModel = {
   notes?: string | null
   assignedUserIds?: string[]
   canEdit?: boolean
+  supervisor?: { id: string; name: string } | null
 }
 
 export type CalendarClientRequestViewModel = {

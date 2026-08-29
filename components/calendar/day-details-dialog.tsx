@@ -14,6 +14,8 @@ import { calendarDateFromKey } from "@/lib/calendar/date"
 import type { CalendarEventViewModel } from "@/lib/calendar/types"
 import { cn } from "@/lib/utils"
 
+import { getSupervisorInitials, getSupervisorTheme } from "@/components/calendar/supervisor-theme"
+
 const EVENT_STATUS_LABELS: Record<CalendarEventViewModel["kind"], string> = {
   client_request: "Client Request",
   scheduled_visit: "Scheduled",
@@ -64,6 +66,9 @@ function DayEventRow({
   const canEdit = Boolean(event.canEdit && onEditVisit)
   const statusLabel = EVENT_STATUS_LABELS[event.kind]
   const showSecondaryLabel = Boolean(event.secondaryLabel && event.secondaryLabel !== statusLabel)
+  const supervisor = event.supervisor
+  const theme = getSupervisorTheme(supervisor?.id)
+  const initials = supervisor?.name ? getSupervisorInitials(supervisor.name) : null
 
   const content = (
     <>
@@ -71,8 +76,26 @@ function DayEventRow({
         {eventTimeLabel(event)}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground">{event.projectName}</p>
-        {showSecondaryLabel ? (
+        <div className="flex min-w-0 items-center gap-1.5">
+          {supervisor ? (
+            <span
+              className={cn(
+                "flex size-4 shrink-0 items-center justify-center rounded-full text-[8px] font-bold tracking-tighter shadow-2xs",
+                theme.bg,
+                theme.text,
+              )}
+              title={`Supervisor: ${supervisor.name}`}
+            >
+              {initials}
+            </span>
+          ) : null}
+          <p className="truncate text-sm font-semibold text-foreground">{event.projectName}</p>
+        </div>
+        {supervisor ? (
+          <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground">
+            Supervisor: {supervisor.name} {showSecondaryLabel ? `· ${event.secondaryLabel}` : ""}
+          </p>
+        ) : showSecondaryLabel ? (
           <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground">{event.secondaryLabel}</p>
         ) : null}
       </div>
