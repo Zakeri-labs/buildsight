@@ -133,6 +133,7 @@ export type LanguagePdfTemplate = {
   termName: string
   reportNumber: string
   visitNumber: string
+  visitDate?: string | null
   createdAt: string
   creatorName: string
   status: string
@@ -184,7 +185,7 @@ const LABELS = {
     term: "Term Name",
     reportNumber: "Report Number",
     visitNumber: "Visit Number",
-    reportDate: "Date",
+    reportDate: "Visit Date",
     reportStatus: "Status",
     reportType: "Type",
     reportTitle: "Report Title",
@@ -218,7 +219,7 @@ const LABELS = {
     term: "اسم البند",
     reportNumber: "رقم التقرير",
     visitNumber: "رقم الزيارة",
-    reportDate: "التاريخ",
+    reportDate: "تاريخ الزيارة",
     reportStatus: "الحالة",
     reportType: "النوع",
     reportTitle: "عنوان التقرير",
@@ -709,6 +710,7 @@ export function buildLanguagePdfTemplate(input: {
     termName: content.termName || data.term.name,
     reportNumber: data.response.reportNumber,
     visitNumber: String(data.response.visitNumber),
+    visitDate: data.response.visitDate || data.response.createdAt,
     createdAt: data.response.createdAt,
     creatorName: typeof (data.response as any).createdBy === "string"
       ? (data.response as any).createdBy

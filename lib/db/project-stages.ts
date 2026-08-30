@@ -47,6 +47,7 @@ export type ProjectTermResponse = {
   id: string
   reportNumber: string
   visitNumber: number
+  visitDate: string | null
   reportType: string
   subject: string | null
   reportTitle: string
@@ -296,7 +297,7 @@ export async function loadProjectStageExecution(
   const { data: responses, error: responseError } = stageIds.length
     ? await admin
         .from("term_responses")
-        .select("id, project_stage_id, project_stage_term_id, report_number, visit_number, report_type, subject, report_title, response_content, status, responsible_user_id, approval_required, response_type, template_reference, instructions, created_by, created_at, updated_at, submitted_at, completed_at")
+        .select("id, project_stage_id, project_stage_term_id, report_number, visit_number, visit_date, report_type, subject, report_title, response_content, status, responsible_user_id, approval_required, response_type, template_reference, instructions, created_by, created_at, updated_at, submitted_at, completed_at")
         .in("project_stage_id", stageIds)
         .order("created_at", { ascending: false })
     : { data: [], error: null }
@@ -388,6 +389,7 @@ export async function loadProjectStageExecution(
       id: response.id,
       reportNumber: response.report_number,
       visitNumber: Number.isInteger(Number(response.visit_number)) && Number(response.visit_number) > 0 ? Number(response.visit_number) : 1,
+      visitDate: response.visit_date ? String(response.visit_date) : response.created_at ? String(response.created_at).slice(0, 10) : null,
       reportType: response.report_type,
       subject: response.subject,
       reportTitle: response.report_title,

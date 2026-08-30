@@ -65,6 +65,7 @@ export type StageTranslationPageData = {
     id: string
     reportNumber: string
     visitNumber: number
+    visitDate?: string | null
     reportType: string
     subject: string | null
     reportTitle: string

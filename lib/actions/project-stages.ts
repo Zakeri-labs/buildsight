@@ -307,9 +307,10 @@ type SaveReportResponseInput = {
   saveStatus?: "draft" | "in_progress"
   siteVisitRequestId?: string | null
   visitNumber?: number | null
+  visitDate?: string | null
 }
 
-type SavedReportResponse = { responseId: string; projectStageId: string; reportNumber: string; visitNumber: number; status: string }
+type SavedReportResponse = { responseId: string; projectStageId: string; reportNumber: string; visitNumber: number; visitDate: string | null; status: string }
 
 async function assertLinkedSiteVisitCompletionAuthority(actorId: string, projectId: string) {
   const scope = await resolveCalendarProjectScope(actorId)
@@ -449,9 +450,6 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       if (!existing && siteVisit.status === "completed") {
         return { ok: false, error: "This Site Visit has already been completed." }
       }
-      if (existing?.site_visit_request_id === siteVisitRequestId && existing.visit_number !== siteVisitReportVisitNumber) {
-        return { ok: false, error: "The linked Site Visit and Report Visit Number do not match." }
-      }
     }
     if (existing && existing.project_stage_id !== projectStageId) {
       return { ok: false, error: "This report does not belong to the selected stage." }
@@ -516,6 +514,9 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
     const userVisitNumber = Number.isInteger(parsedUserVisit) && (parsedUserVisit as number) > 0
       ? (parsedUserVisit as number)
       : null
+    const rawVisitDate = typeof input.visitDate === "string" && input.visitDate.trim()
+      ? input.visitDate.trim()
+      : null
 
     const { data: proj } = await admin
       .from("projects")
@@ -543,6 +544,9 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         visit_number: assignedVisitNumber,
         report_number: reportNumber,
       }
+      if (rawVisitDate) {
+        updatePayload.visit_date = rawVisitDate
+      }
       if (directStage && siteVisitRequestId && !existing.site_visit_request_id) {
         updatePayload.site_visit_request_id = siteVisitRequestId
       }
@@ -562,6 +566,7 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         site_visit_request_id: directStage ? siteVisitRequestId : null,
         report_number: reportNumber,
         visit_number: assignedVisitNumber,
+        visit_date: rawVisitDate,
         report_type: input.reportType,
         subject: input.subject?.trim() || null,
         report_title: title,
@@ -581,6 +586,14 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         if (insertError.code === "23505") return { ok: false, error: "A report with this identifier already exists." }
         throw insertError
       }
+    }
+
+    const linkedSiteVisitId = siteVisitRequestId || existing?.site_visit_request_id
+    if (linkedSiteVisitId && assignedVisitNumber) {
+      await admin
+        .from("site_visit_requests")
+        .update({ report_visit_number: assignedVisitNumber })
+        .eq("id", linkedSiteVisitId)
     }
 
     let linkedSiteVisitTransitioned = false
@@ -673,7 +686,7 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       }
     }
 
-    return { ok: true, data: { responseId: input.responseId, projectStageId, reportNumber, visitNumber: assignedVisitNumber, status: nextStatus } }
+    return { ok: true, data: { responseId: input.responseId, projectStageId, reportNumber, visitNumber: assignedVisitNumber, visitDate: rawVisitDate, status: nextStatus } }
   } catch (error) {
     return actionError(error, "Could not save the inspection report.")
   }

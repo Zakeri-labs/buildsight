@@ -1050,12 +1050,15 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   doc.setTextColor(180, 138, 32)
   writePdfText(doc, nameAr, cx, arabicY, { align: "center" }, true)
 
-  // ── RIGHT COLUMN: Date / Document No. / Page (Right-aligned, stacked metadata block) ──
-  const rawDate = template.createdAt || ""
+  // ── RIGHT COLUMN: Visit Date / Document No. / Page (Right-aligned, stacked metadata block) ──
+  const rawDate = template.visitDate || template.createdAt || ""
   const formattedDate = (() => {
     try {
       if (!rawDate) return "—"
+      const clean = rawDate.split("T")[0].trim()
+      if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean
       const d = new Date(rawDate)
+      if (Number.isNaN(d.getTime())) return clean || "—"
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
     } catch {
       return rawDate.split("T")[0] || "—"
@@ -1064,7 +1067,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
 
   const rtl = flow.rtl
   const infoRows = [
-    { label: rtl ? "التاريخ:" : "Date:",    value: formattedDate },
+    { label: rtl ? "تاريخ الزيارة:" : "Visit Date:",    value: formattedDate },
     { label: rtl ? "رقم المستند:" : "Doc No.:", value: template.reportNumber || "—" },
     { label: rtl ? "الصفحة:" : "Page:",    value: String(flow.pageNumber) },
   ]

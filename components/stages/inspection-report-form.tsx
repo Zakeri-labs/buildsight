@@ -126,7 +126,7 @@ const COPY = {
     optional: "Optional",
     reportNo: "Report No.",
     visitNo: "Visit No.",
-    date: "Date",
+    date: "Visit Date",
     responsible: "Responsible User",
     status: "Status",
     type: "Type",
@@ -168,7 +168,7 @@ const COPY = {
     optional: "اختياري",
     reportNo: "رقم التقرير",
     visitNo: "رقم الزيارة",
-    date: "التاريخ",
+    date: "تاريخ الزيارة",
     responsible: "المستخدم المسؤول",
     status: "الحالة",
     type: "النوع",
@@ -281,6 +281,11 @@ function configuredResponseError(
 }
 
 function formatDate(value: string | Date, locale: "en" | "ar") {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    const [y, m, d] = value.trim().split("-").map(Number)
+    const date = new Date(y, m - 1, d)
+    return new Intl.DateTimeFormat(locale === "ar" ? "ar" : "en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date)
+  }
   const date = typeof value === "string" ? new Date(value) : value
   return new Intl.DateTimeFormat(locale === "ar" ? "ar" : "en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date)
 }
@@ -443,7 +448,18 @@ export function InspectionReportForm({
   const copy = COPY[locale]
   const cleanStageName = stage.name.replace(/^\d+[\.\s\-]+/, "").trim()
   const cleanTermReportName = reportDefinition.reportName.replace(/^\d+[\.\s\-]+/, "").trim()
-  const reportDate = response?.createdAt ?? new Date().toISOString()
+  const todayLocalDate = () => {
+    const now = new Date()
+    const yyyy = now.getFullYear()
+    const mm = String(now.getMonth() + 1).padStart(2, "0")
+    const dd = String(now.getDate()).padStart(2, "0")
+    return `${yyyy}-${mm}-${dd}`
+  }
+  const [visitDate, setVisitDate] = useState<string>(() => {
+    if (response?.visitDate) return response.visitDate.slice(0, 10)
+    if (response?.createdAt) return response.createdAt.slice(0, 10)
+    return todayLocalDate()
+  })
   const [reportType, setReportType] = useState<ReportTypeValue>((REPORT_TYPES.some((item) => item.value === response?.reportType) ? response?.reportType : "inspection_report") as ReportTypeValue)
   const [visitNumber, setVisitNumber] = useState(response?.visitNumber ?? suggestedVisitNumber)
   const defaultReportTitlePattern = cleanTermReportName || cleanStageName
@@ -634,6 +650,7 @@ export function InspectionReportForm({
       reportTitle,
       content,
       visitNumber: currentVisitNo,
+      visitDate: visitDate || todayLocalDate(),
       approvalRequired: reportDefinition.approvalRequired,
       responseType: reportDefinition.responseType,
       responsibleUserId: reportDefinition.responsibleUser?.id ?? null,
@@ -649,6 +666,7 @@ export function InspectionReportForm({
     setResolvedStageId(result.data.projectStageId)
     setReportNumber(result.data.reportNumber)
     setVisitNumber(result.data.visitNumber)
+    if (result.data.visitDate) setVisitDate(result.data.visitDate)
     setStatus(result.data.status as ResponseStatus)
     return result.data
   }
@@ -940,6 +958,7 @@ export function InspectionReportForm({
           reportTitle,
           content,
           visitNumber: currentVisitNo,
+          visitDate: visitDate || todayLocalDate(),
           approvalRequired: reportDefinition.approvalRequired,
           responseType: reportDefinition.responseType,
           responsibleUserId: reportDefinition.responsibleUser?.id ?? null,
@@ -956,6 +975,7 @@ export function InspectionReportForm({
         routeStageId = result.data.projectStageId
         setResolvedStageId(result.data.projectStageId)
         setVisitNumber(result.data.visitNumber)
+        if (result.data.visitDate) setVisitDate(result.data.visitDate)
         setStatus(result.data.status as ResponseStatus)
         setSuccess(copy.submitted)
 
@@ -1323,7 +1343,7 @@ export function InspectionReportForm({
           <HeaderCell label={copy.stage} value={cleanStageName} />
           <HeaderCell label={copy.visitNo} value={formattedVisitNo} />
           <HeaderCell label={copy.reportNo} value={displayReportNo} />
-          <HeaderCell label={copy.date} value={formatDate(reportDate, locale)} />
+          <HeaderCell label={copy.date} value={formatDate(visitDate, locale)} />
           <HeaderCell
             label={isDirectStageReport ? (locale === "ar" ? "المشرف" : "Supervisor") : (locale === "ar" ? "مقدم التقرير" : "Created By")}
             value={creatorPerson.name}
@@ -1356,8 +1376,8 @@ export function InspectionReportForm({
           <p className="text-sm font-semibold text-blue-950 dark:text-blue-100 md:text-base">{copy.basic}</p>
         </div>
         <CardContent className="grid gap-3 p-3 md:gap-4 md:p-5">
-          <div className="grid gap-3 sm:grid-cols-4 md:gap-4">
-            <div className="space-y-1.5 sm:col-span-1">
+          <div className="grid gap-3 sm:grid-cols-12 md:gap-4">
+            <div className="space-y-1.5 sm:col-span-3">
               <Label htmlFor="visit-number" className="text-xs font-semibold text-foreground">
                 {copy.visitNo} <span className="text-destructive">*</span>
               </Label>
@@ -1372,6 +1392,19 @@ export function InspectionReportForm({
               />
             </div>
             <div className="space-y-1.5 sm:col-span-3">
+              <Label htmlFor="visit-date" className="text-xs font-semibold text-foreground">
+                {copy.date} <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="visit-date"
+                type="date"
+                value={visitDate}
+                onChange={(event) => setVisitDate(event.target.value)}
+                disabled={isLocked}
+                className="h-9 px-3 text-xs font-semibold md:text-sm"
+              />
+            </div>
+            <div className="space-y-1.5 sm:col-span-6">
               <Label htmlFor="report-title" className="text-xs font-semibold text-foreground">{copy.title} <span className="text-destructive">*</span></Label>
               <Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} className="h-9 px-3 text-xs md:text-sm" />
             </div>
