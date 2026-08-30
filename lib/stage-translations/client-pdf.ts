@@ -983,9 +983,9 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
 
   // ── 3-COLUMN LAYOUT: [Logo] | [Company Name] | [Date/Doc/Page] ────
   const totalW = pageWidth - margin * 2  // 182 mm
-  const col1W = 50   // Left  – Logo (enlarged area)
-  const col3W = 44   // Right – Date / Doc / Page (3 rows) – compact width
-  const col2W = totalW - col1W - col3W   // Center – Company names
+  const col1W = 44   // Left  – Logo area
+  const col3W = 40   // Right – Date / Doc / Page (3 rows) – compact width
+  const col2W = totalW - col1W - col3W   // Center – Company names (98 mm)
   const col1X = 10   // Move logo further to the left
   const col2X = margin + col1W
   const col3X = margin + col1W + col2W
@@ -1010,32 +1010,32 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     doc.text("BONYAN", col1X, headerTop + headerH / 2 + 2, { align: "left" })
   }
 
-  // ── CENTER COLUMN: Company Name (EN + AR) Bold Center-aligned (moved upward near top golden line) ─────
+  // ── CENTER COLUMN: Company Name (EN + AR) Bold Center-aligned ─────
   const nameEn = org.nameEn || "BONYAN CONSTRUCTION FOR ENGINEERING CONSULTANCY"
   const nameAr = org.nameAr || "بنيان الإنشائية للاستشارات الهندسية"
   const cx = col2X + col2W / 2
-  const topTextY = headerTop + 1.5 + 5.5   // Placed upward just below top golden line
+  const topTextY = headerTop + 1.5 + 5.0   // Placed upward just below top golden line
 
-  // English name – Bold, auto-scale to fit col2W
-  let enSize = 10.5
+  // English name – Bold, enlarged by ~23.8% (10.5pt -> 13.0pt), auto-scale if needed
+  let enSize = 13.0
   setLanguage(doc, false, enSize, true)
-  while (doc.getTextWidth(nameEn) > col2W - 4 && enSize > 5) {
+  while (doc.getTextWidth(nameEn) > col2W - 2 && enSize > 5) {
     enSize -= 0.3
     setLanguage(doc, false, enSize, true)
   }
   doc.setTextColor(15, 23, 42)
   doc.text(nameEn, cx, topTextY, { align: "center" })
 
-  // Arabic name – Bold, auto-scale to fit col2W
-  let arSize = 8.5
+  // Arabic name – Bold, enlarged by ~23.5% (8.5pt -> 10.5pt), auto-scale if needed
+  let arSize = 10.5
   setLanguage(doc, true, arSize, true)
   const shapedAr = String(shapeArabicText(doc, nameAr))
-  while (doc.getTextWidth(shapedAr) > col2W - 4 && arSize > 5) {
+  while (doc.getTextWidth(shapedAr) > col2W - 2 && arSize > 5) {
     arSize -= 0.3
     setLanguage(doc, true, arSize, true)
   }
   doc.setTextColor(180, 138, 32)
-  writePdfText(doc, nameAr, cx, topTextY + 5.5, { align: "center" }, true)
+  writePdfText(doc, nameAr, cx, topTextY + 6.0, { align: "center" }, true)
 
   // ── RIGHT COLUMN: Date / Document No. / Page (Right-aligned, aligned in upper header area) ──
   const rawDate = template.createdAt || ""
