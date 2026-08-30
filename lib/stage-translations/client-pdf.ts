@@ -1068,10 +1068,11 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     { label: rtl ? "رقم المستند:" : "Doc No.:", value: template.reportNumber || "—" },
     { label: rtl ? "الصفحة:" : "Page:",    value: String(flow.pageNumber) },
   ]
-  const labelX  = col3X
-  const rightX  = pageWidth - margin
-  const stepY   = 4.4   // Row step height
-  const startY  = headerTop + 1.5 + 13.0 // 19.0 mm (vertically centered in lower header area)
+  const rightX = pageWidth - margin // 200 mm
+  const labelColRightX = rightX - 32.0 // 168 mm (colons align at 168 mm)
+  const leftValX = labelColRightX + 2.5
+  const stepY  = 4.4   // Row step height
+  const startY = headerTop + 1.5 + 13.0 // 19.0 mm (vertically centered in lower header area)
 
   infoRows.forEach(({ label, value }, i) => {
     const y = startY + i * stepY
@@ -1084,7 +1085,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
       doc.text(shapedLabel, rightX, y, { align: "right" })
 
       const labelW = doc.getTextWidth(shapedLabel)
-      const maxValW = Math.max(15, rightX - labelX - labelW - 3.0)
+      const maxValW = Math.max(15, rightX - col3X - labelW - 3.0)
       let valFontSize = 7.5
       setLanguage(doc, false, valFontSize, false)
       while (doc.getTextWidth(value) > maxValW && valFontSize > 5.5) {
@@ -1092,16 +1093,14 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
         setLanguage(doc, false, valFontSize, false)
       }
       doc.setTextColor(15, 23, 42)
-      doc.text(value, labelX, y, { align: "left" })
+      doc.text(value, col3X, y, { align: "left" })
     } else {
-      // English (LTR): Label on Left edge, Value on Right edge
+      // English (LTR): Label right-aligned at labelColRightX, Value right-aligned at rightX
       setLanguage(doc, false, 6.5, false)
       doc.setTextColor(100, 116, 139)
-      doc.text(label, labelX, y, { align: "left" })
+      doc.text(label, labelColRightX, y, { align: "right" })
 
-      const labelW = doc.getTextWidth(label)
-      const minValX = labelX + labelW + 3.0
-      const maxValW = Math.max(15, rightX - minValX)
+      const maxValW = Math.max(15, rightX - leftValX)
       let valFontSize = 7.5
       setLanguage(doc, false, valFontSize, false)
       while (doc.getTextWidth(value) > maxValW && valFontSize > 5.5) {
@@ -2953,15 +2952,15 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     const col3W = 48
     const col2W = totalW - col1W - col3W
     const col3X = margin + col1W + col2W
-    const labelX = col3X
     const rightX = width - margin
+    const labelColRightX = rightX - 32.0
     const stepY = 4.4
     const startY = headerTop + 1.5 + 13.0
     const pageY = startY + 2 * stepY
 
     // Blank out old row 3 in column 3 area (light gray fill)
     doc.setFillColor(248, 250, 252)
-    doc.rect(labelX - 1, pageY - 3.2, (rightX - labelX) + 2, 4.5, "F")
+    doc.rect(col3X - 1, pageY - 3.2, (rightX - col3X) + 2, 4.5, "F")
 
     const pageStr = `${page} / ${pages}`
 
@@ -2974,12 +2973,12 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
 
       setLanguage(doc, false, 7.5, false)
       doc.setTextColor(15, 23, 42)
-      doc.text(pageStr, labelX, pageY, { align: "left" })
+      doc.text(pageStr, col3X, pageY, { align: "left" })
     } else {
-      // English (LTR): Label on Left edge, Page number on Right edge
+      // English (LTR): Label right-aligned at labelColRightX, Page number right-aligned at rightX
       setLanguage(doc, false, 6.5, false)
       doc.setTextColor(100, 116, 139)
-      doc.text("Page:", labelX, pageY, { align: "left" })
+      doc.text("Page:", labelColRightX, pageY, { align: "right" })
 
       setLanguage(doc, false, 7.5, false)
       doc.setTextColor(15, 23, 42)
