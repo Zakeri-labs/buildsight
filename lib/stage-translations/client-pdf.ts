@@ -2967,7 +2967,8 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     const col2W = totalW - col1W - col3W
     const col3X = margin + col1W + col2W
     const rightX = width - margin
-    const labelColRightX = rightX - 32.0
+    const metadataLabelX = rightX - 48.0 // 152 mm (shared label column start)
+    const metadataValueX = metadataLabelX + 15.0 // 167 mm (shared value column start)
     const stepY = 4.4
     const startY = headerTop + 1.5 + 13.0
     const pageY = startY + 2 * stepY
@@ -2987,16 +2988,16 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
 
       setLanguage(doc, false, 7.5, false)
       doc.setTextColor(15, 23, 42)
-      doc.text(pageStr, col3X, pageY, { align: "left" })
+      doc.text(pageStr, metadataLabelX, pageY, { align: "left" })
     } else {
-      // English (LTR): Label right-aligned at labelColRightX, Page number right-aligned at rightX
+      // English (LTR): Two left-aligned columns at shared metadataLabelX and metadataValueX
       setLanguage(doc, false, 6.5, false)
       doc.setTextColor(100, 116, 139)
-      doc.text("Page:", labelColRightX, pageY, { align: "right" })
+      doc.text("Page:", metadataLabelX, pageY, { align: "left" })
 
       setLanguage(doc, false, 7.5, false)
       doc.setTextColor(15, 23, 42)
-      doc.text(pageStr, rightX, pageY, { align: "right" })
+      doc.text(pageStr, metadataValueX, pageY, { align: "left" })
     }
 
     // ── Footer Top Accent Line ──────────────────────────────────────────
