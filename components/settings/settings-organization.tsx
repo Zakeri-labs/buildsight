@@ -628,20 +628,14 @@ export function SettingsOrganization() {
                 </span>
               </div>
 
-              {/* Right Column: Representative Metadata (Aligned 3-row column) */}
-              <div className="flex shrink-0 flex-col text-xs text-slate-600 dark:text-slate-400 text-start sm:text-end space-y-1 min-w-[175px]">
-                <div className="flex items-center justify-between sm:justify-end gap-3 text-[11px]">
-                  <span className="font-medium text-slate-500 dark:text-slate-400">{isArabic ? "التاريخ:" : "Date:"}</span>
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">2026-08-30</span>
-                </div>
-                <div className="flex items-center justify-between sm:justify-end gap-3 text-[11px]">
-                  <span className="font-medium text-slate-500 dark:text-slate-400">{isArabic ? "رقم المستند:" : "Doc No.:"}</span>
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">Bonyan/sup/2026/048/001</span>
-                </div>
-                <div className="flex items-center justify-between sm:justify-end gap-3 text-[11px]">
-                  <span className="font-medium text-slate-500 dark:text-slate-400">{isArabic ? "الصفحة:" : "Page:"}</span>
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">1 / 4</span>
-                </div>
+              {/* Right Column: Representative Metadata (Two Left-Aligned Columns) */}
+              <div className="grid shrink-0 grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px] min-w-[175px] text-left">
+                <span className="font-medium text-slate-500 dark:text-slate-400">{isArabic ? "تاريخ الزيارة:" : "Visit Date:"}</span>
+                <span className="font-semibold text-slate-900 dark:text-slate-100">2026-08-28</span>
+                <span className="font-medium text-slate-500 dark:text-slate-400">{isArabic ? "رقم المستند:" : "Doc No.:"}</span>
+                <span className="font-semibold text-slate-900 dark:text-slate-100">Bonyan/sup/2026/048/001</span>
+                <span className="font-medium text-slate-500 dark:text-slate-400">{isArabic ? "الصفحة:" : "Page:"}</span>
+                <span className="font-semibold text-slate-900 dark:text-slate-100">1 / 4</span>
               </div>
             </div>
           </div>

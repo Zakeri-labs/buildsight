@@ -1072,9 +1072,9 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     { label: rtl ? "الصفحة:" : "Page:",    value: String(flow.pageNumber) },
   ]
   const rightX = pageWidth - margin // 200 mm
-  const labelColRightX = rightX - 32.0 // 168 mm (colons align at 168 mm)
-  const leftValX = labelColRightX + 2.5
-  const stepY  = 4.4   // Row step height
+  const metadataLabelX = rightX - 48.0 // 152 mm (shared label column start)
+  const metadataValueX = metadataLabelX + 15.0 // 167 mm (shared value column start)
+  const stepY  = 4.4   // Equal row step height
   const startY = headerTop + 1.5 + 13.0 // 19.0 mm (vertically centered in lower header area)
 
   infoRows.forEach(({ label, value }, i) => {
@@ -1096,14 +1096,14 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
         setLanguage(doc, false, valFontSize, false)
       }
       doc.setTextColor(15, 23, 42)
-      doc.text(value, col3X, y, { align: "left" })
+      doc.text(value, metadataLabelX, y, { align: "left" })
     } else {
-      // English (LTR): Label right-aligned at labelColRightX, Value right-aligned at rightX
+      // English (LTR): Two left-aligned columns starting at shared metadataLabelX and metadataValueX
       setLanguage(doc, false, 6.5, false)
       doc.setTextColor(100, 116, 139)
-      doc.text(label, labelColRightX, y, { align: "right" })
+      doc.text(label, metadataLabelX, y, { align: "left" })
 
-      const maxValW = Math.max(15, rightX - leftValX)
+      const maxValW = Math.max(15, rightX - metadataValueX)
       let valFontSize = 7.5
       setLanguage(doc, false, valFontSize, false)
       while (doc.getTextWidth(value) > maxValW && valFontSize > 5.5) {
@@ -1111,7 +1111,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
         setLanguage(doc, false, valFontSize, false)
       }
       doc.setTextColor(15, 23, 42)
-      doc.text(value, rightX, y, { align: "right" })
+      doc.text(value, metadataValueX, y, { align: "left" })
     }
   })
 
