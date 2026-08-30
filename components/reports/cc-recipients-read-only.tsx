@@ -2,7 +2,7 @@ import { Building2, Mail, UserCheck, UserRound } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { profileAvatarDisplayUrl } from "@/lib/profile-avatar"
-import type { ReportCcRecipient } from "@/lib/report-cc/types"
+import { partitionReportCcRecipients, type ReportCcRecipient } from "@/lib/report-cc/types"
 import { cn } from "@/lib/utils"
 
 function initials(name: string) {
@@ -47,8 +47,7 @@ export function CcRecipientsReadOnly({
   title?: string
   compact?: boolean
 }) {
-  const reportToRecipients = recipients.slice(0, 1)
-  const ccToRecipients = recipients.slice(1)
+  const { reportToRecipients, ccRecipients: ccToRecipients } = partitionReportCcRecipients(recipients)
 
   return (
     <Card className={cn("gap-0 py-0", compact && "shadow-none")}>

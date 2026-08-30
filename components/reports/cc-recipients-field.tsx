@@ -144,12 +144,12 @@ export function CcRecipientsField({
   const [showAllCc, setShowAllCc] = useState(false)
 
   // We maintain target groups: "reportTo" and "ccTo"
-  const [reportToUserIds, setReportToUserIds] = useState<string[]>(() => value.reportToUserIds ?? value.internalUserIds.slice(0, 1))
-  const [ccToUserIds, setCcToUserIds] = useState<string[]>(() => value.ccToUserIds ?? value.internalUserIds.filter((id) => !(value.reportToUserIds ?? value.internalUserIds.slice(0, 1)).includes(id)))
+  const [reportToUserIds, setReportToUserIds] = useState<string[]>(() => value.reportToUserIds ?? (value.ccToUserIds !== undefined ? [] : value.internalUserIds.slice(0, 1)))
+  const [ccToUserIds, setCcToUserIds] = useState<string[]>(() => value.ccToUserIds ?? (value.reportToUserIds !== undefined ? value.internalUserIds.filter((id) => !(value.reportToUserIds ?? []).includes(id)) : value.internalUserIds.filter((id) => !value.internalUserIds.slice(0, 1).includes(id))))
   const [externalMap, setExternalMap] = useState<Map<string, ExternalCcRecipientInput & { group: "reportTo" | "ccTo" }>>(() => {
     const map = new Map<string, ExternalCcRecipientInput & { group: "reportTo" | "ccTo" }>()
-    value.externalRecipients.forEach((rec, idx) => {
-      map.set(rec.clientId, { ...rec, group: rec.group ?? (idx === 0 ? "reportTo" : "ccTo") })
+    value.externalRecipients.forEach((rec) => {
+      map.set(rec.clientId, { ...rec, group: rec.group ?? "ccTo" })
     })
     return map
   })

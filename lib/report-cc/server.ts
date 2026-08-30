@@ -147,6 +147,8 @@ export async function loadProjectParticipantsOnly(projectId: string): Promise<Pr
     .sort((left: ProjectCcCandidate, right: ProjectCcCandidate) => left.name.localeCompare(right.name))
 }
 
+export { partitionReportCcRecipients } from "@/lib/report-cc/types"
+
 export async function loadReportCcRecipients(
   projectId: string,
   responseId: string,
@@ -156,7 +158,7 @@ export async function loadReportCcRecipients(
   const admin = createAdminClient()
   const { data: rows, error } = await admin
     .from("report_cc_recipients")
-    .select("id, recipient_context, recipient_type, user_id, external_name, external_email, external_company, external_role, created_at")
+    .select("id, recipient_context, recipient_type, user_id, external_name, external_email, external_company, external_role, recipient_group, created_at")
     .eq("project_id", projectId)
     .eq("response_id", responseId)
     .eq("recipient_context", context)
@@ -202,6 +204,9 @@ export async function loadReportCcRecipients(
       (nameKey ? phoneByName.get(nameKey) : null) ||
       null
 
+    const rawGroup = row.recipient_group
+    const group: "reportTo" | "ccTo" | null = rawGroup === "reportTo" || rawGroup === "ccTo" ? rawGroup : null
+
     return {
       id: row.id,
       context: row.recipient_context,
@@ -213,6 +218,7 @@ export async function loadReportCcRecipients(
       role: row.recipient_type === "internal" ? candidate?.role ?? null : row.external_role ?? null,
       avatarUrl: row.recipient_type === "internal" ? profile?.avatar_url ?? null : null,
       phone: resolvedPhone,
+      group,
       createdAt: row.created_at,
     } satisfies ReportCcRecipient
   })

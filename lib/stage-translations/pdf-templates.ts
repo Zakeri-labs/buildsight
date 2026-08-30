@@ -6,6 +6,8 @@ import type {
 } from "@/lib/stage-translations/types"
 import { statusLabel } from "@/lib/stages/execution"
 
+import { partitionReportCcRecipients } from "@/lib/report-cc/types"
+
 export type PdfKind = "original" | "arabic" | "bilingual"
 
 export type SourceImageSectionHint =
@@ -644,7 +646,9 @@ export function buildLanguagePdfTemplate(input: {
     ?? data.response.content
   if (!content) throw new Error("Report content is missing.")
 
-  const reportToRecipients: PdfRecipientInfo[] = ccRecipientsList.slice(0, 1).map((r) => ({
+  const { reportToRecipients: rawReportTo, ccRecipients: rawCc } = partitionReportCcRecipients(ccRecipientsList)
+
+  const reportToRecipients: PdfRecipientInfo[] = rawReportTo.map((r) => ({
     id: r.id,
     name: r.name,
     role: r.role,
@@ -654,7 +658,7 @@ export function buildLanguagePdfTemplate(input: {
     type: r.type,
   }))
 
-  const ccRecipients: PdfRecipientInfo[] = ccRecipientsList.slice(1).map((r) => ({
+  const ccRecipients: PdfRecipientInfo[] = rawCc.map((r) => ({
     id: r.id,
     name: r.name,
     role: r.role,

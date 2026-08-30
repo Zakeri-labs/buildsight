@@ -167,7 +167,7 @@ export async function saveReportCcRecipientsAction(input: {
 
     const { data: existing, error: existingError } = await admin
       .from("report_cc_recipients")
-      .select("id, recipient_type, user_id, external_name, external_email, external_company, external_role")
+      .select("id, recipient_type, user_id, external_name, external_email, external_company, external_role, recipient_group")
       .eq("project_id", input.projectId)
       .eq("response_id", input.responseId)
       .eq("recipient_context", input.context)
@@ -185,19 +185,38 @@ export async function saveReportCcRecipientsAction(input: {
       if (error) throw error
     }
 
+    for (const id of validInternalUserIds) {
+      const current = existingInternal.get(id)
+      if (!current) continue
+      const targetGroup = reportToIdSet.has(id) ? "reportTo" : ccToIdSet.has(id) ? "ccTo" : "reportTo"
+      if (current.recipient_group !== targetGroup) {
+        const { error } = await admin
+          .from("report_cc_recipients")
+          .update({ recipient_group: targetGroup })
+          .eq("id", current.id)
+        if (error) throw error
+      }
+    }
+
     for (const external of externalRows) {
       const current = existingExternal.get(external.email)
       if (!current) continue
+      const targetGroup = external.group ?? (reportToIdSet.has(external.clientId) ? "reportTo" : ccToIdSet.has(external.clientId) ? "ccTo" : "reportTo")
       const { error } = await admin
         .from("report_cc_recipients")
-        .update({ external_name: external.name, external_company: external.company, external_role: external.role })
+        .update({
+          external_name: external.name,
+          external_company: external.company,
+          external_role: external.role,
+          recipient_group: targetGroup,
+        })
         .eq("id", current.id)
       if (error) throw error
     }
 
     type PendingRecipientInsert =
-      | { type: "internal"; userId: string }
-      | { type: "external"; external: (typeof externalRows)[number] }
+      | { type: "internal"; userId: string; group: "reportTo" | "ccTo" }
+      | { type: "external"; external: (typeof externalRows)[number]; group: "reportTo" | "ccTo" }
 
     const validInternalSet = new Set(validInternalUserIds)
     const externalByClientId = new Map(externalRows.map((row) => [row.clientId, row] as const))
@@ -205,37 +224,48 @@ export async function saveReportCcRecipientsAction(input: {
     const queuedInternal = new Set<string>()
     const queuedExternal = new Set<string>()
 
-    const queueInternal = (userId: string) => {
+    const queueInternal = (userId: string, group: "reportTo" | "ccTo") => {
       if (!validInternalSet.has(userId) || existingInternal.has(userId) || queuedInternal.has(userId)) return
       queuedInternal.add(userId)
-      pendingInserts.push({ type: "internal", userId })
+      pendingInserts.push({ type: "internal", userId, group })
     }
-    const queueConvertedParticipant = (candidateId: string) => {
+    const queueConvertedParticipant = (candidateId: string, group: "reportTo" | "ccTo") => {
       const external = externalByClientId.get(candidateId)
       if (!external || existingExternal.has(external.email) || queuedExternal.has(external.email)) return
       queuedExternal.add(external.email)
-      pendingInserts.push({ type: "external", external })
+      pendingInserts.push({ type: "external", external, group })
     }
-    const queueExternal = (external: (typeof externalRows)[number]) => {
+    const queueExternal = (external: (typeof externalRows)[number], group: "reportTo" | "ccTo") => {
       if (existingExternal.has(external.email) || queuedExternal.has(external.email)) return
       queuedExternal.add(external.email)
-      pendingInserts.push({ type: "external", external })
+      pendingInserts.push({ type: "external", external, group })
     }
 
     if (hasGroupedSelection) {
       for (const id of reportToUserIds) {
-        queueInternal(id)
-        queueConvertedParticipant(id)
+        queueInternal(id, "reportTo")
+        queueConvertedParticipant(id, "reportTo")
       }
-      for (const external of externalRows.filter((row) => row.group === "reportTo")) queueExternal(external)
+      for (const external of externalRows.filter((row) => row.group === "reportTo")) queueExternal(external, "reportTo")
       for (const id of ccToUserIds) {
-        queueInternal(id)
-        queueConvertedParticipant(id)
+        queueInternal(id, "ccTo")
+        queueConvertedParticipant(id, "ccTo")
       }
-      for (const external of externalRows.filter((row) => row.group === "ccTo")) queueExternal(external)
+      for (const external of externalRows.filter((row) => row.group === "ccTo")) queueExternal(external, "ccTo")
+    } else {
+      let isFirst = true
+      for (const id of validInternalUserIds) {
+        const group = isFirst ? "reportTo" : "ccTo"
+        queueInternal(id, group)
+        queueConvertedParticipant(id, group)
+        isFirst = false
+      }
+      for (const external of externalRows) {
+        const group = external.group ?? (isFirst ? "reportTo" : "ccTo")
+        queueExternal(external, group)
+        isFirst = false
+      }
     }
-    for (const id of validInternalUserIds) queueInternal(id)
-    for (const external of externalRows) queueExternal(external)
 
     const inserted: any[] = []
     for (const pending of pendingInserts) {
@@ -248,6 +278,7 @@ export async function saveReportCcRecipientsAction(input: {
             recipient_context: input.context,
             recipient_type: "internal",
             user_id: pending.userId,
+            recipient_group: pending.group,
             added_by: actorId,
           })
           .select("id, user_id, recipient_type")
@@ -267,6 +298,7 @@ export async function saveReportCcRecipientsAction(input: {
             external_email: external.email,
             external_company: external.company,
             external_role: external.role,
+            recipient_group: pending.group,
             added_by: actorId,
           })
           .select("id, external_name, external_email, recipient_type")

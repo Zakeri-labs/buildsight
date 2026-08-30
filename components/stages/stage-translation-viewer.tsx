@@ -34,7 +34,7 @@ import type {
   TranslationSectionKey,
 } from "@/lib/stage-translations/types"
 import { statusLabel, statusTone } from "@/lib/stages/execution"
-import type { ReportCcRecipient } from "@/lib/report-cc/types"
+import { partitionReportCcRecipients, type ReportCcRecipient } from "@/lib/report-cc/types"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
@@ -324,8 +324,7 @@ export function StageTranslationViewer({
   const backHref = isDirectStage
     ? `/projects/${data.project.id}/stages/${data.stage.id}/reports/${data.response.id}`
     : `/projects/${data.project.id}/stages/${data.stage.id}/terms/${data.term.id}/reports/${data.response.id}`
-  const reportToRecipients = ccRecipients.slice(0, 1)
-  const ccToRecipients = ccRecipients.slice(1)
+  const { reportToRecipients, ccRecipients: ccToRecipients } = partitionReportCcRecipients(ccRecipients)
 
   function selectMobileLanguage(language: "en" | "ar") {
     setMobileLanguage(language)

@@ -63,7 +63,7 @@ import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
 import { ReportDownloadSection } from "@/components/stages/report-download-section"
 import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
 import type { ProjectStageAttachment, ProjectStageApproval, ProjectStagePerson, ProjectStageTranslationSummary } from "@/lib/db/project-stages"
-import type { ProjectCcCandidate, ReportCcRecipient, ReportCcSelection } from "@/lib/report-cc/types"
+import { partitionReportCcRecipients, type ProjectCcCandidate, type ReportCcRecipient, type ReportCcSelection } from "@/lib/report-cc/types"
 import {
   EMPTY_TERM_RESPONSE_CONTENT,
   REPORT_TYPES,
@@ -329,10 +329,14 @@ function initialRecipientSelection(
     }
   }
 
-  const reportToRecipient = recipients[0] ?? null
-  const reportToUserIds = reportToRecipient?.type === "internal" && reportToRecipient.userId ? [reportToRecipient.userId] : []
-  const ccToUserIds = recipients
-    .slice(1)
+  const { reportToRecipients, ccRecipients } = partitionReportCcRecipients(recipients)
+  const reportToIdSet = new Set(reportToRecipients.map((r) => r.id))
+
+  const reportToUserIds = reportToRecipients
+    .filter((recipient) => recipient.type === "internal" && recipient.userId)
+    .map((recipient) => recipient.userId as string)
+
+  const ccToUserIds = ccRecipients
     .filter((recipient) => recipient.type === "internal" && recipient.userId)
     .map((recipient) => recipient.userId as string)
 
@@ -348,7 +352,7 @@ function initialRecipientSelection(
         email: recipient.email ?? "",
         company: recipient.company ?? "",
         role: recipient.role ?? "",
-        group: recipients[0]?.id === recipient.id ? ("reportTo" as const) : ("ccTo" as const),
+        group: recipient.group ?? (reportToIdSet.has(recipient.id) ? ("reportTo" as const) : ("ccTo" as const)),
       })),
     reportToUserIds,
     ccToUserIds,

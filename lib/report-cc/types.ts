@@ -24,6 +24,7 @@ export type ReportCcRecipient = {
   role: string | null
   avatarUrl: string | null
   phone?: string | null
+  group?: "reportTo" | "ccTo" | null
   createdAt: string
 }
 
@@ -58,4 +59,41 @@ export type ReportCcNotificationItem = {
   addedByName: string
   createdAt: string
   href: string
+}
+
+export function partitionReportCcRecipients(recipients: ReportCcRecipient[]): {
+  reportToRecipients: ReportCcRecipient[]
+  ccRecipients: ReportCcRecipient[]
+} {
+  if (!recipients.length) {
+    return { reportToRecipients: [], ccRecipients: [] }
+  }
+
+  const hasExplicitGroup = recipients.some((r) => r.group === "reportTo" || r.group === "ccTo")
+
+  if (hasExplicitGroup) {
+    const reportToRecipients: ReportCcRecipient[] = []
+    const ccRecipients: ReportCcRecipient[] = []
+
+    for (const r of recipients) {
+      if (r.group === "reportTo") {
+        reportToRecipients.push(r)
+      } else if (r.group === "ccTo") {
+        ccRecipients.push(r)
+      } else {
+        if (!reportToRecipients.length) {
+          reportToRecipients.push(r)
+        } else {
+          ccRecipients.push(r)
+        }
+      }
+    }
+    return { reportToRecipients, ccRecipients }
+  }
+
+  // Legacy fallback for historical rows where recipient_group IS NULL for all rows
+  return {
+    reportToRecipients: recipients.slice(0, 1),
+    ccRecipients: recipients.slice(1),
+  }
 }
