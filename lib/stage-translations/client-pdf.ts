@@ -4057,6 +4057,132 @@ type BilingualRowOptions = {
   style?: BilingualRowStyle
   alternate?: boolean
   groupEnd?: boolean
+  justify?: boolean
+}
+
+function isJustifiedBilingualSection(key: string, title: string): boolean {
+  const k = (key || "").toLowerCase().trim()
+  const t = (title || "").toLowerCase().trim()
+  return (
+    k === "observation" ||
+    k === "observations" ||
+    k === "recommendations" ||
+    k === "instructions" ||
+    k === "workcompleted" ||
+    k === "work_completed" ||
+    t.includes("observation") ||
+    t.includes("work progress") ||
+    t.includes("instruction") ||
+    t.includes("recommendation") ||
+    t.includes("الملاحظات") ||
+    t.includes("تقدم الأعمال") ||
+    t.includes("التعليمات") ||
+    t.includes("التوصيات")
+  )
+}
+
+function extractPrefix(text: string): { prefix: string; body: string } {
+  if (!text) return { prefix: "", body: "" }
+  const trimmed = text.trimStart()
+
+  const parenMatch = trimmed.match(/^(\([A-Za-z0-9\u0600-\u06FF]+\)\s*)/)
+  if (parenMatch) {
+    return { prefix: parenMatch[1], body: trimmed.slice(parenMatch[1].length) }
+  }
+
+  const dotMatch = trimmed.match(/^([A-Za-z0-9\u0600-\u06FF]+\.\s*)/)
+  if (dotMatch) {
+    return { prefix: dotMatch[1], body: trimmed.slice(dotMatch[1].length) }
+  }
+
+  const bulletMatch = trimmed.match(/^([•\-\*\u2022]\s*)/)
+  if (bulletMatch) {
+    return { prefix: bulletMatch[1], body: trimmed.slice(bulletMatch[1].length) }
+  }
+
+  return { prefix: "", body: text }
+}
+
+function renderJustifiedLine(
+  doc: JsPdfDocument,
+  line: string,
+  x: number,
+  y: number,
+  colWidth: number,
+  isFinalLine: boolean,
+  rtl: boolean,
+) {
+  const normalized = normalizeText(line).trim()
+  if (!normalized) return
+
+  const hasArabic = containsArabic(normalized)
+  const isRtl = rtl || hasArabic
+
+  const { prefix, body } = extractPrefix(normalized)
+  setLanguage(doc, isRtl, 8.5, false)
+  const prefixWidth = prefix ? doc.getTextWidth(isRtl ? (shapeArabicText(doc, prefix) as string) : prefix) : 0
+
+  if (isFinalLine || !body.trim()) {
+    writePdfText(doc, normalized, isRtl ? x + colWidth : x, y, { align: isRtl ? "right" : "left", lineHeightFactor: 1.05 }, isRtl)
+    return
+  }
+
+  const words = body.trim().split(/\s+/).filter(Boolean)
+
+  if (words.length < 3) {
+    writePdfText(doc, normalized, isRtl ? x + colWidth : x, y, { align: isRtl ? "right" : "left", lineHeightFactor: 1.05 }, isRtl)
+    return
+  }
+
+  const availWidth = Math.max(10, colWidth - prefixWidth)
+
+  if (!isRtl) {
+    doc.setFont(LATIN_FONT_FAMILY, "normal")
+    const wordWidths = words.map((w) => doc.getTextWidth(w))
+    const totalWordsWidth = wordWidths.reduce((a, b) => a + b, 0)
+    const extraSpace = availWidth - totalWordsWidth
+    const gapWidth = extraSpace / (words.length - 1)
+
+    if (gapWidth <= 0 || gapWidth > 2.5) {
+      writePdfText(doc, normalized, x, y, { align: "left", lineHeightFactor: 1.05 }, false)
+      return
+    }
+
+    if (prefix) {
+      doc.text(prefix, x, y, { align: "left" })
+    }
+
+    let currX = x + prefixWidth
+    words.forEach((w, i) => {
+      doc.text(w, currX, y, { align: "left" })
+      currX += wordWidths[i] + gapWidth
+    })
+  } else {
+    doc.setFont(ARABIC_FONT_FAMILY, "normal")
+    const shapedWords = words.map((w) => shapeArabicText(doc, w) as string)
+    const wordWidths = shapedWords.map((w) => doc.getTextWidth(w))
+    const totalWordsWidth = wordWidths.reduce((a, b) => a + b, 0)
+    const extraSpace = availWidth - totalWordsWidth
+    const gapWidth = extraSpace / (words.length - 1)
+
+    if (gapWidth <= 0 || gapWidth > 2.5) {
+      writePdfText(doc, normalized, x + colWidth, y, { align: "right", lineHeightFactor: 1.05 }, true)
+      return
+    }
+
+    const columnRightX = x + colWidth
+
+    if (prefix) {
+      const preparedPrefix = shapeArabicText(doc, prefix) as string
+      doc.text(preparedPrefix, columnRightX, y, { ...ARABIC_TEXT_OPTIONS, align: "right" })
+    }
+
+    let currRightX = columnRightX - prefixWidth
+    shapedWords.forEach((sw, i) => {
+      doc.text(sw, currRightX, y, { ...ARABIC_TEXT_OPTIONS, align: "right" })
+      currRightX -= (wordWidths[i] + gapWidth)
+    })
+  }
 }
 
 function bilingualCellLines(
@@ -4507,13 +4633,29 @@ function renderBilingualTextRow(
     if (engSeg.length) {
       setLanguage(doc, false, 8.5, false)
       doc.setTextColor(51, 65, 85)
-      writePdfText(doc, engSeg, flow.x, flow.y + 2.8, { align: "left", lineHeightFactor: 1.05 }, false)
+      if (options.justify) {
+        engSeg.forEach((line, lineIdx) => {
+          const globalLineIdx = engOffset + lineIdx
+          const isFinal = globalLineIdx === engLines.length - 1
+          renderJustifiedLine(doc, line, flow.x, flow.y + 2.8 + lineIdx * lineH, colW, isFinal, false)
+        })
+      } else {
+        writePdfText(doc, engSeg, flow.x, flow.y + 2.8, { align: "left", lineHeightFactor: 1.05 }, false)
+      }
     }
 
     if (arSeg.length) {
       setLanguage(doc, true, 8.5, false)
       doc.setTextColor(51, 65, 85)
-      writePdfText(doc, arSeg, flow.x + flow.width, flow.y + 2.8, { align: "right", lineHeightFactor: 1.05 }, true)
+      if (options.justify) {
+        arSeg.forEach((line, lineIdx) => {
+          const globalLineIdx = arOffset + lineIdx
+          const isFinal = globalLineIdx === arLines.length - 1
+          renderJustifiedLine(doc, line, flow.x, flow.y + 2.8 + lineIdx * lineH, colW, isFinal, true)
+        })
+      } else {
+        writePdfText(doc, arSeg, flow.x + flow.width, flow.y + 2.8, { align: "right", lineHeightFactor: 1.05 }, true)
+      }
     }
 
     flow.y += segH
@@ -4771,6 +4913,7 @@ async function renderBilingualBlockPair(
   flow: Flow,
   english: PdfBlock,
   arabic: PdfBlock | undefined,
+  options?: { justify?: boolean },
 ) {
   if (english.type === "heading") {
     renderBilingualTextRow(
@@ -4788,7 +4931,7 @@ async function renderBilingualBlockPair(
       flow,
       `${englishBullet}${english.text}`,
       arabic?.type === "paragraph" ? `${arabicBullet}${arabic.text}` : "",
-      { style: "body" },
+      { style: "body", justify: options?.justify },
     )
     return
   }
@@ -4796,7 +4939,7 @@ async function renderBilingualBlockPair(
     const arabicItems = arabic?.type === "list" ? arabic.items : []
     english.items.forEach((item, index) => {
       const prefix = english.ordered ? `${index + 1}. ` : "• "
-      renderBilingualTextRow(flow, `${prefix}${item}`, arabicItems[index] ? `${prefix}${arabicItems[index]}` : "", { style: "body" })
+      renderBilingualTextRow(flow, `${prefix}${item}`, arabicItems[index] ? `${prefix}${arabicItems[index]}` : "", { style: "body", justify: options?.justify })
     })
     return
   }
@@ -4926,8 +5069,10 @@ async function buildNativeBilingualPdfBlob(input: {
     flow.y += 3
     renderBilingualTextRow(flow, engSection.title, arSection?.title || "", { style: "section" })
 
+    const isJustifiedSection = isJustifiedBilingualSection(engSection.key, engSection.title)
+
     for (const pair of pairedBlocksByEnglishStructure(engBlocks, arBlocks)) {
-      await renderBilingualBlockPair(flow, pair.english, pair.arabic)
+      await renderBilingualBlockPair(flow, pair.english, pair.arabic, { justify: isJustifiedSection })
     }
 
     if (engDocumentBlocks.length) {
