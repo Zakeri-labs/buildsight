@@ -584,6 +584,70 @@ export function SettingsOrganization() {
         </CardContent>
       </Card>
 
+      {/* Live PDF Header Preview Card */}
+      <Card className="overflow-hidden border-amber-200/80 bg-amber-50/40 dark:border-amber-900/60 dark:bg-amber-950/20">
+        <CardHeader className="border-b border-amber-100 bg-amber-100/60 px-5 py-3.5 dark:border-amber-900/40 dark:bg-amber-900/40 sm:px-6">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-amber-950 dark:text-amber-100">
+            <Sparkles className="size-4 text-amber-600 dark:text-amber-400" />
+            {isArabic ? "معاينة هيدر الـ PDF الحية" : "Live PDF Header Preview"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-5 sm:p-6">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            {/* Top Golden Separator Line */}
+            <div className="h-1 bg-amber-600 dark:bg-amber-500" />
+
+            <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              {/* Left Column: PDF Header Logo */}
+              <div className="flex shrink-0 items-center justify-center sm:justify-start">
+                <img
+                  src={profile.pdfHeaderLogoUrl || "/LogoB.png"}
+                  alt="PDF Header Logo Preview"
+                  className="h-10 w-auto max-w-[140px] object-contain"
+                />
+              </div>
+
+              {/* Center Column: Company Name EN + AR with live dynamic font sizes */}
+              <div className="flex flex-col items-center justify-center text-center max-w-full overflow-hidden px-2">
+                <span
+                  style={{
+                    fontSize: `${Math.max(10, Math.min(24, (profile.pdfHeaderCompanyNameEnFontSize ?? 10.5) * 1.15))}px`,
+                  }}
+                  className="font-bold tracking-tight text-slate-900 transition-all dark:text-slate-100 max-w-full truncate"
+                >
+                  {profile.nameEn || (isArabic ? "اسم المؤسسة (بالإنجليزية)" : "Company Name (English)")}
+                </span>
+                <span
+                  dir="rtl"
+                  style={{
+                    fontSize: `${Math.max(9, Math.min(22, (profile.pdfHeaderCompanyNameArFontSize ?? 8.5) * 1.15))}px`,
+                  }}
+                  className="font-arabic font-bold text-amber-700 transition-all dark:text-amber-400 max-w-full truncate mt-0.5"
+                >
+                  {profile.nameAr || (isArabic ? "اسم المؤسسة (بالعربية)" : "Company Name (Arabic)")}
+                </span>
+              </div>
+
+              {/* Right Column: Representative Metadata */}
+              <div className="flex shrink-0 flex-col text-xs text-slate-600 dark:text-slate-400 text-center sm:text-end space-y-0.5">
+                <p>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">{isArabic ? "التاريخ:" : "Date:"}</span>{" "}
+                  <span>2026-08-30</span>
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">{isArabic ? "رقم المستند:" : "Doc No.:"}</span>{" "}
+                  <span>Bonyan/sup/2026/048/001</span>
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">{isArabic ? "الصفحة:" : "Page:"}</span>{" "}
+                  <span>1 / 4</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Live PDF Footer Preview Card */}
       <Card className="overflow-hidden border-blue-200/80 bg-blue-50/40 dark:border-blue-900/60 dark:bg-blue-950/20">
         <CardHeader className="border-b border-blue-100 bg-blue-100/60 px-5 py-3.5 dark:border-blue-900/40 dark:bg-blue-900/40 sm:px-6">
