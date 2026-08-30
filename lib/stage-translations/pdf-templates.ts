@@ -199,7 +199,7 @@ const LABELS = {
     reviewer: "Reviewer",
     decision: "Decision",
     comments: "Comments",
-    date: "Date",
+    date: "Visit Date",
   },
   ar: {
     title: "الترجمة العربية",
@@ -233,7 +233,7 @@ const LABELS = {
     reviewer: "المراجع",
     decision: "القرار",
     comments: "التعليقات",
-    date: "التاريخ",
+    date: "تاريخ الزيارة",
   },
 } as const
 

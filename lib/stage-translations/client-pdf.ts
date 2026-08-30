@@ -1239,6 +1239,16 @@ function drawCcMetadata(flow: Flow, x: number, y: number, width: number, recipie
 
 function formatDateShort(dateStr?: string | null, rtl: boolean = false) {
   if (!dateStr) return "—"
+  const clean = dateStr.split("T")[0].trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+    const [y, m, d] = clean.split("-").map(Number)
+    const localDate = new Date(y, m - 1, d)
+    return localDate.toLocaleDateString(rtl ? "ar-SA" : "en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    })
+  }
   try {
     const date = new Date(dateStr)
     if (isNaN(date.getTime())) return dateStr
@@ -1604,12 +1614,13 @@ function drawFirstPageHeader(
   drawProjectLocationColumn(locationX, cellW, rtl)
 
   // ── RENDER ROW 2 & 3: THE 6 METADATA CELLS (Matching details page 1:1) ──────
-  const formattedDate = formatDateShort(template.createdAt, rtl)
+  const rawVisitDate = template.visitDate || template.createdAt
+  const formattedDate = formatDateShort(rawVisitDate, rtl)
   const creator = template.creatorName || "—"
 
   const labels = rtl
-    ? ["المشروع", "المرحلة", "رقم الزيارة", "رقم المستند", "التاريخ", "المشرف"]
-    : ["Project", "Stage", "Visit Number", "Report Number", "Date", "Supervisor"]
+    ? ["المشروع", "المرحلة", "رقم الزيارة", "رقم المستند", "تاريخ الزيارة", "المشرف"]
+    : ["Project", "Stage", "Visit Number", "Report Number", "Visit Date", "Supervisor"]
 
   const values = [
     template.projectName,
