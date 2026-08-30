@@ -12,6 +12,8 @@ export type OrganizationProfile = {
   logoUrl?: string
   pdfLogoUrl?: string
   pdfHeaderLogoUrl?: string
+  pdfHeaderCompanyNameEnFontSize?: number
+  pdfHeaderCompanyNameArFontSize?: number
 }
 
 export const DEFAULT_ORG_PROFILE: OrganizationProfile = {
@@ -28,6 +30,8 @@ export const DEFAULT_ORG_PROFILE: OrganizationProfile = {
   logoUrl: "",
   pdfLogoUrl: "",
   pdfHeaderLogoUrl: "",
+  pdfHeaderCompanyNameEnFontSize: 10.5,
+  pdfHeaderCompanyNameArFontSize: 8.5,
 }
 
 const STORAGE_KEY = "buildsight_organization_profile"

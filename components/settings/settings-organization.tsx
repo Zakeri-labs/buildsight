@@ -36,6 +36,11 @@ export function SettingsOrganization() {
     setSaved(false)
   }
 
+  function handleNumberChange(field: keyof OrganizationProfile, value: number) {
+    setProfile((prev) => ({ ...prev, [field]: value }))
+    setSaved(false)
+  }
+
   async function uploadLogoFile(file: File, type: string): Promise<string> {
     const formData = new FormData()
     formData.append("file", file)
@@ -181,10 +186,30 @@ export function SettingsOrganization() {
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Company Names */}
+          {/* Company Names & Configurable PDF Font Sizes */}
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="nameEn">{isArabic ? "اسم المؤسسة (بالإنجليزية)" : "Company Name (English)"}</Label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="nameEn">{isArabic ? "اسم المؤسسة (بالإنجليزية)" : "Company Name (English)"}</Label>
+                <div className="flex items-center gap-1.5 shrink-0" dir="ltr">
+                  <Label htmlFor="pdfHeaderCompanyNameEnFontSize" className="text-[11px] font-normal text-muted-foreground whitespace-nowrap">
+                    {isArabic ? "حجم الخط بالـ PDF:" : "PDF Font Size:"}
+                  </Label>
+                  <Input
+                    id="pdfHeaderCompanyNameEnFontSize"
+                    type="number"
+                    min={6}
+                    max={24}
+                    step={0.5}
+                    value={profile.pdfHeaderCompanyNameEnFontSize ?? 10.5}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value)
+                      handleNumberChange("pdfHeaderCompanyNameEnFontSize", isNaN(val) ? 10.5 : Math.max(6, Math.min(24, val)))
+                    }}
+                    className="h-7 w-16 px-1.5 text-center text-xs font-medium"
+                  />
+                </div>
+              </div>
               <Input
                 id="nameEn"
                 value={profile.nameEn}
@@ -192,10 +217,32 @@ export function SettingsOrganization() {
                 placeholder="e.g. Bonyan Engineering Consultancy"
               />
             </div>
-            <div className="flex flex-col gap-2 font-arabic" dir="rtl">
-              <Label htmlFor="nameAr">{isArabic ? "اسم المؤسسة (بالعربية)" : "Company Name (Arabic)"}</Label>
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="nameAr" className="font-arabic">{isArabic ? "اسم المؤسسة (بالعربية)" : "Company Name (Arabic)"}</Label>
+                <div className="flex items-center gap-1.5 shrink-0" dir="ltr">
+                  <Label htmlFor="pdfHeaderCompanyNameArFontSize" className="text-[11px] font-normal text-muted-foreground whitespace-nowrap">
+                    {isArabic ? "حجم الخط بالـ PDF:" : "PDF Font Size:"}
+                  </Label>
+                  <Input
+                    id="pdfHeaderCompanyNameArFontSize"
+                    type="number"
+                    min={6}
+                    max={24}
+                    step={0.5}
+                    value={profile.pdfHeaderCompanyNameArFontSize ?? 8.5}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value)
+                      handleNumberChange("pdfHeaderCompanyNameArFontSize", isNaN(val) ? 8.5 : Math.max(6, Math.min(24, val)))
+                    }}
+                    className="h-7 w-16 px-1.5 text-center text-xs font-medium"
+                  />
+                </div>
+              </div>
               <Input
                 id="nameAr"
+                dir="rtl"
+                className="font-arabic"
                 value={profile.nameAr}
                 onChange={(e) => handleChange("nameAr", e.target.value)}
                 placeholder="مثال: بنيان للاستشارات الهندسية"

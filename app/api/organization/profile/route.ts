@@ -62,6 +62,14 @@ export async function GET() {
         logoUrl: settingsData.logo_url || "",
         pdfLogoUrl: settingsData.pdf_logo_url || "",
         pdfHeaderLogoUrl: settingsData.pdf_header_logo_url || "",
+        pdfHeaderCompanyNameEnFontSize:
+          typeof settingsData.pdf_header_company_name_en_font_size === "number"
+            ? settingsData.pdf_header_company_name_en_font_size
+            : DEFAULT_ORG_PROFILE.pdfHeaderCompanyNameEnFontSize,
+        pdfHeaderCompanyNameArFontSize:
+          typeof settingsData.pdf_header_company_name_ar_font_size === "number"
+            ? settingsData.pdf_header_company_name_ar_font_size
+            : DEFAULT_ORG_PROFILE.pdfHeaderCompanyNameArFontSize,
       }
       return NextResponse.json({ data: profile })
     }
@@ -89,6 +97,8 @@ export async function GET() {
         logoUrl: (orgData as any).logo_url || "",
         pdfLogoUrl: (orgData as any).pdf_logo_url || "",
         pdfHeaderLogoUrl: (orgData as any).pdf_header_logo_url || "",
+        pdfHeaderCompanyNameEnFontSize: DEFAULT_ORG_PROFILE.pdfHeaderCompanyNameEnFontSize,
+        pdfHeaderCompanyNameArFontSize: DEFAULT_ORG_PROFILE.pdfHeaderCompanyNameArFontSize,
       }
       return NextResponse.json({ data: profile })
     }
@@ -110,11 +120,20 @@ export async function POST(request: NextRequest) {
     const pdfLogoUrl = await uploadLogoToStorage(body.pdfLogoUrl, "pdf-logo")
     const pdfHeaderLogoUrl = await uploadLogoToStorage(body.pdfHeaderLogoUrl, "pdf-header-logo")
 
+    const enSizeVal = Number(body.pdfHeaderCompanyNameEnFontSize)
+    const arSizeVal = Number(body.pdfHeaderCompanyNameArFontSize)
+    const pdfHeaderCompanyNameEnFontSize =
+      !isNaN(enSizeVal) && enSizeVal >= 6 && enSizeVal <= 24 ? enSizeVal : 10.5
+    const pdfHeaderCompanyNameArFontSize =
+      !isNaN(arSizeVal) && arSizeVal >= 6 && arSizeVal <= 24 ? arSizeVal : 8.5
+
     const savedProfile: OrganizationProfile = {
       ...body,
       logoUrl,
       pdfLogoUrl,
       pdfHeaderLogoUrl,
+      pdfHeaderCompanyNameEnFontSize,
+      pdfHeaderCompanyNameArFontSize,
     }
 
     const admin = createAdminClient()
@@ -133,6 +152,8 @@ export async function POST(request: NextRequest) {
       logo_url: savedProfile.logoUrl || "",
       pdf_logo_url: savedProfile.pdfLogoUrl || "",
       pdf_header_logo_url: savedProfile.pdfHeaderLogoUrl || "",
+      pdf_header_company_name_en_font_size: savedProfile.pdfHeaderCompanyNameEnFontSize,
+      pdf_header_company_name_ar_font_size: savedProfile.pdfHeaderCompanyNameArFontSize,
       updated_at: new Date().toISOString(),
     }
 

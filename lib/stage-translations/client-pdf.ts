@@ -1014,10 +1014,19 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   const nameEn = org.nameEn || "BONYAN CONSTRUCTION FOR ENGINEERING CONSULTANCY"
   const nameAr = org.nameAr || "بنيان الإنشائية للاستشارات الهندسية"
   const cx = col2X + col2W / 2
-  const topTextY = headerTop + 1.5 + 5.0   // Placed upward just below top golden line
+  const topTextY = headerTop + 1.5 + 5.0
 
-  // English name – Bold, enlarged by ~23.8% (10.5pt -> 13.0pt), auto-scale if needed
-  let enSize = 13.0
+  const configuredEnSize =
+    typeof org.pdfHeaderCompanyNameEnFontSize === "number" && org.pdfHeaderCompanyNameEnFontSize >= 6
+      ? org.pdfHeaderCompanyNameEnFontSize
+      : 10.5
+  const configuredArSize =
+    typeof org.pdfHeaderCompanyNameArFontSize === "number" && org.pdfHeaderCompanyNameArFontSize >= 6
+      ? org.pdfHeaderCompanyNameArFontSize
+      : 8.5
+
+  // English name – Bold, configured font size with auto-scale protection
+  let enSize = configuredEnSize
   setLanguage(doc, false, enSize, true)
   while (doc.getTextWidth(nameEn) > col2W - 2 && enSize > 5) {
     enSize -= 0.3
@@ -1026,8 +1035,8 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   doc.setTextColor(15, 23, 42)
   doc.text(nameEn, cx, topTextY, { align: "center" })
 
-  // Arabic name – Bold, enlarged by ~23.5% (8.5pt -> 10.5pt), auto-scale if needed
-  let arSize = 10.5
+  // Arabic name – Bold, configured font size with auto-scale protection
+  let arSize = configuredArSize
   setLanguage(doc, true, arSize, true)
   const shapedAr = String(shapeArabicText(doc, nameAr))
   while (doc.getTextWidth(shapedAr) > col2W - 2 && arSize > 5) {
@@ -1035,7 +1044,8 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     setLanguage(doc, true, arSize, true)
   }
   doc.setTextColor(180, 138, 32)
-  writePdfText(doc, nameAr, cx, topTextY + 6.0, { align: "center" }, true)
+  const arYOffset = 5.5 + Math.max(0, (enSize - 10.5) * 0.25)
+  writePdfText(doc, nameAr, cx, topTextY + arYOffset, { align: "center" }, true)
 
   // ── RIGHT COLUMN: Date / Document No. / Page (Right-aligned, aligned in upper header area) ──
   const rawDate = template.createdAt || ""
