@@ -969,22 +969,6 @@ function textLines(doc: JsPdfDocument, text: string, width: number) {
   return Array.isArray(split) ? split : [String(split)]
 }
 
-function getHeaderMetadataGeometry(pageWidth: number, margin: number, headerTop = 4.5) {
-  const rightX = pageWidth - margin // 200 mm
-  const labelX = rightX - 48.0      // 152 mm (shared label column start)
-  const valueX = labelX + 15.0       // 167 mm (shared value column start)
-  const rowGap = 4.4                 // Equal row step height
-  const startY = headerTop + 1.5 + 13.0 // 19.0 mm (vertically centered in lower header area)
-  return {
-    rightX,
-    labelX,
-    valueX,
-    startY,
-    rowGap,
-    pageY: startY + 2 * rowGap,      // 27.8 mm
-  }
-}
-
 function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
   const { template, pageWidth, logoImage } = flow
   const org = getOrganizationProfile()
@@ -1087,21 +1071,24 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     { label: rtl ? "رقم المستند:" : "Doc No.:", value: template.reportNumber || "—" },
     { label: rtl ? "الصفحة:" : "Page:",    value: String(flow.pageNumber) },
   ]
-
-  const geo = getHeaderMetadataGeometry(pageWidth, margin, headerTop)
+  const rightX = pageWidth - margin // 200 mm
+  const metadataLabelX = rightX - 48.0 // 152 mm (shared label column start)
+  const metadataValueX = metadataLabelX + 15.0 // 167 mm (shared value column start)
+  const stepY  = 4.4   // Equal row step height
+  const startY = headerTop + 1.5 + 13.0 // 19.0 mm (vertically centered in lower header area)
 
   infoRows.forEach(({ label, value }, i) => {
-    const y = geo.startY + i * geo.rowGap
+    const y = startY + i * stepY
 
     if (rtl) {
       // Arabic (RTL): Label on Right edge, Value on Left edge
       setLanguage(doc, true, 6.5, false)
       doc.setTextColor(100, 116, 139)
       const shapedLabel = String(shapeArabicText(doc, label))
-      doc.text(shapedLabel, geo.rightX, y, { align: "right" })
+      doc.text(shapedLabel, rightX, y, { align: "right" })
 
       const labelW = doc.getTextWidth(shapedLabel)
-      const maxValW = Math.max(15, geo.rightX - col3X - labelW - 3.0)
+      const maxValW = Math.max(15, rightX - col3X - labelW - 3.0)
       let valFontSize = 7.5
       setLanguage(doc, false, valFontSize, false)
       while (doc.getTextWidth(value) > maxValW && valFontSize > 5.5) {
@@ -1109,14 +1096,14 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
         setLanguage(doc, false, valFontSize, false)
       }
       doc.setTextColor(15, 23, 42)
-      doc.text(value, geo.labelX, y, { align: "left" })
+      doc.text(value, metadataLabelX, y, { align: "left" })
     } else {
-      // English (LTR): Two left-aligned columns starting at shared geo.labelX and geo.valueX
+      // English (LTR): Two left-aligned columns starting at shared metadataLabelX and metadataValueX
       setLanguage(doc, false, 6.5, false)
       doc.setTextColor(100, 116, 139)
-      doc.text(label, geo.labelX, y, { align: "left" })
+      doc.text(label, metadataLabelX, y, { align: "left" })
 
-      const maxValW = Math.max(15, geo.rightX - geo.valueX)
+      const maxValW = Math.max(15, rightX - metadataValueX)
       let valFontSize = 7.5
       setLanguage(doc, false, valFontSize, false)
       while (doc.getTextWidth(value) > maxValW && valFontSize > 5.5) {
@@ -1124,7 +1111,7 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
         setLanguage(doc, false, valFontSize, false)
       }
       doc.setTextColor(15, 23, 42)
-      doc.text(value, geo.valueX, y, { align: "left" })
+      doc.text(value, metadataValueX, y, { align: "left" })
     }
   })
 
@@ -2979,11 +2966,16 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     const col3W = 48
     const col2W = totalW - col1W - col3W
     const col3X = margin + col1W + col2W
-    const geo = getHeaderMetadataGeometry(width, margin, headerTop)
+    const rightX = width - margin
+    const metadataLabelX = rightX - 48.0 // 152 mm (shared label column start)
+    const metadataValueX = metadataLabelX + 15.0 // 167 mm (shared value column start)
+    const stepY = 4.4
+    const startY = headerTop + 1.5 + 13.0
+    const pageY = startY + 2 * stepY
 
     // Blank out old row 3 in column 3 area (light gray fill)
     doc.setFillColor(248, 250, 252)
-    doc.rect(col3X - 1, geo.pageY - 3.2, (geo.rightX - col3X) + 2, 4.5, "F")
+    doc.rect(col3X - 1, pageY - 3.2, (rightX - col3X) + 2, 4.5, "F")
 
     const pageStr = `${page} / ${pages}`
 
@@ -2992,20 +2984,20 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
       setLanguage(doc, true, 6.5, false)
       doc.setTextColor(100, 116, 139)
       const shapedPageLabel = String(shapeArabicText(doc, "الصفحة:"))
-      doc.text(shapedPageLabel, geo.rightX, geo.pageY, { align: "right" })
+      doc.text(shapedPageLabel, rightX, pageY, { align: "right" })
 
       setLanguage(doc, false, 7.5, false)
       doc.setTextColor(15, 23, 42)
-      doc.text(pageStr, geo.labelX, geo.pageY, { align: "left" })
+      doc.text(pageStr, metadataLabelX, pageY, { align: "left" })
     } else {
-      // English (LTR): Two left-aligned columns at shared geo.labelX and geo.valueX
+      // English (LTR): Two left-aligned columns at shared metadataLabelX and metadataValueX
       setLanguage(doc, false, 6.5, false)
       doc.setTextColor(100, 116, 139)
-      doc.text("Page:", geo.labelX, geo.pageY, { align: "left" })
+      doc.text("Page:", metadataLabelX, pageY, { align: "left" })
 
       setLanguage(doc, false, 7.5, false)
       doc.setTextColor(15, 23, 42)
-      doc.text(pageStr, geo.valueX, geo.pageY, { align: "left" })
+      doc.text(pageStr, metadataValueX, pageY, { align: "left" })
     }
 
     // ── Footer Top Accent Line ──────────────────────────────────────────
