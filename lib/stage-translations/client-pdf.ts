@@ -1010,11 +1010,11 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     doc.text("BONYAN", col1X, headerTop + headerH / 2 + 2, { align: "left" })
   }
 
-  // ── CENTER COLUMN: Company Name (EN + AR) Bold Center-aligned ─────
+  // ── CENTER COLUMN: Company Name (EN + AR) Dynamic Vertical Stacking ─────
   const nameEn = org.nameEn || "BONYAN CONSTRUCTION FOR ENGINEERING CONSULTANCY"
   const nameAr = org.nameAr || "بنيان الإنشائية للاستشارات الهندسية"
   const cx = col2X + col2W / 2
-  const topTextY = headerTop + 1.5 + 5.0
+  const englishY = headerTop + 1.5 + 4.5
 
   const configuredEnSize =
     typeof org.pdfHeaderCompanyNameEnFontSize === "number" && org.pdfHeaderCompanyNameEnFontSize >= 6
@@ -1033,7 +1033,11 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     setLanguage(doc, false, enSize, true)
   }
   doc.setTextColor(15, 23, 42)
-  doc.text(nameEn, cx, topTextY, { align: "center" })
+  doc.text(nameEn, cx, englishY, { align: "center" })
+
+  // Calculate dynamic Arabic Y based on English text height to guarantee vertical stacking
+  const englishHeightMm = enSize * 0.352778 * 1.15
+  const arabicY = englishY + englishHeightMm + 1.5
 
   // Arabic name – Bold, configured font size with auto-scale protection
   let arSize = configuredArSize
@@ -1044,10 +1048,9 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     setLanguage(doc, true, arSize, true)
   }
   doc.setTextColor(180, 138, 32)
-  const arYOffset = 5.5 + Math.max(0, (enSize - 10.5) * 0.25)
-  writePdfText(doc, nameAr, cx, topTextY + arYOffset, { align: "center" }, true)
+  writePdfText(doc, nameAr, cx, arabicY, { align: "center" }, true)
 
-  // ── RIGHT COLUMN: Date / Document No. / Page (Right-aligned, aligned in upper header area) ──
+  // ── RIGHT COLUMN: Date / Document No. / Page (Right-aligned, stacked metadata block) ──
   const rawDate = template.createdAt || ""
   const formattedDate = (() => {
     try {
@@ -1065,10 +1068,10 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
     { label: rtl ? "رقم المستند:" : "Doc No.:", value: template.reportNumber || "—" },
     { label: rtl ? "الصفحة:" : "Page:",    value: String(flow.pageNumber) },
   ]
-  const labelX  = col3X + 2.5
-  const rightX  = col3X + col3W - 2.5
-  const stepY   = 4.0   // line spacing
-  const startY  = headerTop + 1.5 + 14.5 // aligned downward to align bottom of text block with logo bottom edge (Y = 20.5mm)
+  const labelX  = col3X
+  const rightX  = pageWidth - margin
+  const stepY   = 4.4   // Row step height
+  const startY  = headerTop + 1.5 + 13.0 // 19.0 mm (vertically centered in lower header area)
 
   infoRows.forEach(({ label, value }, i) => {
     const y = startY + i * stepY
@@ -1080,7 +1083,14 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
       const shapedLabel = String(shapeArabicText(doc, label))
       doc.text(shapedLabel, rightX, y, { align: "right" })
 
-      setLanguage(doc, false, 7.5, false)
+      const labelW = doc.getTextWidth(shapedLabel)
+      const maxValW = Math.max(15, rightX - labelX - labelW - 3.0)
+      let valFontSize = 7.5
+      setLanguage(doc, false, valFontSize, false)
+      while (doc.getTextWidth(value) > maxValW && valFontSize > 5.5) {
+        valFontSize -= 0.3
+        setLanguage(doc, false, valFontSize, false)
+      }
       doc.setTextColor(15, 23, 42)
       doc.text(value, labelX, y, { align: "left" })
     } else {
@@ -1089,7 +1099,15 @@ function drawHeaderColumns(doc: JsPdfDocument, flow: Flow, headerH: number) {
       doc.setTextColor(100, 116, 139)
       doc.text(label, labelX, y, { align: "left" })
 
-      setLanguage(doc, false, 7.5, false)
+      const labelW = doc.getTextWidth(label)
+      const minValX = labelX + labelW + 3.0
+      const maxValW = Math.max(15, rightX - minValX)
+      let valFontSize = 7.5
+      setLanguage(doc, false, valFontSize, false)
+      while (doc.getTextWidth(value) > maxValW && valFontSize > 5.5) {
+        valFontSize -= 0.3
+        setLanguage(doc, false, valFontSize, false)
+      }
       doc.setTextColor(15, 23, 42)
       doc.text(value, rightX, y, { align: "right" })
     }
