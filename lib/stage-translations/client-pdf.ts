@@ -4647,11 +4647,12 @@ function renderBilingualTextRow(
     if (arSeg.length) {
       setLanguage(doc, true, 8.5, false)
       doc.setTextColor(51, 65, 85)
+      const arColX = flow.x + flow.width - colW
       if (options.justify) {
         arSeg.forEach((line, lineIdx) => {
           const globalLineIdx = arOffset + lineIdx
           const isFinal = globalLineIdx === arLines.length - 1
-          renderJustifiedLine(doc, line, flow.x, flow.y + 2.8 + lineIdx * lineH, colW, isFinal, true)
+          renderJustifiedLine(doc, line, arColX, flow.y + 2.8 + lineIdx * lineH, colW, isFinal, true)
         })
       } else {
         writePdfText(doc, arSeg, flow.x + flow.width, flow.y + 2.8, { align: "right", lineHeightFactor: 1.05 }, true)
