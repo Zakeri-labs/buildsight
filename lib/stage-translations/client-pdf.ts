@@ -2948,42 +2948,41 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
 
     // ── Update Header Page Number (Right Column, Row 3) ─────────────────
     const headerTop = 4.5
-    const headerH = 35
     const totalW = width - margin * 2
-    const col1W = 50
-    const col3W = 44
+    const col1W = 44
+    const col3W = 48
     const col2W = totalW - col1W - col3W
     const col3X = margin + col1W + col2W
-    const rightX = col3X + col3W - 2.5
-    const labelX  = col3X + 2.5
-    const stepY = 4.0
-    const startY = headerTop + 1.5 + 14.5
+    const labelX = col3X
+    const rightX = width - margin
+    const stepY = 4.4
+    const startY = headerTop + 1.5 + 13.0
     const pageY = startY + 2 * stepY
 
     // Blank out old row 3 in column 3 area (light gray fill)
     doc.setFillColor(248, 250, 252)
-    doc.rect(col3X + 0.5, pageY - 3, col3W - 1, 4.5, "F")
+    doc.rect(labelX - 1, pageY - 3.2, (rightX - labelX) + 2, 4.5, "F")
 
     const pageStr = `${page} / ${pages}`
 
     if (rtl) {
       // Arabic (RTL): Label on Right edge, Page number on Left edge
       setLanguage(doc, true, 6.5, false)
-      doc.setTextColor(0, 0, 0)
+      doc.setTextColor(100, 116, 139)
       const shapedPageLabel = String(shapeArabicText(doc, "الصفحة:"))
       doc.text(shapedPageLabel, rightX, pageY, { align: "right" })
 
-      setLanguage(doc, false, 7.5, true)
-      doc.setTextColor(0, 0, 0)
+      setLanguage(doc, false, 7.5, false)
+      doc.setTextColor(15, 23, 42)
       doc.text(pageStr, labelX, pageY, { align: "left" })
     } else {
       // English (LTR): Label on Left edge, Page number on Right edge
       setLanguage(doc, false, 6.5, false)
-      doc.setTextColor(0, 0, 0)
+      doc.setTextColor(100, 116, 139)
       doc.text("Page:", labelX, pageY, { align: "left" })
 
-      setLanguage(doc, false, 7.5, true)
-      doc.setTextColor(0, 0, 0)
+      setLanguage(doc, false, 7.5, false)
+      doc.setTextColor(15, 23, 42)
       doc.text(pageStr, rightX, pageY, { align: "right" })
     }
 
