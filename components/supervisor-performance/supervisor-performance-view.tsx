@@ -177,7 +177,7 @@ export function SupervisorPerformanceView({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{organizationSummary.activeSupervisorsCount}</div>
-            <p className="text-xs text-muted-foreground mt-1">Assigned or active authors</p>
+            <p className="text-xs text-muted-foreground mt-1">Current active project supervisors</p>
           </CardContent>
         </Card>
 
@@ -192,25 +192,23 @@ export function SupervisorPerformanceView({
           <CardContent>
             <div className="text-2xl font-bold">{organizationSummary.requiredVisits}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {organizationSummary.complianceEligibleProjectsCount} tracked projects
+              {organizationSummary.complianceEligibleProjectsCount} Monthly 2/3/4 projects
             </p>
           </CardContent>
         </Card>
 
-        {/* Card 4: Completed Visits */}
+        {/* Card 4: Total Visits */}
         <Card size="sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">
-              Completed Visits
+              Total Visits
             </CardTitle>
             <UserCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{organizationSummary.completedVisits}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {organizationSummary.extraVisits > 0
-                ? `${organizationSummary.extraVisits} extra visits`
-                : "Valid submitted reports"}
+              All visit reports in {formattedMonth}
             </p>
           </CardContent>
         </Card>
@@ -231,7 +229,7 @@ export function SupervisorPerformanceView({
             >
               {organizationSummary.missedVisits}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Unfulfilled required visits</p>
+            <p className="text-xs text-muted-foreground mt-1">Unfulfilled Monthly 2/3/4 requirements</p>
           </CardContent>
         </Card>
 
@@ -249,7 +247,11 @@ export function SupervisorPerformanceView({
                 ? `${organizationSummary.visitCompliancePercentage}%`
                 : "—"}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Credited completed / required</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {organizationSummary.extraVisits > 0
+                ? `${organizationSummary.extraVisits} extra visits on tracked projects`
+                : "Monthly 2/3/4 project compliance"}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -261,7 +263,7 @@ export function SupervisorPerformanceView({
             <div>
               <CardTitle className="text-lg font-semibold">Supervisor Workload &amp; Activity</CardTitle>
               <CardDescription className="text-xs">
-                Project workload reflects current active assignments. Visit activity reflects the selected month.
+                Project workload reflects current active assignments. Total Visits reflects reports authored in the selected month.
               </CardDescription>
             </div>
           </div>
@@ -292,7 +294,7 @@ export function SupervisorPerformanceView({
                       </span>
                     </div>
                   </TableHead>
-                  <TableHead className="text-center">Completed Visits</TableHead>
+                  <TableHead className="text-center">Total Visits</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

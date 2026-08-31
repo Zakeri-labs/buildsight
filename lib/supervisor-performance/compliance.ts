@@ -263,7 +263,7 @@ export function calculateSupervisorPerformance(input: {
 
   const totalActiveProjects = allProjectRows.length
   const activeSupervisorsCount = supervisors.filter(
-    (s) => s.activeProjectsCount > 0 || s.completedVisits > 0,
+    (s) => s.activeProjectsCount > 0,
   ).length
   const complianceEligibleProjectsCount = complianceEligibleRows.length
 
