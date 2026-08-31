@@ -18,7 +18,6 @@ import {
   Search,
   Sparkles,
   MapPinned,
-  TrendingUp,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Logo } from "@/components/logo"
@@ -194,17 +193,8 @@ export function AppSidebar({
 
   const homeLabel = homeHref === "/memberhomepage" ? (locale === "ar" ? "الرئيسية" : "Home") : t.nav.dashboard
 
-  const isMember = homeHref === "/memberhomepage"
-
-  const supervisorPerformanceItem = {
-    label: locale === "ar" ? "أداء المشرفين" : "Supervisor Performance",
-    href: "/supervisor-performance",
-    icon: TrendingUp,
-  }
-
   const moduleItems = [
     { label: homeLabel, href: homeHref, icon: Home },
-    ...(!isMember ? [supervisorPerformanceItem] : []),
     projectNavigationItem,
     ...(stageNavigationItem ? [stageNavigationItem] : []),
     {
