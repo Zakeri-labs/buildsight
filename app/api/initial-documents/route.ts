@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { INITIAL_DOCUMENTS_BUCKET } from "@/lib/initial-documents/config"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
 
@@ -23,9 +24,10 @@ export async function GET(request: NextRequest) {
     .maybeSingle()
   if (documentError || !document) return new NextResponse("Not found", { status: 404 })
 
+  const admin = createAdminClient()
   const download = request.nextUrl.searchParams.get("download") === "1"
   const fileName = safeDownloadName(document.original_file_name || document.file_name)
-  const { data, error } = await supabase.storage
+  const { data, error } = await admin.storage
     .from(document.storage_bucket || INITIAL_DOCUMENTS_BUCKET)
     .createSignedUrl(document.file_path, 60 * 10, download ? { download: fileName } : undefined)
   if (error || !data?.signedUrl) return new NextResponse("File not found", { status: 404 })

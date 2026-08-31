@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { DOCUMENT_ASSET_BUCKET } from "@/lib/documents/simple-upload"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
 
@@ -28,9 +29,10 @@ export async function GET(request: NextRequest) {
   const { data: project } = await supabase.from("projects").select("id").eq("id", projectId).maybeSingle()
   if (!project) return new NextResponse("Forbidden", { status: 403 })
 
+  const admin = createAdminClient()
   const shouldDownload = request.nextUrl.searchParams.get("download") === "1"
   const filename = safeDownloadName(request.nextUrl.searchParams.get("filename"))
-  const { data, error } = await supabase.storage
+  const { data, error } = await admin.storage
     .from(DOCUMENT_ASSET_BUCKET)
     .createSignedUrl(path, 60 * 10, shouldDownload ? { download: filename } : undefined)
 
