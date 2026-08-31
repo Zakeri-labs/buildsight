@@ -96,7 +96,7 @@ function SupervisorLegend({ events }: { events: CalendarEventViewModel[] }) {
       </span>
       <div className="flex flex-wrap items-center gap-2.5 overflow-x-auto py-0.5 max-w-full">
         {supervisors.map((supervisor) => {
-          const theme = getSupervisorTheme(supervisor.id)
+          const theme = getSupervisorTheme(supervisor.id, supervisor.name)
           const initials = getSupervisorInitials(supervisor.name)
           return (
             <div key={supervisor.id} className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-foreground">
@@ -131,7 +131,7 @@ function CalendarEventChip({
   const details = [event.secondaryLabel, event.timeLabel].filter(Boolean).join(" · ")
   const canOpenRequest = event.kind === "client_request" && Boolean(onClientRequestClick)
   const supervisor = event.supervisor
-  const theme = getSupervisorTheme(supervisor?.id)
+  const theme = getSupervisorTheme(supervisor?.id, supervisor?.name)
   const initials = supervisor?.name ? getSupervisorInitials(supervisor.name) : null
 
   return (

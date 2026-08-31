@@ -67,7 +67,7 @@ function DayEventRow({
   const statusLabel = EVENT_STATUS_LABELS[event.kind]
   const showSecondaryLabel = Boolean(event.secondaryLabel && event.secondaryLabel !== statusLabel)
   const supervisor = event.supervisor
-  const theme = getSupervisorTheme(supervisor?.id)
+  const theme = getSupervisorTheme(supervisor?.id, supervisor?.name)
   const initials = supervisor?.name ? getSupervisorInitials(supervisor.name) : null
 
   const content = (
