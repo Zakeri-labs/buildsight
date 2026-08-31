@@ -62,10 +62,16 @@ export function logDiagnosticEvent(
 
   try {
     const key = `${STORAGE_PREFIX}${responseId}`
-    const existingRaw = sessionStorage.getItem(key)
-    const events: DiagnosticEvent[] = existingRaw ? JSON.parse(existingRaw) : []
+    const events = readDiagnosticEvents(responseId)
 
-    const numInt = events.length + 1
+    let numInt = events.length + 1
+    if (events.length > 0) {
+      const lastNumStr = events[events.length - 1]?.num
+      const match = /^#(\d+)$/.exec(lastNumStr || "")
+      if (match) {
+        numInt = parseInt(match[1], 10) + 1
+      }
+    }
     const num = `#${String(numInt).padStart(3, "0")}`
 
     const now = new Date()
@@ -118,7 +124,12 @@ export function logDiagnosticEvent(
       events.shift()
     }
 
-    sessionStorage.setItem(key, JSON.stringify(events))
+    try {
+      localStorage.setItem(key, JSON.stringify(events))
+    } catch (storageErr) {
+      console.warn("[debug-timeline] failed to save to localStorage", storageErr)
+    }
+
     window.dispatchEvent(new CustomEvent(DEBUG_TIMELINE_EVENT, { detail: { responseId } }))
   } catch (err) {
     // Fail silently: diagnostics must never affect application behavior
@@ -128,20 +139,51 @@ export function logDiagnosticEvent(
 
 export function readDiagnosticEvents(responseId: string | null | undefined): DiagnosticEvent[] {
   if (typeof window === "undefined" || !responseId) return []
+  const key = `${STORAGE_PREFIX}${responseId}`
+
+  // 1. Primary: read from localStorage
   try {
-    const key = `${STORAGE_PREFIX}${responseId}`
-    const existingRaw = sessionStorage.getItem(key)
-    return existingRaw ? JSON.parse(existingRaw) : []
+    const localRaw = localStorage.getItem(key)
+    if (localRaw) {
+      const parsed = JSON.parse(localRaw)
+      if (Array.isArray(parsed)) return parsed
+    }
   } catch {
-    return []
+    // If localStorage read or parse fails, fall through to legacy migration check
   }
+
+  // 2. Legacy fallback & migration from sessionStorage if localStorage has no data
+  try {
+    const sessionRaw = sessionStorage.getItem(key)
+    if (sessionRaw) {
+      const parsed = JSON.parse(sessionRaw)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        try {
+          localStorage.setItem(key, JSON.stringify(parsed))
+          sessionStorage.removeItem(key)
+        } catch {
+          // Ignore write/remove error, still return legacy events
+        }
+        return parsed
+      }
+    }
+  } catch {
+    // Ignore legacy read errors
+  }
+
+  return []
 }
 
 export function clearDiagnosticEvents(responseId: string | null | undefined) {
   if (typeof window === "undefined" || !responseId) return
   try {
     const key = `${STORAGE_PREFIX}${responseId}`
-    sessionStorage.removeItem(key)
+    try {
+      localStorage.removeItem(key)
+    } catch {}
+    try {
+      sessionStorage.removeItem(key)
+    } catch {}
     window.dispatchEvent(new CustomEvent(DEBUG_TIMELINE_EVENT, { detail: { responseId } }))
   } catch {
     // Ignore clear errors
