@@ -2,7 +2,12 @@ import "server-only"
 
 import { createAdminClient } from "@/lib/supabase/admin"
 import { calculateSupervisorPerformance } from "./compliance"
-import type { RawProjectRecord, RawReportRecord, SupervisorPerformanceData } from "./types"
+import type {
+  RawParticipantRecord,
+  RawProjectRecord,
+  RawReportRecord,
+  SupervisorPerformanceData,
+} from "./types"
 
 export async function loadSupervisorPerformanceData(
   organizationId: string,
@@ -40,13 +45,22 @@ export async function loadSupervisorPerformanceData(
     return calculateSupervisorPerformance({
       month: normalizedMonth,
       projects: [],
+      participants: [],
       reports: [],
       supervisorProfiles: new Map(),
     })
   }
 
-  // Bounded Report Query: Query A for visit_date in month, Query B for null visit_date & created_at in month
-  const [queryA, queryB] = await Promise.all([
+  // Bounded Query 2 & Reports Queries 3 & 4 via Promise.all
+  const [participantsRes, queryA, queryB] = await Promise.all([
+    admin
+      .from("project_participants")
+      .select(
+        "id, project_id, key_contact_user_id, status, participant_type, project_role, participant_role_label",
+      )
+      .in("project_id", activeProjectIds)
+      .eq("status", "active")
+      .not("key_contact_user_id", "is", null),
     admin
       .from("term_responses")
       .select("id, project_id, status, submitted_at, visit_date, created_at, created_by")
@@ -62,8 +76,11 @@ export async function loadSupervisorPerformanceData(
       .lte("created_at", monthEndISO),
   ])
 
+  if (participantsRes.error) throw participantsRes.error
   if (queryA.error) throw queryA.error
   if (queryB.error) throw queryB.error
+
+  const participants: RawParticipantRecord[] = participantsRes.data ?? []
 
   // Deduplicate reports by ID
   const reportMap = new Map<string, RawReportRecord>()
@@ -72,17 +89,20 @@ export async function loadSupervisorPerformanceData(
   }
   const reports = Array.from(reportMap.values())
 
-  // Collect unique profile IDs for supervisors and report creators
+  // Collect unique profile IDs for primary supervisors, additional participants, and report creators
   const profileIdsSet = new Set<string>()
   for (const p of projects) {
     if (p.assigned_supervisor_id) profileIdsSet.add(p.assigned_supervisor_id)
+  }
+  for (const part of participants) {
+    if (part.key_contact_user_id) profileIdsSet.add(part.key_contact_user_id)
   }
   for (const r of reports) {
     if (r.created_by) profileIdsSet.add(r.created_by)
   }
   const profileIds = Array.from(profileIdsSet)
 
-  // Query 3 (Batched Profiles Query): Fetch profiles
+  // Query 5 (Batched Profiles Query): Fetch profiles
   const { data: profilesData, error: profilesErr } = profileIds.length
     ? await admin
         .from("profiles")
@@ -109,6 +129,7 @@ export async function loadSupervisorPerformanceData(
   return calculateSupervisorPerformance({
     month: normalizedMonth,
     projects,
+    participants,
     reports,
     supervisorProfiles,
   })

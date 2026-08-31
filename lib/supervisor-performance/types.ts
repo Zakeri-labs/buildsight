@@ -5,6 +5,7 @@ export type ProjectComplianceMetrics = {
   projectName: string
   projectCode: string
   assignedSupervisorId: string | null
+  supervisorIds: string[]
   supervisionType: string | null
   normalizedSupervisionType: SupervisionComplianceType | null
   isComplianceEligible: boolean
@@ -23,12 +24,7 @@ export type SupervisorPerformanceMetrics = {
   supervisorAvatarUrl: string | null
   activeProjectsCount: number
   complianceProjectsCount: number
-  requiredVisits: number
   completedVisits: number
-  creditedCompletedVisits: number
-  missedVisits: number
-  extraVisits: number
-  visitCompliancePercentage: number | null
   projects: ProjectComplianceMetrics[]
 }
 
@@ -67,6 +63,21 @@ export type RawProjectRecord = {
   supervisingOrganizationId?: string | null
   start_date?: string | null
   supervision_start_date?: string | null
+}
+
+export type RawParticipantRecord = {
+  id?: string
+  project_id?: string | null
+  projectId?: string | null
+  key_contact_user_id?: string | null
+  keyContactUserId?: string | null
+  status?: string | null
+  participant_type?: string | null
+  participantType?: string | null
+  project_role?: string | null
+  projectRole?: string | null
+  participant_role_label?: string | null
+  participantRoleLabel?: string | null
 }
 
 export type RawReportRecord = {

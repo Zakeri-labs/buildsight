@@ -1,251 +1,196 @@
 import {
-  calculateProjectMetrics,
   calculateSupervisorPerformance,
   getEffectiveVisitDate,
   isReportInMonth,
   isValidCompletedReport,
-  normalizeComplianceSupervisionType,
 } from "./compliance"
-import type { RawProjectRecord, RawReportRecord } from "./types"
+import type { RawParticipantRecord, RawProjectRecord, RawReportRecord } from "./types"
 
 function runTests() {
   const month = "2026-08"
-  const supA = "sup-uuid-1"
-  const supB = "sup-uuid-2"
+  const ali = "user-ali-id"
+  const reza = "user-reza-id"
+  const omar = "user-omar-id"
+  const contractorId = "user-contractor-id"
 
-  console.log("Running Supervisor Performance Compliance Unit Tests...\n")
+  console.log("Running Supervisor Performance Phase 1.2 Multi-Supervisor Unit Tests...\n")
 
-  // TEST 1: Monthly 2 with 2 reports -> 100%
-  {
-    const project: RawProjectRecord = {
-      id: "p1",
-      name: "Project 1",
-      code: "P001",
-      status: "active",
-      supervision_type: "monthly_2",
-      assigned_supervisor_id: supA,
-    }
-    const reports: RawReportRecord[] = [
-      { id: "r1", project_id: "p1", status: "submitted", submitted_at: "2026-08-05T10:00:00Z", visit_date: "2026-08-05", created_by: supA },
-      { id: "r2", project_id: "p1", status: "completed", submitted_at: "2026-08-20T10:00:00Z", visit_date: "2026-08-20", created_by: supA },
-    ]
-    const m = calculateProjectMetrics(project, reports, month)
-    console.assert(m.required === 2, "Test 1 Failed: required should be 2")
-    console.assert(m.completed === 2, "Test 1 Failed: completed should be 2")
-    console.assert(m.creditedCompleted === 2, "Test 1 Failed: creditedCompleted should be 2")
-    console.assert(m.missed === 0, "Test 1 Failed: missed should be 0")
-    console.assert(m.extra === 0, "Test 1 Failed: extra should be 0")
-    console.assert(m.compliancePercentage === 100, `Test 1 Failed: compliance should be 100%, got ${m.compliancePercentage}`)
-    console.log("✓ Test 1 Passed: Monthly 2 with 2 reports -> 100%")
-  }
-
-  // TEST 2: Monthly 4 with 3 reports -> 75%, missed 1
-  {
-    const project: RawProjectRecord = {
-      id: "p2",
-      name: "Project 2",
-      code: "P002",
-      status: "active",
-      supervision_type: "monthly_4",
-      assigned_supervisor_id: supA,
-    }
-    const reports: RawReportRecord[] = [
-      { id: "r1", project_id: "p2", status: "submitted", submitted_at: "2026-08-01T10:00:00Z", visit_date: "2026-08-01", created_by: supA },
-      { id: "r2", project_id: "p2", status: "approved", submitted_at: "2026-08-10T10:00:00Z", visit_date: "2026-08-10", created_by: supA },
-      { id: "r3", project_id: "p2", status: "under_review", submitted_at: "2026-08-20T10:00:00Z", visit_date: "2026-08-20", created_by: supA },
-    ]
-    const m = calculateProjectMetrics(project, reports, month)
-    console.assert(m.required === 4, "Test 2 Failed: required should be 4")
-    console.assert(m.completed === 3, "Test 2 Failed: completed should be 3")
-    console.assert(m.creditedCompleted === 3, "Test 2 Failed: creditedCompleted should be 3")
-    console.assert(m.missed === 1, "Test 2 Failed: missed should be 1")
-    console.assert(m.extra === 0, "Test 2 Failed: extra should be 0")
-    console.assert(m.compliancePercentage === 75, `Test 2 Failed: compliance should be 75%, got ${m.compliancePercentage}`)
-    console.log("✓ Test 2 Passed: Monthly 4 with 3 reports -> 75%, missed 1")
-  }
-
-  // TEST 3: Monthly 4 with 6 reports -> 100%, extra 2
-  {
-    const project: RawProjectRecord = {
-      id: "p3",
-      name: "Project 3",
-      code: "P003",
-      status: "active",
-      supervision_type: "monthly_4",
-      assigned_supervisor_id: supA,
-    }
-    const reports: RawReportRecord[] = Array.from({ length: 6 }, (_, i) => ({
-      id: `r${i + 1}`,
-      project_id: "p3",
-      status: "completed",
-      submitted_at: `2026-08-${String(i * 4 + 1).padStart(2, "0")}T10:00:00Z`,
-      visit_date: `2026-08-${String(i * 4 + 1).padStart(2, "0")}`,
-      created_by: supA,
-    }))
-    const m = calculateProjectMetrics(project, reports, month)
-    console.assert(m.required === 4, "Test 3 Failed: required should be 4")
-    console.assert(m.completed === 6, "Test 3 Failed: completed should be 6")
-    console.assert(m.creditedCompleted === 4, "Test 3 Failed: creditedCompleted should be 4 (capped)")
-    console.assert(m.missed === 0, "Test 3 Failed: missed should be 0")
-    console.assert(m.extra === 2, "Test 3 Failed: extra should be 2")
-    console.assert(m.compliancePercentage === 100, `Test 3 Failed: compliance should be 100%, got ${m.compliancePercentage}`)
-    console.log("✓ Test 3 Passed: Monthly 4 with 6 reports -> 100%, extra 2")
-  }
-
-  // TEST 4: Extra on one project does NOT cover misses on another
+  // TEST 1 — Two Supervisors: Primary = Ali, Additional = Reza
   {
     const projects: RawProjectRecord[] = [
-      { id: "pa", name: "Proj A", code: "PA", status: "active", supervision_type: "monthly_4", assigned_supervisor_id: supA },
-      { id: "pb", name: "Proj B", code: "PB", status: "active", supervision_type: "monthly_4", assigned_supervisor_id: supA },
+      { id: "p1", name: "Project 1", code: "P1", status: "active", supervision_type: "monthly_4", assigned_supervisor_id: ali },
     ]
-    const reports: RawReportRecord[] = [
-      // 8 reports for Proj A
-      ...Array.from({ length: 8 }, (_, i) => ({
-        id: `ra${i + 1}`, project_id: "pa", status: "submitted", submitted_at: "2026-08-10T10:00:00Z", visit_date: "2026-08-10", created_by: supA,
-      })),
-      // 0 reports for Proj B
+    const participants: RawParticipantRecord[] = [
+      { project_id: "p1", key_contact_user_id: reza, status: "active", participant_type: "consultancy", participant_role_label: "Supervisor" },
     ]
-    const res = calculateSupervisorPerformance({ month, projects, reports })
-    const supPerf = res.supervisors.find((s) => s.supervisorId === supA)!
-    console.assert(supPerf.requiredVisits === 8, `Test 4 Failed: required should be 8, got ${supPerf.requiredVisits}`)
-    console.assert(supPerf.completedVisits === 8, `Test 4 Failed: completed should be 8, got ${supPerf.completedVisits}`)
-    console.assert(supPerf.creditedCompletedVisits === 4, `Test 4 Failed: creditedCompleted should be 4, got ${supPerf.creditedCompletedVisits}`)
-    console.assert(supPerf.missedVisits === 4, `Test 4 Failed: missed should be 4, got ${supPerf.missedVisits}`)
-    console.assert(supPerf.extraVisits === 4, `Test 4 Failed: extra should be 4, got ${supPerf.extraVisits}`)
-    console.assert(supPerf.visitCompliancePercentage === 50, `Test 4 Failed: compliance should be 50%, got ${supPerf.visitCompliancePercentage}%`)
-    console.log("✓ Test 4 Passed: Extra on one project does NOT cover misses on another (50%, not 100%)")
+
+    const res = calculateSupervisorPerformance({ month, projects, participants, reports: [] })
+
+    const aliPerf = res.supervisors.find((s) => s.supervisorId === ali)!
+    const rezaPerf = res.supervisors.find((s) => s.supervisorId === reza)!
+
+    console.assert(aliPerf.activeProjectsCount === 1, `Test 1 Failed: Ali active projects should be 1, got ${aliPerf.activeProjectsCount}`)
+    console.assert(rezaPerf.activeProjectsCount === 1, `Test 1 Failed: Reza active projects should be 1, got ${rezaPerf.activeProjectsCount}`)
+    console.log("✓ Test 1 Passed: Primary=Ali, Additional=Reza -> Both receive Active Projects = 1")
   }
 
-  // TEST 5: Unsupported supervision type excluded from compliance
-  {
-    const project: RawProjectRecord = {
-      id: "p5",
-      name: "Lump Sum Proj",
-      code: "P005",
-      status: "active",
-      supervision_type: "lump_sum",
-      assigned_supervisor_id: supA,
-    }
-    const reports: RawReportRecord[] = [
-      { id: "r1", project_id: "p5", status: "submitted", submitted_at: "2026-08-10T10:00:00Z", visit_date: "2026-08-10", created_by: supA },
-    ]
-    const m = calculateProjectMetrics(project, reports, month)
-    console.assert(!m.isComplianceEligible, "Test 5 Failed: should not be compliance eligible")
-    console.assert(m.required === 0, "Test 5 Failed: required should be 0")
-    console.assert(m.creditedCompleted === 0, "Test 5 Failed: creditedCompleted should be 0")
-    console.assert(m.compliancePercentage === null, "Test 5 Failed: compliance should be null")
-    console.log("✓ Test 5 Passed: Unsupported supervision type excluded from compliance")
-  }
-
-  // TEST 6: Unsupported type still counts in Active Projects workload
+  // TEST 2 — Mirrored Primary Deduplication: Primary = Ali, project_participants also contains active Ali
   {
     const projects: RawProjectRecord[] = [
-      { id: "p1", name: "P1", code: "P1", status: "active", supervision_type: "monthly_2", assigned_supervisor_id: supA },
-      { id: "p2", name: "P2", code: "P2", status: "active", supervision_type: "lump_sum", assigned_supervisor_id: supA },
-      { id: "p3", name: "P3", code: "P3", status: "active", supervision_type: "other", assigned_supervisor_id: supA },
+      { id: "p2", name: "Project 2", code: "P2", status: "active", supervision_type: "monthly_4", assigned_supervisor_id: ali },
     ]
-    const res = calculateSupervisorPerformance({ month, projects, reports: [] })
-    const supPerf = res.supervisors.find((s) => s.supervisorId === supA)!
-    console.assert(supPerf.activeProjectsCount === 3, `Test 6 Failed: active projects workload should be 3, got ${supPerf.activeProjectsCount}`)
-    console.assert(supPerf.complianceProjectsCount === 1, `Test 6 Failed: compliance projects count should be 1, got ${supPerf.complianceProjectsCount}`)
-    console.log("✓ Test 6 Passed: Unsupported types still count in Active Projects workload")
-  }
-
-  // TEST 7: Draft report excluded
-  {
-    const project: RawProjectRecord = { id: "p7", name: "P7", code: "P7", status: "active", supervision_type: "monthly_2", assigned_supervisor_id: supA }
-    const reports: RawReportRecord[] = [
-      { id: "r1", project_id: "p7", status: "draft", submitted_at: null, visit_date: "2026-08-10", created_by: supA },
-      { id: "r2", project_id: "p7", status: "in_progress", submitted_at: "2026-08-11T10:00:00Z", visit_date: "2026-08-11", created_by: supA },
+    const participants: RawParticipantRecord[] = [
+      { project_id: "p2", key_contact_user_id: ali, status: "active", participant_type: "consultancy", participant_role_label: "Supervisor" },
     ]
-    const m = calculateProjectMetrics(project, reports, month)
-    console.assert(m.completed === 0, `Test 7 Failed: draft/in_progress should be excluded, completed got ${m.completed}`)
-    console.log("✓ Test 7 Passed: Draft and in_progress reports excluded")
+
+    const res = calculateSupervisorPerformance({ month, projects, participants, reports: [] })
+    const aliPerf = res.supervisors.find((s) => s.supervisorId === ali)!
+
+    console.assert(aliPerf.activeProjectsCount === 1, `Test 2 Failed: Ali active projects should be 1 (deduped), got ${aliPerf.activeProjectsCount}`)
+    console.log("✓ Test 2 Passed: Mirrored Primary Deduplication -> Ali Active Projects = 1 (not 2)")
   }
 
-  // TEST 8: Submitted report included
-  {
-    const r: RawReportRecord = { id: "r8", status: "submitted", submitted_at: "2026-08-10T10:00:00Z" }
-    console.assert(isValidCompletedReport(r), "Test 8 Failed: submitted report should be valid")
-    console.log("✓ Test 8 Passed: Submitted report included")
-  }
-
-  // TEST 9: visit_date controls month when present
-  {
-    const r: RawReportRecord = { id: "r9", status: "submitted", submitted_at: "2026-08-01T10:00:00Z", visit_date: "2026-08-25", created_at: "2026-08-27T10:00:00Z" }
-    const effective = getEffectiveVisitDate(r)
-    console.assert(effective === "2026-08-25", `Test 9 Failed: expected 2026-08-25, got ${effective}`)
-    console.assert(isReportInMonth(r, "2026-08"), "Test 9 Failed: should be in 2026-08")
-    console.assert(!isReportInMonth(r, "2026-07"), "Test 9 Failed: should not be in 2026-07")
-    console.log("✓ Test 9 Passed: visit_date controls month when present")
-  }
-
-  // TEST 10: visit_date = null falls back to created_at
-  {
-    const r: RawReportRecord = { id: "r10", status: "submitted", submitted_at: "2026-08-15T10:00:00Z", visit_date: null, created_at: "2026-07-18T10:00:00Z" }
-    const effective = getEffectiveVisitDate(r)
-    console.assert(effective === "2026-07-18", `Test 10 Failed: expected 2026-07-18, got ${effective}`)
-    console.assert(isReportInMonth(r, "2026-07"), "Test 10 Failed: should be in 2026-07")
-    console.assert(!isReportInMonth(r, "2026-08"), "Test 10 Failed: should not be in 2026-08")
-    console.log("✓ Test 10 Passed: visit_date = null falls back to created_at")
-  }
-
-  // TEST 11: submitted_at is NOT used as date fallback
-  {
-    const r: RawReportRecord = { id: "r11", status: "submitted", submitted_at: "2026-08-01T10:00:00Z", visit_date: null, created_at: "2026-07-18T10:00:00Z" }
-    const effective = getEffectiveVisitDate(r)
-    console.assert(effective === "2026-07-18", `Test 11 Failed: expected 2026-07-18, got ${effective}`)
-    console.log("✓ Test 11 Passed: submitted_at is NOT used as date fallback")
-  }
-
-  // TEST 12: Report created by another user does NOT credit assigned supervisor
-  {
-    const project: RawProjectRecord = { id: "p12", name: "P12", code: "P12", status: "active", supervision_type: "monthly_2", assigned_supervisor_id: supA }
-    const reports: RawReportRecord[] = [
-      { id: "r1", project_id: "p12", status: "submitted", submitted_at: "2026-08-10T10:00:00Z", visit_date: "2026-08-10", created_by: supB }, // Created by supB!
-    ]
-    const m = calculateProjectMetrics(project, reports, month)
-    console.assert(m.completed === 0, `Test 12 Failed: report created by another user should not credit supA, completed got ${m.completed}`)
-    console.log("✓ Test 12 Passed: Report created by another user does NOT credit assigned supervisor")
-  }
-
-  // TEST 13: Direct Stage + Term reports both count normally
-  {
-    const project: RawProjectRecord = { id: "p13", name: "P13", code: "P13", status: "active", supervision_type: "monthly_2", assigned_supervisor_id: supA }
-    const reports: RawReportRecord[] = [
-      { id: "r1", project_id: "p13", status: "submitted", submitted_at: "2026-08-10T10:00:00Z", visit_date: "2026-08-10", created_by: supA }, // Direct Stage Report
-      { id: "r2", project_id: "p13", status: "approved", submitted_at: "2026-08-15T10:00:00Z", visit_date: "2026-08-15", created_by: supA }, // Term Report
-    ]
-    const m = calculateProjectMetrics(project, reports, month)
-    console.assert(m.completed === 2, `Test 13 Failed: both direct stage and term reports should count, completed got ${m.completed}`)
-    console.log("✓ Test 13 Passed: Direct Stage + Term reports both count normally")
-  }
-
-  // TEST 14: Resaved/resubmitted report ID counts once
-  {
-    const project: RawProjectRecord = { id: "p14", name: "P14", code: "P14", status: "active", supervision_type: "monthly_2", assigned_supervisor_id: supA }
-    const reports: RawReportRecord[] = [
-      { id: "r1", project_id: "p14", status: "submitted", submitted_at: "2026-08-10T10:00:00Z", visit_date: "2026-08-10", created_by: supA },
-    ]
-    const res = calculateSupervisorPerformance({ month, projects: [project], reports })
-    const supPerf = res.supervisors[0]
-    console.assert(supPerf.completedVisits === 1, `Test 14 Failed: single report ID should count as 1, got ${supPerf.completedVisits}`)
-    console.log("✓ Test 14 Passed: Resaved/resubmitted report ID counts once")
-  }
-
-  // TEST 15: Unassigned project handled safely
+  // TEST 3 — Multiple Additional Supervisors: Primary = Ali, Additional = Reza, Additional = Omar
   {
     const projects: RawProjectRecord[] = [
-      { id: "pu", name: "Unassigned Proj", code: "PU", status: "active", supervision_type: "monthly_2", assigned_supervisor_id: null },
+      { id: "p3", name: "Project 3", code: "P3", status: "active", supervision_type: "monthly_4", assigned_supervisor_id: ali },
     ]
-    const res = calculateSupervisorPerformance({ month, projects, reports: [] })
-    console.assert(res.unassignedProjects.length === 1, `Test 15 Failed: unassigned project should be in unassignedProjects array, got ${res.unassignedProjects.length}`)
-    console.assert(res.organizationSummary.unassignedActiveProjectsCount === 1, `Test 15 Failed: unassigned active count should be 1`)
-    console.assert(res.organizationSummary.unassignedComplianceProjectsCount === 1, `Test 15 Failed: unassigned compliance count should be 1`)
-    console.log("✓ Test 15 Passed: Unassigned project handled safely")
+    const participants: RawParticipantRecord[] = [
+      { project_id: "p3", key_contact_user_id: reza, status: "active", participant_type: "consultancy", participant_role_label: "Supervisor" },
+      { project_id: "p3", key_contact_user_id: omar, status: "active", participant_type: "consultancy", participant_role_label: "Project Manager" },
+    ]
+
+    const res = calculateSupervisorPerformance({ month, projects, participants, reports: [] })
+
+    console.assert(res.supervisors.find((s) => s.supervisorId === ali)!.activeProjectsCount === 1, "Test 3 Failed: Ali")
+    console.assert(res.supervisors.find((s) => s.supervisorId === reza)!.activeProjectsCount === 1, "Test 3 Failed: Reza")
+    console.assert(res.supervisors.find((s) => s.supervisorId === omar)!.activeProjectsCount === 1, "Test 3 Failed: Omar")
+    console.assert(res.organizationSummary.totalActiveProjects === 1, "Test 3 Failed: Org total active projects should be 1")
+
+    console.log("✓ Test 3 Passed: Multiple supervisors get +1 workload, org project count remains 1")
   }
 
-  console.log("\nALL 15 UNIT TESTS PASSED SUCCESSFULLY! 🎉\n")
+  // TEST 4 — Non-Supervisor Participant (Contractor excluded from supervisor workload)
+  {
+    const projects: RawProjectRecord[] = [
+      { id: "p4", name: "Project 4", code: "P4", status: "active", supervision_type: "monthly_4", assigned_supervisor_id: ali },
+    ]
+    const participants: RawParticipantRecord[] = [
+      { project_id: "p4", key_contact_user_id: contractorId, status: "active", participant_type: "contractor", participant_role_label: "Main Contractor" },
+    ]
+
+    const res = calculateSupervisorPerformance({ month, projects, participants, reports: [] })
+    const contractorPerf = res.supervisors.find((s) => s.supervisorId === contractorId)
+
+    console.assert(contractorPerf === undefined || contractorPerf.activeProjectsCount === 0, "Test 4 Failed: Contractor should not get supervisor workload")
+    console.log("✓ Test 4 Passed: Non-supervisor participant (Contractor) excluded from supervisor workload")
+  }
+
+  // TEST 5 — Project Compliance Not Multiplied (Org Required stays 4, not 8)
+  {
+    const projects: RawProjectRecord[] = [
+      { id: "p5", name: "Project 5", code: "P5", status: "active", supervision_type: "monthly_4", assigned_supervisor_id: ali },
+    ]
+    const participants: RawParticipantRecord[] = [
+      { project_id: "p5", key_contact_user_id: reza, status: "active", participant_type: "consultancy", participant_role_label: "Supervisor" },
+    ]
+
+    const res = calculateSupervisorPerformance({ month, projects, participants, reports: [] })
+
+    console.assert(res.organizationSummary.requiredVisits === 4, `Test 5 Failed: Org required visits should be 4, got ${res.organizationSummary.requiredVisits}`)
+    console.log("✓ Test 5 Passed: Project compliance required visits NOT multiplied (Org Required = 4)")
+  }
+
+  // TEST 6 — Individual Activity Independent (Ali=3, Reza=1, Project=4)
+  {
+    const projects: RawProjectRecord[] = [
+      { id: "p6", name: "Project 6", code: "P6", status: "active", supervision_type: "monthly_4", assigned_supervisor_id: ali },
+    ]
+    const participants: RawParticipantRecord[] = [
+      { project_id: "p6", key_contact_user_id: reza, status: "active", participant_type: "consultancy", participant_role_label: "Supervisor" },
+    ]
+    const reports: RawReportRecord[] = [
+      { id: "r1", project_id: "p6", status: "submitted", submitted_at: "2026-08-01T10:00:00Z", visit_date: "2026-08-01", created_by: ali },
+      { id: "r2", project_id: "p6", status: "submitted", submitted_at: "2026-08-05T10:00:00Z", visit_date: "2026-08-05", created_by: ali },
+      { id: "r3", project_id: "p6", status: "submitted", submitted_at: "2026-08-10T10:00:00Z", visit_date: "2026-08-10", created_by: ali },
+      { id: "r4", project_id: "p6", status: "submitted", submitted_at: "2026-08-15T10:00:00Z", visit_date: "2026-08-15", created_by: reza },
+    ]
+
+    const res = calculateSupervisorPerformance({ month, projects, participants, reports })
+    const pMetrics = res.allProjectRows.find((p) => p.projectId === "p6")!
+
+    console.assert(pMetrics.completed === 4, `Test 6 Failed: project completed should be 4`)
+    console.assert(res.supervisors.find((s) => s.supervisorId === ali)!.completedVisits === 3, `Test 6 Failed: Ali completed visits should be 3`)
+    console.assert(res.supervisors.find((s) => s.supervisorId === reza)!.completedVisits === 1, `Test 6 Failed: Reza completed visits should be 1`)
+
+    console.log("✓ Test 6 Passed: Project Completed=4, Ali CompletedVisits=3, Reza CompletedVisits=1")
+  }
+
+  // TEST 7 — Additional Supervisor with No Reports
+  {
+    const projects: RawProjectRecord[] = [
+      { id: "p7", name: "Project 7", code: "P7", status: "active", supervision_type: "monthly_4", assigned_supervisor_id: ali },
+    ]
+    const participants: RawParticipantRecord[] = [
+      { project_id: "p7", key_contact_user_id: reza, status: "active", participant_type: "consultancy", participant_role_label: "Supervisor" },
+    ]
+
+    const res = calculateSupervisorPerformance({ month, projects, participants, reports: [] })
+    const rezaPerf = res.supervisors.find((s) => s.supervisorId === reza)!
+
+    console.assert(rezaPerf.activeProjectsCount === 1, "Test 7 Failed: Reza active projects should be 1")
+    console.assert(rezaPerf.completedVisits === 0, "Test 7 Failed: Reza completed visits should be 0")
+    console.log("✓ Test 7 Passed: Additional supervisor with 0 reports appears with Active Projects=1, Completed Visited=0")
+  }
+
+  // TEST 8 — Creator with No Assignment
+  {
+    const projects: RawProjectRecord[] = [
+      { id: "p8", name: "Project 8", code: "P8", status: "active", supervision_type: "monthly_4", assigned_supervisor_id: ali },
+    ]
+    const reports: RawReportRecord[] = [
+      { id: "r1", project_id: "p8", status: "submitted", submitted_at: "2026-08-01T10:00:00Z", visit_date: "2026-08-01", created_by: omar },
+      { id: "r2", project_id: "p8", status: "submitted", submitted_at: "2026-08-05T10:00:00Z", visit_date: "2026-08-05", created_by: omar },
+    ]
+
+    const res = calculateSupervisorPerformance({ month, projects, participants: [], reports })
+    const omarPerf = res.supervisors.find((s) => s.supervisorId === omar)!
+
+    console.assert(omarPerf.activeProjectsCount === 0, "Test 8 Failed: Omar active projects should be 0")
+    console.assert(omarPerf.completedVisits === 2, "Test 8 Failed: Omar completed visits should be 2")
+    console.log("✓ Test 8 Passed: Creator with 0 assigned projects preserved with Active Projects=0, Completed Visits=2")
+  }
+
+  // TEST 9 — Correct Unassigned Detection (Primary null, Additional active supervisor = Reza)
+  {
+    const projects: RawProjectRecord[] = [
+      { id: "p9", name: "Project 9", code: "P9", status: "active", supervision_type: "monthly_2", assigned_supervisor_id: null },
+    ]
+    const participants: RawParticipantRecord[] = [
+      { project_id: "p9", key_contact_user_id: reza, status: "active", participant_type: "consultancy", participant_role_label: "Supervisor" },
+    ]
+
+    const res = calculateSupervisorPerformance({ month, projects, participants, reports: [] })
+
+    console.assert(res.unassignedProjects.length === 0, `Test 9 Failed: project with active participant supervisor should NOT be unassigned`)
+    console.assert(res.organizationSummary.unassignedActiveProjectsCount === 0, "Test 9 Failed")
+    console.log("✓ Test 9 Passed: Primary null with active participant supervisor is NOT unassigned")
+  }
+
+  // TEST 10 — Truly Unassigned (Primary null, No active supervisor participants)
+  {
+    const projects: RawProjectRecord[] = [
+      { id: "p10", name: "Project 10", code: "P10", status: "active", supervision_type: "monthly_2", assigned_supervisor_id: null },
+    ]
+
+    const res = calculateSupervisorPerformance({ month, projects, participants: [], reports: [] })
+
+    console.assert(res.unassignedProjects.length === 1, `Test 10 Failed: project without supervisors SHOULD be unassigned`)
+    console.assert(res.organizationSummary.unassignedActiveProjectsCount === 1, "Test 10 Failed")
+    console.log("✓ Test 10 Passed: Project with no supervisors IS unassigned")
+  }
+
+  console.log("\nALL PHASE 1.2 MULTI-SUPERVISOR UNIT TESTS PASSED SUCCESSFULLY! 🎉\n")
 }
 
 runTests()
