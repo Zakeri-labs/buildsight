@@ -674,15 +674,28 @@ export function InspectionReportForm({
   const uploadFiles = async (id: string, files: PendingFile[], kind: "evidence_image" | "document") => {
     const validFiles = files.filter((item) => item.file && item.file.size > 0)
     if (!validFiles.length) return
+    const phaseStartTime = Date.now()
+    const expectedCount = validFiles.length
+    let optimizeSucceeded = 0
+    let optimizeFailed = 0
+    let uploadSucceeded = 0
+    let uploadFailed = 0
+    let registeredCount = 0
+
     logDiagnosticEvent(id, "IMAGE_UPLOAD_PHASE_STARTED", {
-      totalFiles: validFiles.length,
+      totalFiles: expectedCount,
       kind,
     })
+
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) throw new Error("Your session has expired. Sign in again.")
+
     const registrations: AttachmentRegistration[] = []
     const uploadedPaths: string[] = []
+    const successfulItemIds: string[] = []
+    const failedFileNames: string[] = []
+
     try {
       const BATCH_SIZE = 3
       for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
@@ -700,11 +713,15 @@ export function InspectionReportForm({
               try {
                 fileToUpload = await optimizeEvidenceImageFile(item.file, { responseId: id, imageKey })
                 mimeType = "image/jpeg"
+                optimizeSucceeded++
               } catch (optError) {
+                optimizeFailed++
+                failedFileNames.push(item.file.name)
                 const optErrMessage = optError instanceof Error ? optError.message : String(optError)
                 logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_FAILED", {
                   imageKey,
                   fileIndex: index,
+                  pendingId: item.id,
                   filename: item.file.name,
                   sanitizedError: optErrMessage,
                   durationMs: Date.now() - startTime,
@@ -719,6 +736,7 @@ export function InspectionReportForm({
             logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_STARTED", {
               imageKey,
               fileIndex: index,
+              pendingId: item.id,
               filename: item.file.name,
               actualUploadedFilename: fileToUpload.name,
               actualUploadedMime: mimeType,
@@ -755,10 +773,13 @@ export function InspectionReportForm({
               }
             }
             if (lastError) {
+              uploadFailed++
+              failedFileNames.push(fileToUpload.name)
               const errStr = lastError instanceof Error ? lastError.message : String(lastError)
               logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_FAILED", {
                 imageKey,
                 fileIndex: index,
+                pendingId: item.id,
                 filename: fileToUpload.name,
                 sanitizedError: errStr,
                 durationMs: Date.now() - startTime,
@@ -766,9 +787,11 @@ export function InspectionReportForm({
               console.warn(`File upload skipped for ${fileToUpload.name}:`, lastError)
               return null
             }
+            uploadSucceeded++
             logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_SUCCESS", {
               imageKey,
               fileIndex: index,
+              pendingId: item.id,
               filename: fileToUpload.name,
               storagePath: path,
               actualUploadedBytes: fileToUpload.size,
@@ -776,6 +799,7 @@ export function InspectionReportForm({
               durationMs: Date.now() - startTime,
             })
             return {
+              pendingId: item.id,
               path,
               registration: {
                 storagePath: path,
@@ -792,6 +816,7 @@ export function InspectionReportForm({
           if (res) {
             uploadedPaths.push(res.path)
             registrations.push(res.registration)
+            successfulItemIds.push(res.pendingId)
           }
         }
       }
@@ -809,9 +834,10 @@ export function InspectionReportForm({
           })
           throw new Error(registered.error)
         }
+        registeredCount = registered.data.ids.length
         logDiagnosticEvent(id, "IMAGE_ATTACHMENT_REGISTER_SUCCESS", {
           responseId: id,
-          registeredCount: registered.data.ids.length,
+          registeredCount,
           attachmentIds: registered.data.ids,
         })
         const newAttachments: ProjectStageAttachment[] = registrations.map((item, index) => ({
@@ -826,19 +852,55 @@ export function InspectionReportForm({
         }))
         setExistingAttachments((current) => [...current, ...newAttachments])
       }
-      if (kind === "evidence_image") {
-        validFiles.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl))
-        setPendingImages((current) => current.filter((row) => !validFiles.some((f) => f.id === row.id)))
-      } else {
-        setPendingDocuments((current) => current.filter((row) => !validFiles.some((f) => f.id === row.id)))
+
+      // Retain failed pending images in form state; remove only successfully persisted items
+      if (successfulItemIds.length > 0) {
+        const successSet = new Set(successfulItemIds)
+        if (kind === "evidence_image") {
+          validFiles.forEach((item) => {
+            if (successSet.has(item.id) && item.previewUrl) {
+              URL.revokeObjectURL(item.previewUrl)
+            }
+          })
+          setPendingImages((current) => current.filter((row) => !successSet.has(row.id)))
+        } else {
+          setPendingDocuments((current) => current.filter((row) => !successSet.has(row.id)))
+        }
       }
-      logDiagnosticEvent(id, "IMAGE_UPLOAD_PHASE_COMPLETE", {
-        totalFiles: validFiles.length,
-        completedCount: registrations.length,
+
+      logDiagnosticEvent(id, "IMAGE_ATTACHMENT_BATCH_SUMMARY", {
+        responseId: id,
+        totalSelected: expectedCount,
+        optimizeSucceeded,
+        optimizeFailed,
+        uploadSucceeded,
+        uploadFailed,
+        registrationRequested: registrations.length,
+        registeredCount,
+        failedCount: expectedCount - registeredCount,
+        durationMs: Date.now() - phaseStartTime,
         kind,
       })
+
+      logDiagnosticEvent(id, "IMAGE_UPLOAD_PHASE_COMPLETE", {
+        totalFiles: expectedCount,
+        completedCount: registeredCount,
+        kind,
+      })
+
+      // Strict batch integrity invariant: all selected files in this batch must successfully persist
+      if (registeredCount < expectedCount) {
+        const failedCount = expectedCount - registeredCount
+        const fileLabel = kind === "evidence_image" ? (failedCount === 1 ? "image" : "images") : (failedCount === 1 ? "document" : "documents")
+        const firstFailedName = failedFileNames[0] ? `: ${failedFileNames[0]}` : ""
+        throw new Error(
+          locale === "ar"
+            ? `تعذر رفع ${failedCount} ${kind === "evidence_image" ? "صورة" : "مستند"}. يرجى إعادة المحاولة قبل تقديم التقرير.`
+            : `${failedCount} ${fileLabel} could not be uploaded${firstFailedName}. Please retry before submitting the report.`
+        )
+      }
     } catch (uploadError) {
-      if (uploadedPaths.length) {
+      if (uploadedPaths.length && registeredCount === 0) {
         await supabase.storage.from("project-stage-evidence").remove(uploadedPaths).catch(() => undefined)
       }
       throw uploadError
