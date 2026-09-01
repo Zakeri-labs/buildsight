@@ -2410,6 +2410,8 @@ function EvidenceTile({
 }) {
   const [imgError, setImgError] = useState(false)
   const [fallbackSrc, setFallbackSrc] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState(false)
 
   const handleError = () => {
     if (!imgError) {
@@ -2421,6 +2423,44 @@ function EvidenceTile({
         }
         reader.readAsDataURL(file)
       }
+    }
+  }
+
+  const handleDownload = async () => {
+    if (downloading) return
+    setDownloading(true)
+    setDownloadError(false)
+    try {
+      if (file && file.size > 0) {
+        const url = URL.createObjectURL(file)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = name?.trim() || file.name || "evidence-image.jpg"
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      } else if (activeSrc) {
+        const response = await fetch(activeSrc)
+        if (!response.ok) throw new Error("Download request failed")
+        const blob = await response.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = name?.trim() || "evidence-image.jpg"
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      } else {
+        throw new Error("No image source available")
+      }
+    } catch (err) {
+      console.warn("Failed to download evidence image:", err)
+      setDownloadError(true)
+      setTimeout(() => setDownloadError(false), 3000)
+    } finally {
+      setDownloading(false)
     }
   }
 
@@ -2454,16 +2494,39 @@ function EvidenceTile({
         </div>
       ) : null}
 
-      {onRemove ? (
+      {downloadError ? (
+        <div className="absolute inset-x-2 top-10 z-30 flex items-center justify-center rounded-md bg-destructive/90 px-2 py-1 text-center text-[10px] font-semibold text-destructive-foreground shadow-md backdrop-blur-xs">
+          Unable to download this image.
+        </div>
+      ) : null}
+
+      <div className="absolute end-2 top-2 z-20 flex items-center gap-1.5">
         <button
           type="button"
-          onClick={onRemove}
-          className="absolute end-2 top-2 z-20 flex size-7 items-center justify-center rounded-full bg-black/75 text-white opacity-90 shadow-md transition-opacity hover:opacity-100 focus:opacity-100"
-          aria-label={`Remove ${name}`}
+          onClick={() => void handleDownload()}
+          disabled={downloading}
+          className="flex size-7 items-center justify-center rounded-full bg-black/75 text-white opacity-90 shadow-md transition-opacity hover:opacity-100 focus:opacity-100 disabled:opacity-50"
+          aria-label={`Download ${name}`}
+          title={downloading ? "Downloading..." : `Download ${name}`}
         >
-          <X className="size-4" />
+          {downloading ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Download className="size-3.5" />
+          )}
         </button>
-      ) : null}
+        {onRemove ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="flex size-7 items-center justify-center rounded-full bg-black/75 text-white opacity-90 shadow-md transition-opacity hover:opacity-100 focus:opacity-100"
+            aria-label={`Remove ${name}`}
+            title={`Remove ${name}`}
+          >
+            <X className="size-4" />
+          </button>
+        ) : null}
+      </div>
 
       {progress !== undefined && progress > 0 && progress < 100 && !isFailed ? (
         <div className="absolute inset-x-2 bottom-2 z-20">
