@@ -219,7 +219,16 @@ type InitialResponse = {
   approvals: ProjectStageApproval[]
 } | null
 
-type PendingFile = { id: string; file: File; previewUrl?: string; progress: number }
+type PendingFileStatus = "pending" | "uploading" | "uploaded" | "failed"
+
+type PendingFile = {
+  id: string
+  file: File
+  previewUrl?: string
+  progress: number
+  status: PendingFileStatus
+  errorMessage?: string
+}
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U"
@@ -672,21 +681,42 @@ export function InspectionReportForm({
   }
 
   const uploadFiles = async (id: string, files: PendingFile[], kind: "evidence_image" | "document") => {
-    const validFiles = files.filter((item) => item.file && item.file.size > 0)
+    const validFiles = files.filter((item) => item.file && item.file.size > 0 && item.status !== "uploaded")
     if (!validFiles.length) return
+
+    const phaseStartTime = Date.now()
+    const expectedCount = validFiles.length
+    let optimizeSucceeded = 0
+    let optimizeFailed = 0
+    let uploadSucceeded = 0
+    let uploadFailed = 0
+    let registeredCount = 0
+    const failedFiles: string[] = []
+
     logDiagnosticEvent(id, "IMAGE_UPLOAD_PHASE_STARTED", {
-      totalFiles: validFiles.length,
+      totalFiles: expectedCount,
       kind,
     })
+
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) throw new Error("Your session has expired. Sign in again.")
+
     const registrations: AttachmentRegistration[] = []
     const uploadedPaths: string[] = []
+    const successfulItemIds: string[] = []
+
     try {
       const BATCH_SIZE = 3
       for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
         const chunk = validFiles.slice(i, i + BATCH_SIZE)
+
+        const chunkIds = new Set(chunk.map((c) => c.id))
+        const markUploading = (rows: PendingFile[]) =>
+          rows.map((row) => (chunkIds.has(row.id) ? { ...row, status: "uploading" as const, errorMessage: undefined } : row))
+        if (kind === "evidence_image") setPendingImages(markUploading)
+        else setPendingDocuments(markUploading)
+
         const chunkResults = await Promise.all(
           chunk.map(async (item, chunkOffset) => {
             const index = i + chunkOffset
@@ -700,16 +730,26 @@ export function InspectionReportForm({
               try {
                 fileToUpload = await optimizeEvidenceImageFile(item.file, { responseId: id, imageKey })
                 mimeType = "image/jpeg"
+                optimizeSucceeded++
               } catch (optError) {
+                optimizeFailed++
+                failedFiles.push(item.file.name)
                 const optErrMessage = optError instanceof Error ? optError.message : String(optError)
                 logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_FAILED", {
                   imageKey,
                   fileIndex: index,
+                  pendingId: item.id,
                   filename: item.file.name,
                   sanitizedError: optErrMessage,
                   durationMs: Date.now() - startTime,
                 })
                 console.warn(`Image optimization failed for ${item.file.name}:`, optError)
+
+                const markFailed = (rows: PendingFile[]) =>
+                  rows.map((row) => (row.id === item.id ? { ...row, status: "failed" as const, errorMessage: optErrMessage } : row))
+                if (kind === "evidence_image") setPendingImages(markFailed)
+                else setPendingDocuments(markFailed)
+
                 return null
               }
             } else {
@@ -719,6 +759,7 @@ export function InspectionReportForm({
             logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_STARTED", {
               imageKey,
               fileIndex: index,
+              pendingId: item.id,
               filename: item.file.name,
               actualUploadedFilename: fileToUpload.name,
               actualUploadedMime: mimeType,
@@ -733,20 +774,27 @@ export function InspectionReportForm({
             let lastError: any = null
             for (let attempt = 1; attempt <= 2; attempt++) {
               try {
-                await uploadStageEvidence(fileToUpload, path, session.access_token, (progress) => {
-                  const update = (rows: PendingFile[]) => rows.map((row) => row.id === item.id ? { ...row, progress } : row)
-                  if (kind === "evidence_image") setPendingImages(update)
-                  else setPendingDocuments(update)
+                await uploadStageEvidence(
+                  fileToUpload,
+                  path,
+                  session.access_token,
+                  (progress) => {
+                    const update = (rows: PendingFile[]) =>
+                      rows.map((row) => (row.id === item.id ? { ...row, progress, status: "uploading" as const } : row))
+                    if (kind === "evidence_image") setPendingImages(update)
+                    else setPendingDocuments(update)
 
-                  setUploadProgress({
-                    active: true,
-                    kind,
-                    currentIndex: index + 1,
-                    totalCount: validFiles.length,
-                    filename: fileToUpload.name,
-                    progress,
-                  })
-                }, mimeType)
+                    setUploadProgress({
+                      active: true,
+                      kind,
+                      currentIndex: index + 1,
+                      totalCount: validFiles.length,
+                      filename: fileToUpload.name,
+                      progress,
+                    })
+                  },
+                  mimeType
+                )
                 lastError = null
                 break
               } catch (err) {
@@ -754,28 +802,42 @@ export function InspectionReportForm({
                 if (attempt < 2) await new Promise((r) => setTimeout(r, 600))
               }
             }
+
             if (lastError) {
+              uploadFailed++
+              failedFiles.push(item.file.name)
               const errStr = lastError instanceof Error ? lastError.message : String(lastError)
               logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_FAILED", {
                 imageKey,
                 fileIndex: index,
-                filename: fileToUpload.name,
+                pendingId: item.id,
+                filename: item.file.name,
                 sanitizedError: errStr,
                 durationMs: Date.now() - startTime,
               })
               console.warn(`File upload skipped for ${fileToUpload.name}:`, lastError)
+
+              const markFailed = (rows: PendingFile[]) =>
+                rows.map((row) => (row.id === item.id ? { ...row, status: "failed" as const, errorMessage: errStr } : row))
+              if (kind === "evidence_image") setPendingImages(markFailed)
+              else setPendingDocuments(markFailed)
+
               return null
             }
+
+            uploadSucceeded++
             logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_SUCCESS", {
               imageKey,
               fileIndex: index,
-              filename: fileToUpload.name,
+              pendingId: item.id,
+              filename: item.file.name,
               storagePath: path,
               actualUploadedBytes: fileToUpload.size,
               actualUploadedMime: mimeType,
               durationMs: Date.now() - startTime,
             })
             return {
+              pendingId: item.id,
               path,
               registration: {
                 storagePath: path,
@@ -786,55 +848,90 @@ export function InspectionReportForm({
                 sortOrder: existingAttachments.length + index,
               },
             }
-          }),
+          })
         )
+
         for (const res of chunkResults) {
           if (res) {
             uploadedPaths.push(res.path)
             registrations.push(res.registration)
+            successfulItemIds.push(res.pendingId)
           }
         }
       }
+
       if (registrations.length > 0) {
         logDiagnosticEvent(id, "IMAGE_ATTACHMENT_REGISTER_STARTED", {
           responseId: id,
           totalAttachments: registrations.length,
           kind,
         })
-        const registered = await registerResponseAttachmentsAction({ projectId: project.id, responseId: id, attachments: registrations })
+        const registered = await registerResponseAttachmentsAction({
+          projectId: project.id,
+          responseId: id,
+          attachments: registrations,
+        })
         if (!registered.ok) {
           logDiagnosticEvent(id, "IMAGE_ATTACHMENT_REGISTER_FAILED", {
             responseId: id,
             sanitizedError: registered.error,
           })
-          throw new Error(registered.error)
+          const regErrStr = registered.error
+          const markAllFailed = (rows: PendingFile[]) =>
+            rows.map((row) => (successfulItemIds.includes(row.id) ? { ...row, status: "failed" as const, errorMessage: regErrStr } : row))
+          if (kind === "evidence_image") setPendingImages(markAllFailed)
+          else setPendingDocuments(markAllFailed)
+        } else {
+          registeredCount = registered.data.ids.length
+          logDiagnosticEvent(id, "IMAGE_ATTACHMENT_REGISTER_SUCCESS", {
+            responseId: id,
+            registeredCount,
+            attachmentIds: registered.data.ids,
+          })
+          const newAttachments: ProjectStageAttachment[] = registrations.map((item, index) => ({
+            id: registered.data.ids[index] ?? crypto.randomUUID(),
+            storagePath: item.storagePath,
+            originalFilename: item.originalFilename,
+            mimeType: item.mimeType,
+            sizeBytes: item.sizeBytes,
+            attachmentKind: item.attachmentKind,
+            sortOrder: item.sortOrder ?? index,
+            createdAt: new Date().toISOString(),
+          }))
+          setExistingAttachments((current) => [...current, ...newAttachments])
+
+          const successSet = new Set(successfulItemIds)
+          if (kind === "evidence_image") {
+            validFiles.forEach((item) => {
+              if (successSet.has(item.id) && item.previewUrl) {
+                URL.revokeObjectURL(item.previewUrl)
+              }
+            })
+            setPendingImages((current) => current.filter((row) => !successSet.has(row.id)))
+          } else {
+            setPendingDocuments((current) => current.filter((row) => !successSet.has(row.id)))
+          }
         }
-        logDiagnosticEvent(id, "IMAGE_ATTACHMENT_REGISTER_SUCCESS", {
-          responseId: id,
-          registeredCount: registered.data.ids.length,
-          attachmentIds: registered.data.ids,
-        })
-        const newAttachments: ProjectStageAttachment[] = registrations.map((item, index) => ({
-          id: registered.data.ids[index] ?? crypto.randomUUID(),
-          storagePath: item.storagePath,
-          originalFilename: item.originalFilename,
-          mimeType: item.mimeType,
-          sizeBytes: item.sizeBytes,
-          attachmentKind: item.attachmentKind,
-          sortOrder: item.sortOrder ?? index,
-          createdAt: new Date().toISOString(),
-        }))
-        setExistingAttachments((current) => [...current, ...newAttachments])
       }
-      if (kind === "evidence_image") {
-        validFiles.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl))
-        setPendingImages((current) => current.filter((row) => !validFiles.some((f) => f.id === row.id)))
-      } else {
-        setPendingDocuments((current) => current.filter((row) => !validFiles.some((f) => f.id === row.id)))
-      }
+
+      logDiagnosticEvent(id, "IMAGE_ATTACHMENT_BATCH_SUMMARY", {
+        responseId: id,
+        totalSelected: expectedCount,
+        optimizeSucceeded,
+        optimizeFailed,
+        uploadSucceeded,
+        uploadFailed,
+        registrationRequested: registrations.length,
+        registeredCount,
+        failedCount: expectedCount - registeredCount,
+        failedFiles,
+        durationMs: Date.now() - phaseStartTime,
+        kind,
+      })
+
       logDiagnosticEvent(id, "IMAGE_UPLOAD_PHASE_COMPLETE", {
-        totalFiles: validFiles.length,
-        completedCount: registrations.length,
+        totalFiles: expectedCount,
+        completedCount: registeredCount,
         kind,
       })
     } catch (uploadError) {
@@ -870,6 +967,14 @@ export function InspectionReportForm({
         setError(validationError)
         return
       }
+    }
+    if (pendingImages.some((item) => item.status === "failed") || pendingDocuments.some((item) => item.status === "failed")) {
+      setError(
+        locale === "ar"
+          ? "توجد صور أو مستندات تعذر رفعها. يرجى إعادة محاولة الصور الفاشلة أو حذفها قبل تقديم التقرير."
+          : "Some images or documents could not be uploaded. Please retry failed uploads or remove them before submitting the report."
+      )
+      return
     }
     setError(null)
     setSuccess(null)
@@ -1150,7 +1255,7 @@ export function InspectionReportForm({
     }
     setPendingImages((current) => [
       ...current,
-      ...accepted.map((file) => ({ id: crypto.randomUUID(), file, previewUrl: URL.createObjectURL(file), progress: 0 })),
+      ...accepted.map((file) => ({ id: crypto.randomUUID(), file, previewUrl: URL.createObjectURL(file), progress: 0, status: "pending" as const })),
     ])
     setError(null)
   }
@@ -1167,7 +1272,7 @@ export function InspectionReportForm({
       setError(invalid)
       return
     }
-    setPendingDocuments((current) => [...current, ...accepted.map((file) => ({ id: crypto.randomUUID(), file, progress: 0 }))])
+    setPendingDocuments((current) => [...current, ...accepted.map((file) => ({ id: crypto.randomUUID(), file, progress: 0, status: "pending" as const }))])
     setError(null)
   }
 
@@ -1470,9 +1575,56 @@ export function InspectionReportForm({
           hideActionOnMobile={isMemberReadOnlyReport}
         >
           <input ref={imageInputRef} type="file" accept={STAGE_EVIDENCE_ACCEPT} multiple className="hidden" onChange={(event) => { addImages(Array.from(event.target.files ?? [])); event.target.value = "" }} />
+
+          {pendingImages.some((item) => item.status === "failed") ? (
+            <div className="col-span-full mb-3.5 flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive dark:bg-destructive/20">
+              <div className="flex items-center gap-2 font-medium">
+                <AlertCircle className="size-4 shrink-0 text-destructive" />
+                <span>
+                  {locale === "ar"
+                    ? `تعذر رفع ${pendingImages.filter((i) => i.status === "failed").length} صورة.`
+                    : `⚠ ${pendingImages.filter((i) => i.status === "failed").length} ${pendingImages.filter((i) => i.status === "failed").length === 1 ? "image" : "images"} failed to upload.`}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void retryFailedUploads("evidence_image")}
+                  disabled={busy !== null}
+                  className="h-7 border-destructive/40 bg-background px-2.5 text-xs text-destructive hover:bg-destructive/10 dark:bg-background"
+                >
+                  {locale === "ar" ? "إعادة محاولة الصور الفاشلة" : "Retry Failed Uploads"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeFailedUploads("evidence_image")}
+                  disabled={busy !== null}
+                  className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
+                >
+                  {locale === "ar" ? "حذف الصور الفاشلة" : "Remove Failed Images"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
             {evidenceImages.map((attachment) => <EvidenceTile key={attachment.id} src={`/api/stage-evidence?path=${encodeURIComponent(attachment.storagePath)}`} name={attachment.originalFilename} onRemove={isLocked ? undefined : () => void removeExisting(attachment)} />)}
-            {pendingImages.map((item) => <EvidenceTile key={item.id} src={item.previewUrl ?? ""} file={item.file} name={item.file.name} progress={item.progress} onRemove={() => removePending("image", item.id)} />)}
+            {pendingImages.map((item) => (
+              <EvidenceTile
+                key={item.id}
+                src={item.previewUrl ?? ""}
+                file={item.file}
+                name={item.file.name}
+                progress={item.progress}
+                status={item.status}
+                errorMessage={item.errorMessage}
+                onRemove={() => removePending("image", item.id)}
+              />
+            ))}
             {!evidenceImages.length && !pendingImages.length ? (
               isMemberReadOnlyReport ? (
                 <>
@@ -2244,16 +2396,22 @@ function EvidenceTile({
   name,
   file,
   progress,
+  status,
+  errorMessage,
   onRemove,
 }: {
   src: string
   name: string
   file?: File
   progress?: number
+  status?: PendingFileStatus
+  errorMessage?: string
   onRemove?: () => void
 }) {
   const [imgError, setImgError] = useState(false)
   const [fallbackSrc, setFallbackSrc] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState(false)
 
   const handleError = () => {
     if (!imgError) {
@@ -2268,41 +2426,117 @@ function EvidenceTile({
     }
   }
 
+  const handleDownload = async () => {
+    if (downloading) return
+    setDownloading(true)
+    setDownloadError(false)
+    try {
+      if (file && file.size > 0) {
+        const url = URL.createObjectURL(file)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = name?.trim() || file.name || "evidence-image.jpg"
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      } else if (activeSrc) {
+        const response = await fetch(activeSrc)
+        if (!response.ok) throw new Error("Download request failed")
+        const blob = await response.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = name?.trim() || "evidence-image.jpg"
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      } else {
+        throw new Error("No image source available")
+      }
+    } catch (err) {
+      console.warn("Failed to download evidence image:", err)
+      setDownloadError(true)
+      setTimeout(() => setDownloadError(false), 3000)
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   const activeSrc = fallbackSrc || src
+  const isFailed = status === "failed"
 
   return (
     <div
       className={cn(
         "group relative aspect-[4/3] w-full overflow-hidden rounded-xl border",
-        imgError && !fallbackSrc ? "border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20" : "border-border/80 bg-muted",
+        isFailed
+          ? "border-destructive bg-destructive/10 ring-2 ring-destructive/30 dark:bg-destructive/20"
+          : imgError && !fallbackSrc
+          ? "border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20"
+          : "border-border/80 bg-muted",
       )}
     >
       {!imgError || fallbackSrc ? (
-        <img src={activeSrc} alt={name} onError={handleError} className="size-full object-cover" />
+        <img src={activeSrc} alt={name} onError={handleError} className={cn("size-full object-cover", isFailed && "opacity-60 grayscale-[30%]")} />
       ) : (
         <div className="flex size-full flex-col items-center justify-center p-2 text-center">
           <AlertCircle className="size-5 text-amber-600 dark:text-amber-400" />
           <span className="mt-1 text-[10px] font-medium text-amber-700 dark:text-amber-300">Tap ✕ to remove</span>
         </div>
       )}
-      {onRemove ? (
+
+      {isFailed ? (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/55 p-1.5 text-center text-white backdrop-blur-[1px]">
+          <AlertCircle className="size-5 text-destructive drop-shadow-xs" />
+          <span className="mt-1 text-[10px] font-bold text-rose-200">Upload Failed</span>
+        </div>
+      ) : null}
+
+      {downloadError ? (
+        <div className="absolute inset-x-2 top-10 z-30 flex items-center justify-center rounded-md bg-destructive/90 px-2 py-1 text-center text-[10px] font-semibold text-destructive-foreground shadow-md backdrop-blur-xs">
+          Unable to download this image.
+        </div>
+      ) : null}
+
+      <div className="absolute end-2 top-2 z-20 flex items-center gap-1.5">
         <button
           type="button"
-          onClick={onRemove}
-          className="absolute end-2 top-2 z-10 flex size-7 items-center justify-center rounded-full bg-black/75 text-white opacity-90 shadow-md transition-opacity hover:opacity-100 focus:opacity-100"
-          aria-label={`Remove ${name}`}
+          onClick={() => void handleDownload()}
+          disabled={downloading}
+          className="flex size-7 items-center justify-center rounded-full bg-black/75 text-white opacity-90 shadow-md transition-opacity hover:opacity-100 focus:opacity-100 disabled:opacity-50"
+          aria-label={`Download ${name}`}
+          title={downloading ? "Downloading..." : `Download ${name}`}
         >
-          <X className="size-4" />
+          {downloading ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Download className="size-3.5" />
+          )}
         </button>
-      ) : null}
-      {progress !== undefined && progress > 0 && progress < 100 ? (
-        <div className="absolute inset-x-2 bottom-2 z-10">
+        {onRemove ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="flex size-7 items-center justify-center rounded-full bg-black/75 text-white opacity-90 shadow-md transition-opacity hover:opacity-100 focus:opacity-100"
+            aria-label={`Remove ${name}`}
+            title={`Remove ${name}`}
+          >
+            <X className="size-4" />
+          </button>
+        ) : null}
+      </div>
+
+      {progress !== undefined && progress > 0 && progress < 100 && !isFailed ? (
+        <div className="absolute inset-x-2 bottom-2 z-20">
           <div className="h-1.5 overflow-hidden rounded-full bg-black/30">
             <div className="h-full bg-white" style={{ width: `${progress}%` }} />
           </div>
         </div>
       ) : null}
-      <div className="absolute inset-x-0 bottom-0 z-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-2 pb-1.5 pt-6 text-start">
+
+      <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-2 pb-1.5 pt-6 text-start">
         <p className="block w-full truncate text-[10px] font-medium leading-tight text-white drop-shadow-xs">{name}</p>
       </div>
     </div>

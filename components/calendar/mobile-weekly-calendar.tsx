@@ -111,7 +111,7 @@ function MobileEventRow({
   const canOpenRequest = event.kind === "client_request" && Boolean(onClientRequestClick)
   const canEdit = Boolean(event.canEdit && onEditVisit)
   const supervisor = event.supervisor
-  const theme = getSupervisorTheme(supervisor?.id)
+  const theme = getSupervisorTheme(supervisor?.id, supervisor?.name)
   const initials = supervisor?.name ? getSupervisorInitials(supervisor.name) : null
 
   const content = (
