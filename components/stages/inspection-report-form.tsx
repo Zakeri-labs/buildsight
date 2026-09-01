@@ -729,7 +729,7 @@ export function InspectionReportForm({
             if (kind === "evidence_image") {
               try {
                 fileToUpload = await optimizeEvidenceImageFile(item.file, { responseId: id, imageKey })
-                mimeType = "image/jpeg"
+                mimeType = fileToUpload.type || "image/jpeg"
                 optimizeSucceeded++
               } catch (optError) {
                 optimizeFailed++

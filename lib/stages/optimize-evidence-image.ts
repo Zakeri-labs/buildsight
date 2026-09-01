@@ -156,7 +156,27 @@ export async function optimizeEvidenceImageFile(
       error: errMessage,
       durationMs: Date.now() - startTime,
     })
-    throw new Error(`IMAGE_OPTIMIZATION_FAILED for ${originalFilename}: ${errMessage}`)
+
+    // Lightweight validation of original file before fallback
+    if (!file || !(file instanceof File) || file.size <= 0) {
+      const reason = !file || !(file instanceof File) ? "Invalid file instance" : "File size is 0 bytes"
+      logDiagnosticEvent(responseId, "IMAGE_FILE_VALIDATION_FAILED", {
+        imageKey,
+        filename: originalFilename,
+        reason,
+      })
+      throw new Error(`IMAGE_OPTIMIZATION_FAILED and original file validation failed (${reason}) for ${originalFilename}`)
+    }
+
+    logDiagnosticEvent(responseId, "IMAGE_OPTIMIZATION_FALLBACK_USED", {
+      imageKey,
+      filename: originalFilename,
+      originalSize: originalBytes,
+      mimeType: originalMime,
+      optimizationError: errMessage,
+    })
+
+    return file
   } finally {
     if (bitmap) {
       try {
