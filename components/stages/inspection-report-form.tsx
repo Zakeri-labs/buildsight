@@ -30,6 +30,7 @@ import {
   Phone,
   Plus,
   Redo2,
+  RotateCw,
   Save,
   Send,
   Share2,
@@ -1252,10 +1253,6 @@ export function InspectionReportForm({
             console.warn("Error verifying authoritative PDF status:", checkErr)
           }
 
-          if (!authoritativeConfirmed && generatedPdfs.original && generatedPdfs.bilingual && pdfGenSuccess) {
-            authoritativeConfirmed = true
-          }
-
           if (authoritativeConfirmed) {
             if (stepIdx < steps.length) {
               steps = updateStep(steps, stepIdx, "done")
@@ -2399,7 +2396,7 @@ export function InspectionReportForm({
                           if (responseId && project?.id) {
                             enqueueStageTranslationJob({
                               projectId: project.id,
-                              stageId: resolvedStageId || stageId,
+                              stageId: resolvedStageId || stage.id,
                               responseId,
                               retry: true,
                             })
@@ -2419,7 +2416,7 @@ export function InspectionReportForm({
                           setError(null)
                           setSubmitSteps((prev) => prev.map((s) => s.status === "error" ? { ...s, status: "pending" } : s))
                           if (responseId && project?.id) {
-                            const targetPath = `/projects/${project.id}/stages/${resolvedStageId || stageId}/reports/${responseId}`
+                            const targetPath = `/projects/${project.id}/stages/${resolvedStageId || stage.id}/reports/${responseId}`
                             router.replace(targetPath)
                             router.refresh()
                           }
