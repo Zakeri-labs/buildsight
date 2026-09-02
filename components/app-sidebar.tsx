@@ -192,6 +192,8 @@ export function AppSidebar({
         icon: FolderKanban,
       }
 
+  const homeLabel = homeHref === "/memberhomepage" ? (locale === "ar" ? "الرئيسية" : "Home") : t.nav.dashboard
+
   const isMember = homeHref === "/memberhomepage"
 
   const supervisorPerformanceItem = {
