@@ -1004,7 +1004,8 @@ export function InspectionReportForm({
       if (hasDocs) stepList.push(locale === "ar" ? `رفع ${pendingDocuments.length} مستند` : `Uploading ${pendingDocuments.length} document${pendingDocuments.length > 1 ? "s" : ""}`)
       stepList.push(locale === "ar" ? "إرسال التقرير للمراجعة" : "Submitting for review")
       if (isDirectStageReport) {
-        stepList.push(locale === "ar" ? "جدولة الترجمة والملفات" : "Scheduling translation & PDFs")
+        stepList.push(locale === "ar" ? "إعداد الترجمة وملفات PDF" : "Preparing translation & PDFs")
+        stepList.push(locale === "ar" ? "التحقق من جاهزية ملفات PDF" : "Confirming PDF availability")
       }
       steps = stepList.map((label) => ({ label, status: "pending" as const }))
       setSubmitSteps(steps)
@@ -1125,11 +1126,15 @@ export function InspectionReportForm({
               const res = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
               if (res.ok) {
                 const payload = await res.json()
-                if (payload?.data?.translation?.status === "completed" && payload?.data?.translation?.translatedContent) {
+                const transStatus = payload?.data?.translation?.status
+                if ((transStatus === "completed" || transStatus === "approved") && payload?.data?.translation?.translatedContent) {
                   translationPayload = {
                     data: payload.data,
                     ccRecipients: payload.ccRecipients ?? [],
                   }
+                  break
+                }
+                if (transStatus === "failed" || transStatus === "error") {
                   break
                 }
               }
@@ -1143,69 +1148,63 @@ export function InspectionReportForm({
             bilingual?: { blob: Blob; filename: string }
           } = {}
 
-          try {
-            const params = new URLSearchParams({
-              projectId: project.id,
-              stageId: result.data.projectStageId,
-              responseId: id,
-            })
-            const res = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
-            if (res.ok) {
-              const payload = await res.json()
-              const pageData = payload?.data
-              const transRecord = pageData?.translation
+          let pdfGenSuccess = false
 
-              if (pageData && transRecord) {
-                const originalPdf = await exportTranslationPdf({
+          if (translationPayload?.data?.translation) {
+            try {
+              const pageData = translationPayload.data
+              const transRecord = pageData.translation
+
+              const originalPdf = await exportTranslationPdf({
+                data: pageData,
+                translation: transRecord,
+                kind: "original",
+                ccRecipients: translationPayload.ccRecipients ?? [],
+                appendClosingBlock: true,
+              })
+              generatedPdfs.original = originalPdf
+
+              if (transRecord.id) {
+                await storeTranslationPdf({
+                  projectId: project.id,
+                  translationId: transRecord.id,
+                  kind: "original",
+                  blob: originalPdf.blob,
+                  filename: originalPdf.filename,
+                  responseId: id,
+                  caller: "submit_flow",
+                }).catch(() => null)
+              }
+
+              if (transRecord.status === "completed" && transRecord.translatedContent) {
+                const bilingualPdf = await exportTranslationPdf({
                   data: pageData,
                   translation: transRecord,
-                  kind: "original",
-                  ccRecipients: payload?.ccRecipients ?? [],
+                  kind: "bilingual",
+                  ccRecipients: translationPayload.ccRecipients ?? [],
                   appendClosingBlock: true,
                 })
-                generatedPdfs.original = originalPdf
+                generatedPdfs.bilingual = bilingualPdf
 
                 if (transRecord.id) {
                   await storeTranslationPdf({
                     projectId: project.id,
                     translationId: transRecord.id,
-                    kind: "original",
-                    blob: originalPdf.blob,
-                    filename: originalPdf.filename,
+                    kind: "bilingual",
+                    blob: bilingualPdf.blob,
+                    filename: bilingualPdf.filename,
                     responseId: id,
                     caller: "submit_flow",
                   }).catch(() => null)
                 }
-
-                if (transRecord.status === "completed" && transRecord.translatedContent) {
-                  const bilingualPdf = await exportTranslationPdf({
-                    data: pageData,
-                    translation: transRecord,
-                    kind: "bilingual",
-                    ccRecipients: payload?.ccRecipients ?? [],
-                    appendClosingBlock: true,
-                  })
-                  generatedPdfs.bilingual = bilingualPdf
-
-                  if (transRecord.id) {
-                    await storeTranslationPdf({
-                      projectId: project.id,
-                      translationId: transRecord.id,
-                      kind: "bilingual",
-                      blob: bilingualPdf.blob,
-                      filename: bilingualPdf.filename,
-                      responseId: id,
-                      caller: "submit_flow",
-                    }).catch(() => null)
-                  }
-                }
               }
+              pdfGenSuccess = true
+            } catch (pdfErr) {
+              logDiagnosticEvent(id, "SUBMIT_PDF_GEN_ERROR", {
+                error: pdfErr instanceof Error ? pdfErr.message : String(pdfErr),
+              })
+              console.warn("Client PDF generation warning during submit:", pdfErr)
             }
-          } catch (pdfErr) {
-            logDiagnosticEvent(id, "SUBMIT_PDF_GEN_ERROR", {
-              error: pdfErr instanceof Error ? pdfErr.message : String(pdfErr),
-            })
-            console.warn("Client PDF generation warning during submit:", pdfErr)
           }
 
           try {
@@ -1222,17 +1221,70 @@ export function InspectionReportForm({
             console.warn("Auto-store bilingual PDF warning during submit:", stErr)
           }
 
-          setReadyPdfs(generatedPdfs)
-          steps = updateStep(steps, stepIdx, "done")
+          steps = updateStep(steps, stepIdx, pdfGenSuccess ? "done" : "error")
+          stepIdx++
+
+          if (stepIdx < steps.length) {
+            steps = updateStep(steps, stepIdx, "active")
+          }
+
+          let authoritativeConfirmed = false
+          try {
+            const checkParams = new URLSearchParams({
+              projectId: project.id,
+              stageId: result.data.projectStageId,
+              responseId: id,
+              statusOnly: "1",
+            })
+            const checkRes = await fetch(`/api/stage-translations?${checkParams.toString()}`, { cache: "no-store" })
+            if (checkRes.ok) {
+              const checkPayload = await checkRes.json()
+              const finalTrans = checkPayload?.data?.translation
+              if (
+                finalTrans &&
+                (finalTrans.status === "completed" || finalTrans.status === "approved") &&
+                (finalTrans.bilingualPdfPath || finalTrans.originalPdfPath)
+              ) {
+                authoritativeConfirmed = true
+              }
+            }
+          } catch (checkErr) {
+            console.warn("Error verifying authoritative PDF status:", checkErr)
+          }
+
+          if (!authoritativeConfirmed && generatedPdfs.original && generatedPdfs.bilingual && pdfGenSuccess) {
+            authoritativeConfirmed = true
+          }
+
+          if (authoritativeConfirmed) {
+            if (stepIdx < steps.length) {
+              steps = updateStep(steps, stepIdx, "done")
+            }
+            setReadyPdfs(generatedPdfs)
+            setSubmitResult({ responseId: id, stageId: routeStageId })
+          } else {
+            const activeErrIdx = stepIdx < steps.length ? stepIdx : steps.length - 1
+            steps = updateStep(steps, activeErrIdx, "error")
+            const failMsg = locale === "ar"
+              ? "تعذر إنشاء الترجمة وملفات PDF تلقائياً. يرجى إعادة المحاولة."
+              : "Automatic translation/PDF generation failed. Please retry."
+            setError(failMsg)
+            logDiagnosticEvent(id, "SUBMIT_PDF_CONFIRMATION_FAILED", {
+              projectId: project.id,
+              responseId: id,
+            })
+          }
+        } else if (isSubmitMode) {
+          setSubmitResult({ responseId: id, stageId: routeStageId })
         }
       } else {
         setStatus(mode === "progress" ? "in_progress" : "draft")
         setSuccess(copy.saved)
       }
 
-      if (isSubmitMode) {
+      if (isSubmitMode && !isDirectStageReport) {
         setSubmitResult({ responseId: id, stageId: routeStageId })
-      } else {
+      } else if (!isSubmitMode) {
         router.replace(`/projects/${project.id}/stages/${routeStageId}/reports/${id}`)
         router.refresh()
       }
@@ -2330,25 +2382,50 @@ export function InspectionReportForm({
                   <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
                     <div className="flex items-center gap-1.5 font-bold text-red-700 dark:text-red-300">
                       <AlertCircle className="size-4 shrink-0 text-red-600 dark:text-red-400" />
-                      <span>{locale === "ar" ? "فشل إرسال التقرير" : "Submission Failed"}</span>
+                      <span>{locale === "ar" ? "فشل إنشاء الترجمة وملفات PDF" : "Translation / PDF Generation Failed"}</span>
                     </div>
                     <p className="mt-1.5 font-medium leading-relaxed">
-                      {error || (locale === "ar" ? "حدث خطأ غير متوقع أثناء إرسال التقرير." : "An error occurred while submitting the report.")}
+                      {error || (locale === "ar" ? "تعذر إنشاء الترجمة وملفات PDF تلقائياً. يرجى إعادة المحاولة." : "Automatic translation/PDF generation failed. Please retry.")}
                     </p>
-                    <div className="mt-3">
+                    <div className="mt-3 flex items-center gap-2">
                       <Button
                         type="button"
                         size="sm"
                         variant="outline"
                         className="h-8 gap-1.5 rounded-lg border-red-300 bg-white px-3 text-xs font-semibold text-red-800 shadow-xs hover:bg-red-100 dark:border-red-800 dark:bg-red-900/40 dark:text-red-200 dark:hover:bg-red-900/60"
                         onClick={() => {
+                          setError(null)
+                          setSubmitSteps((prev) => prev.map((s) => s.status === "error" ? { ...s, status: "pending" } : s))
+                          if (responseId && project?.id) {
+                            enqueueStageTranslationJob({
+                              projectId: project.id,
+                              stageId: resolvedStageId || stageId,
+                              responseId,
+                              retry: true,
+                            })
+                          }
+                        }}
+                      >
+                        <RotateCw className="size-3.5" />
+                        <span>{locale === "ar" ? "إعادة المحاولة" : "Retry"}</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 gap-1.5 rounded-lg px-2 text-xs font-semibold text-red-700 hover:bg-red-100 dark:text-red-300 dark:hover:bg-red-900/40"
+                        onClick={() => {
                           setSubmitModalOpen(false)
                           setError(null)
                           setSubmitSteps((prev) => prev.map((s) => s.status === "error" ? { ...s, status: "pending" } : s))
+                          if (responseId && project?.id) {
+                            const targetPath = `/projects/${project.id}/stages/${resolvedStageId || stageId}/reports/${responseId}`
+                            router.replace(targetPath)
+                            router.refresh()
+                          }
                         }}
                       >
-                        <X className="size-3.5" />
-                        <span>{locale === "ar" ? "إغلاق والمحاولة مجدداً" : "Close and Retry"}</span>
+                        <span>{locale === "ar" ? "عرض التقرير" : "Close & View Report"}</span>
                       </Button>
                     </div>
                   </div>
