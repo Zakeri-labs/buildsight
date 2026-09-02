@@ -71,6 +71,10 @@ export type ExtractedSourceDocument = {
 export type PdfImageTemplate = {
   src: string
   caption: string
+  id?: string
+  attachmentId?: string
+  storagePath?: string
+  originalFilename?: string
   sourcePage?: number
   sectionKey?: string
   preferredWidthRatio?: number
@@ -340,6 +344,10 @@ function evidenceImages(data: StageTranslationPageData): PdfImageTemplate[] {
     .map((item) => ({
       src: attachmentImageUrl(data, item.storagePath, item.originalFilename),
       caption: item.originalFilename,
+      id: item.id,
+      attachmentId: item.id,
+      storagePath: item.storagePath,
+      originalFilename: item.originalFilename,
       sectionKey: "attachments",
       preferredWidthRatio: 0.72,
       alignment: "center" as const,
