@@ -678,15 +678,80 @@ async function normalizeImage(dataUrl: string, isPngHint = false): Promise<Loade
   }
 }
 
+export interface PdfImageFailedDetail {
+  attachmentId: string | null
+  filename: string
+  imageIndex: number | null
+  reason: string
+  attempts: number
+  errorType: "IMAGE_FETCH_TIMEOUT" | "IMAGE_HTTP_ERROR" | "IMAGE_FETCH_FAILED" | "IMAGE_DECODE_FAILED" | "IMAGE_CONVERSION_FAILED" | "IMAGE_EMBED_FAILED" | string
+}
+
+export interface PdfImageLoadingResult {
+  success: boolean
+  loadedImages: number
+  totalImages: number
+  retriesUsed: number
+  failedImages: PdfImageFailedDetail[]
+}
+
+export class PdfImageTracker {
+  totalImages = 0
+  loadedImages = 0
+  retriesUsed = 0
+  failedImages: PdfImageFailedDetail[] = []
+  private trackedKeys = new Set<string>()
+
+  setTotalImages(count: number) {
+    if (count > this.totalImages) {
+      this.totalImages = count
+    }
+  }
+
+  recordSuccess(retries: number) {
+    this.loadedImages += 1
+    if (retries > 0) {
+      this.retriesUsed += retries
+    }
+  }
+
+  recordFailure(detail: PdfImageFailedDetail) {
+    this.failedImages.push(detail)
+    if (detail.attempts > 1) {
+      this.retriesUsed += (detail.attempts - 1)
+    }
+  }
+
+  recordEmbedFailure(detail: Omit<PdfImageFailedDetail, "errorType">) {
+    this.loadedImages = Math.max(0, this.loadedImages - 1)
+    this.failedImages.push({
+      ...detail,
+      errorType: "IMAGE_EMBED_FAILED",
+    })
+  }
+
+  getResult(): PdfImageLoadingResult {
+    return {
+      success: this.failedImages.length === 0,
+      loadedImages: this.loadedImages,
+      totalImages: this.totalImages,
+      retriesUsed: this.retriesUsed,
+      failedImages: this.failedImages,
+    }
+  }
+}
+
 export interface PdfImageMeta {
   pdfKind?: PdfKind
   responseId?: string
+  translationId?: string
   imageKey?: string
   filename?: string
   attachmentId?: string
   storagePath?: string
   imageIndex?: number
   totalImages?: number
+  tracker?: PdfImageTracker
 }
 
 const FETCH_TIMEOUT_MS = 15_000
@@ -713,6 +778,7 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
 interface FetchImageWithRetryResult {
   blob: Blob
   httpStatus: number
+  attemptsUsed: number
 }
 
 async function fetchEvidenceImageWithRetry(
@@ -796,7 +862,7 @@ async function fetchEvidenceImageWithRetry(
       lastHttpStatus = response.status
 
       if (!response.ok) {
-        lastErrorType = response.status >= 500 ? "http_5xx" : `http_${response.status}`
+        lastErrorType = response.status >= 500 ? "IMAGE_HTTP_ERROR" : `IMAGE_HTTP_${response.status}`
         lastErrorMessage = `HTTP ${response.status} request failed for ${filename}`
 
         if (attempt === 1) {
@@ -879,12 +945,12 @@ async function fetchEvidenceImageWithRetry(
         })
       }
 
-      return { blob, httpStatus: response.status }
+      return { blob, httpStatus: response.status, attemptsUsed: attempt }
     } catch (fetchErr) {
       const durationMs = Date.now() - attemptStart
       const errStr = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
       const isTimeout = fetchErr instanceof Error && (fetchErr.name === "AbortError" || errStr.toLowerCase().includes("timed out"))
-      lastErrorType = isTimeout ? "timeout" : "network_error"
+      lastErrorType = isTimeout ? "IMAGE_FETCH_TIMEOUT" : "IMAGE_FETCH_FAILED"
       lastErrorMessage = errStr
       lastHttpStatus = 0
 
@@ -940,13 +1006,20 @@ async function fetchEvidenceImageWithRetry(
     totalAttempts: MAX_ATTEMPTS,
     maxAttempts: MAX_ATTEMPTS,
     lastHttpStatus,
-    errorType: lastErrorType || "exhausted",
+    errorType: lastErrorType || "IMAGE_FETCH_FAILED",
     errorMessage: lastErrorMessage || "All fetch attempts exhausted",
     pdfKind,
     imageKey,
   })
 
-  throw new Error(`Image request failed for ${filename} after ${MAX_ATTEMPTS} attempts: ${lastErrorMessage}`)
+  throw Object.assign(
+    new Error(`Image request failed for ${filename} after ${MAX_ATTEMPTS} attempts: ${lastErrorMessage}`),
+    {
+      attempts: MAX_ATTEMPTS,
+      errorType: lastErrorType || "IMAGE_FETCH_FAILED",
+      reason: lastErrorMessage || "All fetch attempts exhausted",
+    }
+  )
 }
 
 function loadImage(src: string, meta?: PdfImageMeta) {
@@ -989,6 +1062,7 @@ function loadImage(src: string, meta?: PdfImageMeta) {
     let blobBytes = 0
     let blobMime = ""
     let isPng = false
+    let attemptsUsed = 1
 
     try {
       let rawDataUrl = ""
@@ -999,8 +1073,10 @@ function loadImage(src: string, meta?: PdfImageMeta) {
         isPng = blobMime.includes("png") || blobMime.includes("webp")
       } else {
         failedStage = "fetch"
-        const { blob, httpStatus: status } = await fetchEvidenceImageWithRetry(src, meta)
-        httpStatus = status
+        const fetchRes = await fetchEvidenceImageWithRetry(src, meta)
+        httpStatus = fetchRes.httpStatus
+        attemptsUsed = fetchRes.attemptsUsed
+        const blob = fetchRes.blob
         blobBytes = blob.size
         blobMime = blob.type ? blob.type.toLowerCase() : ""
 
@@ -1113,10 +1189,31 @@ function loadImage(src: string, meta?: PdfImageMeta) {
         totalDurationMs: Date.now() - startTime,
       })
 
+      meta?.tracker?.recordSuccess(attemptsUsed > 1 ? attemptsUsed - 1 : 0)
+
       return loaded
     } catch (err) {
       const errMessage = err instanceof Error ? err.message : String(err)
       if (!exactReason) exactReason = errMessage
+
+      const errType = (err as any).errorType || (
+        failedStage === "fetch"
+          ? (errMessage.toLowerCase().includes("timed out") ? "IMAGE_FETCH_TIMEOUT" : "IMAGE_FETCH_FAILED")
+          : failedStage === "decode"
+            ? "IMAGE_DECODE_FAILED"
+            : failedStage === "conversion"
+              ? "IMAGE_CONVERSION_FAILED"
+              : "IMAGE_FETCH_FAILED"
+      )
+
+      meta?.tracker?.recordFailure({
+        attachmentId: meta.attachmentId || null,
+        filename,
+        imageIndex: meta.imageIndex ?? null,
+        reason: exactReason,
+        attempts: (err as any).attempts || 4,
+        errorType: errType,
+      })
 
       logDiagnosticEvent(responseId, "PDF_IMAGE_FILENAME_FALLBACK", {
         pdfKind,
@@ -1130,6 +1227,7 @@ function loadImage(src: string, meta?: PdfImageMeta) {
         sanitizedError: errMessage,
       })
 
+      imageCache.delete(src)
       return null
     }
   })()
@@ -2712,6 +2810,13 @@ async function renderImageBlock(
     })
   } catch (embedErr) {
     const errStr = embedErr instanceof Error ? embedErr.message : String(embedErr)
+    meta?.tracker?.recordEmbedFailure({
+      attachmentId: meta.attachmentId || null,
+      filename,
+      imageIndex: meta.imageIndex ?? null,
+      reason: `embed_failed: ${errStr}`,
+      attempts: 4,
+    })
     logDiagnosticEvent(responseId, "PDF_IMAGE_EMBED_FAILED", {
       pdfKind,
       imageKey,
@@ -2794,13 +2899,15 @@ async function renderImageGrid(
   flow: Flow,
   images: NonNullable<PdfSectionTemplate["images"]>,
   sourceVisuals: boolean,
-  contextMeta?: { pdfKind?: PdfKind; responseId?: string }
+  contextMeta?: { pdfKind?: PdfKind; responseId?: string; tracker?: PdfImageTracker }
 ) {
   const pdfKind = contextMeta?.pdfKind || "original"
   const responseId = contextMeta?.responseId || "unknown"
+  const tracker = contextMeta?.tracker
   const gridStart = Date.now()
 
   let totalImages = images.length
+  tracker?.setTotalImages(totalImages)
   let embeddedImages = 0
   let fallbackImages = 0
   let fetchFailures = 0
@@ -2821,8 +2928,11 @@ async function renderImageGrid(
         responseId,
         imageKey,
         filename,
+        attachmentId: (image as any).attachmentId || (image as any).id,
+        storagePath: (image as any).storagePath,
         imageIndex: idx,
         totalImages: images.length,
+        tracker,
       })
     }
     return
@@ -2845,8 +2955,11 @@ async function renderImageGrid(
           responseId,
           imageKey,
           filename,
+          attachmentId: (img as any).attachmentId || (img as any).id,
+          storagePath: (img as any).storagePath,
           imageIndex: globalIdx,
           totalImages: images.length,
+          tracker,
         })
       })
     )
@@ -2909,6 +3022,13 @@ async function renderImageGrid(
         embedFailures += 1
         fallbackImages += 1
         const errStr = embedErr instanceof Error ? embedErr.message : String(embedErr)
+        tracker?.recordEmbedFailure({
+          attachmentId: (block as any).attachmentId || (block as any).id || null,
+          filename,
+          imageIndex: globalIdx,
+          reason: `embed_failed: ${errStr}`,
+          attempts: 4,
+        })
         logDiagnosticEvent(responseId, "PDF_IMAGE_EMBED_FAILED", {
           pdfKind,
           imageKey,
@@ -3961,7 +4081,7 @@ function validateMirroredTemplates(english: LanguagePdfTemplate, arabic: Languag
 
 async function buildLanguagePdfBlob(
   template: LanguagePdfTemplate,
-  options: { appendClosingBlock?: boolean } = {},
+  options: { appendClosingBlock?: boolean; tracker?: PdfImageTracker } = {},
 ) {
   validateLanguagePdfTemplate(template)
   const profile = await fetchOrganizationProfileFromDb()
@@ -4055,6 +4175,7 @@ async function buildLanguagePdfBlob(
       await renderImageGrid(flow, galleryImages, section.key === "source-visuals", {
         pdfKind: template.language === "ar" ? "arabic" : "original",
         responseId: (template as any).responseId || "unknown",
+        tracker: options.tracker,
       })
     }
 
@@ -4944,14 +5065,16 @@ async function renderBilingualImageGrid(
   flow: Flow,
   images: PdfImageTemplate[],
   arabicImages: PdfImageTemplate[] = [],
-  contextMeta?: { responseId?: string }
+  contextMeta?: { responseId?: string; tracker?: PdfImageTracker }
 ) {
   if (!images.length) return
   const pdfKind = "bilingual"
   const responseId = contextMeta?.responseId || "unknown"
+  const tracker = contextMeta?.tracker
   const gridStart = Date.now()
 
   let totalImages = images.length
+  tracker?.setTotalImages(totalImages)
   let embeddedImages = 0
   let fallbackImages = 0
   let fetchFailures = 0
@@ -4975,8 +5098,11 @@ async function renderBilingualImageGrid(
           responseId,
           imageKey,
           filename,
+          attachmentId: (img as any).attachmentId || (img as any).id,
+          storagePath: (img as any).storagePath,
           imageIndex: globalIdx,
           totalImages: images.length,
+          tracker,
         })
       })
     )
@@ -5044,6 +5170,13 @@ async function renderBilingualImageGrid(
         embedFailures += 1
         fallbackImages += 1
         const errStr = embedErr instanceof Error ? embedErr.message : String(embedErr)
+        tracker?.recordEmbedFailure({
+          attachmentId: (engBlock as any).attachmentId || (engBlock as any).id || null,
+          filename,
+          imageIndex: globalIdx,
+          reason: `embed_failed: ${errStr}`,
+          attempts: 4,
+        })
         logDiagnosticEvent(responseId, "PDF_IMAGE_EMBED_FAILED", {
           pdfKind: "bilingual",
           imageKey,
@@ -5259,6 +5392,7 @@ async function buildNativeBilingualPdfBlob(input: {
   arabicTemplate: LanguagePdfTemplate
   sourceDocument?: ExtractedSourceDocument | null
   appendClosingBlock?: boolean
+  tracker?: PdfImageTracker
 }) {
   const { data, englishTemplate, arabicTemplate, appendClosingBlock = false } = input
   const profile = await fetchOrganizationProfileFromDb()
@@ -5353,7 +5487,7 @@ async function buildNativeBilingualPdfBlob(input: {
 
     if (galleryImages.length) {
       renderBilingualTextRow(flow, engSection.imageTitle || "Images", arSection?.imageTitle || "", { style: "heading" })
-      await renderBilingualImageGrid(flow, galleryImages, arabicGalleryImages, { responseId: data.response.id })
+      await renderBilingualImageGrid(flow, galleryImages, arabicGalleryImages, { responseId: data.response.id, tracker: input.tracker })
     }
 
     flow.y += 4
@@ -5562,10 +5696,14 @@ export async function exportTranslationPdf({
   appendClosingBlock?: boolean
 }) {
   const respId = data?.response?.id
+  const translationId = translation?.id || null
   const isOriginal = kind === "original"
+  const renderStartTime = Date.now()
+  const imageTracker = new PdfImageTracker()
+
   logDiagnosticEvent(respId, isOriginal ? "ORIGINAL_PDF_RENDER_STARTED" : "BILINGUAL_PDF_RENDER_STARTED", {
     kind,
-    translationId: translation?.id || null,
+    translationId,
     status: translation?.status || null,
   })
 
@@ -5592,14 +5730,52 @@ export async function exportTranslationPdf({
     const englishTemplate = stripStaticFooterFromDocumentTemplate(rawEnglishTemplate, sourceDocument)
     ;(englishTemplate as any).responseId = respId
 
+    const validateImageCheckpoint = () => {
+      const result = imageTracker.getResult()
+      const durationMs = Date.now() - renderStartTime
+
+      if (!result.success) {
+        logDiagnosticEvent(respId, "PDF_GENERATION_BLOCKED_IMAGE_FAILURE", {
+          sessionId: respId,
+          responseId: respId,
+          translationId,
+          totalImages: result.totalImages,
+          loadedImages: result.loadedImages,
+          failedImages: result.failedImages.map((f) => ({
+            filename: f.filename,
+            attachmentId: f.attachmentId,
+            imageIndex: f.imageIndex,
+            reason: f.reason,
+            attempts: f.attempts,
+            errorType: f.errorType,
+          })),
+          durationMs,
+        })
+        const failedNames = result.failedImages.map((f) => f.filename).join(", ")
+        throw new Error(`PDF generation blocked: ${result.failedImages.length} required image(s) failed to load (${failedNames}).`)
+      } else {
+        logDiagnosticEvent(respId, "PDF_IMAGE_LOADING_SUMMARY", {
+          sessionId: respId,
+          responseId: respId,
+          translationId,
+          totalImages: result.totalImages,
+          loadedImages: result.loadedImages,
+          failedImages: 0,
+          retriesUsed: result.retriesUsed,
+          durationMs,
+        })
+      }
+    }
+
     if (kind === "original") {
       validateTemplateAssets(englishTemplate, sourceDocument)
-      const blob = await buildLanguagePdfBlob(englishTemplate, { appendClosingBlock })
+      const blob = await buildLanguagePdfBlob(englishTemplate, { appendClosingBlock, tracker: imageTracker })
+      validateImageCheckpoint()
       const filename = formatReportPdfFilename(projectName, submissionDate, "English")
       logDiagnosticEvent(respId, "ORIGINAL_PDF_RENDER_SUCCESS", {
         filename,
         blobSize: blob.size,
-        translationId: translation?.id || null,
+        translationId,
       })
       return { blob, filename }
     }
@@ -5622,7 +5798,8 @@ export async function exportTranslationPdf({
 
     if (kind === "arabic") {
       validateTemplateAssets(arabicTemplate, sourceDocument)
-      const arabicBlob = await buildLanguagePdfBlob(arabicTemplate, { appendClosingBlock })
+      const arabicBlob = await buildLanguagePdfBlob(arabicTemplate, { appendClosingBlock, tracker: imageTracker })
+      validateImageCheckpoint()
       const filename = formatReportPdfFilename(projectName, submissionDate, "Arabic")
       return {
         blob: arabicBlob,
@@ -5637,12 +5814,14 @@ export async function exportTranslationPdf({
       arabicTemplate,
       sourceDocument,
       appendClosingBlock,
+      tracker: imageTracker,
     })
+    validateImageCheckpoint()
     const filename = formatReportPdfFilename(projectName, submissionDate, "Bilingual")
     logDiagnosticEvent(respId, "BILINGUAL_PDF_RENDER_SUCCESS", {
       filename,
       blobSize: bilingualBlob.size,
-      translationId: translation?.id || null,
+      translationId,
     })
     return {
       blob: bilingualBlob,
