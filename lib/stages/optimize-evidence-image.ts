@@ -158,22 +158,36 @@ export async function optimizeEvidenceImageFile(
     })
 
     // Lightweight validation of original file before fallback
-    if (!file || !(file instanceof File) || file.size <= 0) {
-      const reason = !file || !(file instanceof File) ? "Invalid file instance" : "File size is 0 bytes"
-      logDiagnosticEvent(responseId, "IMAGE_FILE_VALIDATION_FAILED", {
-        imageKey,
-        filename: originalFilename,
-        reason,
-      })
-      throw new Error(`IMAGE_OPTIMIZATION_FAILED and original file validation failed (${reason}) for ${originalFilename}`)
+    let validationReason: string | null = null
+    if (!file || !(file instanceof File)) {
+      validationReason = "Invalid file instance"
+    } else if (file.size <= 0) {
+      validationReason = "File size is 0 bytes"
+    } else if (file.size > 15 * 1024 * 1024) {
+      validationReason = "File size exceeds 15 MB limit"
+    } else {
+      const mimeType = file.type || ""
+      const isImageMime = mimeType.startsWith("image/")
+      const isImageExt = /\.(jpe?g|png|webp|gif|heic|heif|bmp|svg|tiff)$/i.test(originalFilename)
+      if (!isImageMime && !isImageExt) {
+        validationReason = `Invalid or unsupported MIME type: ${mimeType || "unknown"}`
+      } else if (typeof file.slice !== "function") {
+        validationReason = "File stream/slice is unreadable"
+      }
     }
 
-    logDiagnosticEvent(responseId, "IMAGE_OPTIMIZATION_FALLBACK_USED", {
-      imageKey,
-      filename: originalFilename,
-      originalSize: originalBytes,
-      mimeType: originalMime,
-      optimizationError: errMessage,
+    if (validationReason) {
+      logDiagnosticEvent(responseId, "IMAGE_FILE_VALIDATION_FAILED", {
+        filename: originalFilename,
+        reason: validationReason,
+      })
+      throw new Error(`IMAGE_OPTIMIZATION_FAILED and original file validation failed (${validationReason}) for ${originalFilename}`)
+    }
+
+    // Attach fallback metadata to the original file
+    Object.defineProperties(file, {
+      isOptimizationFallback: { value: true, writable: true, configurable: true },
+      optimizationError: { value: errMessage, writable: true, configurable: true },
     })
 
     return file

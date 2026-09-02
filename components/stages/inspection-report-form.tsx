@@ -729,8 +729,12 @@ export function InspectionReportForm({
             if (kind === "evidence_image") {
               try {
                 fileToUpload = await optimizeEvidenceImageFile(item.file, { responseId: id, imageKey })
-                mimeType = fileToUpload.type || "image/jpeg"
-                optimizeSucceeded++
+                mimeType = fileToUpload.type || item.file.type || "image/jpeg"
+                if ((fileToUpload as any).isOptimizationFallback) {
+                  optimizeFailed++
+                } else {
+                  optimizeSucceeded++
+                }
               } catch (optError) {
                 optimizeFailed++
                 failedFiles.push(item.file.name)
@@ -743,7 +747,7 @@ export function InspectionReportForm({
                   sanitizedError: optErrMessage,
                   durationMs: Date.now() - startTime,
                 })
-                console.warn(`Image optimization failed for ${item.file.name}:`, optError)
+                console.warn(`Image optimization and fallback validation failed for ${item.file.name}:`, optError)
 
                 const markFailed = (rows: PendingFile[]) =>
                   rows.map((row) => (row.id === item.id ? { ...row, status: "failed" as const, errorMessage: optErrMessage } : row))
@@ -826,6 +830,14 @@ export function InspectionReportForm({
             }
 
             uploadSucceeded++
+            if (kind === "evidence_image" && (fileToUpload as any).isOptimizationFallback) {
+              logDiagnosticEvent(id, "IMAGE_OPTIMIZATION_FALLBACK_USED", {
+                filename: item.file.name || "evidence-image",
+                originalSize: item.file.size,
+                mimeType: item.file.type || mimeType || "unknown",
+                optimizationError: (fileToUpload as any).optimizationError || "Browser image optimization failed",
+              })
+            }
             logDiagnosticEvent(id, "IMAGE_UPLOAD_FILE_SUCCESS", {
               imageKey,
               fileIndex: index,
@@ -1306,16 +1318,25 @@ export function InspectionReportForm({
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error("Your session has expired. Sign in again.")
       const optimized = await optimizeEvidenceImageFile(file, { responseId: id })
+      const mimeType = optimized.type || file.type || "image/jpeg"
       const storagePath = `${project.id}/${id}/inline/${crypto.randomUUID()}-${sanitizeEvidenceFileName(optimized.name)}`
-      await uploadStageEvidence(optimized, storagePath, session.access_token, () => undefined, "image/jpeg")
+      await uploadStageEvidence(optimized, storagePath, session.access_token, () => undefined, mimeType)
       const registered = await registerResponseAttachmentsAction({
         projectId: project.id,
         responseId: id,
-        attachments: [{ storagePath, originalFilename: optimized.name, mimeType: "image/jpeg", sizeBytes: optimized.size, attachmentKind: "inline_image" }],
+        attachments: [{ storagePath, originalFilename: optimized.name, mimeType, sizeBytes: optimized.size, attachmentKind: "inline_image" }],
       })
       if (!registered.ok) {
         await supabase.storage.from("project-stage-evidence").remove([storagePath])
         throw new Error(registered.error)
+      }
+      if ((optimized as any).isOptimizationFallback) {
+        logDiagnosticEvent(id, "IMAGE_OPTIMIZATION_FALLBACK_USED", {
+          filename: file.name || "inline-image",
+          originalSize: file.size,
+          mimeType: file.type || mimeType || "unknown",
+          optimizationError: (optimized as any).optimizationError || "Browser image optimization failed",
+        })
       }
       return `/api/stage-evidence?path=${encodeURIComponent(storagePath)}`
     } finally {
