@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/select"
 import {
   addProjectParticipantAction,
+  editExternalParticipantAction,
   editProjectContractorAction,
   removeProjectParticipantAction,
 } from "@/lib/actions/project-participants"
@@ -670,7 +671,7 @@ function AddParticipantDialog({ projectId, users }: { projectId: string; users: 
   )
 }
 
-function EditContractorDialog({
+function EditExternalParticipantDialog({
   projectId,
   participant,
   open,
@@ -682,12 +683,32 @@ function EditContractorDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const router = useRouter()
-  const [contractorRole, setContractorRole] = useState<ContractorRole | "">(participant?.contractorRole ?? "")
+  const isClient = Boolean(
+    participant &&
+      (participant.participantType === "client" ||
+        participant.projectRole === "Client" ||
+        participant.projectRole === "Client / Owner" ||
+        participant.sourceKey.startsWith("owner:")),
+  )
+  const isContractor = Boolean(
+    participant &&
+      (participantGroup(participant) === "contractors" ||
+        ["contractor", "subcontractor"].includes(participant.participantType as string)),
+  )
+
+  const [contractorRole, setContractorRole] = useState<ContractorRole | "">((participant?.contractorRole as ContractorRole) ?? "")
   const [customContractorType, setCustomContractorType] = useState(participant?.contractorRoleOther ?? "")
   const [companyName, setCompanyName] = useState(participant?.organization ?? "")
-  const [contactPerson, setContactPerson] = useState(participant?.keyContact.name ?? "")
+  const [contactPerson, setContactPerson] = useState(
+    participant?.keyContact.name &&
+      participant.keyContact.name !== participant.organization &&
+      participant.keyContact.name !== "Contact not provided"
+      ? participant.keyContact.name
+      : "",
+  )
   const [email, setEmail] = useState(participant?.keyContact.email ?? "")
   const [phone, setPhone] = useState(participant?.keyContact.phone ?? "")
+  const [idCardFile, setIdCardFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -695,26 +716,46 @@ function EditContractorDialog({
   const currentParticipant = participant
 
   function submit() {
-    if (!contractorRole) {
-      setError("Select a contractor role.")
-      return
+    if (isContractor) {
+      if (!contractorRole) {
+        setError("Select a contractor role.")
+        return
+      }
+      if (contractorRole === "other" && !customContractorType.trim()) {
+        setError("Enter the custom contractor type.")
+        return
+      }
+      if (currentParticipant.isExternalContact && !companyName.trim()) {
+        setError("Enter the contractor company name.")
+        return
+      }
     }
-    if (contractorRole === "other" && !customContractorType.trim()) {
-      setError("Enter the custom contractor type.")
-      return
-    }
-    if (currentParticipant.isExternalContact && !companyName.trim()) {
-      setError("Enter the contractor company name.")
-      return
+
+    if (isClient) {
+      if (companyName.trim().length < 2) {
+        setError("Enter a valid client name (at least 2 characters).")
+        return
+      }
+      if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        setError("Enter a valid email address.")
+        return
+      }
+      if (idCardFile) {
+        const idCardError = validateOwnerIdCardFile(idCardFile)
+        if (idCardError) {
+          setError(idCardError)
+          return
+        }
+      }
     }
 
     setError(null)
     startTransition(async () => {
-      const result = await editProjectContractorAction({
+      const result = await editExternalParticipantAction({
         projectId,
         participantId: currentParticipant.id,
-        contractorRole,
-        customContractorType,
+        contractorRole: isContractor ? contractorRole : undefined,
+        customContractorType: isContractor ? customContractorType : undefined,
         companyName,
         contactPerson,
         email,
@@ -724,6 +765,33 @@ function EditContractorDialog({
         setError(result.error)
         return
       }
+
+      if (isClient && idCardFile && result.ownerId) {
+        try {
+          const supabase = createClient()
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session) {
+            const storagePath = `${projectId}/${session.user.id}/owner-id-cards/${result.ownerId}/${crypto.randomUUID()}-${sanitizeStorageFileName(idCardFile.name)}`
+            await uploadDocumentAsset(idCardFile, storagePath, session.access_token)
+            const attachRes = await attachProjectOwnerIdCards({
+              projectId,
+              files: [{
+                ownerId: result.ownerId,
+                storagePath,
+                originalFilename: idCardFile.name,
+                mimeType: idCardFile.type || "application/octet-stream",
+                sizeBytes: idCardFile.size,
+              }],
+            })
+            if (!attachRes.ok) {
+              console.error("[EditParticipant] Failed to attach owner ID card:", attachRes.error)
+            }
+          }
+        } catch (uploadErr) {
+          console.error("[EditParticipant] Failed to upload owner ID card:", uploadErr)
+        }
+      }
+
       onOpenChange(false)
       router.refresh()
     })
@@ -733,42 +801,108 @@ function EditContractorDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Edit Contractor</DialogTitle>
-          <DialogDescription>Update the contractor role and available contact information.</DialogDescription>
+          <DialogTitle>{currentParticipant.isExternalContact ? "Edit External Participant" : "Edit Contractor"}</DialogTitle>
+          <DialogDescription>
+            {currentParticipant.isExternalContact
+              ? "Update the external participant contact details."
+              : "Update the contractor role and available contact information."}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-1">
-          <ContractorRoleFields
-            role={contractorRole}
-            customRole={customContractorType}
-            onRoleChange={(value) => {
-              setContractorRole(value)
-              if (value !== "other") setCustomContractorType("")
-            }}
-            onCustomRoleChange={setCustomContractorType}
-            disabled={pending}
-          />
-          {currentParticipant.isExternalContact ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="edit-contractor-company">Company Name</Label>
-                <Input id="edit-contractor-company" value={companyName} onChange={(event) => setCompanyName(event.target.value)} maxLength={160} disabled={pending} />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="edit-contractor-contact">Contact Person</Label>
-                <Input id="edit-contractor-contact" value={contactPerson} onChange={(event) => setContactPerson(event.target.value)} maxLength={160} disabled={pending} />
-              </div>
+          {isContractor ? (
+            <ContractorRoleFields
+              role={contractorRole}
+              customRole={customContractorType}
+              onRoleChange={(value) => {
+                setContractorRole(value)
+                if (value !== "other") setCustomContractorType("")
+              }}
+              onCustomRoleChange={setCustomContractorType}
+              disabled={pending}
+            />
+          ) : null}
+
+          {isClient ? (
+            <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="edit-contractor-email">Email</Label>
-                <Input id="edit-contractor-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} maxLength={254} disabled={pending} />
+                <Label htmlFor="edit-client-name">Client Name *</Label>
+                <Input
+                  id="edit-client-name"
+                  value={companyName}
+                  onChange={(event) => setCompanyName(event.target.value)}
+                  placeholder="e.g. ABDUL RAHMAN rashid al hasni"
+                  maxLength={160}
+                  disabled={pending}
+                />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-contractor-phone">Phone</Label>
-                <Input id="edit-contractor-phone" type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} maxLength={50} disabled={pending} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="edit-client-contact">Contact Name (Optional)</Label>
+                  <Input
+                    id="edit-client-contact"
+                    value={contactPerson}
+                    onChange={(event) => setContactPerson(event.target.value)}
+                    placeholder="Enter contact person name"
+                    maxLength={160}
+                    disabled={pending}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-client-phone">Contact Phone (Optional)</Label>
+                  <Input
+                    id="edit-client-phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                    placeholder="e.g. 98976677"
+                    maxLength={50}
+                    disabled={pending}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-client-email">Contact Email (Optional)</Label>
+                  <Input
+                    id="edit-client-email"
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="client@example.com"
+                    maxLength={254}
+                    disabled={pending}
+                  />
+                </div>
               </div>
+              <OwnerIdCardField
+                file={idCardFile}
+                onChange={setIdCardFile}
+                disabled={pending}
+              />
             </div>
-          ) : (
-            <p className="rounded-lg border bg-muted/35 px-3 py-2 text-sm text-muted-foreground">Registered-user profile details remain managed from the user profile.</p>
-          )}
+          ) : isContractor ? (
+            currentParticipant.isExternalContact ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="edit-contractor-company">Company Name *</Label>
+                  <Input id="edit-contractor-company" value={companyName} onChange={(event) => setCompanyName(event.target.value)} maxLength={160} disabled={pending} />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="edit-contractor-contact">Contact Person (Optional)</Label>
+                  <Input id="edit-contractor-contact" value={contactPerson} onChange={(event) => setContactPerson(event.target.value)} maxLength={160} disabled={pending} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-contractor-email">Contact Email (Optional)</Label>
+                  <Input id="edit-contractor-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} maxLength={254} disabled={pending} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-contractor-phone">Contact Phone (Optional)</Label>
+                  <Input id="edit-contractor-phone" type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} maxLength={50} disabled={pending} />
+                </div>
+              </div>
+            ) : (
+              <p className="rounded-lg border bg-muted/35 px-3 py-2 text-sm text-muted-foreground">Registered-user profile details remain managed from the user profile.</p>
+            )
+          ) : null}
+
           {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
         </div>
         <DialogFooter>
@@ -852,7 +986,7 @@ export function ProjectParticipants({
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [avatarDialog, setAvatarDialog] = useState<AvatarDialogState | null>(null)
-  const [editContractor, setEditContractor] = useState<ProjectParticipant | null>(null)
+  const [editParticipant, setEditParticipant] = useState<ProjectParticipant | null>(null)
   const [removeParticipant, setRemoveParticipant] = useState<ProjectParticipant | null>(null)
   const [participantAvatarOverrides, setParticipantAvatarOverrides] = useState<Record<string, string | null>>({})
   const [profileAvatarOverrides, setProfileAvatarOverrides] = useState<Record<string, string | null>>({})
@@ -986,8 +1120,10 @@ export function ProjectParticipants({
                                     <DropdownMenuItem render={<Link href="/users?tab=organizations"><Eye className="size-4" />View organization</Link>} />
                                   ) : null}
                                   {participant.organizationId ? <DropdownMenuItem render={<Link href="/users?tab=projects"><UserRoundCog className="size-4" />Manage access</Link>} /> : null}
-                                  {canManageParticipants && isContractor ? (
-                                    <DropdownMenuItem onClick={() => setEditContractor(participant)}><Pencil className="size-4" />Edit Contractor</DropdownMenuItem>
+                                  {canManageParticipants && (participant.isExternalContact || isContractor) ? (
+                                    <DropdownMenuItem onClick={() => setEditParticipant(participant)}>
+                                      <Pencil className="size-4" />{participant.isExternalContact ? "Edit Participant" : "Edit Contractor"}
+                                    </DropdownMenuItem>
                                   ) : null}
                                   {canManageAvatars ? (
                                     participant.keyContact.userId ? (
@@ -1067,8 +1203,10 @@ export function ProjectParticipants({
                                     <DropdownMenu>
                                       <DropdownMenuTrigger render={<button type="button" aria-label={`Actions for ${participant.organization}`} className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><MoreVertical className="size-4" /></button>} />
                                       <DropdownMenuContent align="end" className="w-52">
-                                        {canManageParticipants && isContractor ? (
-                                          <DropdownMenuItem onClick={() => setEditContractor(participant)}><Pencil className="size-4" />Edit Contractor</DropdownMenuItem>
+                                        {canManageParticipants && (participant.isExternalContact || isContractor) ? (
+                                          <DropdownMenuItem onClick={() => setEditParticipant(participant)}>
+                                            <Pencil className="size-4" />{participant.isExternalContact ? "Edit Participant" : "Edit Contractor"}
+                                          </DropdownMenuItem>
                                         ) : null}
                                         {canManageAvatars ? (
                                           participant.keyContact.userId ? (
@@ -1102,12 +1240,12 @@ export function ProjectParticipants({
         </CardContent>
       </Card>
 
-      <EditContractorDialog
-        key={editContractor ? `edit-${editContractor.id}` : "edit-contractor"}
+      <EditExternalParticipantDialog
+        key={editParticipant ? `edit-${editParticipant.id}` : "edit-participant"}
         projectId={projectId}
-        participant={editContractor}
-        open={Boolean(editContractor)}
-        onOpenChange={(nextOpen) => { if (!nextOpen) setEditContractor(null) }}
+        participant={editParticipant}
+        open={Boolean(editParticipant)}
+        onOpenChange={(nextOpen) => { if (!nextOpen) setEditParticipant(null) }}
       />
       <RemoveParticipantDialog
         key={removeParticipant ? `remove-${removeParticipant.id}` : "remove-participant"}

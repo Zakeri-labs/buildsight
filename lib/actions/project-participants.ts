@@ -665,13 +665,20 @@ export async function addProjectParticipantAction(input: AddParticipantInput): P
   }
 }
 
-export async function editProjectContractorAction(input: EditContractorInput): Promise<ProjectParticipantActionResult> {
+export type EditExternalParticipantInput = {
+  projectId: string
+  participantId: string
+  companyName: string
+  contactPerson?: string
+  email?: string
+  phone?: string
+  contractorRole?: string
+  customContractorType?: string
+}
+
+export async function editExternalParticipantAction(input: EditExternalParticipantInput): Promise<ProjectParticipantActionResult> {
   if (!UUID_PATTERN.test(input.projectId) || !UUID_PATTERN.test(input.participantId)) {
-    return { ok: false, error: "The selected contractor is invalid." }
-  }
-  const contractor = validateContractorRole(input.contractorRole, input.customContractorType)
-  if (!contractor) {
-    return { ok: false, error: input.contractorRole === "other" ? "Enter the custom contractor type." : "Select a contractor role." }
+    return { ok: false, error: "The selected participant is invalid." }
   }
 
   try {
@@ -679,52 +686,132 @@ export async function editProjectContractorAction(input: EditContractorInput): P
     const admin = createAdminClient()
     const { data: participant, error: participantError } = await admin
       .from("project_participants")
-      .select("id, key_contact_user_id, organization_id, participant_type")
+      .select("id, key_contact_user_id, organization_id, participant_type, source_key")
       .eq("id", input.participantId)
       .eq("project_id", input.projectId)
       .eq("status", "active")
       .maybeSingle()
     if (participantError) throw participantError
-    if (!participant || !["contractor", "subcontractor"].includes(participant.participant_type as string)) {
-      return { ok: false, error: "Contractor not found." }
+    if (!participant) {
+      return { ok: false, error: "Participant not found." }
     }
 
-    const update: Record<string, unknown> = {
-      contractor_role: contractor.role,
-      contractor_role_other: contractor.custom,
-      updated_at: new Date().toISOString(),
+    if (participant.key_contact_user_id) {
+      return { ok: false, error: "Registered users cannot be edited here. Profile details are managed on their user profile." }
     }
 
-    if (!participant.key_contact_user_id) {
+    const isClient = participant.participant_type === "client" || participant.source_key?.startsWith("owner:")
+    const isContractor = ["contractor", "subcontractor"].includes(participant.participant_type as string)
+
+    if (isClient) {
+      const externalError = validateExternalClient({
+        projectId: input.projectId,
+        participantType: "client",
+        source: "external_contact",
+        companyName: input.companyName,
+        contactPerson: input.contactPerson,
+        email: input.email,
+        phone: input.phone,
+      })
+      if (externalError) return { ok: false, error: externalError }
+
+      const clientName = input.companyName.trim()
+      const contactPerson = normalizedOptional(input.contactPerson, 160)
+      const email = normalizedOptional(input.email?.toLowerCase(), 254)
+      const phone = normalizedOptional(input.phone, 50)
+
+      const { error: updateError } = await admin
+        .from("project_participants")
+        .update({
+          organization_name: clientName,
+          key_contact_name: contactPerson || clientName,
+          key_contact_email: email,
+          key_contact_phone: phone,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", input.participantId)
+        .eq("project_id", input.projectId)
+      if (updateError) throw updateError
+
+      let ownerId: string | undefined = undefined
+      if (participant.source_key?.startsWith("owner:")) {
+        ownerId = participant.source_key.replace("owner:", "")
+        const { error: ownerUpdateError } = await admin
+          .from("project_owners")
+          .update({
+            name: clientName,
+            contact_name: contactPerson,
+            contact_email: email,
+            contact_phone: phone,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", ownerId)
+          .eq("project_id", input.projectId)
+        if (ownerUpdateError) throw ownerUpdateError
+      }
+
+      await audit({
+        actorId,
+        action: "project_participant.updated",
+        entityType: "project_participant",
+        projectId: input.projectId,
+        metadata: { participantId: input.participantId, participantType: "client", name: clientName },
+      })
+
+      revalidateParticipantViews(input.projectId)
+      return { ok: true, ownerId }
+    }
+
+    if (isContractor) {
+      const contractor = validateContractorRole(input.contractorRole, input.customContractorType)
+      if (!contractor) {
+        return { ok: false, error: input.contractorRole === "other" ? "Enter the custom contractor type." : "Select a contractor role." }
+      }
+
       const externalError = validateExternalContact(input)
       if (externalError) return { ok: false, error: externalError }
-      update.organization_name = input.companyName!.trim()
-      update.key_contact_name = normalizedOptional(input.contactPerson, 160)
-      update.key_contact_email = normalizedOptional(input.email, 254)
-      update.key_contact_phone = normalizedOptional(input.phone, 50)
+
+      const companyName = input.companyName.trim()
+      const contactPerson = normalizedOptional(input.contactPerson, 160)
+      const email = normalizedOptional(input.email, 254)
+      const phone = normalizedOptional(input.phone, 50)
+
+      const { error: updateError } = await admin
+        .from("project_participants")
+        .update({
+          organization_name: companyName,
+          key_contact_name: contactPerson,
+          key_contact_email: email,
+          key_contact_phone: phone,
+          contractor_role: contractor.role,
+          contractor_role_other: contractor.custom,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", input.participantId)
+        .eq("project_id", input.projectId)
+      if (updateError) throw updateError
+
+      await audit({
+        actorId,
+        action: "project_participant.updated",
+        entityType: "project_participant",
+        projectId: input.projectId,
+        metadata: { participantId: input.participantId, contractorRole: contractor.role, companyName },
+      })
+
+      revalidateParticipantViews(input.projectId)
+      return { ok: true }
     }
 
-    const { error: updateError } = await admin
-      .from("project_participants")
-      .update(update)
-      .eq("id", input.participantId)
-      .eq("project_id", input.projectId)
-    if (updateError) throw updateError
-
-    await audit({
-      actorId,
-      action: "project_participant.updated",
-      entityType: "project_participant",
-      organizationId: participant.organization_id ?? undefined,
-      projectId: input.projectId,
-      metadata: { participantId: input.participantId, contractorRole: contractor.role },
-    })
-    revalidateParticipantViews(input.projectId)
-    return { ok: true }
+    return { ok: false, error: "This participant type cannot be edited." }
   } catch (error) {
     if (error instanceof AuthzError) return { ok: false, error: error.message }
-    return { ok: false, error: error instanceof Error ? error.message : "Unable to update the contractor." }
+    return { ok: false, error: error instanceof Error ? error.message : "Unable to update the participant." }
   }
+}
+
+export async function editProjectContractorAction(input: EditContractorInput): Promise<ProjectParticipantActionResult> {
+  return editExternalParticipantAction(input)
 }
 
 export async function removeProjectParticipantAction(input: {
