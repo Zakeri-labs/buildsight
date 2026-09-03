@@ -54,6 +54,12 @@ import {
   editProjectContractorAction,
   removeProjectParticipantAction,
 } from "@/lib/actions/project-participants"
+import { attachProjectOwnerIdCards } from "@/lib/actions/projects"
+import { uploadDocumentAsset } from "@/lib/documents/storage-upload"
+import { sanitizeStorageFileName } from "@/lib/documents/simple-upload"
+import { createClient } from "@/lib/supabase/client"
+import { validateOwnerIdCardFile } from "@/lib/projects/owner-id-card"
+import { OwnerIdCardField } from "@/components/projects/owner-id-card-field"
 import {
   CONTRACTOR_ROLE_OPTIONS,
   OTHER_PARTICIPANT_ROLE_OPTIONS,
@@ -289,6 +295,7 @@ function AddParticipantDialog({ projectId, users }: { projectId: string; users: 
   const [contactPerson, setContactPerson] = useState("")
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
+  const [idCardFile, setIdCardFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -303,6 +310,7 @@ function AddParticipantDialog({ projectId, users }: { projectId: string; users: 
     setContactPerson("")
     setEmail("")
     setPhone("")
+    setIdCardFile(null)
     setError(null)
   }
 
@@ -313,6 +321,11 @@ function AddParticipantDialog({ projectId, users }: { projectId: string; users: 
     setSource("existing_user")
     setContractorRole("")
     setCustomContractorType("")
+    setCompanyName("")
+    setContactPerson("")
+    setEmail("")
+    setPhone("")
+    setIdCardFile(null)
     setError(null)
   }
 
@@ -341,9 +354,26 @@ function AddParticipantDialog({ projectId, users }: { projectId: string; users: 
       setError("Enter the custom contractor type.")
       return
     }
-    if (source === "external_contact" && !companyName.trim()) {
+    if (participantType === "contractor" && source === "external_contact" && !companyName.trim()) {
       setError("Enter the contractor company name.")
       return
+    }
+    if (participantType === "client" && source === "external_contact") {
+      if (companyName.trim().length < 2) {
+        setError("Enter a valid client name (at least 2 characters).")
+        return
+      }
+      if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        setError("Enter a valid email address.")
+        return
+      }
+      if (idCardFile) {
+        const idCardError = validateOwnerIdCardFile(idCardFile)
+        if (idCardError) {
+          setError(idCardError)
+          return
+        }
+      }
     }
 
     setError(null)
@@ -365,13 +395,43 @@ function AddParticipantDialog({ projectId, users }: { projectId: string; users: 
         setError(result.error)
         return
       }
+
+      if (participantType === "client" && source === "external_contact" && idCardFile && result.ownerId) {
+        try {
+          const supabase = createClient()
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session) {
+            const storagePath = `${projectId}/${session.user.id}/owner-id-cards/${result.ownerId}/${crypto.randomUUID()}-${sanitizeStorageFileName(idCardFile.name)}`
+            await uploadDocumentAsset(idCardFile, storagePath, session.access_token)
+            const attachRes = await attachProjectOwnerIdCards({
+              projectId,
+              files: [{
+                ownerId: result.ownerId,
+                storagePath,
+                originalFilename: idCardFile.name,
+                mimeType: idCardFile.type || "application/octet-stream",
+                sizeBytes: idCardFile.size,
+              }],
+            })
+            if (!attachRes.ok) {
+              console.error("[AddParticipant] Failed to attach owner ID card:", attachRes.error)
+            }
+          }
+        } catch (uploadErr) {
+          console.error("[AddParticipant] Failed to upload owner ID card:", uploadErr)
+        }
+      }
+
       setOpen(false)
       reset()
       router.refresh()
     })
   }
 
-  const externalContractor = participantType === "contractor" && source === "external_contact"
+  const isExternal = source === "external_contact"
+  const isExternalClient = participantType === "client" && isExternal
+  const isExternalContractor = participantType === "contractor" && isExternal
+  const showUserPicker = Boolean(participantType && !isExternal)
 
   return (
     <Dialog
@@ -398,7 +458,7 @@ function AddParticipantDialog({ projectId, users }: { projectId: string; users: 
       >
         <DialogHeader>
           <DialogTitle>Add Participant</DialogTitle>
-          <DialogDescription>Add a registered user or an external contractor contact to this project.</DialogDescription>
+          <DialogDescription>Add a registered user or an external contact to this project.</DialogDescription>
         </DialogHeader>
 
         <div
@@ -418,6 +478,32 @@ function AddParticipantDialog({ projectId, users }: { projectId: string; users: 
               </SelectContent>
             </Select>
           </div>
+
+          {participantType === "client" ? (
+            <div className="space-y-2">
+              <Label>Client Source</Label>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <Button
+                  type="button"
+                  variant={source === "existing_user" ? "default" : "outline"}
+                  className={cn("justify-start", source !== "existing_user" && "bg-transparent")}
+                  onClick={() => { setSource("existing_user"); setError(null) }}
+                  disabled={pending}
+                >
+                  Existing Registered User
+                </Button>
+                <Button
+                  type="button"
+                  variant={source === "external_contact" ? "default" : "outline"}
+                  className={cn("justify-start", source !== "external_contact" && "bg-transparent")}
+                  onClick={() => { setSource("external_contact"); setSelectedUserId(""); setError(null) }}
+                  disabled={pending}
+                >
+                  External Client
+                </Button>
+              </div>
+            </div>
+          ) : null}
 
           {participantType === "contractor" ? (
             <div className="space-y-2">
@@ -445,7 +531,7 @@ function AddParticipantDialog({ projectId, users }: { projectId: string; users: 
             </div>
           ) : null}
 
-          {participantType && !externalContractor ? (
+          {showUserPicker ? (
             <UserPicker users={users} value={selectedUserId} onChange={setSelectedUserId} disabled={pending} />
           ) : null}
 
@@ -486,7 +572,68 @@ function AddParticipantDialog({ projectId, users }: { projectId: string; users: 
             />
           ) : null}
 
-          {externalContractor ? (
+          {isExternalClient ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="client-name">Client Name *</Label>
+                <Input
+                  id="client-name"
+                  value={companyName}
+                  onChange={(event) => setCompanyName(event.target.value)}
+                  placeholder="e.g. ABDUL RAHMAN rashid al hasni"
+                  maxLength={160}
+                  disabled={pending}
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="client-contact-person">Contact Name (Optional)</Label>
+                  <Input
+                    id="client-contact-person"
+                    value={contactPerson}
+                    onChange={(event) => setContactPerson(event.target.value)}
+                    placeholder="Enter contact person name"
+                    maxLength={160}
+                    disabled={pending}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="client-phone">Contact Phone (Optional)</Label>
+                  <Input
+                    id="client-phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                    placeholder="e.g. 98976677"
+                    maxLength={50}
+                    disabled={pending}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="client-email">Contact Email (Optional)</Label>
+                  <Input
+                    id="client-email"
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="client@example.com"
+                    maxLength={254}
+                    disabled={pending}
+                  />
+                </div>
+              </div>
+              <OwnerIdCardField
+                file={idCardFile}
+                onChange={setIdCardFile}
+                disabled={pending}
+              />
+              <p className="text-xs text-muted-foreground">
+                External clients are contact records only and do not receive login access or dashboard tasks.
+              </p>
+            </div>
+          ) : null}
+
+          {isExternalContractor ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="contractor-company-name">Company Name</Label>
