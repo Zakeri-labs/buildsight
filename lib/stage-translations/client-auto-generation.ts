@@ -237,40 +237,51 @@ async function generateMissingPdfs(
   ccRecipients: ReportCcRecipient[],
 ) {
   let currentRecord = translation
+
   if (!currentRecord.originalPdfPath) {
-    const originalPdf = await exportTranslationPdf({
-      data,
-      translation: currentRecord,
-      kind: "original",
-      ccRecipients,
-      appendClosingBlock: true,
-    })
-    const originalPdfPath = await storeTranslationPdf({
-      projectId: job.projectId,
-      translationId: currentRecord.id,
-      kind: "original",
-      blob: originalPdf.blob,
-      filename: originalPdf.filename,
-    })
-    currentRecord = { ...currentRecord, originalPdfPath }
+    try {
+      const originalPdf = await exportTranslationPdf({
+        data,
+        translation: currentRecord,
+        kind: "original",
+        ccRecipients,
+        appendClosingBlock: true,
+      })
+      const originalPdfPath = await storeTranslationPdf({
+        projectId: job.projectId,
+        translationId: currentRecord.id,
+        kind: "original",
+        blob: originalPdf.blob,
+        filename: originalPdf.filename,
+      })
+      currentRecord = { ...currentRecord, originalPdfPath }
+    } catch (originalError) {
+      console.warn("[stage-translation] original PDF preparation error, continuing with bilingual:", originalError)
+    }
   }
+
   if (!currentRecord.bilingualPdfPath) {
-    const bilingualPdf = await exportTranslationPdf({
-      data,
-      translation: currentRecord,
-      kind: "bilingual",
-      ccRecipients,
-      appendClosingBlock: true,
-    })
-    const bilingualPdfPath = await storeTranslationPdf({
-      projectId: job.projectId,
-      translationId: currentRecord.id,
-      kind: "bilingual",
-      blob: bilingualPdf.blob,
-      filename: bilingualPdf.filename,
-    })
-    currentRecord = { ...currentRecord, bilingualPdfPath }
+    try {
+      const bilingualPdf = await exportTranslationPdf({
+        data,
+        translation: currentRecord,
+        kind: "bilingual",
+        ccRecipients,
+        appendClosingBlock: true,
+      })
+      const bilingualPdfPath = await storeTranslationPdf({
+        projectId: job.projectId,
+        translationId: currentRecord.id,
+        kind: "bilingual",
+        blob: bilingualPdf.blob,
+        filename: bilingualPdf.filename,
+      })
+      currentRecord = { ...currentRecord, bilingualPdfPath }
+    } catch (bilingualError) {
+      console.warn("[stage-translation] bilingual PDF preparation error:", bilingualError)
+    }
   }
+
   return currentRecord
 }
 

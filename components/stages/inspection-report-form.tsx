@@ -56,7 +56,7 @@ import {
 import { saveReportCcRecipientsAction } from "@/lib/actions/report-cc"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto-generation"
-import { exportTranslationPdf, storeTranslationPdf, downloadPdfBlob, ensureBilingualPdfStored } from "@/lib/stage-translations/client-pdf"
+import { downloadPdfBlob, ensureBilingualPdfStored } from "@/lib/stage-translations/client-pdf"
 import { buildWhatsAppShareUrl, buildShareMessage } from "@/lib/stage-translations/whatsapp-share"
 import { StageTranslationActions } from "@/components/stages/stage-translation-actions"
 import { optimizeEvidenceImageFile } from "@/lib/stages/optimize-evidence-image"
@@ -1114,9 +1114,11 @@ export function InspectionReportForm({
             responseId: id,
           })
 
-          let translationPayload: { data: any; ccRecipients: ReportCcRecipient[] } | null = null
+          // Monitor translation and PDF generation performed by the background worker
+          let pdfGenSuccess = false
+          let finalTransRecord: any = null
           const startTime = Date.now()
-          while (Date.now() - startTime < 35_000) {
+          while (Date.now() - startTime < 45_000) {
             await new Promise((resolve) => setTimeout(resolve, 1500))
             try {
               const params = new URLSearchParams({
@@ -1127,137 +1129,62 @@ export function InspectionReportForm({
               const res = await fetch(`/api/stage-translations?${params.toString()}`, { cache: "no-store" })
               if (res.ok) {
                 const payload = await res.json()
-                const transStatus = payload?.data?.translation?.status
-                if ((transStatus === "completed" || transStatus === "approved") && payload?.data?.translation?.translatedContent) {
-                  translationPayload = {
-                    data: payload.data,
-                    ccRecipients: payload.ccRecipients ?? [],
-                  }
+                const trans = payload?.data?.translation
+                if (trans && (trans.bilingualPdfPath || trans.originalPdfPath)) {
+                  pdfGenSuccess = true
+                  finalTransRecord = trans
                   break
                 }
-                if (transStatus === "failed" || transStatus === "error") {
+                if (trans && (trans.status === "completed" || trans.status === "approved") && trans.translatedContent) {
+                  finalTransRecord = trans
+                  // Translation is complete, give the worker a few more cycles to save PDF
+                }
+                if (trans?.status === "failed") {
                   break
                 }
               }
             } catch {
-              // ignore transient errors
+              // ignore transient network errors
             }
           }
 
-          let generatedPdfs: {
-            original?: { blob: Blob; filename: string }
-            bilingual?: { blob: Blob; filename: string }
-          } = {}
-
-          let pdfGenSuccess = false
-
-          if (translationPayload?.data?.translation) {
-            try {
-              const pageData = translationPayload.data
-              const transRecord = pageData.translation
-
-              const originalPdf = await exportTranslationPdf({
-                data: pageData,
-                translation: transRecord,
-                kind: "original",
-                ccRecipients: translationPayload.ccRecipients ?? [],
-                appendClosingBlock: true,
-              })
-              generatedPdfs.original = originalPdf
-
-              if (transRecord.id) {
-                await storeTranslationPdf({
-                  projectId: project.id,
-                  translationId: transRecord.id,
-                  kind: "original",
-                  blob: originalPdf.blob,
-                  filename: originalPdf.filename,
-                  responseId: id,
-                  caller: "submit_flow",
-                }).catch(() => null)
-              }
-
-              if (transRecord.status === "completed" && transRecord.translatedContent) {
-                const bilingualPdf = await exportTranslationPdf({
-                  data: pageData,
-                  translation: transRecord,
-                  kind: "bilingual",
-                  ccRecipients: translationPayload.ccRecipients ?? [],
-                  appendClosingBlock: true,
-                })
-                generatedPdfs.bilingual = bilingualPdf
-
-                if (transRecord.id) {
-                  await storeTranslationPdf({
-                    projectId: project.id,
-                    translationId: transRecord.id,
-                    kind: "bilingual",
-                    blob: bilingualPdf.blob,
-                    filename: bilingualPdf.filename,
-                    responseId: id,
-                    caller: "submit_flow",
-                  }).catch(() => null)
-                }
-              }
-              pdfGenSuccess = true
-            } catch (pdfErr) {
-              logDiagnosticEvent(id, "SUBMIT_PDF_GEN_ERROR", {
-                error: pdfErr instanceof Error ? pdfErr.message : String(pdfErr),
-              })
-              console.warn("Client PDF generation warning during submit:", pdfErr)
-            }
-          }
-
-          try {
-            await ensureBilingualPdfStored({
-              projectId: project.id,
-              stageId: result.data.projectStageId,
-              responseId: id,
-              caller: "submit_flow",
-            })
-          } catch (stErr) {
-            logDiagnosticEvent(id, "SUBMIT_BILINGUAL_ENSURE_ERROR", {
-              error: stErr instanceof Error ? stErr.message : String(stErr),
-            })
-            console.warn("Auto-store bilingual PDF warning during submit:", stErr)
-          }
-
-          steps = updateStep(steps, stepIdx, pdfGenSuccess ? "done" : "error")
+          steps = updateStep(steps, stepIdx, (pdfGenSuccess || finalTransRecord?.translatedContent) ? "done" : "error")
           stepIdx++
 
           if (stepIdx < steps.length) {
             steps = updateStep(steps, stepIdx, "active")
           }
 
-          let authoritativeConfirmed = false
-          try {
-            const checkParams = new URLSearchParams({
-              projectId: project.id,
-              stageId: result.data.projectStageId,
-              responseId: id,
-              statusOnly: "1",
-            })
-            const checkRes = await fetch(`/api/stage-translations?${checkParams.toString()}`, { cache: "no-store" })
-            if (checkRes.ok) {
-              const checkPayload = await checkRes.json()
-              const finalTrans = checkPayload?.data?.translation
-              if (
-                finalTrans &&
-                (finalTrans.status === "completed" || finalTrans.status === "approved") &&
-                (finalTrans.bilingualPdfPath || finalTrans.originalPdfPath)
-              ) {
-                authoritativeConfirmed = true
+          let authoritativeConfirmed = Boolean(pdfGenSuccess || finalTransRecord?.bilingualPdfPath || finalTransRecord?.originalPdfPath)
+          if (!authoritativeConfirmed) {
+            try {
+              const checkParams = new URLSearchParams({
+                projectId: project.id,
+                stageId: result.data.projectStageId,
+                responseId: id,
+                statusOnly: "1",
+              })
+              const checkRes = await fetch(`/api/stage-translations?${checkParams.toString()}`, { cache: "no-store" })
+              if (checkRes.ok) {
+                const checkPayload = await checkRes.json()
+                const finalTrans = checkPayload?.data?.translation
+                if (
+                  finalTrans &&
+                  (finalTrans.status === "completed" || finalTrans.status === "approved") &&
+                  (finalTrans.bilingualPdfPath || finalTrans.originalPdfPath || finalTrans.translatedContent)
+                ) {
+                  authoritativeConfirmed = true
+                }
               }
+            } catch (checkErr) {
+              console.warn("Error verifying authoritative PDF status:", checkErr)
             }
-          } catch (checkErr) {
-            console.warn("Error verifying authoritative PDF status:", checkErr)
           }
 
           if (authoritativeConfirmed) {
             if (stepIdx < steps.length) {
               steps = updateStep(steps, stepIdx, "done")
             }
-            setReadyPdfs(generatedPdfs)
             setSubmitResult({ responseId: id, stageId: routeStageId })
           } else {
             const activeErrIdx = stepIdx < steps.length ? stepIdx : steps.length - 1
