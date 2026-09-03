@@ -201,10 +201,10 @@ export function AppSidebar({
     href: "/supervisor-performance",
     icon: TrendingUp,
   }
+  void supervisorPerformanceItem
 
   const moduleItems = [
     { label: homeLabel, href: homeHref, icon: Home },
-    ...(!isMember ? [supervisorPerformanceItem] : []),
     projectNavigationItem,
     ...(stageNavigationItem ? [stageNavigationItem] : []),
     {
