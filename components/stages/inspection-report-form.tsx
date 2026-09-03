@@ -381,7 +381,7 @@ export function InspectionReportForm({
   reportConfig: stageReportConfig,
   parentTerm = null,
   response,
-  translation,
+  translation: initialTranslation,
   canReview,
   canManage,
   isMember = false,
@@ -523,6 +523,7 @@ export function InspectionReportForm({
   const [responseId, setResponseId] = useState(response?.id ?? null)
   const [reportNumber, setReportNumber] = useState(response?.reportNumber ?? "Auto-generated on save")
   const [status, setStatus] = useState<ResponseStatus>(response?.status ?? "draft")
+  const [translation, setTranslation] = useState<ProjectStageTranslationSummary | null>(initialTranslation ?? null)
   const [existingAttachments, setExistingAttachments] = useState(response?.attachments ?? [])
   const [pendingImages, setPendingImages] = useState<PendingFile[]>([])
   const [pendingDocuments, setPendingDocuments] = useState<PendingFile[]>([])
@@ -579,6 +580,12 @@ export function InspectionReportForm({
       setApprovalHistory(response.approvals ?? [])
     }
   }, [response])
+
+  useEffect(() => {
+    if (initialTranslation) {
+      setTranslation(initialTranslation)
+    }
+  }, [initialTranslation])
 
   useEffect(() => {
     if (submitModalOpen && submitResult?.responseId) {
