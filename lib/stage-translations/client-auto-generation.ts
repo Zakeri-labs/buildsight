@@ -240,6 +240,14 @@ async function generateMissingPdfs(
 
   if (!currentRecord.originalPdfPath) {
     try {
+      logDiagnosticEvent(job.responseId, "WORKER_PDF_GENERATION_START", {
+        kind: "original",
+        translationId: currentRecord.id,
+        projectId: job.projectId,
+        stageId: job.stageId,
+        responseId: job.responseId,
+      })
+
       const originalPdf = await exportTranslationPdf({
         data,
         translation: currentRecord,
@@ -247,21 +255,50 @@ async function generateMissingPdfs(
         ccRecipients,
         appendClosingBlock: true,
       })
+
       const originalPdfPath = await storeTranslationPdf({
         projectId: job.projectId,
         translationId: currentRecord.id,
         kind: "original",
         blob: originalPdf.blob,
         filename: originalPdf.filename,
+        responseId: job.responseId,
+        caller: "background_worker",
       })
+
       currentRecord = { ...currentRecord, originalPdfPath }
+
+      logDiagnosticEvent(job.responseId, "WORKER_PDF_GENERATION_SUCCESS", {
+        kind: "original",
+        originalPdfPath,
+        translationId: currentRecord.id,
+        projectId: job.projectId,
+        stageId: job.stageId,
+        responseId: job.responseId,
+      })
     } catch (originalError) {
       console.warn("[stage-translation] original PDF preparation error, continuing with bilingual:", originalError)
+      logDiagnosticEvent(job.responseId, "WORKER_PDF_GENERATION_FAILED_RETRYING", {
+        kind: "original",
+        error: originalError instanceof Error ? originalError.message : String(originalError),
+        translationId: currentRecord.id,
+        projectId: job.projectId,
+        stageId: job.stageId,
+        responseId: job.responseId,
+      })
     }
   }
 
   if (!currentRecord.bilingualPdfPath) {
     try {
+      logDiagnosticEvent(job.responseId, "WORKER_PDF_GENERATION_START", {
+        kind: "bilingual",
+        translationId: currentRecord.id,
+        projectId: job.projectId,
+        stageId: job.stageId,
+        responseId: job.responseId,
+      })
+
       const bilingualPdf = await exportTranslationPdf({
         data,
         translation: currentRecord,
@@ -269,16 +306,37 @@ async function generateMissingPdfs(
         ccRecipients,
         appendClosingBlock: true,
       })
+
       const bilingualPdfPath = await storeTranslationPdf({
         projectId: job.projectId,
         translationId: currentRecord.id,
         kind: "bilingual",
         blob: bilingualPdf.blob,
         filename: bilingualPdf.filename,
+        responseId: job.responseId,
+        caller: "background_worker",
       })
+
       currentRecord = { ...currentRecord, bilingualPdfPath }
+
+      logDiagnosticEvent(job.responseId, "WORKER_PDF_GENERATION_SUCCESS", {
+        kind: "bilingual",
+        bilingualPdfPath,
+        translationId: currentRecord.id,
+        projectId: job.projectId,
+        stageId: job.stageId,
+        responseId: job.responseId,
+      })
     } catch (bilingualError) {
       console.warn("[stage-translation] bilingual PDF preparation error:", bilingualError)
+      logDiagnosticEvent(job.responseId, "WORKER_PDF_GENERATION_FAILED_RETRYING", {
+        kind: "bilingual",
+        error: bilingualError instanceof Error ? bilingualError.message : String(bilingualError),
+        translationId: currentRecord.id,
+        projectId: job.projectId,
+        stageId: job.stageId,
+        responseId: job.responseId,
+      })
     }
   }
 
@@ -320,9 +378,15 @@ export async function processStageTranslationJob(job: StageTranslationJob) {
         throw error
       }
 
-      if (!["submitted", "under_review", "rejected", "approved", "completed"].includes(snapshot.data.response.status)) {
-        removeStageTranslationJob(normalized)
-        return
+      const validStatuses = ["submitted", "under_review", "rejected", "approved", "completed"]
+      if (!validStatuses.includes(snapshot.data.response.status)) {
+        // Allow grace cycles for in-flight database status transitions
+        if (cycle >= 5) {
+          removeStageTranslationJob(normalized)
+          return
+        }
+        await wait(POLL_MS)
+        continue
       }
 
       const record = snapshot.data.translation
@@ -368,7 +432,7 @@ export async function processStageTranslationJob(job: StageTranslationJob) {
         // Re-submit a harmless start request periodically. The server-side
         // claim logic ignores active jobs and only reclaims genuinely stale
         // pending rows, protecting against duplicate OpenAI runs.
-        if (!startRequested || cycle > 0 && cycle % 80 === 0) {
+        if (!startRequested || (cycle > 0 && cycle % 80 === 0)) {
           await startTranslation(normalized, false)
           startRequested = true
         }
@@ -377,10 +441,20 @@ export async function processStageTranslationJob(job: StageTranslationJob) {
       }
 
       if (record.status === "completed") {
+        logDiagnosticEvent(normalized.responseId, "WORKER_TRANSLATION_COMPLETED_DETECTED", {
+          translationId: record.id,
+          hasTranslatedContent: Boolean(record.translatedContent),
+          originalPdfPath: record.originalPdfPath || null,
+          bilingualPdfPath: record.bilingualPdfPath || null,
+          projectId: normalized.projectId,
+          stageId: normalized.stageId,
+        })
+
         if (allPdfPaths(record)) {
           removeStageTranslationJob(normalized)
           return
         }
+
         try {
           const pdfSnapshot = await loadTranslation(normalized, true)
           const pdfRecord = pdfSnapshot.data.translation
@@ -388,26 +462,66 @@ export async function processStageTranslationJob(job: StageTranslationJob) {
             await wait(POLL_MS)
             continue
           }
+
           if (allPdfPaths(pdfRecord)) {
             removeStageTranslationJob(normalized)
             return
           }
+
           const completed = await generateMissingPdfs(normalized, pdfSnapshot.data, pdfRecord, pdfSnapshot.ccRecipients)
-          if (allPdfPaths(completed)) removeStageTranslationJob(normalized)
-          return
+
+          if (completed.bilingualPdfPath) {
+            // Verify that the stored PDF is reachable in Supabase Storage
+            let verified = false
+            try {
+              const verifyUrl = `/api/stage-translations/pdf?projectId=${normalized.projectId}&translationId=${completed.id}&kind=bilingual`
+              const verifyRes = await fetch(verifyUrl, { method: "HEAD", cache: "no-store" })
+              if (verifyRes.ok || verifyRes.status === 200 || verifyRes.status === 302) {
+                verified = true
+              } else {
+                const verifyGet = await fetch(verifyUrl, { method: "GET", cache: "no-store" })
+                if (verifyGet.ok) verified = true
+              }
+            } catch {
+              verified = Boolean(completed.bilingualPdfPath)
+            }
+
+            if (verified) {
+              logDiagnosticEvent(normalized.responseId, "WORKER_PDF_READY_VERIFICATION_SUCCESS", {
+                bilingualPdfPath: completed.bilingualPdfPath,
+                originalPdfPath: completed.originalPdfPath || null,
+                translationId: completed.id,
+                projectId: normalized.projectId,
+                stageId: normalized.stageId,
+              })
+
+              removeStageTranslationJob(normalized)
+              return
+            }
+          }
+
+          // If PDF generation did not yield a verified bilingual path, log and retry on next cycle
+          logDiagnosticEvent(normalized.responseId, "WORKER_PDF_GENERATION_FAILED_RETRYING", {
+            cycle,
+            translationId: pdfRecord.id,
+            bilingualPdfPath: completed.bilingualPdfPath || null,
+            projectId: normalized.projectId,
+            stageId: normalized.stageId,
+          })
         } catch (error) {
-          console.error("[stage-translation] automatic PDF preparation failed", {
+          console.error("[stage-translation] automatic PDF preparation error, retrying on next cycle:", {
             projectId: normalized.projectId,
             stageId: normalized.stageId,
             responseId: normalized.responseId,
             message: error instanceof Error ? error.message : String(error),
           })
-          const markedFailed = await markPdfFailure(normalized)
-          if (markedFailed) {
-            removeStageTranslationJob(normalized)
-            return
-          }
-          throw error
+
+          logDiagnosticEvent(normalized.responseId, "WORKER_PDF_GENERATION_FAILED_RETRYING", {
+            cycle,
+            error: error instanceof Error ? error.message : String(error),
+            projectId: normalized.projectId,
+            stageId: normalized.stageId,
+          })
         }
       }
 
