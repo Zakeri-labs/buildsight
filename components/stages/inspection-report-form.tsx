@@ -1118,7 +1118,7 @@ export function InspectionReportForm({
           let pdfGenSuccess = false
           let finalTransRecord: any = null
           const startTime = Date.now()
-          while (Date.now() - startTime < 45_000) {
+          while (Date.now() - startTime < 60_000) {
             await new Promise((resolve) => setTimeout(resolve, 1500))
             try {
               const params = new URLSearchParams({
@@ -1130,14 +1130,15 @@ export function InspectionReportForm({
               if (res.ok) {
                 const payload = await res.json()
                 const trans = payload?.data?.translation
-                if (trans && (trans.bilingualPdfPath || trans.originalPdfPath)) {
+                // STRICT CHECK: Bilingual PDF must be generated and persisted in storage
+                if (trans && trans.bilingualPdfPath) {
                   pdfGenSuccess = true
                   finalTransRecord = trans
                   break
                 }
                 if (trans && (trans.status === "completed" || trans.status === "approved") && trans.translatedContent) {
                   finalTransRecord = trans
-                  // Translation is complete, give the worker a few more cycles to save PDF
+                  // Translation is complete, waiting for the background worker to finish PDF upload
                 }
                 if (trans?.status === "failed") {
                   break
@@ -1148,54 +1149,65 @@ export function InspectionReportForm({
             }
           }
 
-          steps = updateStep(steps, stepIdx, (pdfGenSuccess || finalTransRecord?.translatedContent) ? "done" : "error")
+          // Step 1: "Preparing translation & PDFs" only marks done if bilingualPdfPath is populated
+          steps = updateStep(steps, stepIdx, pdfGenSuccess ? "done" : "error")
           stepIdx++
 
           if (stepIdx < steps.length) {
             steps = updateStep(steps, stepIdx, "active")
           }
 
-          let authoritativeConfirmed = Boolean(pdfGenSuccess || finalTransRecord?.bilingualPdfPath || finalTransRecord?.originalPdfPath)
-          if (!authoritativeConfirmed) {
+          // Step 2: "Confirming PDF availability" strictly verifies that the stored PDF exists and is reachable
+          let storageConfirmed = false
+          if (pdfGenSuccess && finalTransRecord?.id) {
             try {
-              const checkParams = new URLSearchParams({
-                projectId: project.id,
-                stageId: result.data.projectStageId,
-                responseId: id,
-                statusOnly: "1",
-              })
-              const checkRes = await fetch(`/api/stage-translations?${checkParams.toString()}`, { cache: "no-store" })
-              if (checkRes.ok) {
-                const checkPayload = await checkRes.json()
-                const finalTrans = checkPayload?.data?.translation
-                if (
-                  finalTrans &&
-                  (finalTrans.status === "completed" || finalTrans.status === "approved") &&
-                  (finalTrans.bilingualPdfPath || finalTrans.originalPdfPath || finalTrans.translatedContent)
-                ) {
-                  authoritativeConfirmed = true
-                }
+              const verifyUrl = `/api/stage-translations/pdf?projectId=${project.id}&translationId=${finalTransRecord.id}&kind=bilingual`
+              const verifyRes = await fetch(verifyUrl, { method: "HEAD", cache: "no-store" })
+              if (verifyRes.ok || verifyRes.status === 200 || verifyRes.status === 302) {
+                storageConfirmed = true
+              } else {
+                const verifyGet = await fetch(verifyUrl, { method: "GET", cache: "no-store" })
+                if (verifyGet.ok) storageConfirmed = true
               }
-            } catch (checkErr) {
-              console.warn("Error verifying authoritative PDF status:", checkErr)
+            } catch {
+              // If network probe fails but DB record has path, accept DB path as verified
+              storageConfirmed = Boolean(finalTransRecord?.bilingualPdfPath)
             }
           }
 
-          if (authoritativeConfirmed) {
+          logDiagnosticEvent(id, "READY_MODAL_VERIFICATION_DECISION", {
+            whyReady: storageConfirmed ? "bilingual_pdf_persisted_and_verified" : "verification_failed",
+            bilingualPdfPath: finalTransRecord?.bilingualPdfPath || null,
+            storageConfirmed,
+            translatedContentPresent: Boolean(finalTransRecord?.translatedContent),
+          })
+
+          if (storageConfirmed && finalTransRecord) {
             if (stepIdx < steps.length) {
               steps = updateStep(steps, stepIdx, "done")
             }
+            // Update local translation state with the verified stored PDF paths
+            setTranslation((current) => ({
+              ...current,
+              id: finalTransRecord.id,
+              status: finalTransRecord.status,
+              bilingualPdfPath: finalTransRecord.bilingualPdfPath,
+              originalPdfPath: finalTransRecord.originalPdfPath,
+              translatedContent: finalTransRecord.translatedContent,
+              generatedAt: finalTransRecord.generatedAt,
+            }))
             setSubmitResult({ responseId: id, stageId: routeStageId })
           } else {
             const activeErrIdx = stepIdx < steps.length ? stepIdx : steps.length - 1
             steps = updateStep(steps, activeErrIdx, "error")
             const failMsg = locale === "ar"
-              ? "تعذر إنشاء الترجمة وملفات PDF تلقائياً. يرجى إعادة المحاولة."
-              : "Automatic translation/PDF generation failed. Please retry."
+              ? "تعذر التحقق من جاهزية ملف PDF للتقرير. يرجى إعادة المحاولة."
+              : "Report PDF availability confirmation failed. Please retry."
             setError(failMsg)
             logDiagnosticEvent(id, "SUBMIT_PDF_CONFIRMATION_FAILED", {
               projectId: project.id,
               responseId: id,
+              reason: "bilingual_pdf_not_verified_in_storage",
             })
           }
         } else if (isSubmitMode) {
