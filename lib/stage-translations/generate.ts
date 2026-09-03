@@ -567,7 +567,7 @@ export async function markStageTranslationPdfFailure(input: {
   actorId: string
 }) {
   const pageData = await loadStageTranslationPageData(input.projectId, input.stageId, input.actorId, input.responseId)
-  if (!pageData?.translation?.id || !pageData.translation.translatedContent) return
+  if (!pageData?.translation?.id) return
   if (pageData.translation.originalPdfPath && pageData.translation.arabicPdfPath && pageData.translation.bilingualPdfPath) return
 
   logServerDiagnosticEvent("TRANSLATION_FAILURE_MARKED", {
@@ -576,14 +576,30 @@ export async function markStageTranslationPdfFailure(input: {
     stageId: input.stageId,
     responseId: input.responseId,
     translationId: pageData.translation.id,
+    hasTranslatedContent: Boolean(pageData.translation.translatedContent),
   })
+
+  // If translated_content exists, preserve the completed translation status.
+  // A failure to generate or store a PDF artifact must NOT downgrade or invalidate the underlying translation.
+  if (pageData.translation.translatedContent) {
+    logServerDiagnosticEvent("TRANSLATION_STATUS_TRANSITION", {
+      caller: "markStageTranslationPdfFailure",
+      responseId: input.responseId,
+      translationId: pageData.translation.id,
+      previousStatus: pageData.translation.status || "completed",
+      nextStatus: pageData.translation.status || "completed",
+      reason: "pdf_failure_reported_translation_preserved",
+    })
+    return
+  }
+
   logServerDiagnosticEvent("TRANSLATION_STATUS_TRANSITION", {
     caller: "markStageTranslationPdfFailure",
     responseId: input.responseId,
     translationId: pageData.translation.id,
-    previousStatus: pageData.translation.status || "completed",
+    previousStatus: pageData.translation.status || "pending",
     nextStatus: "failed",
-    reason: "pdf_failure_reported",
+    reason: "pdf_failure_reported_no_translated_content",
   })
 
   const admin = createAdminClient()
@@ -594,7 +610,7 @@ export async function markStageTranslationPdfFailure(input: {
     .eq("project_id", input.projectId)
     .eq("project_stage_id", input.stageId)
     .eq("response_id", input.responseId)
-    .eq("translation_status", "completed")
+    .eq("translation_status", "pending")
   if (error) throw error
 }
 
