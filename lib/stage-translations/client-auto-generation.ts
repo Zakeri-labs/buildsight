@@ -3,6 +3,7 @@
 import type { StageTranslationPageData, StageTranslationRecord } from "@/lib/stage-translations/types"
 import type { ReportCcRecipient } from "@/lib/report-cc/types"
 import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
+import { exportTranslationPdf, storeTranslationPdf } from "@/lib/stage-translations/client-pdf"
 
 const STORAGE_KEY = "buildsight-stage-translation-jobs-v1"
 export const STAGE_TRANSLATION_JOB_EVENT = "buildsight:stage-translation-job"
