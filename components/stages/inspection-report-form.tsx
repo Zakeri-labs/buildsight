@@ -1164,46 +1164,34 @@ export function InspectionReportForm({
             steps = updateStep(steps, stepIdx, "active")
           }
 
-          // Step 2: "Confirming PDF availability" with short retry sequence (1s -> 2s -> 4s)
-          let storageConfirmed = false
-          const retryDelays = [1000, 2000, 4000]
+          // Step 2: "Confirming PDF availability" - trust verified bilingualPdfPath returned by database/worker
+          let storageConfirmed = Boolean(pdfGenSuccess && finalTransRecord?.bilingualPdfPath)
 
-          for (let attempt = 0; attempt < retryDelays.length; attempt++) {
-            await new Promise((resolve) => setTimeout(resolve, retryDelays[attempt]))
+          if (!storageConfirmed) {
+            const retryDelays = [1000, 2000, 4000]
+            for (let attempt = 0; attempt < retryDelays.length; attempt++) {
+              await new Promise((resolve) => setTimeout(resolve, retryDelays[attempt]))
 
-            try {
-              // Fetch fresh translation record to catch in-flight finalize
-              const checkParams = new URLSearchParams({
-                projectId: project.id,
-                stageId: result.data.projectStageId,
-                responseId: id,
-              })
-              const checkRes = await fetch(`/api/stage-translations?${checkParams.toString()}`, { cache: "no-store" })
-              if (checkRes.ok) {
-                const checkPayload = await checkRes.json()
-                const trans = checkPayload?.data?.translation
-                if (trans && trans.bilingualPdfPath) {
-                  finalTransRecord = trans
-
-                  // Verify the stored PDF exists and is reachable via HTTP HEAD/GET
-                  const verifyUrl = `/api/stage-translations/pdf?projectId=${project.id}&translationId=${trans.id}&kind=bilingual`
-                  const verifyRes = await fetch(verifyUrl, { method: "HEAD", cache: "no-store" }).catch(() => null)
-                  if (verifyRes && (verifyRes.ok || verifyRes.status === 200 || verifyRes.status === 302)) {
+              try {
+                const checkParams = new URLSearchParams({
+                  projectId: project.id,
+                  stageId: result.data.projectStageId,
+                  responseId: id,
+                })
+                const checkRes = await fetch(`/api/stage-translations?${checkParams.toString()}`, { cache: "no-store" })
+                if (checkRes.ok) {
+                  const checkPayload = await checkRes.json()
+                  const trans = checkPayload?.data?.translation
+                  if (trans && trans.bilingualPdfPath) {
+                    finalTransRecord = trans
                     storageConfirmed = true
                     pdfGenSuccess = true
                     break
-                  } else {
-                    const verifyGet = await fetch(verifyUrl, { method: "GET", cache: "no-store" }).catch(() => null)
-                    if (verifyGet && verifyGet.ok) {
-                      storageConfirmed = true
-                      pdfGenSuccess = true
-                      break
-                    }
                   }
                 }
+              } catch {
+                // Keep waiting during retry sequence without showing error
               }
-            } catch {
-              // Keep waiting during retry sequence without showing error
             }
           }
 
