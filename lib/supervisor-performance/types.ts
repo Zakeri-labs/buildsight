@@ -150,10 +150,13 @@ export type ProjectWeeklyCell = {
   weekKey: string
   startDate: string
   endDate: string
-  overlappingPeriods: CompliancePeriod[]
+  requiredVisits: number
+  completedVisits: number
+  status: CompliancePeriodStatus
   actualReports: ComplianceReportItem[]
   totalActualVisits: number
   primaryStatus: CompliancePeriodStatus | null
+  overlappingPeriods: CompliancePeriod[]
 }
 
 export type ProjectComplianceTimelineRow = {

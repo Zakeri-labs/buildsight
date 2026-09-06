@@ -1,7 +1,6 @@
 "use client"
 
 import {
-  Building2,
   Calendar,
   CheckCircle2,
   Clock,
@@ -21,9 +20,10 @@ import {
 import { Badge } from "@/components/ui/badge"
 import type {
   ComplianceCalendarWeek,
-  CompliancePeriod,
+  CompliancePeriodStatus,
   ComplianceReportItem,
   ProjectComplianceTimelineRow,
+  ProjectWeeklyCell,
 } from "@/lib/supervisor-performance/types"
 import { ComplianceStatusBadge } from "./compliance-status-badge"
 
@@ -36,21 +36,12 @@ function formatFrequencyLabel(type: string | null): string {
   return type
 }
 
-function formatPeriodDateRange(startDate: string, endDate: string): string {
-  if (!startDate || !endDate) return ""
-  const [sYear, sMonth, sDay] = startDate.split("-").map(Number)
-  const [eYear, eMonth, eDay] = endDate.split("-").map(Number)
-
-  const sDate = new Date(Date.UTC(sYear, sMonth - 1, sDay))
-  const eDate = new Date(Date.UTC(eYear, eMonth - 1, eDay))
-
-  const sMonthName = sDate.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
-  const eMonthName = eDate.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
-
-  if (sMonthName === eMonthName) {
-    return `${sMonthName} ${sDay} – ${eDay}, ${sYear}`
-  }
-  return `${sMonthName} ${sDay} – ${eMonthName} ${eDay}, ${sYear}`
+function formatShortDate(dateStr: string): string {
+  if (!dateStr || dateStr.length < 10) return dateStr
+  const [, monthStr, dayStr] = dateStr.slice(0, 10).split("-")
+  const monthIndex = parseInt(monthStr, 10) - 1
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+  return `${months[monthIndex]} ${parseInt(dayStr, 10)}`
 }
 
 export type ComplianceCellDetailDialogProps = {
@@ -58,8 +49,7 @@ export type ComplianceCellDetailDialogProps = {
   onClose: () => void
   project: ProjectComplianceTimelineRow
   week: ComplianceCalendarWeek
-  overlappingPeriods: CompliancePeriod[]
-  actualReports: ComplianceReportItem[]
+  cell: ProjectWeeklyCell | undefined
 }
 
 export function ComplianceCellDetailDialog({
@@ -67,30 +57,67 @@ export function ComplianceCellDetailDialog({
   onClose,
   project,
   week,
-  overlappingPeriods,
-  actualReports,
+  cell,
 }: ComplianceCellDetailDialogProps) {
+  const reports = cell?.actualReports || []
+  const requiredVisits = cell?.requiredVisits ?? 0
+  const completedVisits = cell?.completedVisits ?? reports.length
+  const status: CompliancePeriodStatus = cell?.status ?? "not_applicable"
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-md p-5">
-        <DialogHeader className="gap-1 border-b pb-3">
+        {/* Header: Weekly Visit Compliance */}
+        <DialogHeader className="gap-1 border-b pb-3 text-left">
           <div className="flex items-center justify-between gap-2">
             <Badge variant="secondary" className="text-xs font-medium">
               {formatFrequencyLabel(project.normalizedSupervisionType || project.supervisionType)}
             </Badge>
-            <span className="font-mono text-xs text-muted-foreground">{week.label}</span>
+            <div className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
+              <Calendar className="h-3.5 w-3.5" />
+              <span>{week.label}</span>
+            </div>
           </div>
           <DialogTitle className="text-base font-bold text-foreground">
             {project.projectName}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Visit Compliance &amp; Period Breakdown
+            Weekly Visit Compliance
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4 py-2 text-sm">
-          {/* Assigned Supervisors */}
-          <div className="flex flex-col gap-1 rounded-lg border bg-muted/30 p-2.5">
+          {/* Section 1: Weekly Compliance Summary */}
+          <div className="flex flex-col gap-2.5 rounded-lg border bg-card p-3.5 shadow-2xs">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Week Compliance
+              </span>
+              <ComplianceStatusBadge
+                status={status}
+                requiredVisits={requiredVisits}
+                actualVisits={completedVisits}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 border-t pt-2.5 text-xs">
+              <div className="flex flex-col">
+                <span className="text-muted-foreground">Required visits</span>
+                <span className="text-sm font-bold text-foreground">
+                  {requiredVisits} visit{requiredVisits !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-muted-foreground">Completed visits</span>
+                <span className="text-sm font-bold text-foreground">
+                  {completedVisits} visit{completedVisits !== 1 ? "s" : ""}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Assigned Supervisors */}
+          <div className="flex flex-col gap-1.5 rounded-lg border bg-muted/30 p-2.5">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
               <Users className="h-3.5 w-3.5 text-primary" />
               <span>Assigned Supervisors</span>
@@ -100,14 +127,14 @@ export function ComplianceCellDetailDialog({
                 No supervisor assigned
               </span>
             ) : (
-              <div className="flex flex-wrap gap-2 pt-1">
+              <div className="flex flex-wrap gap-2 pt-0.5">
                 {project.supervisors.map((sup) => (
                   <span
                     key={sup.id}
-                    className="inline-flex items-center gap-1 rounded bg-background px-2 py-0.5 text-xs font-medium text-foreground ring-1 ring-border"
+                    className="inline-flex items-center gap-1.5 rounded bg-background px-2.5 py-1 text-xs font-medium text-foreground ring-1 ring-border"
                   >
                     <User className="h-3 w-3 text-muted-foreground" />
-                    {sup.name}
+                    <span>{sup.name}</span>
                     {sup.isPrimary && (
                       <span className="text-[10px] text-muted-foreground font-normal">(Primary)</span>
                     )}
@@ -117,85 +144,55 @@ export function ComplianceCellDetailDialog({
             )}
           </div>
 
-          {/* Active Requirement Periods */}
+          {/* Section 3: Inspection Reports Conducted During This Week */}
           <div className="flex flex-col gap-2">
-            <span className="text-xs font-semibold text-muted-foreground">
-              Active Requirement Period{overlappingPeriods.length > 1 ? "s" : ""}
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground">
+                Inspection Reports ({reports.length})
+              </span>
+            </div>
 
-            {overlappingPeriods.length === 0 ? (
-              <div className="rounded-md border p-3 text-center text-xs text-muted-foreground">
-                No requirement period applies to this week.
+            {reports.length === 0 ? (
+              <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+                {status === "missing" ? (
+                  <span className="font-medium text-rose-600 dark:text-rose-400">
+                    No inspection report was submitted for this week.
+                  </span>
+                ) : status === "upcoming" ? (
+                  <span className="text-sky-600 dark:text-sky-400">
+                    Inspection visit is due during this week.
+                  </span>
+                ) : (
+                  "No inspection reports recorded for this week."
+                )}
               </div>
             ) : (
-              overlappingPeriods.map((period) => (
-                <div
-                  key={period.id}
-                  className="flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-2xs"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-xs text-foreground">
-                        Period {period.periodIndex} ({period.monthKey})
-                      </span>
-                      <span className="text-[11px] text-muted-foreground">
-                        {formatPeriodDateRange(period.startDate, period.endDate)}
-                      </span>
-                    </div>
-
-                    <ComplianceStatusBadge
-                      status={period.status}
-                      requiredVisits={period.requiredVisits}
-                      actualVisits={period.actualVisits}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between border-t pt-2 text-xs text-muted-foreground">
-                    <span>Required: {period.requiredVisits} visit</span>
-                    <span className="font-semibold text-foreground">
-                      Completed: {period.actualVisits} visit{period.actualVisits !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Actual Reports Conducted During Week */}
-          <div className="flex flex-col gap-2">
-            <span className="text-xs font-semibold text-muted-foreground">
-              Actual Inspection Reports ({actualReports.length})
-            </span>
-
-            {actualReports.length === 0 ? (
-              <div className="rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">
-                No inspection reports submitted during this week.
-              </div>
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                {actualReports.map((report) => (
+              <div className="flex flex-col gap-2">
+                {reports.map((report, idx) => (
                   <div
                     key={report.id}
-                    className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 p-2 text-xs"
+                    className="flex flex-col gap-1 rounded-lg border bg-muted/20 p-2.5 text-xs"
                   >
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 shrink-0 text-primary" />
-                      <div className="flex flex-col">
-                        <span className="font-medium text-foreground">
-                          {report.reportTitle || "Inspection Report"}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground">
-                          Date: <strong className="font-mono text-foreground">{report.visitDate}</strong>
-                          {report.creatorName ? ` • By ${report.creatorName}` : ""}
-                        </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 font-semibold text-foreground">
+                        <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span>{report.reportTitle || `Inspection Report #${idx + 1}`}</span>
                       </div>
+                      {report.visitNumber && (
+                        <Badge variant="outline" className="font-mono text-[10px]">
+                          Visit #{report.visitNumber}
+                        </Badge>
+                      )}
                     </div>
 
-                    {report.visitNumber && (
-                      <Badge variant="outline" className="font-mono text-[10px]">
-                        Visit #{report.visitNumber}
-                      </Badge>
-                    )}
+                    <div className="flex items-center justify-between border-t border-border/50 pt-1 text-[11px] text-muted-foreground">
+                      <span>
+                        Report Date: <strong className="font-mono text-foreground">{report.visitDate}</strong>
+                      </span>
+                      {report.creatorName && (
+                        <span>By {report.creatorName}</span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

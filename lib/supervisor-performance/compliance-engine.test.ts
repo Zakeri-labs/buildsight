@@ -463,8 +463,11 @@ function runUnitTests() {
     console.assert(cell !== undefined, "Cell exists for week")
     console.assert(cell.overlappingPeriods.length === 2, `Week Sep 13–19 MUST overlap 2 periods (P1 and P2), got ${cell.overlappingPeriods.length}`)
     console.assert(cell.actualReports.length === 2, `Week Sep 13–19 has 2 actual reports, got ${cell.actualReports.length}`)
+    console.assert(cell.requiredVisits === 1, `Weekly cell requiredVisits should be 1, got ${cell.requiredVisits}`)
+    console.assert(cell.completedVisits === 2, `Weekly cell completedVisits should be 2, got ${cell.completedVisits}`)
+    console.assert(cell.status === "extra", `Weekly cell status should be extra, got ${cell.status}`)
 
-    console.log("✓ Sunday -> Saturday week boundaries and multi-period boundary overlap mapping verified.")
+    console.log("✓ Sunday -> Saturday week boundaries and weekly compliance properties verified.")
   }
 
   // -----------------------------------------------------------------------------

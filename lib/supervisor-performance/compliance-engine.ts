@@ -548,21 +548,29 @@ export function buildProjectTimelineRow(input: {
       (rep) => rep.visitDate >= week.startDate && rep.visitDate <= week.endDate,
     )
 
-    // Determine aggregate primary status for the week cell
-    let primaryStatus: CompliancePeriodStatus | null = null
-    if (overlapping.length > 0) {
+    // Determine aggregate primary status and weekly compliance requirements
+    const isApplicableWeek =
+      isComplianceEligible &&
+      overlapping.length > 0 &&
+      overlapping.some((p) => p.status !== "not_applicable")
+
+    let requiredVisits = 0
+    let cellStatus: CompliancePeriodStatus = "not_applicable"
+    const completedVisits = weekReports.length
+
+    if (isApplicableWeek) {
+      requiredVisits = 1
+
       if (overlapping.some((p) => p.status === "missing")) {
-        primaryStatus = "missing"
-      } else if (overlapping.some((p) => p.status === "extra")) {
-        primaryStatus = "extra"
-      } else if (overlapping.some((p) => p.status === "upcoming")) {
-        primaryStatus = "upcoming"
-      } else if (overlapping.every((p) => p.status === "done")) {
-        primaryStatus = "done"
-      } else if (overlapping.every((p) => p.status === "not_applicable")) {
-        primaryStatus = "not_applicable"
+        cellStatus = "missing"
+      } else if (completedVisits > requiredVisits || overlapping.some((p) => p.status === "extra")) {
+        cellStatus = "extra"
+      } else if (completedVisits >= requiredVisits || overlapping.every((p) => p.status === "done")) {
+        cellStatus = "done"
+      } else if (week.endDate < today) {
+        cellStatus = "missing"
       } else {
-        primaryStatus = overlapping[0].status
+        cellStatus = "upcoming"
       }
     }
 
@@ -570,10 +578,13 @@ export function buildProjectTimelineRow(input: {
       weekKey: week.weekKey,
       startDate: week.startDate,
       endDate: week.endDate,
+      requiredVisits,
+      completedVisits,
+      status: cellStatus,
       overlappingPeriods: overlapping,
       actualReports: weekReports,
-      totalActualVisits: weekReports.length,
-      primaryStatus,
+      totalActualVisits: completedVisits,
+      primaryStatus: cellStatus,
     }
   }
 
