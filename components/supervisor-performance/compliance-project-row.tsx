@@ -1,6 +1,6 @@
 "use client"
 
-import { Building2, User, Users } from "lucide-react"
+import { Building2, User, Users, Check, AlertTriangle, Clock } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type {
@@ -37,14 +37,28 @@ export function ComplianceProjectRow({
   weeks,
   className,
 }: ComplianceProjectRowProps) {
-  const { projectName, projectCode, normalizedSupervisionType, supervisionType, supervisors, weeklyCells } = row
+  const {
+    projectName,
+    projectCode,
+    normalizedSupervisionType,
+    supervisionType,
+    supervisors,
+    periods,
+    weeklyCells,
+  } = row
+
+  // Calculate high-level compliance summary across the active periods
+  const applicablePeriods = periods.filter((p) => p.status !== "not_applicable")
+  const doneCount = applicablePeriods.filter((p) => p.status === "done" || p.status === "extra").length
+  const missedCount = applicablePeriods.filter((p) => p.status === "missing").length
+  const upcomingCount = applicablePeriods.filter((p) => p.status === "upcoming").length
 
   return (
     <tr className={cn("group transition-colors hover:bg-muted/20", className)}>
-      {/* Left Sticky Column: Project & Supervisor Info */}
+      {/* Left Sticky Column: Project & Supervisor Info + Executive Summary */}
       <td className="sticky left-0 z-10 min-w-[280px] max-w-[320px] border-b border-r bg-background p-3.5 shadow-xs transition-colors group-hover:bg-muted/10">
-        <div className="flex flex-col gap-1.5">
-          {/* Project Title & Code */}
+        <div className="flex flex-col gap-2">
+          {/* Project Title & Code & Frequency Badge */}
           <div className="flex items-start justify-between gap-2">
             <div className="flex flex-col">
               <span className="font-semibold text-sm text-foreground line-clamp-1" title={projectName}>
@@ -68,7 +82,7 @@ export function ComplianceProjectRow({
           </div>
 
           {/* Assigned Supervisors List */}
-          <div className="mt-1 flex flex-col gap-1">
+          <div className="flex flex-col gap-1">
             {supervisors.length === 0 ? (
               <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
                 <Users className="h-3.5 w-3.5 shrink-0" />
@@ -107,6 +121,30 @@ export function ComplianceProjectRow({
               </div>
             )}
           </div>
+
+          {/* Project Management Status Summary */}
+          {applicablePeriods.length > 0 && (
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 border-t pt-1.5 text-[11px]">
+              {doneCount > 0 && (
+                <span className="inline-flex items-center gap-0.5 text-emerald-700 dark:text-emerald-400 font-medium">
+                  <Check className="h-3 w-3 stroke-[2.5]" />
+                  <span>{doneCount} Done</span>
+                </span>
+              )}
+              {missedCount > 0 && (
+                <span className="inline-flex items-center gap-0.5 text-rose-700 dark:text-rose-400 font-bold">
+                  <AlertTriangle className="h-3 w-3 stroke-[2.5]" />
+                  <span>{missedCount} Missed</span>
+                </span>
+              )}
+              {upcomingCount > 0 && (
+                <span className="inline-flex items-center gap-0.5 text-sky-700 dark:text-sky-400 font-medium">
+                  <Clock className="h-3 w-3" />
+                  <span>{upcomingCount} Due</span>
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </td>
 
@@ -116,6 +154,8 @@ export function ComplianceProjectRow({
         return (
           <ComplianceWeekCell
             key={week.weekKey}
+            project={row}
+            week={week}
             cell={cell}
             isCurrentWeek={week.isCurrentWeek}
           />
