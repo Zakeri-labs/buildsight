@@ -46,17 +46,8 @@ export type OrganizationPerformanceSummary = {
   unassignedComplianceProjectsCount: number
 }
 
-export type PerformancePeriod = {
-  mode: "month" | "custom"
-  month?: string // YYYY-MM
-  startDate: string // YYYY-MM-DD
-  endDate: string // YYYY-MM-DD
-  label: string
-}
-
 export type SupervisorPerformanceData = {
-  month: string // YYYY-MM format e.g. "2026-08" or custom range label
-  period: PerformancePeriod
+  month: string // YYYY-MM format e.g. "2026-08"
   organizationSummary: OrganizationPerformanceSummary
   supervisors: SupervisorPerformanceMetrics[]
   unassignedProjects: ProjectComplianceMetrics[]

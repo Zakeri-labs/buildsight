@@ -49,82 +49,6 @@ export function isValidCompletedReport(report: RawReportRecord): boolean {
   return ["submitted", "under_review", "approved", "rejected", "completed"].includes(status)
 }
 
-export function formatMonthLabel(monthStr: string): string {
-  if (!/^\d{4}-\d{2}$/.test(monthStr)) return monthStr
-  const [yearStr, monthNumStr] = monthStr.split("-")
-  const year = parseInt(yearStr, 10)
-  const monthIndex = parseInt(monthNumStr, 10) - 1
-  const date = new Date(year, monthIndex, 1)
-  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" })
-}
-
-export function formatCustomRangeLabel(startDateKey: string, endDateKey: string): string {
-  const [sYear, sMonth, sDay] = startDateKey.split("-").map(Number)
-  const [eYear, eMonth, eDay] = endDateKey.split("-").map(Number)
-  const sDate = new Date(Date.UTC(sYear, sMonth - 1, sDay))
-  const eDate = new Date(Date.UTC(eYear, eMonth - 1, eDay))
-
-  const sMonthName = sDate.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
-  const eMonthName = eDate.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
-
-  return `${sMonthName} ${sDay}, ${sYear} – ${eMonthName} ${eDay}, ${eYear}`
-}
-
-export function getAdjacentMonth(monthStr: string, delta: number): string {
-  if (!/^\d{4}-\d{2}$/.test(monthStr)) return monthStr
-  const [yearStr, monthNumStr] = monthStr.split("-")
-  let year = parseInt(yearStr, 10)
-  let monthNum = parseInt(monthNumStr, 10) + delta
-
-  if (monthNum < 1) {
-    monthNum = 12
-    year -= 1
-  } else if (monthNum > 12) {
-    monthNum = 1
-    year += 1
-  }
-  return `${year}-${String(monthNum).padStart(2, "0")}`
-}
-
-export function addDaysToDateKey(dateKey: string, days: number): string {
-  const [year, month, day] = dateKey.split("-").map(Number)
-  const date = new Date(Date.UTC(year, month - 1, day))
-  date.setUTCDate(date.getUTCDate() + days)
-  return date.toISOString().slice(0, 10)
-}
-
-export function getAdjacentDateRange(
-  startDate: string,
-  endDate: string,
-  direction: -1 | 1,
-): { startDate: string; endDate: string } {
-  const [sYear, sMonth, sDay] = startDate.split("-").map(Number)
-  const [eYear, eMonth, eDay] = endDate.split("-").map(Number)
-  const sDate = new Date(Date.UTC(sYear, sMonth - 1, sDay))
-  const eDate = new Date(Date.UTC(eYear, eMonth - 1, eDay))
-  const diffDays = Math.max(1, Math.round((eDate.getTime() - sDate.getTime()) / 86400000) + 1)
-
-  if (direction === -1) {
-    const newEnd = addDaysToDateKey(startDate, -1)
-    const newStart = addDaysToDateKey(newEnd, -(diffDays - 1))
-    return { startDate: newStart, endDate: newEnd }
-  } else {
-    const newStart = addDaysToDateKey(endDate, 1)
-    const newEnd = addDaysToDateKey(newStart, diffDays - 1)
-    return { startDate: newStart, endDate: newEnd }
-  }
-}
-
-export function isReportInDateRange(
-  report: RawReportRecord,
-  startDate: string,
-  endDate: string,
-): boolean {
-  const effectiveDate = getEffectiveVisitDate(report)
-  if (!effectiveDate) return false
-  return effectiveDate >= startDate && effectiveDate <= endDate
-}
-
 export function isReportInMonth(report: RawReportRecord, monthStr: string): boolean {
   const effectiveDate = getEffectiveVisitDate(report)
   if (!effectiveDate) return false
@@ -162,7 +86,7 @@ export function isSupervisorParticipant(participant: RawParticipantRecord): bool
 export function calculateProjectMetrics(
   project: RawProjectRecord,
   reportsForProject: RawReportRecord[],
-  period: { startDate: string; endDate: string } | string,
+  monthStr: string,
   supervisorIds: string[],
 ): ProjectComplianceMetrics {
   const rawSupervisionType = project.supervision_type ?? project.supervisionType ?? null
@@ -172,16 +96,12 @@ export function calculateProjectMetrics(
 
   const assignedSupervisorId = project.assigned_supervisor_id ?? project.assignedSupervisorId ?? null
 
-  const isRange = typeof period === "object"
-  const validReports = reportsForProject.filter((report) => {
+  const validMonthReports = reportsForProject.filter((report) => {
     if (!isValidCompletedReport(report)) return false
-    if (isRange) {
-      return isReportInDateRange(report, period.startDate, period.endDate)
-    }
-    return isReportInMonth(report, period)
+    return isReportInMonth(report, monthStr)
   })
 
-  const completed = validReports.length
+  const completed = validMonthReports.length
   const creditedCompleted = isComplianceEligible ? Math.min(completed, required) : 0
   const missed = isComplianceEligible ? Math.max(required - completed, 0) : 0
   const extra = isComplianceEligible ? Math.max(completed - required, 0) : 0
@@ -209,9 +129,7 @@ export function calculateProjectMetrics(
 }
 
 export function calculateSupervisorPerformance(input: {
-  month?: string
-  startDate?: string
-  endDate?: string
+  month: string
   projects: RawProjectRecord[]
   participants?: RawParticipantRecord[]
   reports: RawReportRecord[]
@@ -220,42 +138,7 @@ export function calculateSupervisorPerformance(input: {
     { id: string; name: string; email: string | null; avatarUrl: string | null }
   >
 }): SupervisorPerformanceData {
-  const {
-    month: inputMonth,
-    startDate: inputStartDate,
-    endDate: inputEndDate,
-    projects,
-    participants = [],
-    reports,
-    supervisorProfiles,
-  } = input
-
-  // Determine period parameters
-  let startDate: string
-  let endDate: string
-  let periodMode: "month" | "custom"
-  let displayMonth: string
-  let periodLabel: string
-
-  if (inputStartDate && inputEndDate && /^\d{4}-\d{2}-\d{2}$/.test(inputStartDate) && /^\d{4}-\d{2}-\d{2}$/.test(inputEndDate)) {
-    startDate = inputStartDate <= inputEndDate ? inputStartDate : inputEndDate
-    endDate = inputStartDate <= inputEndDate ? inputEndDate : inputStartDate
-    periodMode = "custom"
-    periodLabel = formatCustomRangeLabel(startDate, endDate)
-    displayMonth = periodLabel
-  } else {
-    const rawMonth = inputMonth?.trim() || ""
-    const normalizedMonth = /^\d{4}-\d{2}$/.test(rawMonth)
-      ? rawMonth
-      : new Date().toISOString().slice(0, 7)
-    const [yearStr, monthStr] = normalizedMonth.split("-")
-    const lastDay = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10), 0).getDate()
-    startDate = `${normalizedMonth}-01`
-    endDate = `${normalizedMonth}-${String(lastDay).padStart(2, "0")}`
-    periodMode = "month"
-    periodLabel = formatMonthLabel(normalizedMonth)
-    displayMonth = normalizedMonth
-  }
+  const { month, projects, participants = [], reports, supervisorProfiles } = input
 
   // Filter Active Projects using canonical active status logic
   const activeProjects = projects.filter(
@@ -276,15 +159,14 @@ export function calculateSupervisorPerformance(input: {
     }
   }
 
-  // Filter valid completed reports in target period across all projects
-  const validReports = reports.filter(
-    (report) =>
-      isValidCompletedReport(report) && isReportInDateRange(report, startDate, endDate),
+  // Filter valid completed reports in target month across all projects
+  const validMonthReports = reports.filter(
+    (report) => isValidCompletedReport(report) && isReportInMonth(report, month),
   )
 
   // Group reports by project_id for project-level compliance calculation
   const reportsByProjectId = new Map<string, RawReportRecord[]>()
-  for (const report of validReports) {
+  for (const report of validMonthReports) {
     const projId = report.project_id ?? report.projectId
     if (!projId) continue
     const list = reportsByProjectId.get(projId) ?? []
@@ -294,7 +176,7 @@ export function calculateSupervisorPerformance(input: {
 
   // Count actual completed visit activity by creator (created_by)
   const reportsByCreator = new Map<string, number>()
-  for (const report of validReports) {
+  for (const report of validMonthReports) {
     const creatorId = report.created_by ?? report.createdBy ?? null
     if (creatorId) {
       reportsByCreator.set(creatorId, (reportsByCreator.get(creatorId) ?? 0) + 1)
@@ -315,7 +197,7 @@ export function calculateSupervisorPerformance(input: {
     }
 
     const supervisorIds = Array.from(supervisorSet)
-    return calculateProjectMetrics(project, projReports, { startDate, endDate }, supervisorIds)
+    return calculateProjectMetrics(project, projReports, month, supervisorIds)
   })
 
   // Group project rows by supervisor ID (supporting multi-supervisor workload attribution)
@@ -399,7 +281,7 @@ export function calculateSupervisorPerformance(input: {
   const complianceEligibleProjectsCount = complianceEligibleRows.length
 
   const orgRequiredVisits = complianceEligibleRows.reduce((acc, p) => acc + p.required, 0)
-  const orgCompletedVisits = validReports.length
+  const orgCompletedVisits = validMonthReports.length
   const orgCreditedCompletedVisits = complianceEligibleRows.reduce(
     (acc, p) => acc + p.creditedCompleted,
     0,
@@ -431,14 +313,7 @@ export function calculateSupervisorPerformance(input: {
   }
 
   return {
-    month: displayMonth,
-    period: {
-      mode: periodMode,
-      month: periodMode === "month" ? displayMonth : undefined,
-      startDate,
-      endDate,
-      label: periodLabel,
-    },
+    month,
     organizationSummary,
     supervisors,
     unassignedProjects,

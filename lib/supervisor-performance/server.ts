@@ -17,53 +17,24 @@ import type {
   SupervisorVisitComplianceDashboardData,
 } from "./types"
 
-export type LoadSupervisorPerformancePeriodOptions = {
-  month?: string
-  startDate?: string
-  endDate?: string
-}
-
 export async function loadSupervisorPerformanceData(
   organizationId: string,
-  periodOrMonth?: string | LoadSupervisorPerformancePeriodOptions,
+  month: string, // YYYY-MM format e.g. "2026-08"
 ): Promise<SupervisorPerformanceData> {
   const admin = createAdminClient()
+  const normalizedMonth = /^\d{4}-\d{2}$/.test(month)
+    ? month
+    : new Date().toISOString().slice(0, 7)
 
-  let queryStart: string
-  let queryEnd: string
-  let periodInput: { month?: string; startDate?: string; endDate?: string }
+  const [yearStr, monthStr] = normalizedMonth.split("-")
+  const year = parseInt(yearStr, 10)
+  const monthNum = parseInt(monthStr, 10)
+  const lastDay = new Date(year, monthNum, 0).getDate()
 
-  if (typeof periodOrMonth === "object" && periodOrMonth?.startDate && periodOrMonth?.endDate) {
-    const s =
-      periodOrMonth.startDate <= periodOrMonth.endDate
-        ? periodOrMonth.startDate
-        : periodOrMonth.endDate
-    const e =
-      periodOrMonth.startDate <= periodOrMonth.endDate
-        ? periodOrMonth.endDate
-        : periodOrMonth.startDate
-    queryStart = s
-    queryEnd = e
-    periodInput = { startDate: s, endDate: e }
-  } else {
-    const rawMonth =
-      typeof periodOrMonth === "string" ? periodOrMonth : periodOrMonth?.month ?? ""
-    const normalizedMonth = /^\d{4}-\d{2}$/.test(rawMonth)
-      ? rawMonth
-      : new Date().toISOString().slice(0, 7)
-
-    const [yearStr, monthStr] = normalizedMonth.split("-")
-    const year = parseInt(yearStr, 10)
-    const monthNum = parseInt(monthStr, 10)
-    const lastDay = new Date(year, monthNum, 0).getDate()
-
-    queryStart = `${normalizedMonth}-01`
-    queryEnd = `${normalizedMonth}-${String(lastDay).padStart(2, "0")}`
-    periodInput = { month: normalizedMonth, startDate: queryStart, endDate: queryEnd }
-  }
-
-  const queryStartISO = `${queryStart}T00:00:00.000Z`
-  const queryEndISO = `${queryEnd}T23:59:59.999Z`
+  const monthStart = `${normalizedMonth}-01`
+  const monthEnd = `${normalizedMonth}-${String(lastDay).padStart(2, "0")}`
+  const monthStartISO = `${monthStart}T00:00:00.000Z`
+  const monthEndISO = `${monthEnd}T23:59:59.999Z`
 
   // Query 1: Fetch active projects for supervising organization
   const { data: projectsData, error: projectsErr } = await admin
@@ -80,7 +51,7 @@ export async function loadSupervisorPerformanceData(
 
   if (!activeProjectIds.length) {
     return calculateSupervisorPerformance({
-      ...periodInput,
+      month: normalizedMonth,
       projects: [],
       participants: [],
       reports: [],
@@ -164,7 +135,7 @@ export async function loadSupervisorPerformanceData(
 
   // Calculate analytics in memory
   return calculateSupervisorPerformance({
-    ...periodInput,
+    month: normalizedMonth,
     projects,
     participants,
     reports,
