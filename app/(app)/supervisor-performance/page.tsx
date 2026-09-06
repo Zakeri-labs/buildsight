@@ -54,8 +54,8 @@ export default async function SupervisorPerformancePage({
     loadSupervisorPerformanceData(supervisingOrg.id, selectedMonth),
     loadSupervisorVisitComplianceData({
       organizationId: supervisingOrg.id,
-      pastWeeks: 2,
-      futureWeeks: 4,
+      pastWeeks: 12,
+      futureWeeks: 16,
     }),
   ])
 
