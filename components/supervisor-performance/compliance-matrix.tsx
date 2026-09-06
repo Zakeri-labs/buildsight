@@ -1,6 +1,6 @@
 "use client"
 
-import { Calendar, FolderKanban, FilterX, RotateCcw } from "lucide-react"
+import { Calendar, FolderKanban, FilterX, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type {
@@ -14,6 +14,8 @@ export type ComplianceMatrixProps = {
   projects: ProjectComplianceTimelineRow[]
   isFiltered?: boolean
   onResetFilters?: () => void
+  onPrevWeek?: () => void
+  onNextWeek?: () => void
   className?: string
 }
 
@@ -22,6 +24,8 @@ export function ComplianceMatrix({
   projects,
   isFiltered = false,
   onResetFilters,
+  onPrevWeek,
+  onNextWeek,
   className,
 }: ComplianceMatrixProps) {
   if (projects.length === 0) {
@@ -75,24 +79,62 @@ export function ComplianceMatrix({
                 </div>
               </th>
 
-              {/* Sunday -> Saturday Week Headers */}
-              {weeks.map((week) => (
+              {/* Sunday -> Saturday Week Headers with Circular Navigation Arrows */}
+              {weeks.map((week, idx) => (
                 <th
                   key={week.weekKey}
                   className={cn(
-                    "min-w-[140px] max-w-[180px] border-r p-3 text-center transition-colors",
+                    "min-w-[140px] max-w-[180px] border-r p-2.5 text-center transition-colors",
                     week.isCurrentWeek && "bg-primary/10 text-primary font-bold dark:bg-primary/20",
                   )}
                 >
-                  <div className="flex flex-col items-center gap-0.5">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3 shrink-0 opacity-60" />
-                      <span className="whitespace-nowrap">{week.label}</span>
+                  <div className="flex items-center justify-between gap-1">
+                    {idx === 0 && onPrevWeek ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onPrevWeek()
+                        }}
+                        className="h-6 w-6 rounded-full border border-border/80 bg-background/90 text-muted-foreground shadow-2xs hover:bg-muted hover:text-foreground shrink-0 transition-transform active:scale-95"
+                        title="Shift timeline 1 week backward"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                      </Button>
+                    ) : (
+                      idx === 0 && <span className="w-6 shrink-0" />
+                    )}
+
+                    <div className="flex flex-col items-center gap-0.5 flex-1 min-w-0">
+                      <div className="flex items-center gap-1 truncate">
+                        <Calendar className="h-3 w-3 shrink-0 opacity-60" />
+                        <span className="whitespace-nowrap">{week.label}</span>
+                      </div>
+                      {week.isCurrentWeek && (
+                        <span className="rounded-full bg-primary px-1.5 py-0.2 text-[9px] font-semibold text-primary-foreground">
+                          Current Week
+                        </span>
+                      )}
                     </div>
-                    {week.isCurrentWeek && (
-                      <span className="rounded-full bg-primary px-1.5 py-0.2 text-[9px] font-semibold text-primary-foreground">
-                        Current Week
-                      </span>
+
+                    {idx === weeks.length - 1 && onNextWeek ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onNextWeek()
+                        }}
+                        className="h-6 w-6 rounded-full border border-border/80 bg-background/90 text-muted-foreground shadow-2xs hover:bg-muted hover:text-foreground shrink-0 transition-transform active:scale-95"
+                        title="Shift timeline 1 week forward"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </Button>
+                    ) : (
+                      idx === weeks.length - 1 && <span className="w-6 shrink-0" />
                     )}
                   </div>
                 </th>

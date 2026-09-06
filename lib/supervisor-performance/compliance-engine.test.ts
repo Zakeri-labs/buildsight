@@ -1,5 +1,5 @@
-import { addCalendarDays } from "@/lib/calendar/date"
 import {
+  addCalendarDays,
   buildProjectTimelineRow,
   calculateSupervisorVisitCompliance,
   evaluateCompliancePeriod,
@@ -592,34 +592,37 @@ function runUnitTests() {
     const normalizedSunday = getSundayForDateKey(selectedDate)
     console.assert(normalizedSunday === "2026-09-06", `Selected date ${selectedDate} MUST normalize to Sunday 2026-09-06, got ${normalizedSunday}`)
 
-    // 2. Fixed 8-week window generation starting from Sep 6, 2026
+    // 2. Fixed 8-week window generation around Anchor Week (Sep 6, 2026):
+    // 2 weeks before anchor (Aug 23-29, Aug 30-Sep 5) + Anchor week (Sep 6-12) + 5 following weeks
     const VISIBLE_WEEKS_COUNT = 8
-    const endSaturday = addCalendarDays(normalizedSunday, VISIBLE_WEEKS_COUNT * 7 - 1)
-    console.assert(endSaturday === "2026-10-31", `8-week end Saturday MUST be 2026-10-31, got ${endSaturday}`)
+    const startSunday = addCalendarDays(normalizedSunday, -14)
+    const endSaturday = addCalendarDays(startSunday, VISIBLE_WEEKS_COUNT * 7 - 1)
+    console.assert(startSunday === "2026-08-23", `Start Sunday MUST be Aug 23, got ${startSunday}`)
+    console.assert(endSaturday === "2026-10-17", `8-week end Saturday MUST be 2026-10-17, got ${endSaturday}`)
 
     const weeks = generateCalendarWeeks({
-      rangeStart: normalizedSunday,
+      rangeStart: startSunday,
       rangeEnd: endSaturday,
       referenceDate: today,
     })
 
     console.assert(weeks.length === 8, `Visible window MUST contain exactly 8 weeks, got ${weeks.length}`)
-    console.assert(weeks[0].startDate === "2026-09-06" && weeks[0].endDate === "2026-09-12", `Week 1 should be Sep 6-12, got ${weeks[0].label}`)
-    console.assert(weeks[1].startDate === "2026-09-13" && weeks[1].endDate === "2026-09-19", `Week 2 should be Sep 13-19, got ${weeks[1].label}`)
-    console.assert(weeks[2].startDate === "2026-09-20" && weeks[2].endDate === "2026-09-26", `Week 3 should be Sep 20-26, got ${weeks[2].label}`)
-    console.assert(weeks[3].startDate === "2026-09-27" && weeks[3].endDate === "2026-10-03", `Week 4 should be Sep 27-Oct 3, got ${weeks[3].label}`)
-    console.assert(weeks[4].startDate === "2026-10-04" && weeks[4].endDate === "2026-10-10", `Week 5 should be Oct 4-10, got ${weeks[4].label}`)
-    console.assert(weeks[5].startDate === "2026-10-11" && weeks[5].endDate === "2026-10-17", `Week 6 should be Oct 11-17, got ${weeks[5].label}`)
-    console.assert(weeks[6].startDate === "2026-10-18" && weeks[6].endDate === "2026-10-24", `Week 7 should be Oct 18-24, got ${weeks[6].label}`)
-    console.assert(weeks[7].startDate === "2026-10-25" && weeks[7].endDate === "2026-10-31", `Week 8 should be Oct 25-31, got ${weeks[7].label}`)
+    console.assert(weeks[0].startDate === "2026-08-23" && weeks[0].endDate === "2026-08-29", `Week 1 should be Aug 23-29, got ${weeks[0].label}`)
+    console.assert(weeks[1].startDate === "2026-08-30" && weeks[1].endDate === "2026-09-05", `Week 2 should be Aug 30-Sep 5, got ${weeks[1].label}`)
+    console.assert(weeks[2].startDate === "2026-09-06" && weeks[2].endDate === "2026-09-12", `Week 3 (Anchor) should be Sep 6-12, got ${weeks[2].label}`)
+    console.assert(weeks[3].startDate === "2026-09-13" && weeks[3].endDate === "2026-09-19", `Week 4 should be Sep 13-19, got ${weeks[3].label}`)
+    console.assert(weeks[4].startDate === "2026-09-20" && weeks[4].endDate === "2026-09-26", `Week 5 should be Sep 20-26, got ${weeks[4].label}`)
+    console.assert(weeks[5].startDate === "2026-09-27" && weeks[5].endDate === "2026-10-03", `Week 6 should be Sep 27-Oct 3, got ${weeks[5].label}`)
+    console.assert(weeks[6].startDate === "2026-10-04" && weeks[6].endDate === "2026-10-10", `Week 7 should be Oct 4-10, got ${weeks[6].label}`)
+    console.assert(weeks[7].startDate === "2026-10-11" && weeks[7].endDate === "2026-10-17", `Week 8 should be Oct 11-17, got ${weeks[7].label}`)
 
-    // 3. Backward Navigation (Previous: -7 days)
-    const prevSunday = addCalendarDays(normalizedSunday, -7)
-    console.assert(prevSunday === "2026-08-30", `Previous week from Sep 6 MUST be Aug 30, got ${prevSunday}`)
+    // 3. Backward Navigation (Previous: -7 days on Anchor)
+    const prevAnchor = addCalendarDays(normalizedSunday, -7)
+    console.assert(prevAnchor === "2026-08-30", `Previous anchor from Sep 6 MUST be Aug 30, got ${prevAnchor}`)
 
-    // 4. Forward Navigation (Next: +7 days)
-    const nextSunday = addCalendarDays(normalizedSunday, 7)
-    console.assert(nextSunday === "2026-09-13", `Next week from Sep 6 MUST be Sep 13, got ${nextSunday}`)
+    // 4. Forward Navigation (Next: +7 days on Anchor)
+    const nextAnchor = addCalendarDays(normalizedSunday, 7)
+    console.assert(nextAnchor === "2026-09-13", `Next anchor from Sep 6 MUST be Sep 13, got ${nextAnchor}`)
 
     // 5. Verify addCalendarDays with Date object (immutability + correct calculation)
     const originalDate = new Date(Date.UTC(2026, 8, 6)) // Sep 6, 2026

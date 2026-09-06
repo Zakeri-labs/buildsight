@@ -60,8 +60,8 @@ export function SupervisorVisitComplianceDashboard({
   const { projects, supervisors, referenceDate } = data
   const [filters, setFilters] = useState<ComplianceFilterState>(initialFilters)
 
-  // Default starting week: Sunday of the current reference date week
-  const defaultStartSunday = useMemo(() => {
+  // Default Anchor Week: Sunday of the current reference date week
+  const defaultAnchorSunday = useMemo(() => {
     try {
       return getSundayForDateKey(referenceDate)
     } catch {
@@ -69,17 +69,18 @@ export function SupervisorVisitComplianceDashboard({
     }
   }, [referenceDate])
 
-  const [startWeekSunday, setStartWeekSunday] = useState<string>(defaultStartSunday)
+  const [anchorSunday, setAnchorSunday] = useState<string>(defaultAnchorSunday)
 
-  // Generate the fixed 8 visible calendar weeks (Sunday -> Saturday)
+  // Generate 8 visible weeks: 2 weeks before anchor + anchor week + 5 following weeks
   const visibleWeeks = useMemo(() => {
-    const endSaturday = addCalendarDays(startWeekSunday, VISIBLE_WEEKS_COUNT * 7 - 1)
+    const startSunday = addCalendarDays(anchorSunday, -14)
+    const endSaturday = addCalendarDays(startSunday, VISIBLE_WEEKS_COUNT * 7 - 1)
     return generateCalendarWeeks({
-      rangeStart: startWeekSunday,
+      rangeStart: startSunday,
       rangeEnd: endSaturday,
       referenceDate,
     })
-  }, [startWeekSunday, referenceDate])
+  }, [anchorSunday, referenceDate])
 
   const visibleRangeLabel = useMemo(() => {
     if (visibleWeeks.length === 0) return ""
@@ -88,31 +89,22 @@ export function SupervisorVisitComplianceDashboard({
     return formatVisibleTimelineRange(first, last)
   }, [visibleWeeks])
 
-  const startWeekLabel = useMemo(() => {
-    return formatStartWeekLabel(startWeekSunday)
-  }, [startWeekSunday])
-
-  const isCurrentStartWeek = startWeekSunday === defaultStartSunday
+  const isCurrentAnchorWeek = anchorSunday === defaultAnchorSunday
 
   const handlePrevWeek = () => {
-    setStartWeekSunday((prev) => addCalendarDays(prev, -7))
+    setAnchorSunday((prev) => addCalendarDays(prev, -7))
   }
 
   const handleNextWeek = () => {
-    setStartWeekSunday((prev) => addCalendarDays(prev, 7))
+    setAnchorSunday((prev) => addCalendarDays(prev, 7))
   }
 
-  const handleSelectDate = (dateKey: string) => {
-    try {
-      const sunday = getSundayForDateKey(dateKey)
-      setStartWeekSunday(sunday)
-    } catch {
-      // Ignore invalid date strings
-    }
+  const handleSelectAnchorDate = (sunday: string) => {
+    setAnchorSunday(sunday)
   }
 
   const handleResetToCurrentWeek = () => {
-    setStartWeekSunday(defaultStartSunday)
+    setAnchorSunday(defaultAnchorSunday)
   }
 
   const handleFilterChange = <K extends keyof ComplianceFilterState>(
@@ -234,79 +226,7 @@ export function SupervisorVisitComplianceDashboard({
       </CardHeader>
 
       <CardContent className="space-y-4 pt-0">
-        {/* Timeline Start Week Navigation & Range Banner */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border bg-muted/20 p-2.5">
-          {/* Controls: [ Previous ] [ Select Start Week ] [ Next ] */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center gap-1 rounded-lg border bg-card p-1 shadow-2xs">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={handlePrevWeek}
-                className="h-7 gap-1 px-2.5 text-xs text-muted-foreground hover:text-foreground"
-                title="Move timeline 1 week backward"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Previous</span>
-              </Button>
-
-              {/* Select Start Week Calendar Picker */}
-              <div className="relative inline-flex items-center gap-1.5 rounded-md border bg-muted/50 px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted transition-colors cursor-pointer">
-                <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span>
-                  Start Week: <strong className="font-semibold text-foreground">{startWeekLabel}</strong>
-                </span>
-                <input
-                  type="date"
-                  value={startWeekSunday}
-                  onChange={(e) => {
-                    if (e.target.value) handleSelectDate(e.target.value)
-                  }}
-                  className="absolute inset-0 cursor-pointer opacity-0 w-full h-full"
-                  title="Click to select start week"
-                />
-              </div>
-
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={handleNextWeek}
-                className="h-7 gap-1 px-2.5 text-xs text-muted-foreground hover:text-foreground"
-                title="Move timeline 1 week forward"
-              >
-                <span className="hidden sm:inline">Next</span>
-                <ChevronRight className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-
-            {/* Jump to Current Week button if navigated away */}
-            {!isCurrentStartWeek && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleResetToCurrentWeek}
-                className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-                title="Jump to current week"
-              >
-                <Clock className="h-3 w-3" />
-                <span>This Week</span>
-              </Button>
-            )}
-          </div>
-
-          {/* Current Visible Range Display */}
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span>
-              Showing: <strong className="font-semibold text-foreground">{visibleRangeLabel}</strong>
-            </span>
-          </div>
-        </div>
-
-        {/* Filter Toolbar */}
+        {/* Filter Toolbar (with integrated View From anchor date picker) */}
         <ComplianceFilterToolbar
           projects={projects}
           supervisors={supervisors}
@@ -315,14 +235,21 @@ export function SupervisorVisitComplianceDashboard({
           onResetFilters={handleResetFilters}
           totalProjectsCount={projects.length}
           filteredProjectsCount={filteredProjects.length}
+          anchorWeekSunday={anchorSunday}
+          onAnchorWeekChange={handleSelectAnchorDate}
+          onResetToCurrentWeek={handleResetToCurrentWeek}
+          isCurrentAnchorWeek={isCurrentAnchorWeek}
+          visibleRangeLabel={visibleRangeLabel}
         />
 
-        {/* Matrix Table */}
+        {/* Matrix Table (with circular Previous / Next week navigation buttons on table headers) */}
         <ComplianceMatrix
           weeks={visibleWeeks}
           projects={filteredProjects}
           isFiltered={isFiltered}
           onResetFilters={handleResetFilters}
+          onPrevWeek={handlePrevWeek}
+          onNextWeek={handleNextWeek}
         />
       </CardContent>
     </Card>

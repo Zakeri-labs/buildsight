@@ -9,7 +9,9 @@ import {
   RotateCcw,
   Users,
   Calendar,
+  CalendarDays,
   Activity,
+  Clock,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -22,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { getSundayForDateKey } from "@/lib/supervisor-performance/compliance-engine"
 import { cn } from "@/lib/utils"
 import type {
   ProjectComplianceTimelineRow,
@@ -51,7 +54,19 @@ export type ComplianceFilterToolbarProps = {
   onResetFilters: () => void
   totalProjectsCount: number
   filteredProjectsCount: number
+  anchorWeekSunday?: string
+  onAnchorWeekChange?: (sunday: string) => void
+  onResetToCurrentWeek?: () => void
+  isCurrentAnchorWeek?: boolean
+  visibleRangeLabel?: string
   className?: string
+}
+
+function formatStartWeekLabel(sundayDateKey: string): string {
+  const [year, month, day] = sundayDateKey.split("-").map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  const monthName = date.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
+  return `${monthName} ${day}, ${year}`
 }
 
 export function ComplianceFilterToolbar({
@@ -62,6 +77,11 @@ export function ComplianceFilterToolbar({
   onResetFilters,
   totalProjectsCount,
   filteredProjectsCount,
+  anchorWeekSunday,
+  onAnchorWeekChange,
+  onResetToCurrentWeek,
+  isCurrentAnchorWeek = true,
+  visibleRangeLabel,
   className,
 }: ComplianceFilterToolbarProps) {
   const {
@@ -266,9 +286,47 @@ export function ComplianceFilterToolbar({
             <span>Reset</span>
           </Button>
         )}
+
+        {/* 8. View From / Timeline Anchor Date Picker (Right Side) */}
+        {anchorWeekSunday && onAnchorWeekChange && (
+          <div className="ml-auto flex items-center gap-1.5">
+            <div className="relative inline-flex items-center gap-1.5 rounded-lg border bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted/70 transition-colors cursor-pointer shadow-2xs">
+              <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span className="whitespace-nowrap">
+                View From: <strong className="font-semibold text-foreground">{formatStartWeekLabel(anchorWeekSunday)}</strong>
+              </span>
+              <input
+                type="date"
+                value={anchorWeekSunday}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    const sunday = getSundayForDateKey(e.target.value)
+                    onAnchorWeekChange(sunday)
+                  }
+                }}
+                className="absolute inset-0 cursor-pointer opacity-0 w-full h-full"
+                title="Choose timeline anchor week"
+              />
+            </div>
+
+            {!isCurrentAnchorWeek && onResetToCurrentWeek && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onResetToCurrentWeek}
+                className="h-8 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                title="Jump back to current week"
+              >
+                <Clock className="h-3 w-3" />
+                <span>This Week</span>
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Bottom Sub-bar: Results Counter & Active Filter Badges */}
+      {/* Bottom Sub-bar: Results Counter, Active Filter Badges, and Visible Timeline Range */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-[11px] text-muted-foreground">
         <div className="flex items-center gap-2">
           <span>
@@ -283,6 +341,15 @@ export function ComplianceFilterToolbar({
             </Badge>
           )}
         </div>
+
+        {visibleRangeLabel && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+            <CalendarDays className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span>
+              Timeline: <strong className="font-semibold text-foreground">{visibleRangeLabel}</strong>
+            </span>
+          </div>
+        )}
 
         {isFiltered && filteredProjectsCount === 0 && (
           <span className="text-rose-600 dark:text-rose-400 font-medium">
