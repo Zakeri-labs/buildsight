@@ -260,12 +260,7 @@ export function SupervisorPerformanceView({
         </Card>
       </div>
 
-      {/* Section B — Supervisor Visit Compliance Matrix Dashboard */}
-      {complianceData && (
-        <SupervisorVisitComplianceDashboard data={complianceData} />
-      )}
-
-      {/* Section C — Supervisor Workload & Activity Table */}
+      {/* Section B — Supervisor Workload & Activity Table */}
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -372,6 +367,11 @@ export function SupervisorPerformanceView({
           )}
         </CardContent>
       </Card>
+
+      {/* Section C — Supervisor Visit Compliance Matrix Dashboard */}
+      {complianceData && (
+        <SupervisorVisitComplianceDashboard data={complianceData} />
+      )}
     </div>
   )
 }
