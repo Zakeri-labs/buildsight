@@ -196,6 +196,7 @@ export function ProjectDetail({
   supervisorOptions = [],
   canManageImages = false,
   canEditProject = false,
+  canEditLocation = false,
 }: {
   project: ProjectRecord
   editProject: ProjectEditData
