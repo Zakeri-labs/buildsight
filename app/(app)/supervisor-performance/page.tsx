@@ -1,5 +1,8 @@
 import { requireOnboarded } from "@/lib/auth/session"
-import { loadSupervisorPerformanceData } from "@/lib/supervisor-performance/server"
+import {
+  loadSupervisorPerformanceData,
+  loadSupervisorVisitComplianceData,
+} from "@/lib/supervisor-performance/server"
 import { SupervisorPerformanceView } from "@/components/supervisor-performance/supervisor-performance-view"
 import { Card, CardContent } from "@/components/ui/card"
 import { AlertCircle } from "lucide-react"
@@ -47,7 +50,20 @@ export default async function SupervisorPerformancePage({
   const currentMonthStr = new Date().toISOString().slice(0, 7)
   const selectedMonth = /^\d{4}-\d{2}$/.test(rawMonth) ? rawMonth : currentMonthStr
 
-  const data = await loadSupervisorPerformanceData(supervisingOrg.id, selectedMonth)
+  const [data, complianceData] = await Promise.all([
+    loadSupervisorPerformanceData(supervisingOrg.id, selectedMonth),
+    loadSupervisorVisitComplianceData({
+      organizationId: supervisingOrg.id,
+      pastWeeks: 2,
+      futureWeeks: 4,
+    }),
+  ])
 
-  return <SupervisorPerformanceView data={data} selectedMonth={selectedMonth} />
+  return (
+    <SupervisorPerformanceView
+      data={data}
+      complianceData={complianceData}
+      selectedMonth={selectedMonth}
+    />
+  )
 }
