@@ -621,6 +621,12 @@ function runUnitTests() {
     const nextSunday = addCalendarDays(normalizedSunday, 7)
     console.assert(nextSunday === "2026-09-13", `Next week from Sep 6 MUST be Sep 13, got ${nextSunday}`)
 
+    // 5. Verify addCalendarDays with Date object (immutability + correct calculation)
+    const originalDate = new Date(Date.UTC(2026, 8, 6)) // Sep 6, 2026
+    const shiftedDate = addCalendarDays(originalDate, 5)
+    console.assert(originalDate.getUTCDate() === 6, "original Date object MUST not be mutated")
+    console.assert(shiftedDate.getUTCDate() === 11, `shifted Date should be Sep 11, got ${shiftedDate.getUTCDate()}`)
+
     console.log("✓ Timeline 8-week window, date normalization, and backward/forward navigation verified.")
   }
 

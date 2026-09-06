@@ -1,5 +1,5 @@
 import {
-  addCalendarDays,
+  addCalendarDays as addCalendarDaysToKey,
   currentCalendarDateKey,
   isCalendarDateKey,
   calendarDateFromKey,
@@ -28,6 +28,20 @@ import type {
 
 function pad(value: number): string {
   return String(value).padStart(2, "0")
+}
+
+/**
+ * Adds or subtracts days from a Date object or a YYYY-MM-DD date string key without mutating the input.
+ */
+export function addCalendarDays(date: Date, days: number): Date
+export function addCalendarDays(dateKey: string, days: number): string
+export function addCalendarDays(dateOrKey: Date | string, days: number): Date | string {
+  if (dateOrKey instanceof Date) {
+    const result = new Date(dateOrKey)
+    result.setDate(result.getDate() + days)
+    return result
+  }
+  return addCalendarDaysToKey(dateOrKey, days)
 }
 
 export function getDaysInMonth(year: number, month: number): number {
