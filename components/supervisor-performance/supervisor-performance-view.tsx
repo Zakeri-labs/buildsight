@@ -1,13 +1,13 @@
-"useClient"
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import {
   Building2,
   Calendar,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ClipboardCheck,
   FolderKanban,
   Info,
@@ -28,6 +28,23 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import {
   Table,
@@ -40,33 +57,14 @@ import {
 import type {
   SupervisorPerformanceData,
   SupervisorVisitComplianceDashboardData,
+  PerformancePeriod,
 } from "@/lib/supervisor-performance/types"
+import {
+  formatMonthLabel,
+  getAdjacentMonth,
+  getAdjacentDateRange,
+} from "@/lib/supervisor-performance/compliance"
 import { SupervisorVisitComplianceDashboard } from "./supervisor-visit-compliance-dashboard"
-
-function formatMonthLabel(monthStr: string): string {
-  if (!/^\d{4}-\d{2}$/.test(monthStr)) return monthStr
-  const [yearStr, monthNumStr] = monthStr.split("-")
-  const year = parseInt(yearStr, 10)
-  const monthIndex = parseInt(monthNumStr, 10) - 1
-  const date = new Date(year, monthIndex, 1)
-  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" })
-}
-
-function getAdjacentMonth(monthStr: string, delta: number): string {
-  if (!/^\d{4}-\d{2}$/.test(monthStr)) return monthStr
-  const [yearStr, monthNumStr] = monthStr.split("-")
-  let year = parseInt(yearStr, 10)
-  let monthNum = parseInt(monthNumStr, 10) + delta
-
-  if (monthNum < 1) {
-    monthNum = 12
-    year -= 1
-  } else if (monthNum > 12) {
-    monthNum = 1
-    year += 1
-  }
-  return `${year}-${String(monthNum).padStart(2, "0")}`
-}
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/)
@@ -83,17 +81,86 @@ export function SupervisorPerformanceView({
 }: {
   data: SupervisorPerformanceData
   complianceData?: SupervisorVisitComplianceDashboardData
-  selectedMonth: string
+  selectedMonth?: string
 }) {
   const router = useRouter()
   const { organizationSummary, supervisors } = data
 
-  const formattedMonth = formatMonthLabel(selectedMonth)
-  const prevMonth = getAdjacentMonth(selectedMonth, -1)
-  const nextMonth = getAdjacentMonth(selectedMonth, 1)
+  const period: PerformancePeriod = useMemo(() => {
+    if (data.period) return data.period
+    const m = selectedMonth || data.month || new Date().toISOString().slice(0, 7)
+    return {
+      mode: "month",
+      month: m,
+      startDate: `${m}-01`,
+      endDate: `${m}-31`,
+      label: formatMonthLabel(m),
+    }
+  }, [data.period, data.month, selectedMonth])
 
-  const handleMonthChange = (targetMonth: string) => {
+  // Custom date range dialog state
+  const [customOpen, setCustomOpen] = useState(false)
+  const [customFrom, setCustomFrom] = useState(period.startDate || "")
+  const [customTo, setCustomTo] = useState(period.endDate || "")
+  const [customError, setCustomError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setCustomFrom(period.startDate || "")
+    setCustomTo(period.endDate || "")
+  }, [period.startDate, period.endDate])
+
+  const handlePrevPeriod = () => {
+    if (period.mode === "month") {
+      const targetMonth = period.month || selectedMonth || data.month
+      const prev = getAdjacentMonth(targetMonth, -1)
+      router.push(`/supervisor-performance?month=${encodeURIComponent(prev)}`)
+    } else {
+      const { startDate: prevStart, endDate: prevEnd } = getAdjacentDateRange(
+        period.startDate,
+        period.endDate,
+        -1,
+      )
+      router.push(
+        `/supervisor-performance?from=${encodeURIComponent(prevStart)}&to=${encodeURIComponent(prevEnd)}`,
+      )
+    }
+  }
+
+  const handleNextPeriod = () => {
+    if (period.mode === "month") {
+      const targetMonth = period.month || selectedMonth || data.month
+      const next = getAdjacentMonth(targetMonth, 1)
+      router.push(`/supervisor-performance?month=${encodeURIComponent(next)}`)
+    } else {
+      const { startDate: nextStart, endDate: nextEnd } = getAdjacentDateRange(
+        period.startDate,
+        period.endDate,
+        1,
+      )
+      router.push(
+        `/supervisor-performance?from=${encodeURIComponent(nextStart)}&to=${encodeURIComponent(nextEnd)}`,
+      )
+    }
+  }
+
+  const handleSelectMonth = (targetMonth: string) => {
     router.push(`/supervisor-performance?month=${encodeURIComponent(targetMonth)}`)
+  }
+
+  const handleApplyCustomRange = () => {
+    if (!customFrom || !customTo) {
+      setCustomError("Choose both From and To dates.")
+      return
+    }
+    if (customFrom > customTo) {
+      setCustomError("From date must be on or before To date.")
+      return
+    }
+    setCustomError(null)
+    setCustomOpen(false)
+    router.push(
+      `/supervisor-performance?from=${encodeURIComponent(customFrom)}&to=${encodeURIComponent(customTo)}`,
+    )
   }
 
   // Sorted supervisors: Active Projects DESC, Completed Visits DESC, Supervisor Name ASC
@@ -113,7 +180,7 @@ export function SupervisorPerformanceView({
     <div className="space-y-8">
       {/* Section A: Monthly Supervisor Performance Container */}
       <Card className="overflow-hidden border shadow-xs">
-        {/* Container Header: Title & Month Selector */}
+        {/* Container Header: Title & Month / Custom Period Selector */}
         <CardHeader className="border-b bg-muted/15 pb-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -125,33 +192,153 @@ export function SupervisorPerformanceView({
               </CardDescription>
             </div>
 
-            {/* Month Selector in Header */}
-            <div className="flex items-center gap-1.5 rounded-xl border border-border bg-card p-1 shadow-2xs">
+            {/* Date Selector in Header */}
+            <div className="flex items-center gap-1 rounded-xl border border-border bg-card p-1 shadow-2xs">
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 rounded-lg"
-                onClick={() => handleMonthChange(prevMonth)}
-                title="Previous Month"
+                onClick={handlePrevPeriod}
+                title="Previous Period"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <div className="flex items-center gap-1.5 px-3 text-sm font-semibold">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span>{formattedMonth}</span>
-              </div>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={`Performance period: ${period.label}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 text-sm font-semibold text-foreground hover:bg-muted/80 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span>{period.label}</span>
+                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    </button>
+                  }
+                />
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const curMonth = new Date().toISOString().slice(0, 7)
+                      handleSelectMonth(curMonth)
+                    }}
+                    className="cursor-pointer justify-between"
+                  >
+                    <span>Current Month</span>
+                    {period.mode === "month" &&
+                      period.month === new Date().toISOString().slice(0, 7) && (
+                        <Check className="h-4 w-4 text-primary" />
+                      )}
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const curMonth = new Date().toISOString().slice(0, 7)
+                      handleSelectMonth(getAdjacentMonth(curMonth, -1))
+                    }}
+                    className="cursor-pointer justify-between"
+                  >
+                    <span>Previous Month</span>
+                    {period.mode === "month" &&
+                      period.month ===
+                        getAdjacentMonth(new Date().toISOString().slice(0, 7), -1) && (
+                        <Check className="h-4 w-4 text-primary" />
+                      )}
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSeparator />
+
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setCustomFrom(period.startDate || "")
+                      setCustomTo(period.endDate || "")
+                      setCustomError(null)
+                      setCustomOpen(true)
+                    }}
+                    className="cursor-pointer justify-between"
+                  >
+                    <span>Custom Date Range</span>
+                    {period.mode === "custom" && <Check className="h-4 w-4 text-primary" />}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 rounded-lg"
-                onClick={() => handleMonthChange(nextMonth)}
-                title="Next Month"
+                onClick={handleNextPeriod}
+                title="Next Period"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>
         </CardHeader>
+
+        {/* Custom Date Range Dialog */}
+        <Dialog open={customOpen} onOpenChange={setCustomOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Custom Date Range</DialogTitle>
+              <DialogDescription>
+                Evaluate supervisor performance and visit activity between specific dates.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="perf-custom-from" className="text-xs font-semibold">
+                  From Date
+                </Label>
+                <Input
+                  id="perf-custom-from"
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => {
+                    setCustomFrom(e.target.value)
+                    setCustomError(null)
+                  }}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="perf-custom-to" className="text-xs font-semibold">
+                  To Date
+                </Label>
+                <Input
+                  id="perf-custom-to"
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => {
+                    setCustomTo(e.target.value)
+                    setCustomError(null)
+                  }}
+                />
+              </div>
+            </div>
+            {customError && (
+              <p className="text-xs text-destructive font-medium">{customError}</p>
+            )}
+            <DialogFooter className="mt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCustomOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleApplyCustomRange}
+              >
+                Apply Filter
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <CardContent className="space-y-6 pt-6">
           {/* Unassigned Projects Notice if applicable */}
@@ -469,13 +656,8 @@ export function SupervisorPerformanceView({
 
       {/* Section Separator */}
       {complianceData && (
-        <div className="relative my-2 py-3 flex items-center justify-center">
-          <div className="absolute inset-0 flex items-center" aria-hidden="true">
-            <div className="w-full border-t border-border" />
-          </div>
-          <div className="relative flex items-center gap-2 rounded-full border border-border bg-background px-4 py-1 text-xs font-medium text-muted-foreground shadow-2xs">
-            <span>Supervisor Visit Compliance</span>
-          </div>
+        <div className="py-2" aria-hidden="true">
+          <div className="w-full border-t border-border" />
         </div>
       )}
 

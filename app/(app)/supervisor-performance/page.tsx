@@ -9,6 +9,8 @@ import { AlertCircle } from "lucide-react"
 
 type SupervisorPerformancePageParams = {
   month?: string
+  from?: string
+  to?: string
 }
 
 export default async function SupervisorPerformancePage({
@@ -47,11 +49,26 @@ export default async function SupervisorPerformancePage({
   }
 
   const rawMonth = params.month?.trim() ?? ""
-  const currentMonthStr = new Date().toISOString().slice(0, 7)
-  const selectedMonth = /^\d{4}-\d{2}$/.test(rawMonth) ? rawMonth : currentMonthStr
+  const rawFrom = params.from?.trim() ?? ""
+  const rawTo = params.to?.trim() ?? ""
+
+  let periodOptions: { month?: string; startDate?: string; endDate?: string }
+  if (
+    /^\d{4}-\d{2}-\d{2}$/.test(rawFrom) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(rawTo)
+  ) {
+    periodOptions = {
+      startDate: rawFrom <= rawTo ? rawFrom : rawTo,
+      endDate: rawFrom <= rawTo ? rawTo : rawFrom,
+    }
+  } else {
+    const currentMonthStr = new Date().toISOString().slice(0, 7)
+    const selectedMonth = /^\d{4}-\d{2}$/.test(rawMonth) ? rawMonth : currentMonthStr
+    periodOptions = { month: selectedMonth }
+  }
 
   const [data, complianceData] = await Promise.all([
-    loadSupervisorPerformanceData(supervisingOrg.id, selectedMonth),
+    loadSupervisorPerformanceData(supervisingOrg.id, periodOptions),
     loadSupervisorVisitComplianceData({
       organizationId: supervisingOrg.id,
       pastWeeks: 12,
@@ -63,7 +80,6 @@ export default async function SupervisorPerformancePage({
     <SupervisorPerformanceView
       data={data}
       complianceData={complianceData}
-      selectedMonth={selectedMonth}
     />
   )
 }
