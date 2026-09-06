@@ -25,6 +25,10 @@ export type SupervisorPerformanceMetrics = {
   activeProjectsCount: number
   complianceProjectsCount: number
   completedVisits: number
+  requiredVisits: number
+  creditedCompletedVisits: number
+  missedVisits: number
+  extraVisits: number
   projects: ProjectComplianceMetrics[]
 }
 

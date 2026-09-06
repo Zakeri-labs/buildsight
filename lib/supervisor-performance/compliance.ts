@@ -237,10 +237,19 @@ export function calculateSupervisorPerformance(input: {
 
       const projRows = projectsBySupervisor.get(supervisorId) ?? []
       const activeProjectsCount = projRows.length
-      const complianceProjectsCount = projRows.filter((p) => p.isComplianceEligible).length
+      const compProjects = projRows.filter((p) => p.isComplianceEligible)
+      const complianceProjectsCount = compProjects.length
 
       // Actual Completed Visits Activity: Attributed directly to created_by
       const completedVisits = reportsByCreator.get(supervisorId) ?? 0
+
+      const requiredVisits = compProjects.reduce((acc, p) => acc + p.required, 0)
+      const creditedCompletedVisits = compProjects.reduce(
+        (acc, p) => acc + p.creditedCompleted,
+        0,
+      )
+      const missedVisits = compProjects.reduce((acc, p) => acc + p.missed, 0)
+      const extraVisits = compProjects.reduce((acc, p) => acc + p.extra, 0)
 
       return {
         supervisorId,
@@ -250,6 +259,10 @@ export function calculateSupervisorPerformance(input: {
         activeProjectsCount,
         complianceProjectsCount,
         completedVisits,
+        requiredVisits,
+        creditedCompletedVisits,
+        missedVisits,
+        extraVisits,
         projects: projRows,
       }
     },
