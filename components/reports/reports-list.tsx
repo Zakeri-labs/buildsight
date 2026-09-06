@@ -1,18 +1,24 @@
 "use client"
 
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
-import { FileText, ChevronLeft, ChevronRight } from "lucide-react"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
+import { FileText, ChevronLeft, ChevronRight, Calendar, ChevronDown, Check, Users } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { PageHeader } from "@/components/dashboard/page-header"
-import { DateRangePill } from "@/components/dashboard/date-range-pill"
 import { ToneBadge } from "@/components/status-badge"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import type { DashboardDateRange } from "@/lib/dashboard/date-range"
-import type { ListReportItem } from "@/lib/db/reports-list"
+import type { ListReportItem, ReportSupervisorOption } from "@/lib/db/reports-list"
 
 function formatSubmissionDate(iso: string | null) {
   if (!iso) return "—"
@@ -47,6 +53,8 @@ export type ReportsListProps = {
   currentPage: number
   totalPages: number
   dateRange?: DashboardDateRange
+  supervisors?: ReportSupervisorOption[]
+  selectedSupervisorId?: string | null
 }
 
 export function ReportsList({
@@ -55,9 +63,39 @@ export function ReportsList({
   currentPage,
   totalPages,
   dateRange,
+  supervisors = [],
+  selectedSupervisorId = null,
 }: ReportsListProps) {
   const { t } = useI18n()
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
+
+  const selectedSupervisor = supervisors.find((s) => s.id === selectedSupervisorId)
+  const supervisorLabel = selectedSupervisor ? selectedSupervisor.name : "All Supervisors"
+  const dateLabel = dateRange?.preset === "yesterday" ? "Yesterday" : "Today"
+
+  function handleDateChange(preset: "today" | "yesterday") {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set("range", preset)
+    params.delete("from")
+    params.delete("to")
+    params.delete("page")
+    const query = params.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+  }
+
+  function handleSupervisorChange(supervisorId: string | null) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (supervisorId) {
+      params.set("supervisor", supervisorId)
+    } else {
+      params.delete("supervisor")
+    }
+    params.delete("page")
+    const query = params.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+  }
 
   function pageUrl(page: number) {
     const params = new URLSearchParams(searchParams.toString())
@@ -72,17 +110,85 @@ export function ReportsList({
           title={t.reports.title}
           subtitle={t.reports.subtitle}
         />
-        {dateRange ? (
-          <DateRangePill
-            preset={dateRange.preset}
-            label={dateRange.label}
-            startDate={dateRange.startDate}
-            endDate={dateRange.endDate}
-            showAllTime={false}
-            ariaLabel={`Reports date range: ${dateRange.label}`}
-            dialogDescription="Choose inclusive calendar dates for reports."
-          />
-        ) : null}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Date Filter Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={`Date filter: ${dateLabel}`}
+                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                >
+                  <Calendar className="size-4 text-muted-foreground" />
+                  <span>{dateLabel}</span>
+                  <ChevronDown className="size-4 text-muted-foreground" />
+                </button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem
+                onClick={() => handleDateChange("today")}
+                className="justify-between"
+              >
+                <span>Today</span>
+                {dateRange?.preset !== "yesterday" ? (
+                  <Check className="size-4 text-primary" />
+                ) : null}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleDateChange("yesterday")}
+                className="justify-between"
+              >
+                <span>Yesterday</span>
+                {dateRange?.preset === "yesterday" ? (
+                  <Check className="size-4 text-primary" />
+                ) : null}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Supervisor Filter Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={`Supervisor filter: ${supervisorLabel}`}
+                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                >
+                  <Users className="size-4 text-muted-foreground" />
+                  <span className="max-w-[170px] truncate">{supervisorLabel}</span>
+                  <ChevronDown className="size-4 text-muted-foreground" />
+                </button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-56 max-h-72 overflow-y-auto">
+              <DropdownMenuItem
+                onClick={() => handleSupervisorChange(null)}
+                className="justify-between font-medium"
+              >
+                <span>All Supervisors</span>
+                {!selectedSupervisorId ? (
+                  <Check className="size-4 text-primary" />
+                ) : null}
+              </DropdownMenuItem>
+              {supervisors.length > 0 && <DropdownMenuSeparator />}
+              {supervisors.map((sup) => (
+                <DropdownMenuItem
+                  key={sup.id}
+                  onClick={() => handleSupervisorChange(sup.id)}
+                  className="justify-between"
+                >
+                  <span className="truncate">{sup.name}</span>
+                  {selectedSupervisorId === sup.id ? (
+                    <Check className="size-4 text-primary" />
+                  ) : null}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {reports.length ? (
@@ -191,7 +297,9 @@ export function ReportsList({
           <FileText className="mx-auto size-12 text-muted-foreground/60" />
           <h3 className="mt-4 text-base font-semibold text-foreground">No reports found</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            No supervisor reports have been submitted yet.
+            {selectedSupervisorId || dateRange?.preset === "yesterday"
+              ? "No supervisor reports match the selected date and supervisor filters."
+              : "No supervisor reports have been submitted today."}
           </p>
         </Card>
       )}

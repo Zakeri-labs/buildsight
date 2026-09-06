@@ -7,6 +7,7 @@ import {
 
 export type DashboardDateRangePreset =
   | "today"
+  | "yesterday"
   | "last7"
   | "last30"
   | "thisMonth"
@@ -37,6 +38,7 @@ type DashboardDateRangeSearchParams = {
 
 const PRESETS = new Set<DashboardDateRangePreset>([
   "today",
+  "yesterday",
   "last7",
   "last30",
   "thisMonth",
@@ -140,6 +142,10 @@ export function resolveDashboardDateRange(
 
   if (preset === "all") return buildRange("all", null, null, "All Time")
   if (preset === "today") return buildRange("today", today, today, "Today")
+  if (preset === "yesterday") {
+    const yesterday = addCalendarDays(today, -1)
+    return buildRange("yesterday", yesterday, yesterday, "Yesterday")
+  }
   if (preset === "last7") return buildRange("last7", addCalendarDays(today, -6), today, "Last 7 Days")
   if (preset === "thisMonth") return buildRange("thisMonth", `${today.slice(0, 7)}-01`, today, "This Month")
 

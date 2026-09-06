@@ -29,11 +29,81 @@ export type ListReportItem = {
   href: string
 }
 
+export type ReportSupervisorOption = {
+  id: string
+  name: string
+  email?: string | null
+}
+
 export type PaginatedReportsResult = {
   items: ListReportItem[]
   totalReports: number
   currentPage: number
   totalPages: number
+  supervisors: ReportSupervisorOption[]
+}
+
+export async function getReportSupervisors(
+  organizationId: string | undefined,
+  projectIds: string[],
+): Promise<ReportSupervisorOption[]> {
+  try {
+    const admin = createAdminClient()
+    const userIds = new Set<string>()
+
+    // 1. Members from organization memberships
+    if (organizationId && isUuid(organizationId)) {
+      const { data: memberships } = await admin
+        .from("organization_memberships")
+        .select("user_id")
+        .eq("organization_id", organizationId)
+        .eq("status", "active")
+
+      for (const m of memberships ?? []) {
+        if (m.user_id && isUuid(m.user_id)) {
+          userIds.add(m.user_id)
+        }
+      }
+    }
+
+    // 2. Report authors in these projects
+    if (projectIds.length) {
+      const { data: reportAuthors } = await admin
+        .from("term_responses")
+        .select("created_by")
+        .in("project_id", projectIds)
+        .is("project_stage_term_id", null)
+        .not("created_by", "is", null)
+        .limit(300)
+
+      for (const r of reportAuthors ?? []) {
+        if (r.created_by && isUuid(r.created_by)) {
+          userIds.add(r.created_by)
+        }
+      }
+    }
+
+    if (!userIds.size) return []
+
+    const { data: profiles, error: profileErr } = await admin
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", Array.from(userIds))
+
+    if (profileErr || !profiles) return []
+
+    return profiles
+      .filter((p: any) => isUuid(p.id))
+      .map((p: any) => ({
+        id: p.id,
+        name: p.full_name?.trim() || p.email?.trim() || "Supervisor",
+        email: p.email?.trim() || null,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  } catch (err) {
+    console.error("[getReportSupervisors] Error:", err)
+    return []
+  }
 }
 
 export async function getPaginatedReportsList({
@@ -42,15 +112,18 @@ export async function getPaginatedReportsList({
   page = 1,
   pageSize = 30,
   dateRange = null,
+  supervisorId = null,
 }: {
   userId: string
   organizationId?: string
   page?: number
   pageSize?: number
   dateRange?: DashboardDateRange | null
+  supervisorId?: string | null
 }): Promise<PaginatedReportsResult> {
   const safePage = Math.max(1, Math.floor(page) || 1)
   const offset = (safePage - 1) * pageSize
+  const safeSupervisorId = supervisorId && isUuid(supervisorId) ? supervisorId.trim() : null
 
   try {
     const admin = createAdminClient()
@@ -76,8 +149,12 @@ export async function getPaginatedReportsList({
         totalReports: 0,
         currentPage: 1,
         totalPages: 1,
+        supervisors: [],
       }
     }
+
+    // Fetch active supervisors for filter options in parallel
+    const supervisorsPromise = getReportSupervisors(organizationId, projectIds)
 
     const validStatuses = ["submitted", "under_review", "approved", "rejected", "completed"]
 
@@ -88,13 +165,17 @@ export async function getPaginatedReportsList({
       dateOrClause = `and(submitted_at.gte.${startUtc},submitted_at.lt.${endExclusiveUtc}),and(submitted_at.is.null,created_at.gte.${startUtc},created_at.lt.${endExclusiveUtc})`
     }
 
-    // 2. Count total reports matching project, status AND date range
+    // 2. Count total reports matching project, status, supervisor AND date range
     let countQuery = admin
       .from("term_responses")
       .select("id", { count: "exact", head: true })
       .in("project_id", projectIds)
       .is("project_stage_term_id", null)
       .in("status", validStatuses)
+
+    if (safeSupervisorId) {
+      countQuery = countQuery.eq("created_by", safeSupervisorId)
+    }
 
     if (dateOrClause) {
       countQuery = countQuery.or(dateOrClause)
@@ -105,7 +186,7 @@ export async function getPaginatedReportsList({
     const totalReports = totalCount ?? 0
     const totalPages = Math.max(1, Math.ceil(totalReports / pageSize))
 
-    // 3. Fetch paginated reports list with server-side date range filter
+    // 3. Fetch paginated reports list with server-side date range and supervisor filter
     let dataQuery = admin
       .from("term_responses")
       .select("id, project_id, project_stage_id, report_number, report_title, subject, visit_number, status, created_by, created_at, submitted_at, completed_at")
@@ -113,14 +194,21 @@ export async function getPaginatedReportsList({
       .is("project_stage_term_id", null)
       .in("status", validStatuses)
 
+    if (safeSupervisorId) {
+      dataQuery = dataQuery.eq("created_by", safeSupervisorId)
+    }
+
     if (dateOrClause) {
       dataQuery = dataQuery.or(dateOrClause)
     }
 
-    const { data: responses, error: responseErr } = await dataQuery
-      .order("submitted_at", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false })
-      .range(offset, offset + pageSize - 1)
+    const [{ data: responses, error: responseErr }, supervisors] = await Promise.all([
+      dataQuery
+        .order("submitted_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false })
+        .range(offset, offset + pageSize - 1),
+      supervisorsPromise,
+    ])
 
     if (responseErr || !responses || !responses.length) {
       return {
@@ -128,6 +216,7 @@ export async function getPaginatedReportsList({
         totalReports,
         currentPage: safePage,
         totalPages,
+        supervisors,
       }
     }
 
@@ -209,6 +298,7 @@ export async function getPaginatedReportsList({
       totalReports,
       currentPage: safePage,
       totalPages,
+      supervisors,
     }
   } catch (err) {
     console.error("[getPaginatedReportsList] Error:", err)
@@ -217,6 +307,7 @@ export async function getPaginatedReportsList({
       totalReports: 0,
       currentPage: 1,
       totalPages: 1,
+      supervisors: [],
     }
   }
 }

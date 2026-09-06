@@ -12,6 +12,7 @@ export default async function ReportsPage({
   searchParams: Promise<{
     page?: string
     range?: string | string[]
+    supervisor?: string | string[]
     from?: string | string[]
     to?: string | string[]
   }>
@@ -20,6 +21,9 @@ export default async function ReportsPage({
   const params = await searchParams
   const page = Math.max(1, parseInt(params.page || "1", 10) || 1)
   const dateRange = resolveDashboardDateRange(params)
+  const supervisorId = Array.isArray(params.supervisor)
+    ? params.supervisor[0]
+    : params.supervisor || null
 
   const primaryMembership = session.memberships[0]
   const organizationId = session.supervisingOrg?.id ?? primaryMembership?.organization?.id
@@ -30,6 +34,7 @@ export default async function ReportsPage({
     page,
     pageSize: 30,
     dateRange,
+    supervisorId,
   })
 
   return (
@@ -39,6 +44,8 @@ export default async function ReportsPage({
       currentPage={data.currentPage}
       totalPages={data.totalPages}
       dateRange={dateRange}
+      supervisors={data.supervisors}
+      selectedSupervisorId={supervisorId}
     />
   )
 }
