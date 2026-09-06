@@ -17,7 +17,6 @@ export type SupervisorVisitComplianceDashboardProps = {
 const initialFilters: ComplianceFilterState = {
   searchQuery: "",
   selectedSupervisor: "all",
-  selectedProject: "all",
   selectedFrequency: "all",
   selectedStatus: "all",
   showIssuesOnly: false,
@@ -46,7 +45,6 @@ export function SupervisorVisitComplianceDashboard({
     const {
       searchQuery,
       selectedSupervisor,
-      selectedProject,
       selectedFrequency,
       selectedStatus,
       showIssuesOnly,
@@ -72,12 +70,7 @@ export function SupervisorVisitComplianceDashboard({
         if (!isAssigned) return false
       }
 
-      // 3. Project Filter
-      if (selectedProject !== "all") {
-        if (project.projectId !== selectedProject) return false
-      }
-
-      // 4. Visit Frequency Filter
+      // 3. Visit Frequency Filter
       if (selectedFrequency !== "all") {
         if (selectedFrequency === "lump_sum") {
           if (project.normalizedSupervisionType !== null) return false
@@ -86,7 +79,7 @@ export function SupervisorVisitComplianceDashboard({
         }
       }
 
-      // 5. Compliance Status Filter
+      // 4. Compliance Status Filter
       if (selectedStatus !== "all") {
         const hasStatusInVisibleWeeks = Object.values(project.weeklyCells).some(
           (cell) => cell.status === selectedStatus,
@@ -94,7 +87,7 @@ export function SupervisorVisitComplianceDashboard({
         if (!hasStatusInVisibleWeeks) return false
       }
 
-      // 6. Quick Action: Show Issues Only
+      // 5. Quick Action: Show Issues Only
       if (showIssuesOnly) {
         const hasIssues = Object.values(project.weeklyCells).some(
           (cell) => cell.status === "missing" || cell.status === "extra",
@@ -109,7 +102,6 @@ export function SupervisorVisitComplianceDashboard({
   const isFiltered =
     filters.searchQuery.trim() !== "" ||
     filters.selectedSupervisor !== "all" ||
-    filters.selectedProject !== "all" ||
     filters.selectedFrequency !== "all" ||
     filters.selectedStatus !== "all" ||
     filters.showIssuesOnly

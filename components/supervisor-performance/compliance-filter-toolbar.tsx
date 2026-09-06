@@ -8,7 +8,6 @@ import {
   AlertTriangle,
   RotateCcw,
   Users,
-  FolderKanban,
   Calendar,
   Activity,
 } from "lucide-react"
@@ -32,7 +31,6 @@ import type {
 export type ComplianceFilterState = {
   searchQuery: string
   selectedSupervisor: string
-  selectedProject: string
   selectedFrequency: string
   selectedStatus: string
   showIssuesOnly: boolean
@@ -69,7 +67,6 @@ export function ComplianceFilterToolbar({
   const {
     searchQuery,
     selectedSupervisor,
-    selectedProject,
     selectedFrequency,
     selectedStatus,
     showIssuesOnly,
@@ -93,17 +90,11 @@ export function ComplianceFilterToolbar({
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
   }, [supervisors, projects])
 
-  // Distinct project options
-  const projectOptions = useMemo(() => {
-    return [...projects].sort((a, b) => a.projectName.localeCompare(b.projectName))
-  }, [projects])
-
   // Active filters count
   const activeFiltersCount = useMemo(() => {
     let count = 0
     if (searchQuery.trim()) count += 1
     if (selectedSupervisor !== "all") count += 1
-    if (selectedProject !== "all") count += 1
     if (selectedFrequency !== "all") count += 1
     if (selectedStatus !== "all") count += 1
     if (showIssuesOnly) count += 1
@@ -111,7 +102,6 @@ export function ComplianceFilterToolbar({
   }, [
     searchQuery,
     selectedSupervisor,
-    selectedProject,
     selectedFrequency,
     selectedStatus,
     showIssuesOnly,
@@ -179,38 +169,7 @@ export function ComplianceFilterToolbar({
           </Select>
         </div>
 
-        {/* 3. Project Filter */}
-        <div className="w-[170px] sm:w-[195px]">
-          <Select
-            value={selectedProject}
-            onValueChange={(val) => onFilterChange("selectedProject", val as string)}
-          >
-            <SelectTrigger size="sm" className="h-8 text-xs">
-              <div className="flex items-center gap-1.5 truncate">
-                <FolderKanban className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <SelectValue placeholder="All Projects">
-                  {(value) => {
-                    if (!value || value === "all") return "All Projects"
-                    const proj = projectOptions.find((p) => p.projectId === value)
-                    return proj?.projectName ?? "Project"
-                  }}
-                </SelectValue>
-              </div>
-            </SelectTrigger>
-            <SelectContent className="max-h-60">
-              <SelectGroup>
-                <SelectItem value="all">All Projects</SelectItem>
-                {projectOptions.map((proj) => (
-                  <SelectItem key={proj.projectId} value={proj.projectId}>
-                    {proj.projectName}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* 4. Visit Frequency Filter */}
+        {/* 3. Visit Frequency Filter */}
         <div className="w-[145px] sm:w-[155px]">
           <Select
             value={selectedFrequency}
