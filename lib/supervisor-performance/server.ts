@@ -102,15 +102,15 @@ export async function loadSupervisorPerformanceData(
       .from("term_responses")
       .select("id, project_id, status, submitted_at, visit_date, created_at, created_by")
       .in("project_id", activeProjectIds)
-      .gte("visit_date", monthStart)
-      .lte("visit_date", monthEnd),
+      .gte("visit_date", queryStart)
+      .lte("visit_date", queryEnd),
     admin
       .from("term_responses")
       .select("id, project_id, status, submitted_at, visit_date, created_at, created_by")
       .in("project_id", activeProjectIds)
       .is("visit_date", null)
-      .gte("created_at", monthStartISO)
-      .lte("created_at", monthEndISO),
+      .gte("created_at", queryStartISO)
+      .lte("created_at", queryEndISO),
   ])
 
   if (participantsRes.error) throw participantsRes.error
