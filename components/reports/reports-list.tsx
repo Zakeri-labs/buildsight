@@ -1,9 +1,18 @@
 "use client"
 
+import { useMemo, useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter, usePathname, useSearchParams } from "next/navigation"
-import { FileText, ChevronLeft, ChevronRight, Calendar, ChevronDown, Check, Users } from "lucide-react"
-import { buttonVariants } from "@/components/ui/button"
+import { useRouter, usePathname } from "next/navigation"
+import {
+  FileText,
+  ChevronLeft,
+  ChevronRight,
+  Calendar,
+  ChevronDown,
+  Check,
+  Users,
+} from "lucide-react"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -13,12 +22,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { ToneBadge } from "@/components/status-badge"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import type { DashboardDateRange } from "@/lib/dashboard/date-range"
-import type { ListReportItem, ReportSupervisorOption } from "@/lib/db/reports-list"
+import type { ListReportItem } from "@/lib/db/reports-list"
 
 function formatSubmissionDate(iso: string | null) {
   if (!iso) return "—"
@@ -50,58 +69,118 @@ function statusTone(status: string): "info" | "primary" | "success" | "warning" 
 export type ReportsListProps = {
   reports: ListReportItem[]
   totalReports: number
-  currentPage: number
-  totalPages: number
   dateRange?: DashboardDateRange
-  supervisors?: ReportSupervisorOption[]
-  selectedSupervisorId?: string | null
 }
 
 export function ReportsList({
   reports,
   totalReports,
-  currentPage,
-  totalPages,
   dateRange,
-  supervisors = [],
-  selectedSupervisorId = null,
 }: ReportsListProps) {
   const { t } = useI18n()
   const router = useRouter()
   const pathname = usePathname()
-  const searchParams = useSearchParams()
 
-  const selectedSupervisor = supervisors.find((s) => s.id === selectedSupervisorId)
-  const supervisorLabel = selectedSupervisor ? selectedSupervisor.name : "All Supervisors"
-  const dateLabel = dateRange?.preset === "yesterday" ? "Yesterday" : "Today"
+  // Custom date range dialog state
+  const [customOpen, setCustomOpen] = useState(false)
+  const [from, setFrom] = useState(dateRange?.startDate ?? "")
+  const [to, setTo] = useState(dateRange?.endDate ?? "")
+  const [customError, setCustomError] = useState<string | null>(null)
 
-  function handleDateChange(preset: "today" | "yesterday") {
-    const params = new URLSearchParams(searchParams.toString())
-    params.set("range", preset)
-    params.delete("from")
-    params.delete("to")
-    params.delete("page")
-    const query = params.toString()
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
-  }
-
-  function handleSupervisorChange(supervisorId: string | null) {
-    const params = new URLSearchParams(searchParams.toString())
-    if (supervisorId) {
-      params.set("supervisor", supervisorId)
-    } else {
-      params.delete("supervisor")
+  // Supervisor filter options derived dynamically from loaded report dataset
+  const supervisorOptions = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>()
+    for (const r of reports) {
+      const id = r.authorId || r.authorName
+      if (id && !map.has(id)) {
+        map.set(id, { id, name: r.authorName })
+      }
     }
-    params.delete("page")
-    const query = params.toString()
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [reports])
+
+  // Purely client-side supervisor selection (no DB query triggered)
+  const [selectedSupervisorId, setSelectedSupervisorId] = useState<string | null>(null)
+  const [clientPage, setClientPage] = useState(1)
+
+  // Auto-reset supervisor selection if not in new dataset
+  useEffect(() => {
+    if (selectedSupervisorId && !supervisorOptions.some((s) => s.id === selectedSupervisorId)) {
+      setSelectedSupervisorId(null)
+    }
+  }, [supervisorOptions, selectedSupervisorId])
+
+  // Reset page when supervisor filter or reports change
+  useEffect(() => {
+    setClientPage(1)
+  }, [selectedSupervisorId, reports])
+
+  useEffect(() => {
+    if (dateRange?.preset === "custom") {
+      setFrom(dateRange.startDate ?? "")
+      setTo(dateRange.endDate ?? "")
+    }
+  }, [dateRange])
+
+  const selectedSupervisor = supervisorOptions.find((s) => s.id === selectedSupervisorId)
+  const supervisorLabel = selectedSupervisor ? selectedSupervisor.name : "All Supervisors"
+
+  // Date range label
+  let dateLabel = "Today"
+  if (dateRange?.preset === "yesterday") {
+    dateLabel = "Yesterday"
+  } else if (dateRange?.preset === "thisMonth") {
+    dateLabel = "Current Month"
+  } else if (dateRange?.preset === "custom") {
+    dateLabel = dateRange.label || "Custom Range"
   }
 
-  function pageUrl(page: number) {
-    const params = new URLSearchParams(searchParams.toString())
-    params.set("page", String(page))
-    return `/reports?${params.toString()}`
+  function handlePresetSelect(preset: "today" | "yesterday" | "thisMonth") {
+    const params = new URLSearchParams()
+    params.set("range", preset)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }
+
+  function openCustomRange() {
+    setCustomError(null)
+    setFrom(dateRange?.startDate ?? "")
+    setTo(dateRange?.endDate ?? "")
+    setCustomOpen(true)
+  }
+
+  function applyCustomRange() {
+    if (!from || !to) {
+      setCustomError("Choose both From and To dates.")
+      return
+    }
+    if (from > to) {
+      setCustomError("From date must be on or before To date.")
+      return
+    }
+    const params = new URLSearchParams()
+    params.set("range", "custom")
+    params.set("from", from)
+    params.set("to", to)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+    setCustomOpen(false)
+  }
+
+  // Locally filtered reports based on selected supervisor
+  const filteredReports = useMemo(() => {
+    if (!selectedSupervisorId) return reports
+    return reports.filter((r) => (r.authorId || r.authorName) === selectedSupervisorId)
+  }, [reports, selectedSupervisorId])
+
+  // Client-side pagination
+  const PAGE_SIZE = 30
+  const totalFilteredReports = filteredReports.length
+  const totalPages = Math.max(1, Math.ceil(totalFilteredReports / PAGE_SIZE))
+  const currentPage = Math.min(clientPage, totalPages)
+
+  const displayedReports = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return filteredReports.slice(start, start + PAGE_SIZE)
+  }, [filteredReports, currentPage])
 
   return (
     <div className="flex flex-col gap-6">
@@ -111,7 +190,7 @@ export function ReportsList({
           subtitle={t.reports.subtitle}
         />
         <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Date Filter Dropdown */}
+          {/* Date Range Filter Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -126,18 +205,19 @@ export function ReportsList({
                 </button>
               }
             />
-            <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem
-                onClick={() => handleDateChange("today")}
+                onClick={() => handlePresetSelect("today")}
                 className="justify-between"
               >
                 <span>Today</span>
-                {dateRange?.preset !== "yesterday" ? (
+                {dateRange?.preset === "today" || !dateRange?.preset ? (
                   <Check className="size-4 text-primary" />
                 ) : null}
               </DropdownMenuItem>
+
               <DropdownMenuItem
-                onClick={() => handleDateChange("yesterday")}
+                onClick={() => handlePresetSelect("yesterday")}
                 className="justify-between"
               >
                 <span>Yesterday</span>
@@ -145,10 +225,32 @@ export function ReportsList({
                   <Check className="size-4 text-primary" />
                 ) : null}
               </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => handlePresetSelect("thisMonth")}
+                className="justify-between"
+              >
+                <span>Current Month</span>
+                {dateRange?.preset === "thisMonth" ? (
+                  <Check className="size-4 text-primary" />
+                ) : null}
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
+              <DropdownMenuItem
+                onClick={openCustomRange}
+                className="justify-between"
+              >
+                <span>Custom Date Range</span>
+                {dateRange?.preset === "custom" ? (
+                  <Check className="size-4 text-primary" />
+                ) : null}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Supervisor Filter Dropdown */}
+          {/* Supervisor Filter Dropdown (Derived dynamically from loaded reports, filtered in-memory) */}
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -165,7 +267,7 @@ export function ReportsList({
             />
             <DropdownMenuContent align="end" className="w-56 max-h-72 overflow-y-auto">
               <DropdownMenuItem
-                onClick={() => handleSupervisorChange(null)}
+                onClick={() => setSelectedSupervisorId(null)}
                 className="justify-between font-medium"
               >
                 <span>All Supervisors</span>
@@ -173,11 +275,11 @@ export function ReportsList({
                   <Check className="size-4 text-primary" />
                 ) : null}
               </DropdownMenuItem>
-              {supervisors.length > 0 && <DropdownMenuSeparator />}
-              {supervisors.map((sup) => (
+              {supervisorOptions.length > 0 && <DropdownMenuSeparator />}
+              {supervisorOptions.map((sup) => (
                 <DropdownMenuItem
                   key={sup.id}
-                  onClick={() => handleSupervisorChange(sup.id)}
+                  onClick={() => setSelectedSupervisorId(sup.id)}
                   className="justify-between"
                 >
                   <span className="truncate">{sup.name}</span>
@@ -191,7 +293,57 @@ export function ReportsList({
         </div>
       </div>
 
-      {reports.length ? (
+      {/* Custom Date Range Modal Dialog */}
+      <Dialog open={customOpen} onOpenChange={setCustomOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Custom Date Range</DialogTitle>
+            <DialogDescription>
+              Choose inclusive start and end dates to filter reports.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 sm:grid-cols-2 py-2">
+            <div className="grid gap-2">
+              <Label htmlFor="reports-range-from">From Date</Label>
+              <Input
+                id="reports-range-from"
+                type="date"
+                value={from}
+                onChange={(event) => {
+                  setFrom(event.target.value)
+                  setCustomError(null)
+                }}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="reports-range-to">To Date</Label>
+              <Input
+                id="reports-range-to"
+                type="date"
+                value={to}
+                onChange={(event) => {
+                  setTo(event.target.value)
+                  setCustomError(null)
+                }}
+              />
+            </div>
+          </div>
+
+          {customError ? <p className="text-xs text-destructive">{customError}</p> : null}
+
+          <DialogFooter className="sm:justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setCustomOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={applyCustomRange}>
+              Apply Range
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {displayedReports.length ? (
         <Card className="min-w-0 overflow-hidden py-0 gap-0">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -207,7 +359,7 @@ export function ReportsList({
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {reports.map((report) => {
+                {displayedReports.map((report) => {
                   const tone = statusTone(report.status)
                   const dateStr = formatSubmissionDate(report.submittedAt)
 
@@ -297,9 +449,9 @@ export function ReportsList({
           <FileText className="mx-auto size-12 text-muted-foreground/60" />
           <h3 className="mt-4 text-base font-semibold text-foreground">No reports found</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            {selectedSupervisorId || dateRange?.preset === "yesterday"
-              ? "No supervisor reports match the selected date and supervisor filters."
-              : "No supervisor reports have been submitted today."}
+            {selectedSupervisorId
+              ? "No supervisor reports match the selected supervisor."
+              : "No supervisor reports match the selected date range."}
           </p>
         </Card>
       )}
@@ -308,38 +460,34 @@ export function ReportsList({
       {totalPages > 1 && (
         <div className="flex items-center justify-between border-t border-border pt-4 text-sm">
           <div className="text-muted-foreground">
-            Showing <span className="font-medium text-foreground">{reports.length}</span> of{" "}
-            <span className="font-medium text-foreground">{totalReports}</span> reports
+            Showing <span className="font-medium text-foreground">{displayedReports.length}</span> of{" "}
+            <span className="font-medium text-foreground">{totalFilteredReports}</span> reports
           </div>
 
           <div className="flex items-center gap-2">
-            <Link
-              href={pageUrl(currentPage - 1)}
-              aria-disabled={currentPage <= 1}
-              className={cn(
-                buttonVariants({ variant: "outline", size: "sm" }),
-                currentPage <= 1 && "pointer-events-none opacity-50",
-              )}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage <= 1}
+              onClick={() => setClientPage((p) => Math.max(1, p - 1))}
             >
               <ChevronLeft className="size-4 me-1 flip-rtl" />
               Previous
-            </Link>
+            </Button>
 
             <span className="px-2 text-xs font-medium text-foreground">
               Page {currentPage} of {totalPages}
             </span>
 
-            <Link
-              href={pageUrl(currentPage + 1)}
-              aria-disabled={currentPage >= totalPages}
-              className={cn(
-                buttonVariants({ variant: "outline", size: "sm" }),
-                currentPage >= totalPages && "pointer-events-none opacity-50",
-              )}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage >= totalPages}
+              onClick={() => setClientPage((p) => Math.min(totalPages, p + 1))}
             >
               Next
               <ChevronRight className="size-4 ms-1 flip-rtl" />
-            </Link>
+            </Button>
           </div>
         </div>
       )}
