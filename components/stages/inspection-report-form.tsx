@@ -1491,6 +1491,7 @@ export function InspectionReportForm({
         <ReportDownloadSection
           projectId={project.id}
           projectName={project.name}
+          projectCode={project.code}
           stageId={resolvedStageId}
           termId={isDirectStageReport ? undefined : reportDefinition.id}
           responseId={responseId}
@@ -1893,6 +1894,7 @@ export function InspectionReportForm({
                 <ReportDownloadSection
                   projectId={project.id}
                   projectName={project.name}
+                  projectCode={project.code}
                   stageId={resolvedStageId}
                   termId={isDirectStageReport ? undefined : reportDefinition.id}
                   responseId={responseId}
@@ -2138,6 +2140,7 @@ export function InspectionReportForm({
                         }
                         const url = buildWhatsAppShareUrl({
                           projectName: project?.name || "Project",
+                          projectCode: project?.code,
                           reportTitle: reportTitle?.trim() || defaultReportTitlePattern || "Inspection Report",
                           reportSubject: subject?.trim() || reportTitle?.trim() || "Inspection Report",
                           visitNumber: currentVisitNo,
@@ -2187,6 +2190,7 @@ export function InspectionReportForm({
                         }
                         const msg = buildShareMessage({
                           projectName: project?.name || "Project",
+                          projectCode: project?.code,
                           reportTitle: reportTitle?.trim() || defaultReportTitlePattern || "Inspection Report",
                           reportSubject: subject?.trim() || reportTitle?.trim() || "Inspection Report",
                           visitNumber: currentVisitNo,

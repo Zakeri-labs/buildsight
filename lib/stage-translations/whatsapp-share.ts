@@ -2,6 +2,7 @@
 
 export function buildShareMessage(options: {
   projectName: string
+  projectCode?: string | null
   reportTitle?: string
   reportSubject?: string
   visitNumber?: number | string
@@ -26,10 +27,12 @@ export function buildShareMessage(options: {
     : `${origin}/api/stage-translations/pdf?projectId=${options.projectId}&kind=bilingual&share=1${queryIdParam ? `&${queryIdParam}` : ""}`
 
   const subjectText = (options.reportSubject || options.reportTitle || "Inspection Report").trim()
+  const projectCodeText = options.projectCode?.trim()
 
   const messageLines = [
     "🏗️ *Bonyan Construction Report*",
     `*Project:* ${options.projectName}`,
+    ...(projectCodeText ? [`*Project Code:* ${projectCodeText}`] : []),
     `*Report Subject:* ${subjectText}`,
     ...(options.supervisorName ? [`*Supervisor:* ${options.supervisorName}`] : []),
     "",
@@ -53,6 +56,7 @@ export function buildShareMessage(options: {
 
 export function buildWhatsAppShareUrl(options: {
   projectName: string
+  projectCode?: string | null
   reportTitle?: string
   reportSubject?: string
   visitNumber?: number | string

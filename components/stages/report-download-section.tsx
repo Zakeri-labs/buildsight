@@ -15,6 +15,7 @@ import { DebugTimelinePanel } from "@/components/stages/debug-timeline-panel"
 export function ReportDownloadSection({
   projectId,
   projectName,
+  projectCode,
   stageId,
   termId,
   responseId,
@@ -29,6 +30,7 @@ export function ReportDownloadSection({
 }: {
   projectId: string
   projectName?: string
+  projectCode?: string | null
   stageId: string
   termId?: string
   responseId: string
@@ -182,6 +184,7 @@ export function ReportDownloadSection({
       await ensureBilingualPdfReady()
       const url = buildWhatsAppShareUrl({
         projectName: projectName || "Project",
+        projectCode,
         reportTitle: reportTitle || "Inspection Report",
         reportSubject: reportSubject || reportTitle || "Inspection Report",
         visitNumber,
@@ -214,6 +217,7 @@ export function ReportDownloadSection({
       await ensureBilingualPdfReady()
       const msg = buildShareMessage({
         projectName: projectName || "Project",
+        projectCode,
         reportTitle: reportTitle || "Inspection Report",
         reportSubject: reportSubject || reportTitle || "Inspection Report",
         visitNumber,
