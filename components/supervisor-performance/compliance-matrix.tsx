@@ -1,6 +1,7 @@
 "use client"
 
-import { Calendar, FolderKanban } from "lucide-react"
+import { Calendar, FolderKanban, FilterX, RotateCcw } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type {
   ComplianceCalendarWeek,
@@ -11,15 +12,43 @@ import { ComplianceProjectRow } from "./compliance-project-row"
 export type ComplianceMatrixProps = {
   weeks: ComplianceCalendarWeek[]
   projects: ProjectComplianceTimelineRow[]
+  isFiltered?: boolean
+  onResetFilters?: () => void
   className?: string
 }
 
 export function ComplianceMatrix({
   weeks,
   projects,
+  isFiltered = false,
+  onResetFilters,
   className,
 }: ComplianceMatrixProps) {
   if (projects.length === 0) {
+    if (isFiltered) {
+      return (
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center bg-card">
+          <FilterX className="h-10 w-10 text-muted-foreground/40" />
+          <h3 className="mt-3 text-sm font-semibold text-foreground">No Matching Projects Found</h3>
+          <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+            No projects match the active filter criteria. Try adjusting your supervisor, frequency, or compliance status selection.
+          </p>
+          {onResetFilters && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onResetFilters}
+              className="mt-4 h-8 gap-1.5 text-xs"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span>Reset Filters</span>
+            </Button>
+          )}
+        </div>
+      )
+    }
+
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
         <FolderKanban className="h-10 w-10 text-muted-foreground/40" />
