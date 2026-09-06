@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import {
   Calendar,
   CheckCircle2,
@@ -9,6 +10,7 @@ import {
   FileText,
   User,
   Users,
+  ExternalLink,
 } from "lucide-react"
 import {
   Dialog,
@@ -68,21 +70,26 @@ export function ComplianceCellDetailDialog({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-md p-5">
         {/* Header: Weekly Visit Compliance */}
-        <DialogHeader className="gap-1 border-b pb-3 text-left">
-          <div className="flex items-center justify-between gap-2">
+        <DialogHeader className="gap-1.5 border-b pb-3.5 text-left">
+          {/* Row 1: Frequency badge (with right padding to prevent close button overlap) */}
+          <div className="flex items-center justify-between pr-8">
             <Badge variant="secondary" className="text-xs font-medium">
               {formatFrequencyLabel(project.normalizedSupervisionType || project.supervisionType)}
             </Badge>
-            <div className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
-              <Calendar className="h-3.5 w-3.5" />
-              <span>{week.label}</span>
-            </div>
           </div>
-          <DialogTitle className="text-base font-bold text-foreground">
+
+          {/* Row 2: Project Name */}
+          <DialogTitle className="text-base font-bold text-foreground leading-snug">
             {project.projectName}
           </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">
-            Weekly Visit Compliance
+
+          {/* Row 3: Week Date Range */}
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Calendar className="h-3.5 w-3.5 shrink-0" />
+            <span className="font-mono">{week.label}</span>
+          </div>
+          <DialogDescription className="sr-only">
+            Weekly Visit Compliance for {project.projectName} during {week.label}
           </DialogDescription>
         </DialogHeader>
 
@@ -168,33 +175,38 @@ export function ComplianceCellDetailDialog({
               </div>
             ) : (
               <div className="flex flex-col gap-2">
-                {reports.map((report, idx) => (
-                  <div
-                    key={report.id}
-                    className="flex flex-col gap-1 rounded-lg border bg-muted/20 p-2.5 text-xs"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 font-semibold text-foreground">
-                        <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
-                        <span>{report.reportTitle || `Inspection Report #${idx + 1}`}</span>
+                {reports.map((report, idx) => {
+                  const reportHref = `/projects/${report.projectId}/stages/inspection/reports/${report.id}`
+                  return (
+                    <Link
+                      key={report.id}
+                      href={reportHref}
+                      className="group flex flex-col gap-1 rounded-lg border bg-muted/20 p-2.5 text-xs transition-all hover:bg-muted/50 hover:border-primary/40 hover:shadow-xs cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 font-semibold text-foreground group-hover:text-primary transition-colors min-w-0">
+                          <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <span className="truncate">{report.reportTitle || `Inspection Report #${idx + 1}`}</span>
+                          <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                        </div>
+                        {report.visitNumber && (
+                          <Badge variant="outline" className="font-mono text-[10px] shrink-0">
+                            Visit #{report.visitNumber}
+                          </Badge>
+                        )}
                       </div>
-                      {report.visitNumber && (
-                        <Badge variant="outline" className="font-mono text-[10px]">
-                          Visit #{report.visitNumber}
-                        </Badge>
-                      )}
-                    </div>
 
-                    <div className="flex items-center justify-between border-t border-border/50 pt-1 text-[11px] text-muted-foreground">
-                      <span>
-                        Report Date: <strong className="font-mono text-foreground">{report.visitDate}</strong>
-                      </span>
-                      {report.creatorName && (
-                        <span>By {report.creatorName}</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                      <div className="flex items-center justify-between border-t border-border/50 pt-1 text-[11px] text-muted-foreground">
+                        <span>
+                          Report Date: <strong className="font-mono text-foreground">{report.visitDate}</strong>
+                        </span>
+                        {report.creatorName && (
+                          <span>By {report.creatorName}</span>
+                        )}
+                      </div>
+                    </Link>
+                  )
+                })}
               </div>
             )}
           </div>
