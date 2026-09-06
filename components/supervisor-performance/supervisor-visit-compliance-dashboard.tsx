@@ -19,6 +19,7 @@ const initialFilters: ComplianceFilterState = {
   selectedSupervisor: "all",
   selectedProject: "all",
   selectedFrequency: "all",
+  selectedStatus: "all",
   showIssuesOnly: false,
 }
 
@@ -47,6 +48,7 @@ export function SupervisorVisitComplianceDashboard({
       selectedSupervisor,
       selectedProject,
       selectedFrequency,
+      selectedStatus,
       showIssuesOnly,
     } = filters
 
@@ -84,7 +86,15 @@ export function SupervisorVisitComplianceDashboard({
         }
       }
 
-      // 5. Quick Action: Show Issues Only
+      // 5. Compliance Status Filter
+      if (selectedStatus !== "all") {
+        const hasStatusInVisibleWeeks = Object.values(project.weeklyCells).some(
+          (cell) => cell.status === selectedStatus,
+        )
+        if (!hasStatusInVisibleWeeks) return false
+      }
+
+      // 6. Quick Action: Show Issues Only
       if (showIssuesOnly) {
         const hasIssues = Object.values(project.weeklyCells).some(
           (cell) => cell.status === "missing" || cell.status === "extra",
@@ -101,6 +111,7 @@ export function SupervisorVisitComplianceDashboard({
     filters.selectedSupervisor !== "all" ||
     filters.selectedProject !== "all" ||
     filters.selectedFrequency !== "all" ||
+    filters.selectedStatus !== "all" ||
     filters.showIssuesOnly
 
   return (
