@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { assertOrgAdmin, assertProjectAdmin, assertProjectReadAccess, audit, AuthzError } from "@/lib/auth/guards"
+import { assertOrgAdmin, assertProjectAdmin, assertProjectReadAccess, audit, AuthzError, getUserIdOrThrow } from "@/lib/auth/guards"
+import { isUserProjectSupervisor, resolveProjectReadAccessForUser } from "@/lib/auth/project-access"
 import { createInvitation, type InvitationActionData } from "@/lib/actions/invitations"
 import { createOrganization } from "@/lib/actions/organizations"
 import type { ProjectAccessRole, ProjectOrgRole } from "@/lib/db/types"
@@ -692,6 +693,89 @@ export async function updateProject(input: {
     }
   } catch (err) {
     return { ok: false, error: err instanceof AuthzError ? err.message : "Could not update project." }
+  }
+}
+
+export async function updateProjectLocationAction(input: {
+  projectId: string
+  address: string
+  areaDistrict?: string | null
+  latitude: number | null
+  longitude: number | null
+}): Promise<ActionResult<{ address: string; areaDistrict: string | null; latitude: number | null; longitude: number | null }>> {
+  try {
+    const userId = await getUserIdOrThrow()
+    const access = await resolveProjectReadAccessForUser(userId, input.projectId)
+    if (!access) throw new AuthzError("You do not have access to this project")
+
+    const isSupervisor = await isUserProjectSupervisor(userId, input.projectId)
+    const isAdmin =
+      access.projectAccessRole === "project_admin" ||
+      access.supervisingOrganizationRole === "org_admin" ||
+      access.supervisingOrganizationRole === "org_manager"
+
+    if (!isSupervisor && !isAdmin) {
+      throw new AuthzError("Only authorized supervisors and administrators can edit project location.")
+    }
+
+    const coordinates = normalizeProjectCoordinates(input.latitude, input.longitude)
+    if (!coordinates.ok) return { ok: false, error: coordinates.error }
+
+    const address =
+      input.address.trim() ||
+      (coordinates.latitude != null && coordinates.longitude != null
+        ? coordinateLabel(coordinates.latitude, coordinates.longitude)
+        : null)
+
+    const areaDistrict = input.areaDistrict?.trim() || null
+
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from("projects")
+      .update({
+        location: address,
+        region: areaDistrict,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.projectId)
+
+    if (error) throw error
+
+    revalidatePath(`/projects/${input.projectId}`)
+    revalidatePath(`/projects/${input.projectId}/location`)
+    revalidatePath("/projects")
+
+    await audit({
+      actorId: userId,
+      action: "project.location_updated",
+      entityType: "project",
+      entityId: input.projectId,
+      organizationId: access.project.supervising_organization_id,
+      projectId: input.projectId,
+      metadata: {
+        location: address,
+        region: areaDistrict,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+      },
+    })
+
+    return {
+      ok: true,
+      data: {
+        address: address || "—",
+        areaDistrict,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+      },
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof AuthzError ? err.message : "Could not update project location.",
+    }
   }
 }
 

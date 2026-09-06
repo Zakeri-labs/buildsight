@@ -4,10 +4,16 @@ import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, ArrowLeft, ChevronDown, ClipboardList, ExternalLink, FolderOpen, Images, Loader2, MapPin, Maximize2, Minimize2, Pencil } from "lucide-react"
+import { AlertTriangle, ArrowLeft, ChevronDown, ClipboardList, ExternalLink, FolderOpen, Images, Loader2, MapPin, Maximize2, Minimize2, MoreVertical, Pencil } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useCurrentUser } from "@/components/current-user-provider"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
@@ -202,6 +208,7 @@ export function ProjectDetail({
   supervisorOptions?: ProjectSupervisorCandidate[]
   canManageImages?: boolean
   canEditProject?: boolean
+  canEditLocation?: boolean
 }) {
   const { t, locale } = useI18n()
   const currentUser = useCurrentUser()
@@ -605,10 +612,36 @@ export function ProjectDetail({
 
         <Card className={cn("h-full w-full self-stretch gap-0 overflow-hidden py-0", isMember ? "min-h-0 md:min-h-[420px]" : "min-h-[420px]")}>
           <CardHeader className={cn("shrink-0 border-b px-5 py-3.5 sm:px-6", isMember && "max-md:px-3 max-md:py-2.5")}>
-            <CardTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">
-              <MapPin className="size-4 text-primary" aria-hidden="true" />
-              {isArabic ? "موقع المشروع" : "Project Location"}
-            </CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">
+                <MapPin className="size-4 text-primary" aria-hidden="true" />
+                {isArabic ? "موقع المشروع" : "Project Location"}
+              </CardTitle>
+              {canEditLocation ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label="Location options"
+                        className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                      >
+                        <MoreVertical className="size-4" />
+                      </button>
+                    }
+                  />
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem
+                      onClick={() => router.push(`/projects/${encodeURIComponent(currentProject.id)}/location`)}
+                      className="gap-2 cursor-pointer text-xs"
+                    >
+                      <MapPin className="size-3.5 text-muted-foreground" />
+                      <span>{isArabic ? "تعديل الموقع" : "Edit Location"}</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
+            </div>
           </CardHeader>
           <CardContent className={cn("flex flex-1 p-0 lg:min-h-0", isMember ? "min-h-[180px] md:min-h-[360px]" : "min-h-[360px]")}>
             <div

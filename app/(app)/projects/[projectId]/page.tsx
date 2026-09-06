@@ -7,6 +7,7 @@ import type { ProjectDocument } from "@/components/projects/project-documents"
 import type { ProjectSiteVisitReport } from "@/components/projects/project-site-visit-reports"
 import { requireOnboarded } from "@/lib/auth/session"
 import { canAdministerProject } from "@/lib/auth/guards"
+import { isUserProjectSupervisor } from "@/lib/auth/project-access"
 import { getDashboardData, getOrgProjects } from "@/lib/db/domain"
 import { getProjectParticipants, getProjectParticipantUserOptions } from "@/lib/db/project-participants"
 import { getProjectSupervisorCandidates } from "@/lib/projects/supervisor-candidates-server"
@@ -15,7 +16,6 @@ import { getInitialDocumentsForScope } from "@/lib/initial-documents/server"
 import { toProjectRecord } from "@/lib/projects/project-record"
 import { isProjectTypeValue } from "@/lib/projects/project-options"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient } from "@/lib/supabase/server"
 
 type ProjectDocumentRow = {
   id: string
@@ -68,9 +68,6 @@ type ProjectReportProfileRow = {
 }
 
 async function getProjectSiteVisitReports(projectId: string): Promise<ProjectSiteVisitReport[]> {
-  // The caller has already resolved this project through the authenticated user's canonical project scope.
-  // Use the service client only after that authorization check so the project summary can aggregate
-  // direct Stage-based reports without depending on client-side filtering.
   const admin = createAdminClient()
   const { data: reports, error: reportsError } = await admin
     .from("term_responses")
@@ -185,7 +182,7 @@ export default async function ProjectDetailPage({
   const project = projects.find((item) => item.id === projectId)
   if (!project) return notFound()
 
-  const [dashboardData, letters, initialDocumentsResult, siteVisitReports, participants, canManageImages] = await Promise.all([
+  const [dashboardData, letters, initialDocumentsResult, siteVisitReports, participants, canManageImages, isSupervisor] = await Promise.all([
     getDashboardData(organizationId, project.id, session.userId),
     getProjectDocuments(project.id, session.userId, session.email),
     getInitialDocumentsForScope({
@@ -196,7 +193,9 @@ export default async function ProjectDetailPage({
     getProjectSiteVisitReports(project.id),
     getProjectParticipants(project.id),
     canAdministerProject(project.id),
+    isUserProjectSupervisor(session.userId, project.id),
   ])
+  const canEditLocation = canManageImages || isSupervisor
   const [participantUsers, supervisorOptions] = canManageImages
     ? await Promise.all([
         getProjectParticipantUserOptions(project.id),
@@ -248,6 +247,7 @@ export default async function ProjectDetailPage({
       supervisorOptions={supervisorOptions}
       canManageImages={canManageImages}
       canEditProject={canManageImages}
+      canEditLocation={canEditLocation}
     />
   )
 }
