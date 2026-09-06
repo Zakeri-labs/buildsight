@@ -10,7 +10,6 @@ import {
   Users,
   FolderKanban,
   Calendar,
-  Activity,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -34,7 +33,6 @@ export type ComplianceFilterState = {
   selectedSupervisor: string
   selectedProject: string
   selectedFrequency: string
-  selectedStatus: string
   showIssuesOnly: boolean
 }
 
@@ -71,7 +69,6 @@ export function ComplianceFilterToolbar({
     selectedSupervisor,
     selectedProject,
     selectedFrequency,
-    selectedStatus,
     showIssuesOnly,
   } = filters
 
@@ -105,7 +102,6 @@ export function ComplianceFilterToolbar({
     if (selectedSupervisor !== "all") count += 1
     if (selectedProject !== "all") count += 1
     if (selectedFrequency !== "all") count += 1
-    if (selectedStatus !== "all") count += 1
     if (showIssuesOnly) count += 1
     return count
   }, [
@@ -113,7 +109,6 @@ export function ComplianceFilterToolbar({
     selectedSupervisor,
     selectedProject,
     selectedFrequency,
-    selectedStatus,
     showIssuesOnly,
   ])
 
@@ -242,39 +237,7 @@ export function ComplianceFilterToolbar({
           </Select>
         </div>
 
-        {/* 5. Compliance Status Filter */}
-        <div className="w-[140px] sm:w-[150px]">
-          <Select
-            value={selectedStatus}
-            onValueChange={(val) => onFilterChange("selectedStatus", val as string)}
-          >
-            <SelectTrigger size="sm" className="h-8 text-xs">
-              <div className="flex items-center gap-1.5 truncate">
-                <Activity className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <SelectValue placeholder="All Status">
-                  {(value) => {
-                    if (value === "done") return "Completed"
-                    if (value === "missing") return "Missing"
-                    if (value === "upcoming") return "Upcoming"
-                    if (value === "extra") return "Extra Visit"
-                    return "All Status"
-                  }}
-                </SelectValue>
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="done">Completed</SelectItem>
-                <SelectItem value="missing">Missing</SelectItem>
-                <SelectItem value="upcoming">Upcoming</SelectItem>
-                <SelectItem value="extra">Extra Visit</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* 6. Quick Action: Show Issues Only */}
+        {/* 5. Quick Action: Show Issues Only */}
         <Button
           type="button"
           size="sm"
