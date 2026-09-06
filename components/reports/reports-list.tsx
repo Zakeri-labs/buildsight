@@ -11,10 +11,20 @@ import {
   ChevronDown,
   Check,
   Users,
+  Eye,
+  Download,
+  Loader2,
 } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { ensureBilingualPdfStored } from "@/lib/stage-translations/client-pdf"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -178,6 +188,30 @@ export function ReportsList({
     params.set("to", to)
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
     setCustomOpen(false)
+  }
+
+  const [downloadingReportId, setDownloadingReportId] = useState<string | null>(null)
+
+  async function handleDownloadBilingualPdf(report: ListReportItem) {
+    if (downloadingReportId) return
+    setDownloadingReportId(report.id)
+    try {
+      await ensureBilingualPdfStored({
+        projectId: report.projectId,
+        stageId: report.stageId,
+        responseId: report.id,
+        caller: "reports_list",
+      }).catch(() => null)
+
+      const endpoint = `/api/stage-translations/pdf?projectId=${report.projectId}&responseId=${report.id}&kind=bilingual`
+      window.location.assign(endpoint)
+    } catch (err) {
+      console.error("Error downloading bilingual PDF:", err)
+    } finally {
+      setTimeout(() => {
+        setDownloadingReportId(null)
+      }, 2500)
+    }
   }
 
   // Locally filtered reports based on selected supervisor
@@ -359,106 +393,141 @@ export function ReportsList({
       </Dialog>
 
       {displayedReports.length ? (
-        <Card className="min-w-0 overflow-hidden py-0 gap-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b bg-muted/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th scope="col" className="px-4 py-3.5 min-w-[220px]">Report</th>
-                  <th scope="col" className="px-4 py-3.5 min-w-[160px]">Project</th>
-                  <th scope="col" className="px-4 py-3.5 min-w-[140px]">Stage</th>
-                  <th scope="col" className="px-4 py-3.5 min-w-[110px]">Date</th>
-                  <th scope="col" className="px-4 py-3.5 min-w-[160px]">Submitted By</th>
-                  <th scope="col" className="px-4 py-3.5 min-w-[110px]">Status</th>
-                  <th scope="col" className="px-4 py-3.5 text-right min-w-[160px]">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {displayedReports.map((report) => {
-                  const tone = statusTone(report.status)
-                  const dateStr = formatSubmissionDate(report.submittedAt)
+        <TooltipProvider delay={100}>
+          <Card className="min-w-0 overflow-hidden py-0 gap-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b bg-muted/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th scope="col" className="px-4 py-3.5 min-w-[220px]">Report</th>
+                    <th scope="col" className="px-4 py-3.5 min-w-[160px]">Project</th>
+                    <th scope="col" className="px-4 py-3.5 min-w-[140px]">Stage</th>
+                    <th scope="col" className="px-4 py-3.5 min-w-[110px]">Date</th>
+                    <th scope="col" className="px-4 py-3.5 min-w-[160px]">Submitted By</th>
+                    <th scope="col" className="px-4 py-3.5 min-w-[110px]">Status</th>
+                    <th scope="col" className="px-4 py-3.5 text-right min-w-[100px]">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {displayedReports.map((report) => {
+                    const tone = statusTone(report.status)
+                    const dateStr = formatSubmissionDate(report.submittedAt)
+                    const isDownloading = downloadingReportId === report.id
 
-                  return (
-                    <tr key={report.id} className="transition-colors hover:bg-muted/30">
-                      {/* 1. Report */}
-                      <td className="px-4 py-3 align-middle">
-                        <div className="flex flex-col min-w-0">
-                          <Link
-                            href={report.href}
-                            className="font-semibold text-foreground hover:underline truncate max-w-[280px]"
-                            title={report.reportTitle}
-                          >
-                            {report.reportTitle}
-                          </Link>
-                          {report.reportNumber ? (
-                            <span className="font-mono text-xs text-muted-foreground truncate">
-                              #{report.reportNumber}
+                    return (
+                      <tr key={report.id} className="transition-colors hover:bg-muted/30">
+                        {/* 1. Report */}
+                        <td className="px-4 py-3 align-middle">
+                          <div className="flex flex-col min-w-0">
+                            <Link
+                              href={report.href}
+                              className="font-semibold text-foreground hover:underline truncate max-w-[280px]"
+                              title={report.reportTitle}
+                            >
+                              {report.reportTitle}
+                            </Link>
+                            {report.reportNumber ? (
+                              <span className="font-mono text-xs text-muted-foreground truncate">
+                                #{report.reportNumber}
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+
+                        {/* 2. Project */}
+                        <td className="px-4 py-3 align-middle">
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-medium text-foreground truncate max-w-[200px]" title={report.projectName}>
+                              {report.projectName}
                             </span>
-                          ) : null}
-                        </div>
-                      </td>
+                            {report.projectCode ? (
+                              <span className="font-mono text-xs text-muted-foreground truncate">
+                                {report.projectCode}
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
 
-                      {/* 2. Project */}
-                      <td className="px-4 py-3 align-middle">
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-medium text-foreground truncate max-w-[200px]" title={report.projectName}>
-                            {report.projectName}
+                        {/* 3. Stage */}
+                        <td className="px-4 py-3 align-middle">
+                          <span className="text-muted-foreground truncate max-w-[180px] block text-xs" title={report.stageName}>
+                            {report.stageName}
                           </span>
-                          {report.projectCode ? (
-                            <span className="font-mono text-xs text-muted-foreground truncate">
-                              {report.projectCode}
+                        </td>
+
+                        {/* 4. Date */}
+                        <td className="px-4 py-3 align-middle whitespace-nowrap text-xs text-muted-foreground">
+                          {dateStr}
+                        </td>
+
+                        {/* 5. Submitted By */}
+                        <td className="px-4 py-3 align-middle">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Avatar className="size-6 shrink-0">
+                              <AvatarFallback className="text-[10px]">{report.authorInitials}</AvatarFallback>
+                            </Avatar>
+                            <span className="text-xs text-foreground truncate max-w-[140px]" title={report.authorName}>
+                              {report.authorName}
                             </span>
-                          ) : null}
-                        </div>
-                      </td>
+                          </div>
+                        </td>
 
-                      {/* 3. Stage */}
-                      <td className="px-4 py-3 align-middle">
-                        <span className="text-muted-foreground truncate max-w-[180px] block text-xs" title={report.stageName}>
-                          {report.stageName}
-                        </span>
-                      </td>
+                        {/* 6. Status */}
+                        <td className="px-4 py-3 align-middle whitespace-nowrap">
+                          <ToneBadge tone={tone}>
+                            {report.status.replace("_", " ")}
+                          </ToneBadge>
+                        </td>
 
-                      {/* 4. Date */}
-                      <td className="px-4 py-3 align-middle whitespace-nowrap text-xs text-muted-foreground">
-                        {dateStr}
-                      </td>
+                        {/* 7. Actions */}
+                        <td className="px-4 py-3 align-middle text-right whitespace-nowrap">
+                          <div className="inline-flex items-center justify-end gap-1.5">
+                            <Tooltip>
+                              <TooltipTrigger render={<span className="inline-flex shrink-0" />}>
+                                <Link
+                                  href={report.href}
+                                  className={cn(
+                                    buttonVariants({ variant: "outline", size: "icon" }),
+                                    "size-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/80"
+                                  )}
+                                  aria-label="View Report"
+                                >
+                                  <Eye className="size-4" />
+                                </Link>
+                              </TooltipTrigger>
+                              <TooltipContent>View Report</TooltipContent>
+                            </Tooltip>
 
-                      {/* 5. Submitted By */}
-                      <td className="px-4 py-3 align-middle">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Avatar className="size-6 shrink-0">
-                            <AvatarFallback className="text-[10px]">{report.authorInitials}</AvatarFallback>
-                          </Avatar>
-                          <span className="text-xs text-foreground truncate max-w-[140px]" title={report.authorName}>
-                            {report.authorName}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* 6. Status */}
-                      <td className="px-4 py-3 align-middle whitespace-nowrap">
-                        <ToneBadge tone={tone}>
-                          {report.status.replace("_", " ")}
-                        </ToneBadge>
-                      </td>
-
-                      {/* 7. Actions */}
-                      <td className="px-4 py-3 align-middle text-right whitespace-nowrap">
-                        <Link
-                          href={report.href}
-                          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 text-xs")}
-                        >
-                          {t.reports.viewReport}
-                        </Link>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+                            <Tooltip>
+                              <TooltipTrigger render={<span className="inline-flex shrink-0" />}>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  disabled={isDownloading}
+                                  onClick={() => handleDownloadBilingualPdf(report)}
+                                  className="size-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/80"
+                                  aria-label="Download Bilingual PDF"
+                                >
+                                  {isDownloading ? (
+                                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                                  ) : (
+                                    <Download className="size-4" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Download Bilingual PDF</TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </TooltipProvider>
       ) : (
         <Card className="p-8 text-center">
           <FileText className="mx-auto size-12 text-muted-foreground/60" />
