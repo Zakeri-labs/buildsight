@@ -36,6 +36,7 @@ import { selectProject } from "@/lib/actions/project-scope"
 import type { ProjectOption } from "@/components/app-shell"
 import { NAVIGATION_START_EVENT } from "@/components/loading/navigation-progress"
 import { useI18n } from "@/lib/i18n"
+import { useCurrentUser } from "@/components/current-user-provider"
 
 function NavLink({
   label,
@@ -195,16 +196,19 @@ export function AppSidebar({
   const homeLabel = homeHref === "/memberhomepage" ? (locale === "ar" ? "الرئيسية" : "Home") : t.nav.dashboard
 
   const isMember = homeHref === "/memberhomepage"
+  const currentUser = useCurrentUser()
+  const canAccessSupervisorPerformance =
+    !isMember && (currentUser.role === "org_admin" || currentUser.role === "org_manager")
 
   const supervisorPerformanceItem = {
     label: locale === "ar" ? "أداء المشرفين" : "Supervisor Performance",
     href: "/supervisor-performance",
     icon: TrendingUp,
   }
-  void supervisorPerformanceItem
 
   const moduleItems = [
     { label: homeLabel, href: homeHref, icon: Home },
+    ...(canAccessSupervisorPerformance ? [supervisorPerformanceItem] : []),
     projectNavigationItem,
     ...(stageNavigationItem ? [stageNavigationItem] : []),
     {

@@ -58,6 +58,7 @@ export function AppTopbar({
     "/documents": { title: t.documents.title, subtitle: t.documents.subtitle },
     "/initial-documents": { title: t.nav.initialDocuments, subtitle: "Initial reference files uploaded with each project" },
     "/reports": { title: t.reports.title, subtitle: t.reports.subtitle },
+    "/supervisor-performance": { title: "Supervisor Performance", subtitle: "Monitor supervisor visit workload, reports, and compliance" },
     "/calendar": { title: t.nav.calendar, subtitle: "" },
     "/site-visits": { title: t.nav.siteVisits, subtitle: "Request, schedule, and track project site visits" },
     "/users": { title: t.settings.tabAccess, subtitle: t.settings.accessDesc },
