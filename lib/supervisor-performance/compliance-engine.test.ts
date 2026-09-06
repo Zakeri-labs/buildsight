@@ -515,9 +515,73 @@ function runUnitTests() {
     console.log("✓ Top-level calculateSupervisorVisitCompliance generated complete dashboard model.")
   }
 
+  // -----------------------------------------------------------------------------
+  // TEST GROUP 10: Weekly Compliance Cell Status Isolation (Regression Test)
+  // -----------------------------------------------------------------------------
+  console.log("\n--- 10. Weekly Compliance Cell Status Isolation (Regression Test) ---")
+  {
+    // Today is Sep 10, 2026
+    const refDate = "2026-09-10"
+    // Weeks:
+    // Week 1: Aug 23 - Aug 29 (Past)
+    // Week 2: Aug 30 - Sep 05 (Past)
+    // Week 3: Sep 06 - Sep 12 (Current: ends Sep 12 >= Sep 10)
+    // Week 4: Sep 13 - Sep 19 (Future: ends Sep 19 > Sep 10)
+    const weeks = generateCalendarWeeks({ rangeStart: "2026-08-23", rangeEnd: "2026-09-19", referenceDate: refDate })
+
+    const project: RawProjectRecord = {
+      id: "p_regression",
+      name: "Regression Test Project",
+      code: "REG-1",
+      status: "active",
+      supervision_type: "monthly_4",
+      start_date: "2026-01-01",
+    }
+
+    // Week 1 (Aug 23-29) has 2 visits -> Extra
+    // Week 2 (Aug 30 - Sep 05) has 0 visits -> MUST be Missing (week ended), NOT Extra!
+    // Week 3 (Sep 06 - Sep 12) has 0 visits -> MUST be Upcoming (week current/not ended), NOT Extra!
+    const reports: RawReportRecord[] = [
+      { id: "r1", project_id: "p_regression", status: "submitted", submitted_at: "2026-08-24T00:00:00Z", visit_date: "2026-08-24" },
+      { id: "r2", project_id: "p_regression", status: "submitted", submitted_at: "2026-08-26T00:00:00Z", visit_date: "2026-08-26" },
+    ]
+
+    const timelineRow = buildProjectTimelineRow({
+      project,
+      participants: [],
+      reports,
+      weeks,
+      today: refDate,
+    })
+
+    const week1Cell = timelineRow.weeklyCells[weeks[0].weekKey]
+    const week2Cell = timelineRow.weeklyCells[weeks[1].weekKey]
+    const week3Cell = timelineRow.weeklyCells[weeks[2].weekKey]
+    const week4Cell = timelineRow.weeklyCells[weeks[3].weekKey]
+
+    // Week 1: Required=1, Done=2 -> status: extra
+    console.assert(week1Cell.requiredVisits === 1 && week1Cell.completedVisits === 2 && week1Cell.status === "extra",
+      `Week 1 should be extra (Req 1, Done 2), got req=${week1Cell.requiredVisits}, done=${week1Cell.completedVisits}, status=${week1Cell.status}`)
+
+    // Week 2: Required=1, Done=0, Week Ended (Aug 30 - Sep 05 < Sep 10) -> status: missing (MUST NOT BE extra!)
+    console.assert(week2Cell.requiredVisits === 1 && week2Cell.completedVisits === 0 && week2Cell.status === "missing",
+      `Week 2 MUST be missing (Req 1, Done 0, past), got req=${week2Cell.requiredVisits}, done=${week2Cell.completedVisits}, status=${week2Cell.status}`)
+
+    // Week 3: Required=1, Done=0, Week Active (Sep 06 - Sep 12 >= Sep 10) -> status: upcoming (MUST NOT BE extra!)
+    console.assert(week3Cell.requiredVisits === 1 && week3Cell.completedVisits === 0 && week3Cell.status === "upcoming",
+      `Week 3 MUST be upcoming (Req 1, Done 0, current/future), got req=${week3Cell.requiredVisits}, done=${week3Cell.completedVisits}, status=${week3Cell.status}`)
+
+    // Week 4: Required=1, Done=0, Future -> status: upcoming
+    console.assert(week4Cell.requiredVisits === 1 && week4Cell.completedVisits === 0 && week4Cell.status === "upcoming",
+      `Week 4 MUST be upcoming (Req 1, Done 0, future), got req=${week4Cell.requiredVisits}, done=${week4Cell.completedVisits}, status=${week4Cell.status}`)
+
+    console.log("✓ Regression test passed: A period with extra visits does NOT mark following empty weeks as Extra.")
+  }
+
   console.log("\n================================================================================")
   console.log("ALL SUPERVISOR VISIT COMPLIANCE DOMAIN ENGINE TESTS PASSED! 🎉")
   console.log("================================================================================\n")
 }
 
 runUnitTests()
+

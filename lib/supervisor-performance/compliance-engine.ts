@@ -561,11 +561,9 @@ export function buildProjectTimelineRow(input: {
     if (isApplicableWeek) {
       requiredVisits = 1
 
-      if (overlapping.some((p) => p.status === "missing")) {
-        cellStatus = "missing"
-      } else if (completedVisits > requiredVisits || overlapping.some((p) => p.status === "extra")) {
+      if (completedVisits > requiredVisits) {
         cellStatus = "extra"
-      } else if (completedVisits >= requiredVisits || overlapping.every((p) => p.status === "done")) {
+      } else if (completedVisits === requiredVisits) {
         cellStatus = "done"
       } else if (week.endDate < today) {
         cellStatus = "missing"
