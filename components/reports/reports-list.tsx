@@ -103,6 +103,21 @@ export function ReportsList({
   const [selectedSupervisorId, setSelectedSupervisorId] = useState<string | null>(null)
   const [clientPage, setClientPage] = useState(1)
 
+  // Check and consume sessionStorage supervisor filter context (e.g. from Supervisor Performance)
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem("reportsSupervisorFilter")
+      if (stored) {
+        sessionStorage.removeItem("reportsSupervisorFilter")
+        if (supervisorOptions.some((s) => s.id === stored)) {
+          setSelectedSupervisorId(stored)
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [supervisorOptions])
+
   // Auto-reset supervisor selection if not in new dataset
   useEffect(() => {
     if (selectedSupervisorId && !supervisorOptions.some((s) => s.id === selectedSupervisorId)) {

@@ -18,6 +18,7 @@ import {
   Check,
   AlertTriangle,
   Plus,
+  FileText,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -161,6 +162,19 @@ export function SupervisorPerformanceView({
     router.push(
       `/supervisor-performance?from=${encodeURIComponent(customFrom)}&to=${encodeURIComponent(customTo)}`,
     )
+  }
+
+  const handleViewSupervisorReports = (supervisorId: string) => {
+    try {
+      sessionStorage.setItem("reportsSupervisorFilter", supervisorId)
+    } catch {
+      // ignore
+    }
+    const params = new URLSearchParams()
+    params.set("range", "custom")
+    params.set("from", period.startDate)
+    params.set("to", period.endDate)
+    router.push(`/reports?${params.toString()}`)
   }
 
   // Sorted supervisors: Active Projects DESC, Completed Visits DESC, Supervisor Name ASC
@@ -516,6 +530,7 @@ export function SupervisorPerformanceView({
                             </Tooltip>
                           </div>
                         </TableHead>
+                        <TableHead className="text-right w-[130px]">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -641,6 +656,19 @@ export function SupervisorPerformanceView({
                                   </div>
                                 </TooltipContent>
                               </Tooltip>
+                            </TableCell>
+
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                                onClick={() => handleViewSupervisorReports(supervisor.supervisorId)}
+                                title={`View Reports for ${supervisor.supervisorName}`}
+                              >
+                                <FileText className="h-3.5 w-3.5" />
+                                <span>View Reports</span>
+                              </Button>
                             </TableCell>
                           </TableRow>
                         )
