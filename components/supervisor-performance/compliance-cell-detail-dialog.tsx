@@ -176,7 +176,11 @@ export function ComplianceCellDetailDialog({
             ) : (
               <div className="flex flex-col gap-2">
                 {reports.map((report, idx) => {
-                  const reportHref = `/projects/${report.projectId}/stages/inspection/reports/${report.id}`
+                  const reportHref =
+                    report.href ||
+                    (report.stageId
+                      ? `/projects/${report.projectId}/stages/${report.stageId}/reports/${report.id}`
+                      : `/projects/${report.projectId}`)
                   return (
                     <Link
                       key={report.id}

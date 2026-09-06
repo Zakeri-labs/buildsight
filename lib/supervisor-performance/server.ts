@@ -231,7 +231,7 @@ export async function loadSupervisorVisitComplianceData(
     admin
       .from("term_responses")
       .select(
-        "id, project_id, status, submitted_at, visit_date, created_at, created_by, report_number, report_title, visit_number",
+        "id, project_id, project_stage_id, status, submitted_at, visit_date, created_at, created_by, report_number, report_title, visit_number",
       )
       .in("project_id", projectIds)
       .gte("visit_date", queryStart)
@@ -239,7 +239,7 @@ export async function loadSupervisorVisitComplianceData(
     admin
       .from("term_responses")
       .select(
-        "id, project_id, status, submitted_at, visit_date, created_at, created_by, report_number, report_title, visit_number",
+        "id, project_id, project_stage_id, status, submitted_at, visit_date, created_at, created_by, report_number, report_title, visit_number",
       )
       .in("project_id", projectIds)
       .is("visit_date", null)

@@ -536,9 +536,16 @@ export function buildProjectTimelineRow(input: {
         ? (parsedVisitNo as number)
         : null
 
+    const stageId = (r.project_stage_id ?? r.projectStageId ?? "").trim() || null
+    const href = stageId
+      ? `/projects/${project.id}/stages/${stageId}/reports/${r.id}`
+      : `/projects/${project.id}`
+
     allProjectReportItems.push({
       id: r.id,
       projectId: project.id,
+      stageId,
+      href,
       reportNumber: (r.report_number ?? r.reportNumber ?? "").trim() || null,
       visitNumber,
       visitDate: effectiveDate,

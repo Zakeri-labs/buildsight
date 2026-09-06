@@ -86,6 +86,8 @@ export type RawReportRecord = {
   id: string
   project_id?: string | null
   projectId?: string | null
+  project_stage_id?: string | null
+  projectStageId?: string | null
   status: string | null
   submitted_at?: string | null
   submittedAt?: string | null
@@ -113,6 +115,8 @@ export type CompliancePeriodStatus =
 export type ComplianceReportItem = {
   id: string
   projectId: string
+  stageId?: string | null
+  href?: string | null
   reportNumber: string | null
   visitNumber: number | null
   visitDate: string // YYYY-MM-DD
