@@ -144,6 +144,94 @@ export function ComplianceMatrix({
 
           {/* Matrix Body */}
           <tbody className="divide-y">
+            {/* Summary Row */}
+            <tr className="border-b-2 border-border/80 bg-muted/30 font-medium transition-colors hover:bg-muted/40">
+              {/* Sticky Summary Label */}
+              <td className="sticky left-0 z-10 min-w-[280px] max-w-[320px] border-r bg-muted/60 p-3 shadow-xs backdrop-blur-xs">
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                    <span className="inline-block h-2 w-2 rounded-full bg-primary" />
+                    <span>Week Summary</span>
+                  </div>
+                  <span className="text-[11px] text-muted-foreground">
+                    Aggregated for {projects.length} project{projects.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+              </td>
+
+              {/* Weekly Aggregated Totals */}
+              {weeks.map((week) => {
+                let totalRequired = 0
+                let totalCompleted = 0
+                let totalMissing = 0
+                let totalExtra = 0
+
+                for (const project of projects) {
+                  const cell = project.weeklyCells[week.weekKey]
+                  if (cell) {
+                    totalRequired += cell.requiredVisits || 0
+                    totalCompleted += cell.completedVisits || 0
+                    if (cell.status === "missing") {
+                      totalMissing += Math.max(1, (cell.requiredVisits || 1) - (cell.completedVisits || 0))
+                    } else if (cell.status === "extra") {
+                      totalExtra += Math.max(1, (cell.completedVisits || 0) - (cell.requiredVisits || 0))
+                    }
+                  }
+                }
+
+                return (
+                  <td
+                    key={week.weekKey}
+                    className={cn(
+                      "min-w-[140px] max-w-[180px] border-r p-2.5 text-xs align-top transition-colors",
+                      week.isCurrentWeek && "bg-primary/5 dark:bg-primary/10",
+                    )}
+                  >
+                    <div className="flex flex-col gap-1 rounded bg-background/60 p-1.5 ring-1 ring-border/50 text-[11px]">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Required</span>
+                        <strong className="font-mono text-foreground font-semibold">
+                          {totalRequired}
+                        </strong>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-emerald-700 dark:text-emerald-400 font-medium">Done</span>
+                        <strong className="font-mono text-emerald-700 dark:text-emerald-400 font-semibold">
+                          {totalCompleted}
+                        </strong>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className={cn(
+                          totalMissing > 0 ? "text-rose-600 dark:text-rose-400 font-semibold" : "text-muted-foreground",
+                        )}>
+                          Missing
+                        </span>
+                        <strong className={cn(
+                          "font-mono font-semibold",
+                          totalMissing > 0 ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground",
+                        )}>
+                          {totalMissing}
+                        </strong>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className={cn(
+                          totalExtra > 0 ? "text-amber-700 dark:text-amber-400 font-semibold" : "text-muted-foreground",
+                        )}>
+                          Extra
+                        </span>
+                        <strong className={cn(
+                          "font-mono font-semibold",
+                          totalExtra > 0 ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground",
+                        )}>
+                          {totalExtra}
+                        </strong>
+                      </div>
+                    </div>
+                  </td>
+                )
+              })}
+            </tr>
+
             {projects.map((projectRow) => (
               <ComplianceProjectRow
                 key={projectRow.projectId}
