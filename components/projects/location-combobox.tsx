@@ -2,7 +2,6 @@
 
 import { useEffect, useId, useRef, useState } from "react"
 import { Loader2, MapPin, Search } from "lucide-react"
-import { Input } from "@/components/ui/input"
 import { useI18n } from "@/lib/i18n"
 import {
   LOCATION_SEARCH_DEBOUNCE_MS,
@@ -22,6 +21,8 @@ type LocationComboboxProps = {
   placeholder?: string
   disabled?: boolean
   className?: string
+  inputClassName?: string
+  rows?: number
   autoFocus?: boolean
   describedBy?: string
   ariaLabel?: string
@@ -38,6 +39,8 @@ export function LocationCombobox({
   placeholder,
   disabled,
   className,
+  inputClassName,
+  rows = 2,
   autoFocus,
   describedBy,
   ariaLabel,
@@ -158,7 +161,7 @@ export function LocationCombobox({
     onValueChange(nextValue)
   }
 
-  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "ArrowDown") {
       if (!open && value.trim().length >= LOCATION_SEARCH_MIN_CHARACTERS) setOpen(true)
       if (results.length) {
@@ -172,9 +175,11 @@ export function LocationCombobox({
       setActiveIndex((current) => (current <= 0 ? results.length - 1 : current - 1))
       return
     }
-    if (event.key === "Enter" && open && activeIndex >= 0 && results[activeIndex]) {
+    if (event.key === "Enter") {
       event.preventDefault()
-      choose(results[activeIndex])
+      if (open && activeIndex >= 0 && results[activeIndex]) {
+        choose(results[activeIndex])
+      }
       return
     }
     if (event.key === "Escape") {
@@ -189,10 +194,11 @@ export function LocationCombobox({
     <div className={cn("relative", className)}>
       <Search
         aria-hidden="true"
-        className="pointer-events-none absolute inset-inline-start-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground"
+        className="pointer-events-none absolute inset-inline-start-3 top-3 z-10 size-4 text-muted-foreground"
       />
-      <Input
+      <textarea
         id={inputId}
+        rows={rows}
         value={value}
         onChange={(event) => handleInput(event.target.value)}
         onKeyDown={handleKeyDown}
@@ -213,12 +219,15 @@ export function LocationCombobox({
         placeholder={placeholder ?? labels.placeholder}
         disabled={disabled}
         autoFocus={autoFocus}
-        className={cn("h-10 ps-9 pe-9 text-xs sm:text-sm", className)}
+        className={cn(
+          "w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-2 text-xs sm:text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 resize-none leading-relaxed ps-9 pe-9 min-h-[3.25rem] sm:min-h-[3.5rem]",
+          inputClassName,
+        )}
       />
       {state === "loading" && (
         <Loader2
           aria-hidden="true"
-          className="pointer-events-none absolute inset-inline-end-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground"
+          className="pointer-events-none absolute inset-inline-end-3 top-3 size-4 animate-spin text-muted-foreground"
         />
       )}
 
