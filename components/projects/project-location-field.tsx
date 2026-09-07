@@ -416,10 +416,17 @@ export function ProjectLocationField({
   }
 
   return (
-    <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(28rem,1.05fr)] lg:items-stretch xl:gap-6">
-      <div className="min-w-0">
-        {children ? <div className="h-full min-h-0">{children}</div> : null}
-      </div>
+    <div
+      className={cn(
+        "grid min-w-0 gap-5 lg:items-stretch xl:gap-6",
+        children ? "lg:grid-cols-[minmax(0,0.95fr)_minmax(28rem,1.05fr)]" : "w-full",
+      )}
+    >
+      {children ? (
+        <div className="min-w-0">
+          <div className="h-full min-h-0">{children}</div>
+        </div>
+      ) : null}
 
       <div className="flex min-w-0 flex-col gap-3">
         <div className="space-y-2.5">

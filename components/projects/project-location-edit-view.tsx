@@ -10,11 +10,10 @@ import {
   Building2,
   CheckCircle2,
   Loader2,
-  MapPin,
   Save,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { ProjectLocationField } from "@/components/projects/project-location-field"
 import { updateProjectLocationAction } from "@/lib/actions/projects"
 import { useI18n } from "@/lib/i18n"
@@ -129,73 +128,19 @@ export function ProjectLocationEditView({
       {/* Main Edit Form */}
       <form onSubmit={handleSave} className="flex flex-col gap-6">
         <Card className="shadow-xs">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-2 text-base font-semibold">
-              <MapPin className="size-4 text-primary" />
-              {isArabic ? "موقع المشروع والخريطة التفاعلية" : "Project Location & Interactive Map"}
-            </CardTitle>
-            <CardDescription className="text-xs">
-              {isArabic
-                ? "ابحث عن موقع، أو انقر على الخريطة لتحديد الموقع تلقائياً واستخراج العنوان والمنطقة الإدارية."
-                : "Search for an address or click anywhere on the map to automatically pin coordinates and resolve address and area."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-2xl border bg-muted/15 p-4 sm:p-5 lg:p-6">
-              <ProjectLocationField
-                id={`supervisor-project-location-${project.id}`}
-                value={location}
-                onChange={setLocation}
-                areaField={{
-                  value: areaDistrict,
-                  onChange: setAreaDistrict,
-                  label: isArabic ? "المنطقة / الحي" : "Area / District",
-                  placeholder: isArabic ? "مثال: مسقط / الخوض" : "e.g. Muscat / Al Khoudh",
-                }}
-                disabled={isSaving}
-              >
-                <div className="flex h-full min-h-0 flex-col justify-between gap-4">
-                  <div className="space-y-3">
-                    <div className="rounded-xl border bg-background/80 p-3.5 shadow-2xs">
-                      <p className="text-xs font-semibold text-foreground">
-                        {isArabic ? "مشروع" : "Project"}
-                      </p>
-                      <p className="mt-0.5 text-sm font-medium text-foreground/90">
-                        {project.name}
-                      </p>
-                      {project.code && (
-                        <p className="mt-1 font-mono text-xs text-muted-foreground">
-                          {project.code}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="rounded-xl border bg-background/80 p-3.5 text-xs text-muted-foreground shadow-2xs">
-                      <p className="font-medium text-foreground">
-                        {isArabic ? "إرشادات تحديد الموقع:" : "Location Pinning Guide:"}
-                      </p>
-                      <ul className="mt-2 list-inside list-disc space-y-1 text-[11px] leading-relaxed">
-                        <li>
-                          {isArabic
-                            ? "ابحث في شريط البحث عن اسم المعلم أو الشارع."
-                            : "Search in the location bar for places, landmarks, or streets."}
-                        </li>
-                        <li>
-                          {isArabic
-                            ? "انقر على الخريطة أو اسحب العلامة لتحديد الموقع بدقة."
-                            : "Click anywhere on the map or drag the marker to pinpoint exact site GPS coordinates."}
-                        </li>
-                        <li>
-                          {isArabic
-                            ? "يتم جلب العنوان والمنطقة تلقائياً من الإحداثيات المحددة."
-                            : "Address and Area/District are reverse-geocoded automatically."}
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              </ProjectLocationField>
-            </div>
+          <CardContent className="p-4 sm:p-5 lg:p-6">
+            <ProjectLocationField
+              id={`supervisor-project-location-${project.id}`}
+              value={location}
+              onChange={setLocation}
+              areaField={{
+                value: areaDistrict,
+                onChange: setAreaDistrict,
+                label: isArabic ? "المنطقة / الحي" : "Area / District",
+                placeholder: isArabic ? "مثال: مسقط / الخوض" : "e.g. Muscat / Al Khoudh",
+              }}
+              disabled={isSaving}
+            />
           </CardContent>
         </Card>
 
