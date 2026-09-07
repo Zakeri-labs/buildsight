@@ -30,7 +30,7 @@ const initialFilters: ComplianceFilterState = {
   searchQuery: "",
   selectedSupervisor: "all",
   selectedFrequency: "all",
-  selectedStatus: "all",
+  selectedStatus: "active",
   showIssuesOnly: false,
 }
 
