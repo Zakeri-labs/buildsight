@@ -464,7 +464,7 @@ export function ProjectLocationField({
                 onChange={(event) => areaField.onChange(event.target.value)}
                 placeholder={areaField.placeholder}
                 disabled={disabled}
-                className="h-10"
+                className="h-10 text-xs sm:text-sm"
               />
             </div>
           ) : null}

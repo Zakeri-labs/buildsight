@@ -213,7 +213,7 @@ export function LocationCombobox({
         placeholder={placeholder ?? labels.placeholder}
         disabled={disabled}
         autoFocus={autoFocus}
-        className="h-10 ps-9 pe-9"
+        className={cn("h-10 ps-9 pe-9 text-xs sm:text-sm", className)}
       />
       {state === "loading" && (
         <Loader2
