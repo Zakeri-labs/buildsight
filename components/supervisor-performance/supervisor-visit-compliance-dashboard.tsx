@@ -150,10 +150,14 @@ export function SupervisorVisitComplianceDashboard({
 
       // 3. Visit Frequency Filter
       if (selectedFrequency !== "all") {
-        if (selectedFrequency === "lump_sum") {
+        if (selectedFrequency === "monthly") {
+          const isMonthly =
+            project.normalizedSupervisionType === "monthly_2" ||
+            project.normalizedSupervisionType === "monthly_3" ||
+            project.normalizedSupervisionType === "monthly_4"
+          if (!isMonthly) return false
+        } else if (selectedFrequency === "lump_sum") {
           if (project.normalizedSupervisionType !== null) return false
-        } else {
-          if (project.normalizedSupervisionType !== selectedFrequency) return false
         }
       }
 

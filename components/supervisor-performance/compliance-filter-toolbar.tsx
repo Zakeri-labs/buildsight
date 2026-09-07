@@ -201,9 +201,7 @@ export function ComplianceFilterToolbar({
                 <Calendar className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <SelectValue placeholder="All Frequencies">
                   {(value) => {
-                    if (value === "monthly_2") return "Monthly 2"
-                    if (value === "monthly_3") return "Monthly 3"
-                    if (value === "monthly_4") return "Monthly 4"
+                    if (value === "monthly") return "Monthly"
                     if (value === "lump_sum") return "Lump Sum"
                     return "All Frequencies"
                   }}
@@ -213,9 +211,7 @@ export function ComplianceFilterToolbar({
             <SelectContent>
               <SelectGroup>
                 <SelectItem value="all">All Frequencies</SelectItem>
-                <SelectItem value="monthly_2">Monthly 2</SelectItem>
-                <SelectItem value="monthly_3">Monthly 3</SelectItem>
-                <SelectItem value="monthly_4">Monthly 4</SelectItem>
+                <SelectItem value="monthly">Monthly</SelectItem>
                 <SelectItem value="lump_sum">Lump Sum</SelectItem>
               </SelectGroup>
             </SelectContent>
