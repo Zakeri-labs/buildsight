@@ -92,6 +92,7 @@ export function ProjectLocationField({
   children,
   areaField,
   contentAfterAreaField,
+  mapClassName,
 }: {
   value: ProjectLocationValue
   onChange: (value: ProjectLocationValue) => void
@@ -105,6 +106,7 @@ export function ProjectLocationField({
     placeholder?: string
   }
   contentAfterAreaField?: React.ReactNode
+  mapClassName?: string
 }) {
   const generatedId = useId()
   const inputId = id ?? `project-location-${generatedId}`
@@ -509,7 +511,8 @@ export function ProjectLocationField({
             "relative isolate w-full min-w-0 overflow-hidden border bg-muted/30 shadow-sm",
             isFullscreen
               ? "fixed inset-0 z-[1200] h-screen max-h-none max-w-none rounded-none border-0 bg-background"
-              : "h-[24rem] rounded-2xl sm:h-[32rem] lg:h-auto lg:aspect-square lg:max-h-[42rem] lg:min-h-[30rem]",
+              : "h-[16rem] rounded-2xl sm:h-[22rem] lg:h-auto lg:aspect-square lg:max-h-[42rem] lg:min-h-[30rem]",
+            mapClassName,
           )}
         >
           <div className={cn("absolute overflow-hidden", isFullscreen ? "inset-3 rounded-xl border sm:inset-4" : "inset-0")}>
