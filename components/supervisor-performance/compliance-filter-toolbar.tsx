@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getSundayForDateKey } from "@/lib/supervisor-performance/compliance-engine"
+import { PROJECT_STATUS_OPTIONS } from "@/lib/projects/project-status"
 import { cn } from "@/lib/utils"
 import type {
   ProjectComplianceTimelineRow,
@@ -221,8 +222,8 @@ export function ComplianceFilterToolbar({
           </Select>
         </div>
 
-        {/* 5. Compliance Status Filter */}
-        <div className="w-[140px] sm:w-[150px]">
+        {/* 4. Project Status Filter */}
+        <div className="w-[145px] sm:w-[155px]">
           <Select
             value={selectedStatus}
             onValueChange={(val) => onFilterChange("selectedStatus", val as string)}
@@ -230,24 +231,23 @@ export function ComplianceFilterToolbar({
             <SelectTrigger size="sm" className="h-8 text-xs">
               <div className="flex items-center gap-1.5 truncate">
                 <Activity className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <SelectValue placeholder="All Status">
+                <SelectValue placeholder="All Statuses">
                   {(value) => {
-                    if (value === "done") return "Completed"
-                    if (value === "missing") return "Missing"
-                    if (value === "upcoming") return "Upcoming"
-                    if (value === "extra") return "Extra Visit"
-                    return "All Status"
+                    if (!value || value === "all") return "All Statuses"
+                    const status = PROJECT_STATUS_OPTIONS.find((s) => s.value === value)
+                    return status?.label ?? "All Statuses"
                   }}
                 </SelectValue>
               </div>
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="done">Completed</SelectItem>
-                <SelectItem value="missing">Missing</SelectItem>
-                <SelectItem value="upcoming">Upcoming</SelectItem>
-                <SelectItem value="extra">Extra Visit</SelectItem>
+                <SelectItem value="all">All Statuses</SelectItem>
+                {PROJECT_STATUS_OPTIONS.map((status) => (
+                  <SelectItem key={status.value} value={status.value}>
+                    {status.label}
+                  </SelectItem>
+                ))}
               </SelectGroup>
             </SelectContent>
           </Select>

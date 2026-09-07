@@ -157,12 +157,11 @@ export function SupervisorVisitComplianceDashboard({
         }
       }
 
-      // 4. Compliance Status Filter
+      // 4. Project Status Filter
       if (selectedStatus !== "all") {
-        const hasStatusInVisibleWeeks = Object.values(project.weeklyCells).some(
-          (cell) => cell.status === selectedStatus,
-        )
-        if (!hasStatusInVisibleWeeks) return false
+        if (project.normalizedStatus !== selectedStatus && project.status !== selectedStatus) {
+          return false
+        }
       }
 
       // 5. Quick Action: Show Issues Only

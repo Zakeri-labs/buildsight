@@ -35,7 +35,7 @@ export function ComplianceMatrix({
           <FilterX className="h-10 w-10 text-muted-foreground/40" />
           <h3 className="mt-3 text-sm font-semibold text-foreground">No Matching Projects Found</h3>
           <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-            No projects match the active filter criteria. Try adjusting your supervisor, frequency, or compliance status selection.
+            No projects match the active filter criteria. Try adjusting your search, supervisor, frequency, or status selection.
           </p>
           {onResetFilters && (
             <Button
