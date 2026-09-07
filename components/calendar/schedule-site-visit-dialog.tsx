@@ -56,6 +56,30 @@ function normalizeTimeValue(value: string | null | undefined): string {
   return ""
 }
 
+function getInitialSupervisorId(
+  project: CalendarSchedulingProjectViewModel | null,
+  editEvt?: CalendarEventViewModel | null,
+): string {
+  if (!project) return ""
+  const availableSupervisors = project.supervisors?.length
+    ? project.supervisors
+    : project.supervisor ? [project.supervisor] : []
+
+  if (editEvt) {
+    if (editEvt.assignedUserIds?.length) {
+      const matchingId = editEvt.assignedUserIds.find((id) =>
+        availableSupervisors.some((s) => s.id === id),
+      )
+      if (matchingId) return matchingId
+    }
+    if (editEvt.supervisor?.id && availableSupervisors.some((s) => s.id === editEvt.supervisor?.id)) {
+      return editEvt.supervisor.id
+    }
+  }
+
+  return project.supervisor?.id ?? availableSupervisors[0]?.id ?? ""
+}
+
 export function ScheduleSiteVisitDialog({
   open,
   onOpenChange,
@@ -89,7 +113,12 @@ export function ScheduleSiteVisitDialog({
   const [date, setDate] = useState(editVisit?.date ?? request?.requestedDate ?? initialDate)
   const [time, setTime] = useState(normalizeTimeValue(editVisit?.timeLabel))
   const [notes, setNotes] = useState(editVisit?.notes ?? request?.notes ?? "")
-  const [assignedUserIds, setAssignedUserIds] = useState<string[]>(editVisit?.assignedUserIds ?? [])
+  const [selectedSupervisorId, setSelectedSupervisorId] = useState<string>(() =>
+    getInitialSupervisorId(
+      fixedProject ?? projects.find((project) => project.id === (editVisit?.projectId ?? request?.projectId ?? projects[0]?.id)) ?? projects[0] ?? null,
+      editVisit,
+    ),
+  )
   const [mobileNotesExpanded, setMobileNotesExpanded] = useState(Boolean(editVisit?.notes))
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
   const [error, setError] = useState("")
@@ -150,7 +179,12 @@ export function ScheduleSiteVisitDialog({
     setDate(editVisit?.date ?? request?.requestedDate ?? initialDate)
     setTime(normalizeTimeValue(editVisit?.timeLabel))
     setNotes(editVisit?.notes ?? request?.notes ?? "")
-    setAssignedUserIds(editVisit?.assignedUserIds ?? [])
+    const targetProject = editVisit
+      ? projects.find((project) => project.id === editVisit.projectId) ?? null
+      : request
+        ? projects.find((project) => project.id === request.projectId) ?? null
+        : projects.find((project) => project.id === targetProjectId) ?? projects[0] ?? null
+    setSelectedSupervisorId(getInitialSupervisorId(targetProject, editVisit))
     setMobileNotesExpanded(Boolean(editVisit?.notes))
     setConfirmCancelOpen(false)
     setError("")
@@ -167,17 +201,13 @@ export function ScheduleSiteVisitDialog({
 
   function changeProject(value: unknown) {
     if (isEditMode || request) return
-    setProjectId(String(value))
+    const nextProjectId = String(value)
+    setProjectId(nextProjectId)
     setProjectSearch("")
     setProjectMenuOpen(false)
-    setAssignedUserIds([])
+    const nextProject = projects.find((project) => project.id === nextProjectId) ?? null
+    setSelectedSupervisorId(getInitialSupervisorId(nextProject, null))
     setError("")
-  }
-
-  function toggleParticipant(userId: string) {
-    setAssignedUserIds((current) =>
-      current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId],
-    )
   }
 
   function submit() {
@@ -198,13 +228,24 @@ export function ScheduleSiteVisitDialog({
       setError("Visit date cannot be in the past.")
       return
     }
-    const isMobileScheduling = window.matchMedia("(max-width: 639px)").matches
-    const submittedAssignedUserIds = isMobileScheduling ? [] : assignedUserIds
-    const validParticipantIds = new Set(selectedProject.participants.map((participant) => participant.id))
-    if (submittedAssignedUserIds.some((id) => !UUID_PATTERN.test(id) || !validParticipantIds.has(id))) {
-      setError("One or more selected participants are invalid.")
+
+    const availableSupervisors = selectedProject.supervisors?.length
+      ? selectedProject.supervisors
+      : selectedProject.supervisor
+        ? [selectedProject.supervisor]
+        : []
+
+    let finalSupervisorId = selectedSupervisorId
+    if (!finalSupervisorId && availableSupervisors.length > 0) {
+      finalSupervisorId = availableSupervisors[0].id
+    }
+
+    if (finalSupervisorId && !UUID_PATTERN.test(finalSupervisorId)) {
+      setError("Select a valid project supervisor.")
       return
     }
+
+    const submittedAssignedUserIds = finalSupervisorId ? [finalSupervisorId] : []
 
     setError("")
     startTransition(async () => {
@@ -437,28 +478,52 @@ export function ScheduleSiteVisitDialog({
             </div>
           </div>
 
-          <div className="grid gap-2">
-            <Label>Supervisor</Label>
-            <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
-              <p className="truncate text-sm font-medium text-foreground">{selectedProject?.supervisor?.name ?? "Assigned Project Supervisor"}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">Project Supervisor</p>
-            </div>
-          </div>
+          {(() => {
+            const supervisors = selectedProject?.supervisors?.length
+              ? selectedProject.supervisors
+              : selectedProject?.supervisor
+                ? [selectedProject.supervisor]
+                : []
 
-          <div className="grid gap-2 max-sm:hidden">
-            <Label>Participants</Label>
-            <div className="grid max-h-48 min-w-0 gap-1 overflow-y-auto rounded-xl border p-2 max-sm:max-h-40">
-              {selectedProject?.participants?.length ? selectedProject.participants.map((person) => (
-                <label key={person.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted">
-                  <input type="checkbox" checked={assignedUserIds.includes(person.id)} onChange={() => toggleParticipant(person.id)} disabled={pending} className="size-4 rounded border-input accent-primary" />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">{person.name}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{person.role ?? "Project participant"}</span>
-                  </span>
-                </label>
-              )) : <p className="px-2 py-4 text-sm text-muted-foreground">No assignable project participants were found.</p>}
-            </div>
-          </div>
+            if (supervisors.length <= 1) {
+              const displaySupervisor = supervisors[0] ?? selectedProject?.supervisor
+              return (
+                <div className="grid gap-2">
+                  <Label>Supervisor</Label>
+                  <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {displaySupervisor?.name ?? "Assigned Project Supervisor"}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {displaySupervisor?.role ?? "Project Supervisor"}
+                    </p>
+                  </div>
+                </div>
+              )
+            }
+
+            return (
+              <div className="grid gap-2">
+                <Label htmlFor="calendar-visit-supervisor">Supervisor</Label>
+                <div className="relative">
+                  <select
+                    id="calendar-visit-supervisor"
+                    value={selectedSupervisorId || supervisors[0]?.id || ""}
+                    onChange={(e) => setSelectedSupervisorId(e.target.value)}
+                    disabled={pending}
+                    className="flex h-10 w-full appearance-none items-center rounded-lg border border-input bg-transparent px-3 py-2 pr-9 text-sm font-medium outline-none transition-colors hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {supervisors.map((s) => (
+                      <option key={s.id} value={s.id} className="bg-popover text-popover-foreground">
+                        {s.name} ({s.role ?? "Project Supervisor"})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                </div>
+              </div>
+            )
+          })()}
 
           <div className="grid gap-2 max-sm:hidden">
             <Label htmlFor="calendar-visit-notes">Notes</Label>

@@ -259,7 +259,7 @@ export async function scheduleSiteVisitAction(input: {
           .in("key_contact_user_id", assignedUserIds),
         admin
           .from("projects")
-          .select("supervising_organization_id")
+          .select("assigned_supervisor_id, supervising_organization_id")
           .eq("id", request.project_id)
           .maybeSingle(),
       ])
@@ -282,6 +282,9 @@ export async function scheduleSiteVisitAction(input: {
           .map((row: any) => row.key_contact_user_id as string | null)
           .filter((id): id is string => Boolean(id)),
       ])
+      if (projectResult.data?.assigned_supervisor_id) {
+        validAssignedUserIds.add(projectResult.data.assigned_supervisor_id)
+      }
 
       const remainingUserIds = assignedUserIds.filter((id) => !validAssignedUserIds.has(id))
       if (remainingUserIds.length && projectResult.data?.supervising_organization_id) {
@@ -495,11 +498,14 @@ export async function createDirectSiteVisitAction(input: {
       throw new AuthzError("This project is not available for direct Site Visit scheduling.")
     }
 
-    const validParticipantIds = new Set(selectedProject.participants.map((participant) => participant.id))
-    if (assignedUserIds.some((id) => !validParticipantIds.has(id))) {
+    const validAssigneeIds = new Set([
+      ...(selectedProject.supervisors ?? []).map((supervisor) => supervisor.id),
+      ...(selectedProject.participants ?? []).map((participant) => participant.id),
+    ])
+    if (assignedUserIds.some((id) => !validAssigneeIds.has(id))) {
       return {
         ok: false,
-        error: "One or more selected participants can no longer be assigned to this project. Refresh and try again.",
+        error: "The selected supervisor can no longer be assigned to this project. Refresh and try again.",
       }
     }
 
@@ -658,9 +664,12 @@ export async function approveCalendarClientVisitRequestAction(input: {
       return { ok: false, error: "The project must have an assigned Project Supervisor before this request can be scheduled." }
     }
 
-    const validParticipantIds = new Set(selectedProject.participants.map((participant) => participant.id))
-    if (assignedUserIds.some((id) => !validParticipantIds.has(id))) {
-      return { ok: false, error: "One or more selected participants can no longer be assigned to this project. Refresh and try again." }
+    const validAssigneeIds = new Set([
+      ...(selectedProject.supervisors ?? []).map((supervisor) => supervisor.id),
+      ...(selectedProject.participants ?? []).map((participant) => participant.id),
+    ])
+    if (assignedUserIds.some((id) => !validAssigneeIds.has(id))) {
+      return { ok: false, error: "The selected supervisor can no longer be assigned to this project. Refresh and try again." }
     }
 
     const { data: approvedRequestId, error: approvalError } = await admin.rpc(

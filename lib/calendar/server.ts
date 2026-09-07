@@ -362,7 +362,7 @@ export async function getCalendarSchedulingProjects({ userId, projects }: {
 
   const [projectMembershipResult, participantResult, organizationMembershipResult] = await Promise.all([
     admin.from("project_user_memberships").select("project_id, user_id, access_role").in("project_id", projectIds).eq("status", "active"),
-    admin.from("project_participants").select("project_id, key_contact_user_id, project_role, participant_role_label").in("project_id", projectIds).eq("status", "active").not("key_contact_user_id", "is", null),
+    admin.from("project_participants").select("project_id, key_contact_user_id, project_role, participant_role_label, participant_type").in("project_id", projectIds).eq("status", "active").not("key_contact_user_id", "is", null),
     organizationIds.length
       ? admin.from("organization_memberships").select("organization_id, user_id, role").in("organization_id", organizationIds).eq("status", "active")
       : Promise.resolve({ data: [] as any[], error: null }),
@@ -436,15 +436,55 @@ export async function getCalendarSchedulingProjects({ userId, projects }: {
       }
     }
 
-    const supervisorId = isValidCalendarUuid(project.assignedSupervisorId) ? project.assignedSupervisorId : userId
-    const supervisor = person(supervisorId, "Project Supervisor")
-    people.set(supervisorId, supervisor)
+    const supervisorMap = new Map<string, CalendarSchedulingPersonViewModel>()
+    if (isValidCalendarUuid(project.assignedSupervisorId)) {
+      supervisorMap.set(project.assignedSupervisorId, person(project.assignedSupervisorId, "Project Supervisor"))
+    }
+
+    for (const participant of participantsByProject.get(project.id) ?? []) {
+      if (!isValidCalendarUuid(participant.key_contact_user_id)) continue
+      const pType = typeof participant.participant_type === "string" ? participant.participant_type.trim().toLowerCase() : ""
+      const roleLabel = typeof participant.participant_role_label === "string" ? participant.participant_role_label.trim().toLowerCase() : ""
+      const pRole = typeof participant.project_role === "string" ? participant.project_role.trim().toLowerCase() : ""
+
+      const isSupervisor =
+        pType === "supervisor" ||
+        pType === "consultancy" ||
+        roleLabel.includes("supervisor") ||
+        pRole === "supervisor" ||
+        roleLabel === "site engineer" ||
+        roleLabel === "project manager"
+
+      if (isSupervisor && !supervisorMap.has(participant.key_contact_user_id)) {
+        const displayRole = readableRole(participant.participant_role_label) ?? "Project Supervisor"
+        supervisorMap.set(participant.key_contact_user_id, person(participant.key_contact_user_id, displayRole))
+      }
+    }
+
+    if (supervisorMap.size === 0) {
+      const fallbackId = isValidCalendarUuid(project.assignedSupervisorId) ? project.assignedSupervisorId : userId
+      supervisorMap.set(fallbackId, person(fallbackId, "Project Supervisor"))
+    }
+
+    const primarySupervisor = isValidCalendarUuid(project.assignedSupervisorId) && supervisorMap.has(project.assignedSupervisorId)
+      ? supervisorMap.get(project.assignedSupervisorId)!
+      : Array.from(supervisorMap.values())[0]
+
+    const otherSupervisors = Array.from(supervisorMap.values())
+      .filter((s) => s.id !== primarySupervisor.id)
+      .sort((left, right) => left.name.localeCompare(right.name))
+    const supervisors = [primarySupervisor, ...otherSupervisors]
+
+    for (const s of supervisors) {
+      people.set(s.id, s)
+    }
 
     return {
       id: project.id,
       name: project.name,
       code: project.code,
-      supervisor,
+      supervisor: primarySupervisor,
+      supervisors,
       participants: Array.from(people.values()).sort((left, right) => left.name.localeCompare(right.name)),
     }
   })
