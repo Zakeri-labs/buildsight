@@ -39,6 +39,7 @@ export default async function ProjectLocationPage({
         code: project.code,
         location: project.location,
         region: project.region,
+        phase: project.phase,
         latitude: project.latitude,
         longitude: project.longitude,
       }}

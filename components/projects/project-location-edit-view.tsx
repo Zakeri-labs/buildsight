@@ -14,6 +14,8 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { ProjectLocationField } from "@/components/projects/project-location-field"
 import { updateProjectLocationAction } from "@/lib/actions/projects"
 import { useI18n } from "@/lib/i18n"
@@ -25,6 +27,7 @@ export type ProjectLocationEditData = {
   code: string | null
   location: string | null
   region: string | null
+  phase?: string | null
   latitude: number | null
   longitude: number | null
 }
@@ -46,6 +49,7 @@ export function ProjectLocationEditView({
     source: project.latitude != null && project.longitude != null ? "map" : "manual",
   })
   const [areaDistrict, setAreaDistrict] = useState(project.region || "")
+  const [phase, setPhase] = useState(project.phase || "")
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
@@ -61,6 +65,7 @@ export function ProjectLocationEditView({
         projectId: project.id,
         address: location.address,
         areaDistrict,
+        phase,
         latitude: location.latitude,
         longitude: location.longitude,
       })
@@ -139,6 +144,21 @@ export function ProjectLocationEditView({
                 label: isArabic ? "المنطقة / الحي" : "Area / District",
                 placeholder: isArabic ? "مثال: مسقط / الخوض" : "e.g. Muscat / Al Khoudh",
               }}
+              contentAfterAreaField={
+                <div className="space-y-2.5">
+                  <Label htmlFor={`supervisor-project-phase-${project.id}`}>
+                    {isArabic ? "المرحلة (اختياري)" : "Phase (Optional)"}
+                  </Label>
+                  <Input
+                    id={`supervisor-project-phase-${project.id}`}
+                    value={phase}
+                    onChange={(e) => setPhase(e.target.value)}
+                    placeholder={isArabic ? "مثال: المرحلة 1" : "e.g. Phase 1"}
+                    disabled={isSaving}
+                    className="h-10 text-xs sm:text-sm"
+                  />
+                </div>
+              }
               disabled={isSaving}
             />
           </CardContent>

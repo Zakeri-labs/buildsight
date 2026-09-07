@@ -700,9 +700,10 @@ export async function updateProjectLocationAction(input: {
   projectId: string
   address: string
   areaDistrict?: string | null
+  phase?: string | null
   latitude: number | null
   longitude: number | null
-}): Promise<ActionResult<{ address: string; areaDistrict: string | null; latitude: number | null; longitude: number | null }>> {
+}): Promise<ActionResult<{ address: string; areaDistrict: string | null; phase: string | null; latitude: number | null; longitude: number | null }>> {
   try {
     const userId = await getUserIdOrThrow()
     const access = await resolveProjectReadAccessForUser(userId, input.projectId)
@@ -728,17 +729,23 @@ export async function updateProjectLocationAction(input: {
         : null)
 
     const areaDistrict = input.areaDistrict?.trim() || null
+    const phase = input.phase !== undefined ? input.phase?.trim() || null : undefined
+
+    const updatePayload: Record<string, any> = {
+      location: address,
+      region: areaDistrict,
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
+      updated_at: new Date().toISOString(),
+    }
+    if (phase !== undefined) {
+      updatePayload.phase = phase
+    }
 
     const admin = createAdminClient()
     const { error } = await admin
       .from("projects")
-      .update({
-        location: address,
-        region: areaDistrict,
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", input.projectId)
 
     if (error) throw error
@@ -757,6 +764,7 @@ export async function updateProjectLocationAction(input: {
       metadata: {
         location: address,
         region: areaDistrict,
+        phase: phase ?? null,
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,
       },
@@ -767,6 +775,7 @@ export async function updateProjectLocationAction(input: {
       data: {
         address: address || "—",
         areaDistrict,
+        phase: phase ?? null,
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,
       },
