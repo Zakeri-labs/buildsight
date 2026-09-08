@@ -243,6 +243,18 @@ export async function scheduleSiteVisitAction(input: {
       throw authorizationError
     }
 
+    const projectScope = await resolveCalendarProjectScope(actorId)
+    const scopedProject = projectScope.find((p) => p.id === request.project_id)
+    const isAdmin = scopedProject?.accessMode === "admin"
+    if (!isAdmin) {
+      if (assignedUserIds.length !== 1 || assignedUserIds[0] !== actorId) {
+        return {
+          ok: false,
+          error: "Supervisors can only schedule visits for themselves.",
+        }
+      }
+    }
+
     if (assignedUserIds.length) {
       const [membershipResult, participantResult, projectResult] = await Promise.all([
         admin
@@ -404,9 +416,18 @@ export async function updateScheduledSiteVisitAction(input: {
       return { ok: false, error: "Past visits cannot be modified." }
     }
 
-    const { allowed } = await checkEditOrCancelPermission(actorId, request)
+    const { allowed, isAdmin } = await checkEditOrCancelPermission(actorId, request)
     if (!allowed) {
       return { ok: false, error: "You do not have permission to edit this site visit." }
+    }
+
+    if (!isAdmin) {
+      if (assignedUserIds.length !== 1 || assignedUserIds[0] !== actorId) {
+        return {
+          ok: false,
+          error: "Supervisors can only schedule visits for themselves.",
+        }
+      }
     }
 
     const { error: updateError } = await admin
@@ -489,6 +510,16 @@ export async function createDirectSiteVisitAction(input: {
       const isSupervisor = await isUserProjectSupervisor(actorId, input.projectId)
       if (!isSupervisor) {
         throw new AuthzError("You are not the assigned Supervisor for this project.")
+      }
+    }
+
+    const isAdmin = accessMode === "admin"
+    if (!isAdmin) {
+      if (assignedUserIds.length !== 1 || assignedUserIds[0] !== actorId) {
+        return {
+          ok: false,
+          error: "Supervisors can only schedule visits for themselves.",
+        }
       }
     }
 
@@ -657,6 +688,16 @@ export async function approveCalendarClientVisitRequestAction(input: {
     const { actorId, admin, request, projectScope, scopedProject } = await resolveCalendarClientRequestForAction(input.requestId)
     projectId = request.project_id
     authorizationMode = scopedProject.accessMode
+
+    const isAdmin = scopedProject.accessMode === "admin"
+    if (!isAdmin) {
+      if (assignedUserIds.length !== 1 || assignedUserIds[0] !== actorId) {
+        return {
+          ok: false,
+          error: "Supervisors can only schedule visits for themselves.",
+        }
+      }
+    }
 
     const schedulingProjects = await getCalendarSchedulingProjects({ userId: actorId, projects: projectScope })
     const selectedProject = schedulingProjects.find((project) => project.id === request.project_id)

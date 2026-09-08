@@ -59,6 +59,7 @@ export type CalendarSchedulingProjectViewModel = {
   supervisor: CalendarSchedulingPersonViewModel
   supervisors: CalendarSchedulingPersonViewModel[]
   participants: CalendarSchedulingPersonViewModel[]
+  isAdmin?: boolean
 }
 
 export type CalendarSchedulingViewModel = {

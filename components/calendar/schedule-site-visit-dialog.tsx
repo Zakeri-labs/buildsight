@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition, type ChangeEvent }
 import { Check, ChevronDown, MapPinned, Search, Trash2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { useCurrentUser } from "@/components/current-user-provider"
 import {
   Dialog,
   DialogContent,
@@ -59,8 +60,14 @@ function normalizeTimeValue(value: string | null | undefined): string {
 function getInitialSupervisorId(
   project: CalendarSchedulingProjectViewModel | null,
   editEvt?: CalendarEventViewModel | null,
+  currentUserId?: string,
+  isAdmin?: boolean,
 ): string {
-  if (!project) return ""
+  if (!project) return currentUserId ?? ""
+  if (!isAdmin && currentUserId) {
+    return currentUserId
+  }
+
   const availableSupervisors = project.supervisors?.length
     ? project.supervisors
     : project.supervisor ? [project.supervisor] : []
@@ -77,7 +84,7 @@ function getInitialSupervisorId(
     }
   }
 
-  return project.supervisor?.id ?? availableSupervisors[0]?.id ?? ""
+  return project.supervisor?.id ?? availableSupervisors[0]?.id ?? currentUserId ?? ""
 }
 
 export function ScheduleSiteVisitDialog({
@@ -99,6 +106,7 @@ export function ScheduleSiteVisitDialog({
   onScheduled: () => Promise<void> | void
   onRefreshRequired?: () => Promise<void> | void
 }) {
+  const currentUser = useCurrentUser()
   const isEditMode = Boolean(editVisit)
   const isRequestApproval = Boolean(request)
   const fixedProject = editVisit
@@ -113,12 +121,18 @@ export function ScheduleSiteVisitDialog({
   const [date, setDate] = useState(editVisit?.date ?? request?.requestedDate ?? initialDate)
   const [time, setTime] = useState(normalizeTimeValue(editVisit?.timeLabel))
   const [notes, setNotes] = useState(editVisit?.notes ?? request?.notes ?? "")
-  const [selectedSupervisorId, setSelectedSupervisorId] = useState<string>(() =>
-    getInitialSupervisorId(
-      fixedProject ?? projects.find((project) => project.id === (editVisit?.projectId ?? request?.projectId ?? projects[0]?.id)) ?? projects[0] ?? null,
-      editVisit,
-    ),
+
+  const selectedProject = useMemo(
+    () => fixedProject ?? projects.find((project) => project.id === projectId) ?? projects[0] ?? null,
+    [projectId, projects, fixedProject],
   )
+  const isProjectAdmin = Boolean(selectedProject?.isAdmin ?? (currentUser?.role === "org_admin"))
+
+  const [selectedSupervisorId, setSelectedSupervisorId] = useState<string>(() => {
+    const initialProject = fixedProject ?? projects.find((project) => project.id === (editVisit?.projectId ?? request?.projectId ?? projects[0]?.id)) ?? projects[0] ?? null
+    const initialIsAdmin = Boolean(initialProject?.isAdmin ?? (currentUser?.role === "org_admin"))
+    return getInitialSupervisorId(initialProject, editVisit, currentUser?.id, initialIsAdmin)
+  })
   const [mobileNotesExpanded, setMobileNotesExpanded] = useState(Boolean(editVisit?.notes))
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
   const [error, setError] = useState("")
@@ -153,11 +167,6 @@ export function ScheduleSiteVisitDialog({
     }
   }, [projectMenuOpen])
 
-  const selectedProject = useMemo(
-    () => fixedProject ?? projects.find((project) => project.id === projectId) ?? projects[0] ?? null,
-    [projectId, projects, fixedProject],
-  )
-
   const filteredProjects = useMemo(() => {
     const query = projectSearch.trim().toLowerCase()
     if (!query) return projects
@@ -184,11 +193,12 @@ export function ScheduleSiteVisitDialog({
       : request
         ? projects.find((project) => project.id === request.projectId) ?? null
         : projects.find((project) => project.id === targetProjectId) ?? projects[0] ?? null
-    setSelectedSupervisorId(getInitialSupervisorId(targetProject, editVisit))
+    const targetIsAdmin = Boolean(targetProject?.isAdmin ?? (currentUser?.role === "org_admin"))
+    setSelectedSupervisorId(getInitialSupervisorId(targetProject, editVisit, currentUser?.id, targetIsAdmin))
     setMobileNotesExpanded(Boolean(editVisit?.notes))
     setConfirmCancelOpen(false)
     setError("")
-  }, [open, initialDate, projects, request, editVisit])
+  }, [open, initialDate, projects, request, editVisit, currentUser?.id])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 639px)")
@@ -206,7 +216,8 @@ export function ScheduleSiteVisitDialog({
     setProjectSearch("")
     setProjectMenuOpen(false)
     const nextProject = projects.find((project) => project.id === nextProjectId) ?? null
-    setSelectedSupervisorId(getInitialSupervisorId(nextProject, null))
+    const nextIsAdmin = Boolean(nextProject?.isAdmin ?? (currentUser?.role === "org_admin"))
+    setSelectedSupervisorId(getInitialSupervisorId(nextProject, null, currentUser?.id, nextIsAdmin))
     setError("")
   }
 
@@ -235,8 +246,8 @@ export function ScheduleSiteVisitDialog({
         ? [selectedProject.supervisor]
         : []
 
-    let finalSupervisorId = selectedSupervisorId
-    if (!finalSupervisorId && availableSupervisors.length > 0) {
+    let finalSupervisorId = isProjectAdmin ? selectedSupervisorId : currentUser.id
+    if (isProjectAdmin && !finalSupervisorId && availableSupervisors.length > 0) {
       finalSupervisorId = availableSupervisors[0].id
     }
 
@@ -484,6 +495,30 @@ export function ScheduleSiteVisitDialog({
               : selectedProject?.supervisor
                 ? [selectedProject.supervisor]
                 : []
+
+            if (!isProjectAdmin) {
+              const currentSupervisor =
+                supervisors.find((s) => s.id === currentUser?.id) ??
+                selectedProject?.participants?.find((p) => p.id === currentUser?.id) ?? {
+                  id: currentUser?.id ?? "",
+                  name: currentUser?.name || "Assigned Project Supervisor",
+                  role: "Project Supervisor",
+                }
+
+              return (
+                <div className="grid gap-2">
+                  <Label>Supervisor</Label>
+                  <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {currentSupervisor.name}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {currentSupervisor.role ?? "Project Supervisor"}
+                    </p>
+                  </div>
+                </div>
+              )
+            }
 
             if (supervisors.length <= 1) {
               const displaySupervisor = supervisors[0] ?? selectedProject?.supervisor

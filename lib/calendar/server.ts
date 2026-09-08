@@ -486,6 +486,7 @@ export async function getCalendarSchedulingProjects({ userId, projects }: {
       supervisor: primarySupervisor,
       supervisors,
       participants: Array.from(people.values()).sort((left, right) => left.name.localeCompare(right.name)),
+      isAdmin: project.accessMode === "admin",
     }
   })
 }
