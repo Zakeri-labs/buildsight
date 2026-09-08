@@ -4,7 +4,7 @@ import type {
   TranslationReportContent,
   TranslationSectionKey,
 } from "@/lib/stage-translations/types"
-import { statusLabel } from "@/lib/stages/execution"
+import { PREDEFINED_CASTING_RECOMMENDATIONS_HTML_AR, statusLabel } from "@/lib/stages/execution"
 
 import { partitionReportCcRecipients } from "@/lib/report-cc/types"
 
@@ -168,6 +168,7 @@ const SECTION_LABELS: Array<{ key: TranslationSectionKey; en: string; ar: string
   { key: "findings", en: "Findings", ar: "النتائج" },
   { key: "recommendations", en: "Instructions / Recommendations", ar: "التعليمات / التوصيات" },
   { key: "correctiveActions", en: "Corrective Actions", ar: "الإجراءات التصحيحية" },
+  { key: "recommendationsDuringCasting", en: "Recommendations During Casting", ar: "توصيات أثناء الصب" },
 ]
 
 const LABELS = {
@@ -612,6 +613,7 @@ export const PDF_UI_SECTION_KEYS = [
   "findings",
   "recommendations",
   "correctiveActions",
+  "recommendationsDuringCasting",
   "attachments",
 ] as const
 
@@ -697,7 +699,8 @@ export function buildLanguagePdfTemplate(input: {
     ...SECTION_LABELS.map((section) => ({
       key: section.key,
       title: language === "ar" ? section.ar : section.en,
-      html: content.sections[section.key],
+      html: content.sections[section.key]
+        || (language === "ar" && section.key === "recommendationsDuringCasting" && (englishContent?.sections?.recommendationsDuringCasting || (englishContent as any)?.recommendationsDuringCasting) ? PREDEFINED_CASTING_RECOMMENDATIONS_HTML_AR : ""),
     })),
     attachmentsSection({ data, content, language, sourceDocument }),
   ]

@@ -278,6 +278,7 @@ export async function generateAiSummary(rawInput: GenerateAiSummaryInput) {
         `Findings:\n${htmlToPlainText(responseContent.findings) || "—"}`,
         `Recommendations:\n${htmlToPlainText(responseContent.recommendations) || "—"}`,
         `Corrective actions:\n${htmlToPlainText(responseContent.correctiveActions) || "—"}`,
+        ...(responseContent.recommendationsDuringCasting ? [`Recommendations during casting:\n${htmlToPlainText(responseContent.recommendationsDuringCasting)}`] : []),
         checklist ? `Checklist:\n${checklist}` : "Checklist: —",
         `Approval information:\n${approvalText}`,
       ].join("\n"),

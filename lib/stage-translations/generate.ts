@@ -171,13 +171,14 @@ function translationSchema() {
       sections: {
         type: "object",
         additionalProperties: false,
-        required: ["feedback", "observation", "findings", "recommendations", "correctiveActions"],
+        required: ["feedback", "observation", "findings", "recommendations", "correctiveActions", "recommendationsDuringCasting"],
         properties: {
           feedback: segmentArray,
           observation: segmentArray,
           findings: segmentArray,
           recommendations: segmentArray,
           correctiveActions: segmentArray,
+          recommendationsDuringCasting: segmentArray,
         },
       },
       checklist: {
@@ -289,6 +290,7 @@ function parseRawTranslation(value: unknown): RawTranslation | null {
       findings: parseSegments(sections.findings),
       recommendations: parseSegments(sections.recommendations),
       correctiveActions: parseSegments(sections.correctiveActions),
+      recommendationsDuringCasting: parseSegments(sections.recommendationsDuringCasting),
     },
     checklist: parseChecklist(row.checklist),
     approvals: parseApprovals(row.approvals),

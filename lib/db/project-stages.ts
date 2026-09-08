@@ -164,6 +164,7 @@ function parseContent(value: unknown): TermResponseContent {
     findings: sanitizeReportHtml(row.findings),
     recommendations: sanitizeReportHtml(row.recommendations),
     correctiveActions: sanitizeReportHtml(row.correctiveActions),
+    recommendationsDuringCasting: sanitizeReportHtml(row.recommendationsDuringCasting),
     checklist: Array.isArray(row.checklist)
       ? row.checklist
           .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))

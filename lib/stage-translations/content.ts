@@ -13,6 +13,7 @@ const EMPTY_SECTIONS: Record<TranslationSectionKey, string> = {
   findings: "",
   recommendations: "",
   correctiveActions: "",
+  recommendationsDuringCasting: "",
 }
 
 function objectValue(value: unknown): Record<string, unknown> {
@@ -50,6 +51,7 @@ export function buildOriginalTranslationContent(input: {
       findings: sanitizeReportHtml(input.responseContent.findings),
       recommendations: sanitizeReportHtml(input.responseContent.recommendations),
       correctiveActions: sanitizeReportHtml(input.responseContent.correctiveActions),
+      recommendationsDuringCasting: sanitizeReportHtml(input.responseContent.recommendationsDuringCasting),
     },
     checklist: input.responseContent.checklist.map((item) => ({
       id: item.id,
@@ -126,6 +128,7 @@ export function parseTranslationContent(value: unknown): TranslationReportConten
       findings: sanitizeReportHtml(sectionRow.findings),
       recommendations: sanitizeReportHtml(sectionRow.recommendations),
       correctiveActions: sanitizeReportHtml(sectionRow.correctiveActions),
+      recommendationsDuringCasting: sanitizeReportHtml(sectionRow.recommendationsDuringCasting),
     },
     checklist: parseChecklist(row.checklist),
     approvals: parseApprovals(row.approvals),

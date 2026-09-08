@@ -67,6 +67,7 @@ import type { ProjectStageAttachment, ProjectStageApproval, ProjectStagePerson, 
 import { partitionReportCcRecipients, type ProjectCcCandidate, type ReportCcRecipient, type ReportCcSelection } from "@/lib/report-cc/types"
 import {
   EMPTY_TERM_RESPONSE_CONTENT,
+  PREDEFINED_CASTING_RECOMMENDATIONS_HTML,
   REPORT_TYPES,
   reportTypeLabel,
   STAGE_DOCUMENT_ACCEPT,
@@ -95,6 +96,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -1820,28 +1822,119 @@ export function InspectionReportForm({
       ) : null}
 
 
-      {reportDefinition.responseType === "combined" ? SECTION_META.map((section) => (
-        <RichSectionEditor
-          key={section.key}
-          title={locale === "ar" ? section.titleAr : section.title}
-          description={section.description}
-          value={content[section.key]}
-          onChange={(value) => updateSection(section.key, value)}
-          onSplitSections={(obs, rec) => {
-            setContent((current) => ({
-              ...current,
-              ...(obs ? { observation: obs } : {}),
-              ...(rec ? { recommendations: rec } : {}),
-            }))
-          }}
-          onTranslateAllSections={handleTranslateAllSections}
-          allowTable={section.key === "feedback"}
-          disabled={isLocked}
-          uploadInlineImage={uploadInlineImage}
-          project={project}
-          ccCandidates={ccCandidates}
-        />
-      )) : reportDefinition.responseType === "inspection_checklist" ? (
+      {reportDefinition.responseType === "combined" ? (
+        <>
+          {SECTION_META.map((section) => (
+            <RichSectionEditor
+              key={section.key}
+              title={locale === "ar" ? section.titleAr : section.title}
+              description={section.description}
+              value={content[section.key]}
+              onChange={(value) => updateSection(section.key, value)}
+              onSplitSections={(obs, rec) => {
+                setContent((current) => ({
+                  ...current,
+                  ...(obs ? { observation: obs } : {}),
+                  ...(rec ? { recommendations: rec } : {}),
+                }))
+              }}
+              onTranslateAllSections={handleTranslateAllSections}
+              allowTable={section.key === "feedback"}
+              disabled={isLocked}
+              uploadInlineImage={uploadInlineImage}
+              project={project}
+              ccCandidates={ccCandidates}
+            />
+          ))}
+
+          <Card className="rounded-2xl border bg-card shadow-sm transition-shadow hover:shadow-md">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 md:p-5">
+              <div className="space-y-1">
+                <CardTitle className="text-base font-semibold">
+                  {locale === "ar" ? "توصيات أثناء صب الخرسانة" : "Recommendations During Casting"}
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  {locale === "ar"
+                    ? "تضمين اشتراطات وتوصيات الصب والمعالجة المعتمدة في التقرير (اختياري)"
+                    : "Include predefined casting and curing recommendations in the report (Optional)"}
+                </p>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {Boolean(content.recommendationsDuringCasting)
+                    ? (locale === "ar" ? "مفعل" : "Enabled")
+                    : (locale === "ar" ? "معطل" : "Disabled")}
+                </span>
+                <Switch
+                  checked={Boolean(content.recommendationsDuringCasting)}
+                  disabled={isLocked}
+                  onCheckedChange={(checked) => {
+                    setContent((current) => ({
+                      ...current,
+                      recommendationsDuringCasting: checked ? PREDEFINED_CASTING_RECOMMENDATIONS_HTML : "",
+                    }))
+                  }}
+                  aria-label={locale === "ar" ? "توصيات أثناء صب الخرسانة" : "Recommendations During Casting"}
+                />
+              </div>
+            </CardHeader>
+            {Boolean(content.recommendationsDuringCasting) ? (
+              <CardContent className="px-4 pb-4 pt-0 md:px-5 md:pb-5">
+                <div className="rounded-xl border border-border/80 bg-muted/40 p-4 text-xs leading-relaxed text-foreground md:text-sm">
+                  <div className="mb-3">
+                    <h4 className="font-semibold text-foreground">
+                      {locale === "ar" ? "توصيات أثناء الصب" : "Recommendations During Casting"}
+                    </h4>
+                    <ul className="mt-2 list-inside list-disc space-y-1.5 text-muted-foreground">
+                      {locale === "ar" ? (
+                        <>
+                          <li>ألا تقل رتبة الخرسانة عن M30 SRC، كما هو محدد في المخططات المعتمدة.</li>
+                          <li>أثناء صب الخرسانة، يجب توخي الحذر لتجنب الانفصال الحبيبي وإزاحة حديد التسليح. يجب ألا يتجاوز السقوط الحر للخرسانة 2.0 متر كحد أقصى.</li>
+                          <li>يجب دمك الخرسانة جيداً باستخدام الهزازات الميكانيكية من الأسفل حتى المنسوب المطلوب، مع توفير هزاز إضافي واحد على الأقل في وضع الاستعداد.</li>
+                          <li>ألا تتجاوز درجة حرارة الخرسانة وقت الصب 30 درجة مئوية، مع فحص وتسجيل درجة حرارة الخرسانة (لكل شاحنة).</li>
+                          <li>يجب أن تكون قيمة الهبوط (Slump) في حدود 100 ± 25 مم.</li>
+                          <li>7 أيام (3 مكعبات لكل مجموعة).</li>
+                          <li>28 يوماً (3 مكعبات لكل مجموعة).</li>
+                        </>
+                      ) : (
+                        <>
+                          <li>The grade of concrete shall not be less than M30 SRC, as specified in the approved drawings.</li>
+                          <li>During concrete placement, care shall be taken to avoid segregation and displacement of reinforcement. The concrete free fall shall be restricted to a maximum of 2.0 metres.</li>
+                          <li>Concrete shall be compacted thoroughly using vibrators from the bottom to the required level. At least one additional vibrator shall be kept on standby.</li>
+                          <li>The concrete temperature at the time of placement does not exceed 30 degrees. The temperature for concrete (Each truck) will be tested and recorded.</li>
+                          <li>Slump value should be in the range of 100+/-25.</li>
+                          <li>7 Days (3 Cubes for each Set)</li>
+                          <li>28 Days (3 Cubes for each Set)</li>
+                        </>
+                      )}
+                    </ul>
+                  </div>
+                  <div className="border-t border-border/60 pt-3">
+                    <h4 className="font-semibold text-foreground">
+                      {locale === "ar" ? "أعمال ما بعد الصب" : "Post Concrete Work"}
+                    </h4>
+                    <ul className="mt-2 list-inside list-disc space-y-1.5 text-muted-foreground">
+                      {locale === "ar" ? (
+                        <>
+                          <li>بعد التصلب الأولي، يتم عمل حبسات أسمنتية فوق القواعد، وإزالة تجمعات المياه وكذلك فرم جوانب القواعد، وتغطيتها بالخيش مع استمرار المعالجة بالرش المستمر بالماء.</li>
+                          <li>تستمر المعالجة بالماء لمدة لا تقل عن 7 أيام.</li>
+                          <li>في حال ملاحظة أي تعشيش أو عيوب سطحية، يجب إبلاغ الاستشاري قبل البدء بأي أعمال معالجة أو إصلاح.</li>
+                        </>
+                      ) : (
+                        <>
+                          <li>After the initial settlement, cement bundles are to be provided on footings, and the water stagnation, as well as the footings' side shuttering, are to be removed and covered with hessian cloth with continuous curing.</li>
+                          <li>Further curing will continue for a minimum of 7 days.</li>
+                          <li>If any honeycombs or surface defects are observed, they shall be reported to the consultant before any rectification work.</li>
+                        </>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            ) : null}
+          </Card>
+        </>
+      ) : reportDefinition.responseType === "inspection_checklist" ? (
         <RichSectionEditor title="Overall Notes" description="Add overall inspection observations or follow-up notes." value={content.feedback} onChange={(value) => updateSection("feedback", value)} onTranslateAllSections={handleTranslateAllSections} allowTable={false} disabled={isLocked} uploadInlineImage={uploadInlineImage} project={project} ccCandidates={ccCandidates} />
       ) : reportDefinition.responseType === "text" ? null : (
         <RichSectionEditor title="Comments / Notes" description="Add context, observations, or supporting notes." value={content.feedback} onChange={(value) => updateSection("feedback", value)} onTranslateAllSections={handleTranslateAllSections} allowTable={false} disabled={isLocked} uploadInlineImage={uploadInlineImage} project={project} ccCandidates={ccCandidates} />

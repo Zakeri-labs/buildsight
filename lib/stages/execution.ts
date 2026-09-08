@@ -99,6 +99,7 @@ export type ReportSectionKey =
   | "findings"
   | "recommendations"
   | "correctiveActions"
+  | "recommendationsDuringCasting"
 
 export type ChecklistResult = "" | "pass" | "fail" | "na" | "in_progress"
 
@@ -109,6 +110,38 @@ export type ChecklistItem = {
   result?: ChecklistResult
   notes?: string
 }
+
+export const PREDEFINED_CASTING_RECOMMENDATIONS_HTML = `<ul>
+<li>The grade of concrete shall not be less than M30 SRC, as specified in the approved drawings.</li>
+<li>During concrete placement, care shall be taken to avoid segregation and displacement of reinforcement. The concrete free fall shall be restricted to a maximum of 2.0 metres.</li>
+<li>Concrete shall be compacted thoroughly using vibrators from the bottom to the required level. At least one additional vibrator shall be kept on standby.</li>
+<li>The concrete temperature at the time of placement does not exceed 30 degrees. The temperature for concrete (Each truck) will be tested and recorded.</li>
+<li>Slump value should be in the range of 100+/-25.</li>
+<li>7 Days (3 Cubes for each Set)</li>
+<li>28 Days (3 Cubes for each Set)</li>
+</ul>
+<h3>Post Concrete Work</h3>
+<ul>
+<li>After the initial settlement, cement bundles are to be provided on footings, and the water stagnation, as well as the footings' side shuttering, are to be removed and covered with hessian cloth with continuous curing.</li>
+<li>Further curing will continue for a minimum of 7 days.</li>
+<li>If any honeycombs or surface defects are observed, they shall be reported to the consultant before any rectification work.</li>
+</ul>`.trim()
+
+export const PREDEFINED_CASTING_RECOMMENDATIONS_HTML_AR = `<ul>
+<li>ألا تقل رتبة الخرسانة عن M30 SRC، كما هو محدد في المخططات المعتمدة.</li>
+<li>أثناء صب الخرسانة، يجب توخي الحذر لتجنب الانفصال الحبيبي وإزاحة حديد التسليح. يجب ألا يتجاوز السقوط الحر للخرسانة 2.0 متر كحد أقصى.</li>
+<li>يجب دمك الخرسانة جيداً باستخدام الهزازات الميكانيكية من الأسفل حتى المنسوب المطلوب، مع توفير هزاز إضافي واحد على الأقل في وضع الاستعداد.</li>
+<li>ألا تتجاوز درجة حرارة الخرسانة وقت الصب 30 درجة مئوية، مع فحص وتسجيل درجة حرارة الخرسانة (لكل شاحنة).</li>
+<li>يجب أن تكون قيمة الهبوط (Slump) في حدود 100 ± 25 مم.</li>
+<li>7 أيام (3 مكعبات لكل مجموعة).</li>
+<li>28 يوماً (3 مكعبات لكل مجموعة).</li>
+</ul>
+<h3>أعمال ما بعد الصب</h3>
+<ul>
+<li>بعد التصلب الأولي، يتم عمل حبسات أسمنتية فوق القواعد، وإزالة تجمعات المياه وكذلك فرم جوانب القواعد، وتغطيتها بالخيش مع استمرار المعالجة بالرش المستمر بالماء.</li>
+<li>تستمر المعالجة بالماء لمدة لا تقل عن 7 أيام.</li>
+<li>في حال ملاحظة أي تعشيش أو عيوب سطحية، يجب إبلاغ الاستشاري قبل البدء بأي أعمال معالجة أو إصلاح.</li>
+</ul>`.trim()
 
 export type TermResponseContent = Record<ReportSectionKey, string> & {
   checklist: ChecklistItem[]
@@ -125,6 +158,7 @@ export const EMPTY_TERM_RESPONSE_CONTENT: TermResponseContent = {
   findings: "",
   recommendations: "",
   correctiveActions: "",
+  recommendationsDuringCasting: "",
   checklist: [],
   answer: "",
   selection: "",

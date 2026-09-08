@@ -306,6 +306,7 @@ function findImageCaption(lines: PositionedTextLine[], box: ImageBox, viewport: 
 
 const SECTION_PATTERNS: Array<{ key: SourceImageSectionHint; pattern: RegExp }> = [
   { key: "correctiveActions", pattern: /corrective\s+actions?|remedial\s+actions?|الإجراءات\s+التصحيحية/i },
+  { key: "recommendationsDuringCasting", pattern: /recommendations\s+during\s+casting|توصيات\s+أثناء\s+الصب/i },
   { key: "recommendations", pattern: /recommendations?|التوصيات/i },
   { key: "findings", pattern: /findings?|inspection\s+results?|النتائج/i },
   { key: "observation", pattern: /observations?|inspection\s+observations?|site\s+observations?|المعاينة|الملاحظات/i },

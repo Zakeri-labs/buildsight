@@ -6,6 +6,7 @@ export const TRANSLATION_SECTION_KEYS = [
   "findings",
   "recommendations",
   "correctiveActions",
+  "recommendationsDuringCasting",
 ] as const
 
 export type TranslationSectionKey = (typeof TRANSLATION_SECTION_KEYS)[number]
