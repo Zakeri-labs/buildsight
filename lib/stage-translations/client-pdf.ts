@@ -2186,7 +2186,7 @@ function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>
   flow.y += height
 }
 
-function renderParagraph(flow: Flow, text: string, options: { indent?: number; bullet?: string } = {}) {
+function renderParagraph(flow: Flow, text: string, options: { indent?: number; bullet?: string; justify?: boolean } = {}) {
   setLanguage(flow.doc, flow.rtl, 9, false)
   const indent = options.indent ?? 0
   const bulletWidth = options.bullet ? 6 : 0
@@ -2213,14 +2213,23 @@ function renderParagraph(flow: Flow, text: string, options: { indent?: number; b
   const textX = flow.rtl
     ? flow.x + flow.width - indent - bulletWidth
     : flow.x + indent + bulletWidth
-  writePdfText(
-    flow.doc,
-    lines,
-    textX,
-    flow.y,
-    { align: flow.rtl ? "right" : "left", lineHeightFactor: 1.2 },
-    flow.rtl,
-  )
+
+  if (options.justify) {
+    lines.forEach((line, lineIdx) => {
+      const isFinal = lineIdx === lines.length - 1
+      const lineY = flow.y + lineIdx * lineHeight
+      renderJustifiedLine(flow.doc, line, textX, lineY, available, isFinal, flow.rtl, 9)
+    })
+  } else {
+    writePdfText(
+      flow.doc,
+      lines,
+      textX,
+      flow.y,
+      { align: flow.rtl ? "right" : "left", lineHeightFactor: 1.2 },
+      flow.rtl,
+    )
+  }
   flow.y += height
 }
 
@@ -2846,13 +2855,27 @@ async function renderImageBlock(
   flow.y += 3
 }
 
+function isJustifiedReportSection(key?: string): boolean {
+  if (!key) return false
+  const k = key.toLowerCase().trim()
+  return (
+    k === "observation" ||
+    k === "observations" ||
+    k === "recommendations" ||
+    k === "instructions" ||
+    k === "recommendationsduringcasting" ||
+    k === "recommendations_during_casting"
+  )
+}
+
 async function renderBlocks(flow: Flow, blocks: PdfBlock[], sectionKey?: string) {
+  const justify = isJustifiedReportSection(sectionKey)
   for (const block of blocks) {
     if (block.type === "heading") renderHeading(flow, block)
-    else if (block.type === "paragraph") renderParagraph(flow, block.text, { indent: (block as any).indent, bullet: (block as any).bullet })
+    else if (block.type === "paragraph") renderParagraph(flow, block.text, { indent: (block as any).indent, bullet: (block as any).bullet, justify })
     else if (block.type === "list") {
       for (let index = 0; index < block.items.length; index += 1) {
-        renderParagraph(flow, block.items[index], { indent: 2, bullet: block.ordered ? `${index + 1}.` : "•" })
+        renderParagraph(flow, block.items[index], { indent: 2, bullet: block.ordered ? `${index + 1}.` : "•", justify })
       }
     } else if (block.type === "table") renderTable(flow, block, sectionKey)
     else if (block.type === "image") await renderImageBlock(flow, block)
@@ -4457,6 +4480,8 @@ function isJustifiedBilingualSection(key: string, title: string): boolean {
     k === "observations" ||
     k === "recommendations" ||
     k === "instructions" ||
+    k === "recommendationsduringcasting" ||
+    k === "recommendations_during_casting" ||
     k === "workcompleted" ||
     k === "work_completed" ||
     t.includes("observation") ||
@@ -4500,6 +4525,7 @@ function renderJustifiedLine(
   colWidth: number,
   isFinalLine: boolean,
   rtl: boolean,
+  fontSize: number = 8.5,
 ) {
   const normalized = normalizeText(line).trim()
   if (!normalized) return
@@ -4508,7 +4534,7 @@ function renderJustifiedLine(
   const isRtl = rtl || hasArabic
 
   const { prefix, body } = extractPrefix(normalized)
-  setLanguage(doc, isRtl, 8.5, false)
+  setLanguage(doc, isRtl, fontSize, false)
   const prefixWidth = prefix ? doc.getTextWidth(isRtl ? (shapeArabicText(doc, prefix) as string) : prefix) : 0
 
   if (isFinalLine || !body.trim()) {
@@ -4532,7 +4558,7 @@ function renderJustifiedLine(
     const extraSpace = availWidth - totalWordsWidth
     const gapWidth = extraSpace / (words.length - 1)
 
-    if (gapWidth <= 0 || gapWidth > 2.5) {
+    if (gapWidth <= 0 || gapWidth > 3.5) {
       writePdfText(doc, normalized, x, y, { align: "left", lineHeightFactor: 1.05 }, false)
       return
     }
