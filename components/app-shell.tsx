@@ -9,6 +9,7 @@ import { AppTopbar } from "@/components/app-topbar"
 import { NavigationProgress } from "@/components/loading/navigation-progress"
 import type { AppNotificationFeed } from "@/lib/notifications/types"
 import { StageTranslationBackgroundWorker } from "@/components/stages/stage-translation-background-worker"
+import { ScreenWakeLockManager } from "@/components/wake-lock/screen-wake-lock-manager"
 import { SystemAnnouncementBanner } from "@/components/announcements/system-announcement-banner"
 import type { SystemAnnouncement } from "@/lib/announcements/types"
 
@@ -64,6 +65,7 @@ export function AppShell({
     <div className="flex min-h-dvh bg-background">
       <Suspense fallback={null}><NavigationProgress /></Suspense>
       <StageTranslationBackgroundWorker />
+      <ScreenWakeLockManager />
       <div className="hidden md:flex">
         <AppSidebar
           projects={projects}
