@@ -8,6 +8,7 @@ import {
   generateRequirementPeriodTemplates,
   generateWeeklyWindow,
   getDaysInMonth,
+  getFridayForDateKey,
   getSaturdayForDateKey,
   getSundayForDateKey,
 } from "./compliance-engine"
@@ -414,29 +415,29 @@ function runUnitTests() {
   }
 
   // -----------------------------------------------------------------------------
-  // TEST GROUP 8: Weekly Calendar Window & Mapping (Sunday -> Saturday)
+  // TEST GROUP 8: Weekly Calendar Window & Mapping (Saturday -> Friday)
   // -----------------------------------------------------------------------------
-  console.log("\n--- 8. Weekly Calendar Window & Sunday-Saturday Mapping ---")
+  console.log("\n--- 8. Weekly Calendar Window & Saturday-Friday Mapping ---")
   {
     // Sep 18, 2026 is a Friday.
-    // Sunday of that week is Sep 13, Saturday is Sep 19.
-    const sunday = getSundayForDateKey("2026-09-18")
+    // Saturday (week start) is Sep 12, Friday (week end) is Sep 18.
     const saturday = getSaturdayForDateKey("2026-09-18")
-    console.assert(sunday === "2026-09-13", `Sunday of Sep 18, 2026 should be 2026-09-13, got ${sunday}`)
-    console.assert(saturday === "2026-09-19", `Saturday of Sep 18, 2026 should be 2026-09-19, got ${saturday}`)
+    const friday = getFridayForDateKey("2026-09-18")
+    console.assert(saturday === "2026-09-12", `Saturday of Sep 18, 2026 should be 2026-09-12, got ${saturday}`)
+    console.assert(friday === "2026-09-18", `Friday of Sep 18, 2026 should be 2026-09-18, got ${friday}`)
 
     // Label format
-    const label = formatWeekLabel(sunday, saturday)
-    console.assert(label === "Sep 13–19", `Week label should be Sep 13–19, got ${label}`)
+    const label = formatWeekLabel(saturday, friday)
+    console.assert(label === "Sep 12–18", `Week label should be Sep 12–18, got ${label}`)
 
-    // Month boundary week label e.g. Aug 30 to Sep 5
-    const monthBoundaryLabel = formatWeekLabel("2026-08-30", "2026-09-05")
-    console.assert(monthBoundaryLabel === "Aug 30 – Sep 5", `Month boundary label should be Aug 30 – Sep 5, got ${monthBoundaryLabel}`)
+    // Month boundary week label e.g. Aug 29 to Sep 4
+    const monthBoundaryLabel = formatWeekLabel("2026-08-29", "2026-09-04")
+    console.assert(monthBoundaryLabel === "Aug 29 – Sep 4", `Month boundary label should be Aug 29 – Sep 4, got ${monthBoundaryLabel}`)
 
-    // Week Sep 13–19 crosses Monthly 2 period boundary (P1: Sep 1–15, P2: Sep 16–30)
-    const weeks = generateCalendarWeeks({ rangeStart: "2026-09-13", rangeEnd: "2026-09-19", referenceDate: "2026-09-18" })
+    // Week Sep 12–18 crosses Monthly 2 period boundary (P1: Sep 1–15, P2: Sep 16–30)
+    const weeks = generateCalendarWeeks({ rangeStart: "2026-09-12", rangeEnd: "2026-09-18", referenceDate: "2026-09-18" })
     console.assert(weeks.length === 1, "1 week generated")
-    console.assert(weeks[0].isCurrentWeek === true, "Sep 13–19 is current week")
+    console.assert(weeks[0].isCurrentWeek === true, "Sep 12–18 is current week")
 
     const project: RawProjectRecord = {
       id: "p_cross",
@@ -462,13 +463,13 @@ function runUnitTests() {
 
     const cell = timelineRow.weeklyCells[weeks[0].weekKey]
     console.assert(cell !== undefined, "Cell exists for week")
-    console.assert(cell.overlappingPeriods.length === 2, `Week Sep 13–19 MUST overlap 2 periods (P1 and P2), got ${cell.overlappingPeriods.length}`)
-    console.assert(cell.actualReports.length === 2, `Week Sep 13–19 has 2 actual reports, got ${cell.actualReports.length}`)
+    console.assert(cell.overlappingPeriods.length === 2, `Week Sep 12–18 MUST overlap 2 periods (P1 and P2), got ${cell.overlappingPeriods.length}`)
+    console.assert(cell.actualReports.length === 2, `Week Sep 12–18 has 2 actual reports, got ${cell.actualReports.length}`)
     console.assert(cell.requiredVisits === 1, `Weekly cell requiredVisits should be 1, got ${cell.requiredVisits}`)
     console.assert(cell.completedVisits === 2, `Weekly cell completedVisits should be 2, got ${cell.completedVisits}`)
     console.assert(cell.status === "extra", `Weekly cell status should be extra, got ${cell.status}`)
 
-    console.log("✓ Sunday -> Saturday week boundaries and weekly compliance properties verified.")
+    console.log("✓ Saturday -> Friday week boundaries and weekly compliance properties verified.")
   }
 
   // -----------------------------------------------------------------------------
@@ -521,14 +522,14 @@ function runUnitTests() {
   // -----------------------------------------------------------------------------
   console.log("\n--- 10. Weekly Compliance Cell Status Isolation (Regression Test) ---")
   {
-    // Today is Sep 10, 2026
+    // Today is Sep 10, 2026 (Thursday)
     const refDate = "2026-09-10"
-    // Weeks:
-    // Week 1: Aug 23 - Aug 29 (Past)
-    // Week 2: Aug 30 - Sep 05 (Past)
-    // Week 3: Sep 06 - Sep 12 (Current: ends Sep 12 >= Sep 10)
-    // Week 4: Sep 13 - Sep 19 (Future: ends Sep 19 > Sep 10)
-    const weeks = generateCalendarWeeks({ rangeStart: "2026-08-23", rangeEnd: "2026-09-19", referenceDate: refDate })
+    // Weeks (Saturday -> Friday):
+    // Week 1: Aug 22 - Aug 28 (Past)
+    // Week 2: Aug 29 - Sep 04 (Past)
+    // Week 3: Sep 05 - Sep 11 (Current: ends Sep 11 >= Sep 10)
+    // Week 4: Sep 12 - Sep 18 (Future: starts Sep 12 > Sep 10)
+    const weeks = generateCalendarWeeks({ rangeStart: "2026-08-22", rangeEnd: "2026-09-18", referenceDate: refDate })
 
     const project: RawProjectRecord = {
       id: "p_regression",
@@ -539,9 +540,9 @@ function runUnitTests() {
       start_date: "2026-01-01",
     }
 
-    // Week 1 (Aug 23-29) has 2 visits -> Extra
-    // Week 2 (Aug 30 - Sep 05) has 0 visits -> MUST be Missing (week ended), NOT Extra!
-    // Week 3 (Sep 06 - Sep 12) has 0 visits -> MUST be Upcoming (week current/not ended), NOT Extra!
+    // Week 1 (Aug 22-28) has 2 visits -> Extra
+    // Week 2 (Aug 29 - Sep 04) has 0 visits -> MUST be Missing (week ended), NOT Extra!
+    // Week 3 (Sep 05 - Sep 11) has 0 visits -> MUST be Upcoming (week current/not ended), NOT Extra!
     const reports: RawReportRecord[] = [
       { id: "r1", project_id: "p_regression", status: "submitted", submitted_at: "2026-08-24T00:00:00Z", visit_date: "2026-08-24" },
       { id: "r2", project_id: "p_regression", status: "submitted", submitted_at: "2026-08-26T00:00:00Z", visit_date: "2026-08-26" },
@@ -564,11 +565,11 @@ function runUnitTests() {
     console.assert(week1Cell.requiredVisits === 1 && week1Cell.completedVisits === 2 && week1Cell.status === "extra",
       `Week 1 should be extra (Req 1, Done 2), got req=${week1Cell.requiredVisits}, done=${week1Cell.completedVisits}, status=${week1Cell.status}`)
 
-    // Week 2: Required=1, Done=0, Week Ended (Aug 30 - Sep 05 < Sep 10) -> status: missing (MUST NOT BE extra!)
+    // Week 2: Required=1, Done=0, Week Ended (Aug 29 - Sep 04 < Sep 10) -> status: missing (MUST NOT BE extra!)
     console.assert(week2Cell.requiredVisits === 1 && week2Cell.completedVisits === 0 && week2Cell.status === "missing",
       `Week 2 MUST be missing (Req 1, Done 0, past), got req=${week2Cell.requiredVisits}, done=${week2Cell.completedVisits}, status=${week2Cell.status}`)
 
-    // Week 3: Required=1, Done=0, Week Active (Sep 06 - Sep 12 >= Sep 10) -> status: upcoming (MUST NOT BE extra!)
+    // Week 3: Required=1, Done=0, Week Active (Sep 05 - Sep 11 >= Sep 10) -> status: upcoming (MUST NOT BE extra!)
     console.assert(week3Cell.requiredVisits === 1 && week3Cell.completedVisits === 0 && week3Cell.status === "upcoming",
       `Week 3 MUST be upcoming (Req 1, Done 0, current/future), got req=${week3Cell.requiredVisits}, done=${week3Cell.completedVisits}, status=${week3Cell.status}`)
 
@@ -584,51 +585,51 @@ function runUnitTests() {
   // -----------------------------------------------------------------------------
   console.log("\n--- 11. Timeline Start Week Navigation & 8-Week Window ---")
   {
-    const today = "2026-09-06" // Sunday, Sep 6, 2026
+    const today = "2026-09-05" // Saturday, Sep 5, 2026
 
-    // 1. Normalization of selected date to Sunday-Saturday week
-    // User selects Thursday, Sep 10, 2026 -> normalized start Sunday is Sep 6, 2026
+    // 1. Normalization of selected date to Saturday-Friday week
+    // User selects Thursday, Sep 10, 2026 -> normalized start Saturday is Sep 5, 2026
     const selectedDate = "2026-09-10"
-    const normalizedSunday = getSundayForDateKey(selectedDate)
-    console.assert(normalizedSunday === "2026-09-06", `Selected date ${selectedDate} MUST normalize to Sunday 2026-09-06, got ${normalizedSunday}`)
+    const normalizedSaturday = getSaturdayForDateKey(selectedDate)
+    console.assert(normalizedSaturday === "2026-09-05", `Selected date ${selectedDate} MUST normalize to Saturday 2026-09-05, got ${normalizedSaturday}`)
 
-    // 2. Fixed 8-week window generation around Anchor Week (Sep 6, 2026):
-    // 2 weeks before anchor (Aug 23-29, Aug 30-Sep 5) + Anchor week (Sep 6-12) + 5 following weeks
+    // 2. Fixed 8-week window generation around Anchor Week (Sep 5, 2026):
+    // 2 weeks before anchor (Aug 22-28, Aug 29-Sep 4) + Anchor week (Sep 5-11) + 5 following weeks
     const VISIBLE_WEEKS_COUNT = 8
-    const startSunday = addCalendarDays(normalizedSunday, -14)
-    const endSaturday = addCalendarDays(startSunday, VISIBLE_WEEKS_COUNT * 7 - 1)
-    console.assert(startSunday === "2026-08-23", `Start Sunday MUST be Aug 23, got ${startSunday}`)
-    console.assert(endSaturday === "2026-10-17", `8-week end Saturday MUST be 2026-10-17, got ${endSaturday}`)
+    const startSaturday = addCalendarDays(normalizedSaturday, -14)
+    const endFriday = addCalendarDays(startSaturday, VISIBLE_WEEKS_COUNT * 7 - 1)
+    console.assert(startSaturday === "2026-08-22", `Start Saturday MUST be Aug 22, got ${startSaturday}`)
+    console.assert(endFriday === "2026-10-16", `8-week end Friday MUST be 2026-10-16, got ${endFriday}`)
 
     const weeks = generateCalendarWeeks({
-      rangeStart: startSunday,
-      rangeEnd: endSaturday,
+      rangeStart: startSaturday,
+      rangeEnd: endFriday,
       referenceDate: today,
     })
 
     console.assert(weeks.length === 8, `Visible window MUST contain exactly 8 weeks, got ${weeks.length}`)
-    console.assert(weeks[0].startDate === "2026-08-23" && weeks[0].endDate === "2026-08-29", `Week 1 should be Aug 23-29, got ${weeks[0].label}`)
-    console.assert(weeks[1].startDate === "2026-08-30" && weeks[1].endDate === "2026-09-05", `Week 2 should be Aug 30-Sep 5, got ${weeks[1].label}`)
-    console.assert(weeks[2].startDate === "2026-09-06" && weeks[2].endDate === "2026-09-12", `Week 3 (Anchor) should be Sep 6-12, got ${weeks[2].label}`)
-    console.assert(weeks[3].startDate === "2026-09-13" && weeks[3].endDate === "2026-09-19", `Week 4 should be Sep 13-19, got ${weeks[3].label}`)
-    console.assert(weeks[4].startDate === "2026-09-20" && weeks[4].endDate === "2026-09-26", `Week 5 should be Sep 20-26, got ${weeks[4].label}`)
-    console.assert(weeks[5].startDate === "2026-09-27" && weeks[5].endDate === "2026-10-03", `Week 6 should be Sep 27-Oct 3, got ${weeks[5].label}`)
-    console.assert(weeks[6].startDate === "2026-10-04" && weeks[6].endDate === "2026-10-10", `Week 7 should be Oct 4-10, got ${weeks[6].label}`)
-    console.assert(weeks[7].startDate === "2026-10-11" && weeks[7].endDate === "2026-10-17", `Week 8 should be Oct 11-17, got ${weeks[7].label}`)
+    console.assert(weeks[0].startDate === "2026-08-22" && weeks[0].endDate === "2026-08-28", `Week 1 should be Aug 22-28, got ${weeks[0].label}`)
+    console.assert(weeks[1].startDate === "2026-08-29" && weeks[1].endDate === "2026-09-04", `Week 2 should be Aug 29-Sep 4, got ${weeks[1].label}`)
+    console.assert(weeks[2].startDate === "2026-09-05" && weeks[2].endDate === "2026-09-11", `Week 3 (Anchor) should be Sep 5-11, got ${weeks[2].label}`)
+    console.assert(weeks[3].startDate === "2026-09-12" && weeks[3].endDate === "2026-09-18", `Week 4 should be Sep 12-18, got ${weeks[3].label}`)
+    console.assert(weeks[4].startDate === "2026-09-19" && weeks[4].endDate === "2026-09-25", `Week 5 should be Sep 19-25, got ${weeks[4].label}`)
+    console.assert(weeks[5].startDate === "2026-09-26" && weeks[5].endDate === "2026-10-02", `Week 6 should be Sep 26-Oct 2, got ${weeks[5].label}`)
+    console.assert(weeks[6].startDate === "2026-10-03" && weeks[6].endDate === "2026-10-09", `Week 7 should be Oct 3-9, got ${weeks[6].label}`)
+    console.assert(weeks[7].startDate === "2026-10-10" && weeks[7].endDate === "2026-10-16", `Week 8 should be Oct 10-16, got ${weeks[7].label}`)
 
     // 3. Backward Navigation (Previous: -7 days on Anchor)
-    const prevAnchor = addCalendarDays(normalizedSunday, -7)
-    console.assert(prevAnchor === "2026-08-30", `Previous anchor from Sep 6 MUST be Aug 30, got ${prevAnchor}`)
+    const prevAnchor = addCalendarDays(normalizedSaturday, -7)
+    console.assert(prevAnchor === "2026-08-29", `Previous anchor from Sep 5 MUST be Aug 29, got ${prevAnchor}`)
 
     // 4. Forward Navigation (Next: +7 days on Anchor)
-    const nextAnchor = addCalendarDays(normalizedSunday, 7)
-    console.assert(nextAnchor === "2026-09-13", `Next anchor from Sep 6 MUST be Sep 13, got ${nextAnchor}`)
+    const nextAnchor = addCalendarDays(normalizedSaturday, 7)
+    console.assert(nextAnchor === "2026-09-12", `Next anchor from Sep 5 MUST be Sep 12, got ${nextAnchor}`)
 
     // 5. Verify addCalendarDays with Date object (immutability + correct calculation)
-    const originalDate = new Date(Date.UTC(2026, 8, 6)) // Sep 6, 2026
+    const originalDate = new Date(Date.UTC(2026, 8, 5)) // Sep 5, 2026
     const shiftedDate = addCalendarDays(originalDate, 5)
-    console.assert(originalDate.getUTCDate() === 6, "original Date object MUST not be mutated")
-    console.assert(shiftedDate.getUTCDate() === 11, `shifted Date should be Sep 11, got ${shiftedDate.getUTCDate()}`)
+    console.assert(originalDate.getUTCDate() === 5, "original Date object MUST not be mutated")
+    console.assert(shiftedDate.getUTCDate() === 10, `shifted Date should be Sep 10, got ${shiftedDate.getUTCDate()}`)
 
     console.log("✓ Timeline 8-week window, date normalization, and backward/forward navigation verified.")
   }

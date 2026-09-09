@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { getSundayForDateKey } from "@/lib/supervisor-performance/compliance-engine"
+import { getSaturdayForDateKey } from "@/lib/supervisor-performance/compliance-engine"
 import { PROJECT_STATUS_OPTIONS } from "@/lib/projects/project-status"
 import { cn } from "@/lib/utils"
 import type {
@@ -55,16 +55,17 @@ export type ComplianceFilterToolbarProps = {
   onResetFilters: () => void
   totalProjectsCount: number
   filteredProjectsCount: number
+  anchorWeekSaturday?: string
   anchorWeekSunday?: string
-  onAnchorWeekChange?: (sunday: string) => void
+  onAnchorWeekChange?: (saturday: string) => void
   onResetToCurrentWeek?: () => void
   isCurrentAnchorWeek?: boolean
   visibleRangeLabel?: string
   className?: string
 }
 
-function formatStartWeekLabel(sundayDateKey: string): string {
-  const [year, month, day] = sundayDateKey.split("-").map(Number)
+function formatStartWeekLabel(saturdayDateKey: string): string {
+  const [year, month, day] = saturdayDateKey.split("-").map(Number)
   const date = new Date(Date.UTC(year, month - 1, day))
   const monthName = date.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
   return `${monthName} ${day}, ${year}`
@@ -78,6 +79,7 @@ export function ComplianceFilterToolbar({
   onResetFilters,
   totalProjectsCount,
   filteredProjectsCount,
+  anchorWeekSaturday,
   anchorWeekSunday,
   onAnchorWeekChange,
   onResetToCurrentWeek,
@@ -85,6 +87,7 @@ export function ComplianceFilterToolbar({
   visibleRangeLabel,
   className,
 }: ComplianceFilterToolbarProps) {
+  const activeAnchorDate = anchorWeekSaturday ?? anchorWeekSunday
   const {
     searchQuery,
     selectedSupervisor,
@@ -284,20 +287,20 @@ export function ComplianceFilterToolbar({
         )}
 
         {/* 8. View From / Timeline Anchor Date Picker (Right Side) */}
-        {anchorWeekSunday && onAnchorWeekChange && (
+        {activeAnchorDate && onAnchorWeekChange && (
           <div className="ml-auto flex items-center gap-1.5">
             <div className="relative inline-flex items-center gap-1.5 rounded-lg border bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted/70 transition-colors cursor-pointer shadow-2xs">
               <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
               <span className="whitespace-nowrap">
-                View From: <strong className="font-semibold text-foreground">{formatStartWeekLabel(anchorWeekSunday)}</strong>
+                View From: <strong className="font-semibold text-foreground">{formatStartWeekLabel(activeAnchorDate)}</strong>
               </span>
               <input
                 type="date"
-                value={anchorWeekSunday}
+                value={activeAnchorDate}
                 onChange={(e) => {
                   if (e.target.value) {
-                    const sunday = getSundayForDateKey(e.target.value)
-                    onAnchorWeekChange(sunday)
+                    const saturday = getSaturdayForDateKey(e.target.value)
+                    onAnchorWeekChange(saturday)
                   }
                 }}
                 className="absolute inset-0 cursor-pointer opacity-0 w-full h-full"

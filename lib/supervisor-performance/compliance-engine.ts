@@ -49,26 +49,34 @@ export function getDaysInMonth(year: number, month: number): number {
 }
 
 /**
- * Returns the Sunday for any given YYYY-MM-DD date key in UTC.
+ * Returns the Saturday (week start) for any given YYYY-MM-DD date key in UTC.
  */
-export function getSundayForDateKey(dateKey: string): string {
+export function getSaturdayForDateKey(dateKey: string): string {
   if (!isCalendarDateKey(dateKey)) throw new Error(`Invalid calendar date key: ${dateKey}`)
   const [year, month, day] = dateKey.split("-").map(Number)
   const date = new Date(Date.UTC(year, month - 1, day))
   const dayOfWeek = date.getUTCDay() // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-  return addCalendarDays(dateKey, -dayOfWeek)
+  const offset = (dayOfWeek + 1) % 7 // 0 for Saturday, 1 for Sunday, ..., 6 for Friday
+  return addCalendarDays(dateKey, -offset)
 }
 
 /**
- * Returns the Saturday for any given YYYY-MM-DD date key in UTC.
+ * Returns the Friday (week end) for any given YYYY-MM-DD date key in UTC.
  */
-export function getSaturdayForDateKey(dateKey: string): string {
-  const sunday = getSundayForDateKey(dateKey)
-  return addCalendarDays(sunday, 6)
+export function getFridayForDateKey(dateKey: string): string {
+  const saturday = getSaturdayForDateKey(dateKey)
+  return addCalendarDays(saturday, 6)
 }
 
 /**
- * Formats a short week label e.g. "Aug 30 - Sep 5" or "Sep 1 - Sep 7"
+ * Legacy alias for week start - returns Saturday for any given YYYY-MM-DD date key.
+ */
+export function getSundayForDateKey(dateKey: string): string {
+  return getSaturdayForDateKey(dateKey)
+}
+
+/**
+ * Formats a short week label e.g. "Aug 29 – Sep 4" or "Sep 5–11"
  */
 export function formatWeekLabel(startDateKey: string, endDateKey: string): string {
   const [startYear, startMonth, startDay] = startDateKey.split("-").map(Number)
@@ -87,7 +95,7 @@ export function formatWeekLabel(startDateKey: string, endDateKey: string): strin
 }
 
 /**
- * Generates Sunday -> Saturday calendar weeks covering rangeStart to rangeEnd.
+ * Generates Saturday -> Friday calendar weeks covering rangeStart to rangeEnd.
  */
 export function generateCalendarWeeks(options: {
   rangeStart: string
@@ -99,19 +107,19 @@ export function generateCalendarWeeks(options: {
     throw new Error("Invalid date range for generating calendar weeks")
   }
 
-  const firstSunday = getSundayForDateKey(rangeStart)
-  const lastSaturday = getSaturdayForDateKey(rangeEnd)
-  const currentSunday = getSundayForDateKey(referenceDate)
+  const firstSaturday = getSaturdayForDateKey(rangeStart)
+  const lastFriday = getFridayForDateKey(rangeEnd)
+  const currentSaturday = getSaturdayForDateKey(referenceDate)
 
   const weeks: ComplianceCalendarWeek[] = []
-  let cursor = firstSunday
+  let cursor = firstSaturday
   let index = 0
 
-  while (cursor <= lastSaturday) {
+  while (cursor <= lastFriday) {
     const weekStart = cursor
     const weekEnd = addCalendarDays(cursor, 6)
     const weekKey = `${weekStart}_${weekEnd}`
-    const isCurrentWeek = weekStart === currentSunday
+    const isCurrentWeek = weekStart === currentSaturday
     const isPastWeek = weekEnd < referenceDate && !isCurrentWeek
     const isFutureWeek = weekStart > referenceDate && !isCurrentWeek
 
@@ -145,9 +153,9 @@ export function generateWeeklyWindow(options?: {
   const pastWeeks = Math.max(0, options?.pastWeeks ?? 3)
   const futureWeeks = Math.max(0, options?.futureWeeks ?? 4)
 
-  const currentSunday = getSundayForDateKey(referenceDate)
-  const windowStart = addCalendarDays(currentSunday, -(pastWeeks * 7))
-  const windowEnd = addCalendarDays(currentSunday, futureWeeks * 7 + 6)
+  const currentSaturday = getSaturdayForDateKey(referenceDate)
+  const windowStart = addCalendarDays(currentSaturday, -(pastWeeks * 7))
+  const windowEnd = addCalendarDays(currentSaturday, futureWeeks * 7 + 6)
 
   return generateCalendarWeeks({
     rangeStart: windowStart,
@@ -564,7 +572,7 @@ export function buildProjectTimelineRow(input: {
       (p) => p.startDate <= week.endDate && p.endDate >= week.startDate,
     )
 
-    // 2. Find actual valid reports during this Sunday -> Saturday week
+    // 2. Find actual valid reports during this Saturday -> Friday week
     const weekReports = allProjectReportItems.filter(
       (rep) => rep.visitDate >= week.startDate && rep.visitDate <= week.endDate,
     )

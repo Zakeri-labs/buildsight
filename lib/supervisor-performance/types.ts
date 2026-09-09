@@ -154,10 +154,10 @@ export type CompliancePeriod = {
 
 export type ComplianceCalendarWeek = {
   weekIndex: number
-  weekKey: string // e.g. "2026-08-30_2026-09-05"
-  startDate: string // YYYY-MM-DD (Sunday)
-  endDate: string // YYYY-MM-DD (Saturday)
-  label: string // e.g. "Aug 30 - Sep 5"
+  weekKey: string // e.g. "2026-08-29_2026-09-04"
+  startDate: string // YYYY-MM-DD (Saturday)
+  endDate: string // YYYY-MM-DD (Friday)
+  label: string // e.g. "Aug 29 – Sep 4"
   isCurrentWeek: boolean
   isPastWeek: boolean
   isFutureWeek: boolean

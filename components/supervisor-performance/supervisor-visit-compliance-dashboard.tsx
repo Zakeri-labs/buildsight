@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import {
   addCalendarDays,
   generateCalendarWeeks,
-  getSundayForDateKey,
+  getSaturdayForDateKey,
 } from "@/lib/supervisor-performance/compliance-engine"
 import type { SupervisorVisitComplianceDashboardData } from "@/lib/supervisor-performance/types"
 import { ComplianceFilterToolbar, type ComplianceFilterState } from "./compliance-filter-toolbar"
@@ -46,8 +46,8 @@ function formatVisibleTimelineRange(startDateKey: string, endDateKey: string): s
   return `${sMonthName} ${sDay}, ${sYear} – ${eMonthName} ${eDay}, ${eYear}`
 }
 
-function formatStartWeekLabel(sundayDateKey: string): string {
-  const [year, month, day] = sundayDateKey.split("-").map(Number)
+function formatStartWeekLabel(saturdayDateKey: string): string {
+  const [year, month, day] = saturdayDateKey.split("-").map(Number)
   const date = new Date(Date.UTC(year, month - 1, day))
   const monthName = date.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
   return `${monthName} ${day}, ${year}`
@@ -60,27 +60,27 @@ export function SupervisorVisitComplianceDashboard({
   const { projects, supervisors, referenceDate } = data
   const [filters, setFilters] = useState<ComplianceFilterState>(initialFilters)
 
-  // Default Anchor Week: Sunday of the current reference date week
-  const defaultAnchorSunday = useMemo(() => {
+  // Default Anchor Week: Saturday of the current reference date week
+  const defaultAnchorSaturday = useMemo(() => {
     try {
-      return getSundayForDateKey(referenceDate)
+      return getSaturdayForDateKey(referenceDate)
     } catch {
       return referenceDate.slice(0, 10)
     }
   }, [referenceDate])
 
-  const [anchorSunday, setAnchorSunday] = useState<string>(defaultAnchorSunday)
+  const [anchorSaturday, setAnchorSaturday] = useState<string>(defaultAnchorSaturday)
 
   // Generate 8 visible weeks: 2 weeks before anchor + anchor week + 5 following weeks
   const visibleWeeks = useMemo(() => {
-    const startSunday = addCalendarDays(anchorSunday, -14)
-    const endSaturday = addCalendarDays(startSunday, VISIBLE_WEEKS_COUNT * 7 - 1)
+    const startSaturday = addCalendarDays(anchorSaturday, -14)
+    const endFriday = addCalendarDays(startSaturday, VISIBLE_WEEKS_COUNT * 7 - 1)
     return generateCalendarWeeks({
-      rangeStart: startSunday,
-      rangeEnd: endSaturday,
+      rangeStart: startSaturday,
+      rangeEnd: endFriday,
       referenceDate,
     })
-  }, [anchorSunday, referenceDate])
+  }, [anchorSaturday, referenceDate])
 
   const visibleRangeLabel = useMemo(() => {
     if (visibleWeeks.length === 0) return ""
@@ -89,22 +89,22 @@ export function SupervisorVisitComplianceDashboard({
     return formatVisibleTimelineRange(first, last)
   }, [visibleWeeks])
 
-  const isCurrentAnchorWeek = anchorSunday === defaultAnchorSunday
+  const isCurrentAnchorWeek = anchorSaturday === defaultAnchorSaturday
 
   const handlePrevWeek = () => {
-    setAnchorSunday((prev) => addCalendarDays(prev, -7))
+    setAnchorSaturday((prev) => addCalendarDays(prev, -7))
   }
 
   const handleNextWeek = () => {
-    setAnchorSunday((prev) => addCalendarDays(prev, 7))
+    setAnchorSaturday((prev) => addCalendarDays(prev, 7))
   }
 
-  const handleSelectAnchorDate = (sunday: string) => {
-    setAnchorSunday(sunday)
+  const handleSelectAnchorDate = (saturday: string) => {
+    setAnchorSaturday(saturday)
   }
 
   const handleResetToCurrentWeek = () => {
-    setAnchorSunday(defaultAnchorSunday)
+    setAnchorSaturday(defaultAnchorSaturday)
   }
 
   const handleFilterChange = <K extends keyof ComplianceFilterState>(
@@ -199,7 +199,7 @@ export function SupervisorVisitComplianceDashboard({
               </CardTitle>
             </div>
             <CardDescription className="mt-1 text-xs">
-              Operational compliance tracking required vs. completed inspection visits across calendar weeks (Sunday → Saturday).
+              Operational compliance tracking required vs. completed inspection visits across calendar weeks (Saturday → Friday).
             </CardDescription>
           </div>
 
@@ -238,7 +238,7 @@ export function SupervisorVisitComplianceDashboard({
           onResetFilters={handleResetFilters}
           totalProjectsCount={projects.length}
           filteredProjectsCount={filteredProjects.length}
-          anchorWeekSunday={anchorSunday}
+          anchorWeekSaturday={anchorSaturday}
           onAnchorWeekChange={handleSelectAnchorDate}
           onResetToCurrentWeek={handleResetToCurrentWeek}
           isCurrentAnchorWeek={isCurrentAnchorWeek}

@@ -79,7 +79,7 @@ export function ComplianceMatrix({
                 </div>
               </th>
 
-              {/* Sunday -> Saturday Week Headers with Circular Navigation Arrows */}
+              {/* Saturday -> Friday Week Headers with Circular Navigation Arrows */}
               {weeks.map((week, idx) => (
                 <th
                   key={week.weekKey}
