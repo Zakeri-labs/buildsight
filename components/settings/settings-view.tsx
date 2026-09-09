@@ -7,6 +7,7 @@ import { SettingsGeneral } from "@/components/settings/settings-general"
 import { SettingsNotifications } from "@/components/settings/settings-notifications"
 import { SettingsAccess } from "@/components/settings/settings-access"
 import { SettingsOrganization } from "@/components/settings/settings-organization"
+import { SettingsAnnouncement } from "@/components/settings/settings-announcement"
 import { useCurrentUser } from "@/components/current-user-provider"
 import { cn } from "@/lib/utils"
 
@@ -37,6 +38,7 @@ export function SettingsView() {
           <TabsList className={cn("flex flex-wrap", isMember && "w-max max-w-none flex-nowrap md:w-fit md:flex-wrap")}>
             <TabsTrigger value="general" className={triggerClassName}>{t.settings.tabGeneral}</TabsTrigger>
             <TabsTrigger value="org-profile" className={triggerClassName}>{t.settings.tabOrgProfile}</TabsTrigger>
+            <TabsTrigger value="announcement" className={triggerClassName}>{t.settings.tabAnnouncement}</TabsTrigger>
             <TabsTrigger value="notifications" className={triggerClassName}>{t.settings.tabNotifications}</TabsTrigger>
             <TabsTrigger value="access" className={triggerClassName}>{t.settings.tabAccess}</TabsTrigger>
           </TabsList>
@@ -46,6 +48,9 @@ export function SettingsView() {
         </TabsContent>
         <TabsContent value="org-profile" className="min-w-0">
           <SettingsOrganization />
+        </TabsContent>
+        <TabsContent value="announcement" className="min-w-0">
+          <SettingsAnnouncement />
         </TabsContent>
         <TabsContent value="notifications" className="min-w-0">
           <SettingsNotifications />

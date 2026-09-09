@@ -9,6 +9,8 @@ import { AppTopbar } from "@/components/app-topbar"
 import { NavigationProgress } from "@/components/loading/navigation-progress"
 import type { AppNotificationFeed } from "@/lib/notifications/types"
 import { StageTranslationBackgroundWorker } from "@/components/stages/stage-translation-background-worker"
+import { SystemAnnouncementBanner } from "@/components/announcements/system-announcement-banner"
+import type { SystemAnnouncement } from "@/lib/announcements/types"
 
 export type ProjectOption = { id: string; name: string }
 
@@ -19,6 +21,7 @@ export function AppShell({
   canManageStages,
   canAccessSiteVisits,
   notificationFeed,
+  announcement,
 }: {
   children: React.ReactNode
   projects: ProjectOption[]
@@ -26,6 +29,7 @@ export function AppShell({
   canManageStages: boolean
   canAccessSiteVisits: boolean
   notificationFeed: AppNotificationFeed
+  announcement?: SystemAnnouncement | null
 }) {
   const pathname = usePathname()
   const currentUser = useCurrentUser()
@@ -102,6 +106,7 @@ export function AppShell({
             homeHref={isMember ? "/memberhomepage" : "/"}
           />
         )}
+        <SystemAnnouncementBanner initialAnnouncement={announcement} />
         <main
           className={
             isStageReport

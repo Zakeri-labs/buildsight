@@ -8,6 +8,7 @@ import { getSelectedProjectId } from "@/lib/project-scope"
 import { resolveStageManagementOrganization } from "@/lib/db/stages"
 import { getAppNotificationFeed } from "@/lib/notifications/server"
 import { getSiteVisitProjectAccess } from "@/lib/site-visits/access"
+import { getActiveSystemAnnouncement } from "@/lib/announcements/server"
 
 function initials(name: string, email: string) {
   const source = name.trim() || email
@@ -27,11 +28,12 @@ export default async function AppGroupLayout({
   const primary = session.memberships[0]
   const orgId = session.supervisingOrg?.id ?? primary?.organization?.id ?? null
 
-  const [projects, selectedProjectId, stageManagementOrganization, siteVisitAccess] = await Promise.all([
+  const [projects, selectedProjectId, stageManagementOrganization, siteVisitAccess, announcement] = await Promise.all([
     orgId ? getOrgProjects(orgId, session.userId) : Promise.resolve([]),
     getSelectedProjectId(),
     resolveStageManagementOrganization(session.userId, session.supervisingOrg?.id),
     getSiteVisitProjectAccess(session.userId),
+    getActiveSystemAnnouncement(),
   ])
   const notificationFeed = await getAppNotificationFeed({
     userId: session.userId,
@@ -73,6 +75,7 @@ export default async function AppGroupLayout({
         canManageStages={Boolean(stageManagementOrganization)}
         canAccessSiteVisits={canShowSiteVisitsInSidebar}
         notificationFeed={notificationFeed}
+        announcement={announcement}
       >
         {children}
       </AppShell>
