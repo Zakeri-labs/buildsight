@@ -62,7 +62,7 @@ import { StageTranslationActions } from "@/components/stages/stage-translation-a
 import { optimizeEvidenceImageFile } from "@/lib/stages/optimize-evidence-image"
 import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
 import { ReportDownloadSection } from "@/components/stages/report-download-section"
-import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
+import { logDiagnosticEvent, readDiagnosticEvents } from "@/lib/stage-translations/debug-timeline"
 import type { ProjectStageAttachment, ProjectStageApproval, ProjectStagePerson, ProjectStageTranslationSummary } from "@/lib/db/project-stages"
 import { partitionReportCcRecipients, type ProjectCcCandidate, type ReportCcRecipient, type ReportCcSelection } from "@/lib/report-cc/types"
 import {
@@ -1157,82 +1157,127 @@ export function InspectionReportForm({
             } catch {
               // ignore transient network errors
             }
-          }
 
-          // Step 1: "Preparing translation & PDFs" completes when worker finishes translation or PDF
-          steps = updateStep(steps, stepIdx, (pdfGenSuccess || finalTransRecord?.translatedContent) ? "done" : "error")
-          stepIdx++
-
-          if (stepIdx < steps.length) {
-            steps = updateStep(steps, stepIdx, "active")
-          }
-
-          // Step 2: "Confirming PDF availability" - trust verified bilingualPdfPath returned by database/worker
-          let storageConfirmed = Boolean(pdfGenSuccess && finalTransRecord?.bilingualPdfPath)
-
-          if (!storageConfirmed) {
-            const retryDelays = [1000, 2000, 4000]
-            for (let attempt = 0; attempt < retryDelays.length; attempt++) {
-              await new Promise((resolve) => setTimeout(resolve, retryDelays[attempt]))
-
-              try {
-                const checkParams = new URLSearchParams({
-                  projectId: project.id,
-                  stageId: result.data.projectStageId,
-                  responseId: id,
-                })
-                const checkRes = await fetch(`/api/stage-translations?${checkParams.toString()}`, { cache: "no-store" })
-                if (checkRes.ok) {
-                  const checkPayload = await checkRes.json()
-                  const trans = checkPayload?.data?.translation
-                  if (trans && trans.bilingualPdfPath) {
-                    finalTransRecord = trans
-                    storageConfirmed = true
-                    pdfGenSuccess = true
-                    break
-                  }
-                }
-              } catch {
-                // Keep waiting during retry sequence without showing error
-              }
+            // Check if client worker logged a blocking PDF generation failure
+            const recentEvents = readDiagnosticEvents(id)
+            const blockedEvent = recentEvents.find((e) => e.name === "PDF_GENERATION_BLOCKED_IMAGE_FAILURE")
+            if (blockedEvent) {
+              break
             }
           }
 
-          logDiagnosticEvent(id, "READY_MODAL_VERIFICATION_DECISION", {
-            whyReady: storageConfirmed ? "bilingual_pdf_persisted_and_verified" : "verification_failed",
-            bilingualPdfPath: finalTransRecord?.bilingualPdfPath || null,
-            storageConfirmed,
-            translatedContentPresent: Boolean(finalTransRecord?.translatedContent),
-          })
+          // Step 1: "Preparing translation & PDFs"
+          // CRITICAL: Do NOT mark as done unless PDF readiness is confirmed (both translatedContent and bilingualPdfPath exist)
+          const isPdfReady = Boolean(pdfGenSuccess && finalTransRecord?.bilingualPdfPath && finalTransRecord?.translatedContent)
 
-          if (storageConfirmed && finalTransRecord) {
-            if (stepIdx < steps.length) {
-              steps = updateStep(steps, stepIdx, "done")
+          if (!isPdfReady) {
+            // "Preparing translation & PDFs" failed - do NOT advance to "Confirming PDF availability"
+            steps = updateStep(steps, stepIdx, "error")
+
+            // Determine real worker / PDF error message
+            const events = readDiagnosticEvents(id)
+            const imageBlockEvent = events.slice().reverse().find((e) => e.name === "PDF_GENERATION_BLOCKED_IMAGE_FAILURE")
+            const workerErrorEvent = events.slice().reverse().find((e) => e.name === "WORKER_PDF_GENERATION_FAILED_RETRYING")
+
+            let realError: string | null = finalTransRecord?.errorMessage?.trim() || null
+
+            if (!realError && imageBlockEvent?.details?.failedImages && Array.isArray(imageBlockEvent.details.failedImages)) {
+              const failedNames = (imageBlockEvent.details.failedImages as Array<{ filename?: string }>).map((f) => f.filename || "image").filter(Boolean).join(", ")
+              realError = `PDF generation failed: required image '${failedNames || "attachment"}' could not be loaded.`
+            } else if (!realError && workerErrorEvent?.details?.error) {
+              realError = `PDF generation failed: ${String(workerErrorEvent.details.error)}`
             }
-            // Update local translation state with the verified stored PDF paths
-            setTranslation((current) => ({
-              ...current,
-              id: finalTransRecord.id,
-              status: finalTransRecord.status,
-              bilingualPdfPath: finalTransRecord.bilingualPdfPath,
-              originalPdfPath: finalTransRecord.originalPdfPath,
-              translatedContent: finalTransRecord.translatedContent,
-              generatedAt: finalTransRecord.generatedAt,
-            }))
-            setSubmitResult({ responseId: id, stageId: routeStageId })
-          } else {
-            const activeErrIdx = stepIdx < steps.length ? stepIdx : steps.length - 1
-            steps = updateStep(steps, activeErrIdx, "error")
+
             const fallbackMsg = locale === "ar"
-              ? "تعذر التحقق من جاهزية ملف PDF للتقرير. يرجى إعادة المحاولة."
-              : "Report PDF availability confirmation failed. Please retry."
-            const specificMsg = finalTransRecord?.errorMessage?.trim()
-            setError(specificMsg || fallbackMsg)
-            logDiagnosticEvent(id, "SUBMIT_PDF_CONFIRMATION_FAILED", {
+              ? "تعذر إنشاء الترجمة وملفات PDF للتقرير. يرجى إعادة المحاولة."
+              : "Preparing translation & PDFs failed. Please retry."
+
+            setError(realError || fallbackMsg)
+
+            logDiagnosticEvent(id, "SUBMIT_PREPARATION_FAILED", {
               projectId: project.id,
               responseId: id,
-              reason: specificMsg || "bilingual_pdf_not_verified_in_storage",
+              reason: realError || "pdf_not_generated_or_failed",
+              hasTranslatedContent: Boolean(finalTransRecord?.translatedContent),
+              hasBilingualPdfPath: Boolean(finalTransRecord?.bilingualPdfPath),
             })
+          } else {
+            // PDF generation succeeded -> mark "Preparing translation & PDFs" as done
+            steps = updateStep(steps, stepIdx, "done")
+            stepIdx++
+
+            // Advance to Step 2: "Confirming PDF availability"
+            if (stepIdx < steps.length) {
+              steps = updateStep(steps, stepIdx, "active")
+            }
+
+            // Step 2: "Confirming PDF availability" - trust verified bilingualPdfPath returned by database/worker
+            let storageConfirmed = Boolean(pdfGenSuccess && finalTransRecord?.bilingualPdfPath)
+
+            if (!storageConfirmed) {
+              const retryDelays = [1000, 2000, 4000]
+              for (let attempt = 0; attempt < retryDelays.length; attempt++) {
+                await new Promise((resolve) => setTimeout(resolve, retryDelays[attempt]))
+
+                try {
+                  const checkParams = new URLSearchParams({
+                    projectId: project.id,
+                    stageId: result.data.projectStageId,
+                    responseId: id,
+                  })
+                  const checkRes = await fetch(`/api/stage-translations?${checkParams.toString()}`, { cache: "no-store" })
+                  if (checkRes.ok) {
+                    const checkPayload = await checkRes.json()
+                    const trans = checkPayload?.data?.translation
+                    if (trans && trans.bilingualPdfPath) {
+                      finalTransRecord = trans
+                      storageConfirmed = true
+                      pdfGenSuccess = true
+                      break
+                    }
+                  }
+                } catch {
+                  // Keep waiting during retry sequence without showing error
+                }
+              }
+            }
+
+            logDiagnosticEvent(id, "READY_MODAL_VERIFICATION_DECISION", {
+              whyReady: storageConfirmed ? "bilingual_pdf_persisted_and_verified" : "verification_failed",
+              bilingualPdfPath: finalTransRecord?.bilingualPdfPath || null,
+              storageConfirmed,
+              translatedContentPresent: Boolean(finalTransRecord?.translatedContent),
+            })
+
+            if (storageConfirmed && finalTransRecord) {
+              if (stepIdx < steps.length) {
+                steps = updateStep(steps, stepIdx, "done")
+              }
+              // Update local translation state with the verified stored PDF paths
+              setTranslation((current) => ({
+                ...current,
+                id: finalTransRecord.id,
+                status: finalTransRecord.status,
+                bilingualPdfPath: finalTransRecord.bilingualPdfPath,
+                originalPdfPath: finalTransRecord.originalPdfPath,
+                translatedContent: finalTransRecord.translatedContent,
+                generatedAt: finalTransRecord.generatedAt,
+              }))
+              setSubmitResult({ responseId: id, stageId: routeStageId })
+            } else {
+              const activeErrIdx = stepIdx < steps.length ? stepIdx : steps.length - 1
+              steps = updateStep(steps, activeErrIdx, "error")
+              const fallbackMsg = locale === "ar"
+                ? "تعذر التحقق من جاهزية ملف PDF للتقرير. يرجى إعادة المحاولة."
+                : "Report PDF availability confirmation failed. Please retry."
+              const specificMsg = finalTransRecord?.errorMessage?.trim()
+              setError(specificMsg || fallbackMsg)
+              logDiagnosticEvent(id, "SUBMIT_PDF_CONFIRMATION_FAILED", {
+                projectId: project.id,
+                responseId: id,
+                reason: specificMsg || "bilingual_pdf_not_verified_in_storage",
+              })
+            }
           }
         } else if (isSubmitMode) {
           setSubmitResult({ responseId: id, stageId: routeStageId })
