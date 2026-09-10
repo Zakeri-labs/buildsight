@@ -454,7 +454,7 @@ export async function processStageTranslationJob(job: StageTranslationJob) {
           stageId: normalized.stageId,
         })
 
-        if (allPdfPaths(record)) {
+        if (allPdfPaths(record) && !stale && !record.isStale) {
           removeStageTranslationJob(normalized)
           return
         }
@@ -467,7 +467,7 @@ export async function processStageTranslationJob(job: StageTranslationJob) {
             continue
           }
 
-          if (allPdfPaths(pdfRecord)) {
+          if (allPdfPaths(pdfRecord) && !stale && !pdfRecord.isStale) {
             removeStageTranslationJob(normalized)
             return
           }

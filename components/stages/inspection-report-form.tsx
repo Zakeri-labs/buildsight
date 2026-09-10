@@ -1209,17 +1209,19 @@ export function InspectionReportForm({
               if (res.ok) {
                 const payload = await res.json()
                 const trans = payload?.data?.translation
-                // STRICT CHECK: Bilingual PDF must be generated and persisted in storage
-                if (trans && trans.bilingualPdfPath) {
+                const transGenMs = trans?.generatedAt ? new Date(trans.generatedAt).getTime() : 0
+                const isFresh = transGenMs >= startTime - 5000
+                // STRICT CHECK: Bilingual PDF must be generated and persisted in storage for the current submission
+                if (trans && trans.bilingualPdfPath && trans.translatedContent && !trans.isStale && isFresh) {
                   pdfGenSuccess = true
                   finalTransRecord = trans
                   break
                 }
-                if (trans && (trans.status === "completed" || trans.status === "approved") && trans.translatedContent) {
+                if (trans && (trans.status === "completed" || trans.status === "approved") && trans.translatedContent && !trans.isStale && isFresh) {
                   finalTransRecord = trans
                   // Translation is complete, waiting for the background worker to finish PDF upload
                 }
-                if (trans?.status === "failed") {
+                if (trans?.status === "failed" && isFresh) {
                   finalTransRecord = trans
                   break
                 }

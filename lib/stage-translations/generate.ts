@@ -520,6 +520,9 @@ export async function prepareStageTranslationGeneration(input: {
     .update({
       translation_status: "pending",
       original_content: original,
+      original_pdf_url: null,
+      arabic_pdf_url: null,
+      bilingual_pdf_url: null,
       created_by: input.actorId,
       updated_at: now,
     })
@@ -757,7 +760,15 @@ export async function generateStageTranslation(input: {
   if (translationId) {
     const { error } = await admin
       .from("translation_documents")
-      .update({ translation_status: "pending", original_content: original, created_by: userId, updated_at: new Date().toISOString() })
+      .update({
+        translation_status: "pending",
+        original_content: original,
+        original_pdf_url: null,
+        arabic_pdf_url: null,
+        bilingual_pdf_url: null,
+        created_by: userId,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", translationId)
     if (error) throw error
   } else {
