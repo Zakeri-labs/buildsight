@@ -257,6 +257,75 @@ function checklistFromTemplate(reference: string | null): ChecklistItem[] {
 }
 
 
+function extractSubmissionFailureReason(
+  id: string | null | undefined,
+  finalTransRecord?: { errorMessage?: string | null } | null
+): string | null {
+  if (
+    finalTransRecord?.errorMessage &&
+    typeof finalTransRecord.errorMessage === "string" &&
+    finalTransRecord.errorMessage.trim()
+  ) {
+    return finalTransRecord.errorMessage.trim()
+  }
+
+  const events = readDiagnosticEvents(id)
+  if (!events.length) return null
+  const reversed = events.slice().reverse()
+
+  const blockedImg = reversed.find((e) => e.name === "PDF_GENERATION_BLOCKED_IMAGE_FAILURE")
+  if (
+    blockedImg?.details?.failedImages &&
+    Array.isArray(blockedImg.details.failedImages) &&
+    blockedImg.details.failedImages.length > 0
+  ) {
+    const names = (blockedImg.details.failedImages as Array<{ filename?: string }>)
+      .map((f) => f?.filename || "image")
+      .filter(Boolean)
+      .join(", ")
+    const count = blockedImg.details.failedImages.length
+    return `PDF generation blocked: ${count} required image(s) failed to load (${names}).`
+  }
+
+  const workerErr = reversed.find(
+    (e) =>
+      e.name === "WORKER_PDF_GENERATION_FAILED_RETRYING" ||
+      e.name === "WORKER_CYCLE_ERROR" ||
+      e.name === "PDF_GENERATION_FAILED"
+  )
+  if (
+    workerErr?.details?.error &&
+    typeof workerErr.details.error === "string" &&
+    workerErr.details.error.trim()
+  ) {
+    return workerErr.details.error.trim()
+  }
+
+  const exhausted = reversed.find((e) => e.name === "PDF_IMAGE_FETCH_EXHAUSTED")
+  if (exhausted?.details?.filename && typeof exhausted.details.filename === "string") {
+    return `PDF generation failed: required image '${exhausted.details.filename}' could not be loaded.`
+  }
+
+  const storageErr = reversed.find(
+    (e) =>
+      e.name === "BILINGUAL_PDF_UPLOAD_FAILED" ||
+      e.name === "ORIGINAL_PDF_UPLOAD_FAILED" ||
+      e.name === "BILINGUAL_PDF_PREPARE_FAILED" ||
+      e.name === "ORIGINAL_PDF_PREPARE_FAILED" ||
+      e.name === "ENSURE_BILINGUAL_FAILED" ||
+      e.name === "TRANSLATION_SAVE_FAILED"
+  )
+  if (
+    storageErr?.details?.error &&
+    typeof storageErr.details.error === "string" &&
+    storageErr.details.error.trim()
+  ) {
+    return storageErr.details.error.trim()
+  }
+
+  return null
+}
+
 function plainResponseText(value: string) {
   return value.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim()
 }
@@ -1175,20 +1244,7 @@ export function InspectionReportForm({
             // "Preparing translation & PDFs" failed - do NOT advance to "Confirming PDF availability"
             steps = updateStep(steps, stepIdx, "error")
 
-            // Determine real worker / PDF error message
-            const events = readDiagnosticEvents(id)
-            const imageBlockEvent = events.slice().reverse().find((e) => e.name === "PDF_GENERATION_BLOCKED_IMAGE_FAILURE")
-            const workerErrorEvent = events.slice().reverse().find((e) => e.name === "WORKER_PDF_GENERATION_FAILED_RETRYING")
-
-            let realError: string | null = finalTransRecord?.errorMessage?.trim() || null
-
-            if (!realError && imageBlockEvent?.details?.failedImages && Array.isArray(imageBlockEvent.details.failedImages)) {
-              const failedNames = (imageBlockEvent.details.failedImages as Array<{ filename?: string }>).map((f) => f.filename || "image").filter(Boolean).join(", ")
-              realError = `PDF generation failed: required image '${failedNames || "attachment"}' could not be loaded.`
-            } else if (!realError && workerErrorEvent?.details?.error) {
-              realError = `PDF generation failed: ${String(workerErrorEvent.details.error)}`
-            }
-
+            const realError = extractSubmissionFailureReason(id, finalTransRecord)
             const fallbackMsg = locale === "ar"
               ? "تعذر إنشاء الترجمة وملفات PDF للتقرير. يرجى إعادة المحاولة."
               : "Preparing translation & PDFs failed. Please retry."
@@ -1256,27 +1312,28 @@ export function InspectionReportForm({
               }
               // Update local translation state with the verified stored PDF paths
               setTranslation((current) => ({
-                ...current,
                 id: finalTransRecord.id,
                 status: finalTransRecord.status,
                 bilingualPdfPath: finalTransRecord.bilingualPdfPath,
                 originalPdfPath: finalTransRecord.originalPdfPath,
+                arabicPdfPath: current?.arabicPdfPath ?? null,
                 translatedContent: finalTransRecord.translatedContent,
                 generatedAt: finalTransRecord.generatedAt,
+                isStale: current?.isStale,
               }))
               setSubmitResult({ responseId: id, stageId: routeStageId })
             } else {
               const activeErrIdx = stepIdx < steps.length ? stepIdx : steps.length - 1
               steps = updateStep(steps, activeErrIdx, "error")
+              const realError = extractSubmissionFailureReason(id, finalTransRecord)
               const fallbackMsg = locale === "ar"
                 ? "تعذر التحقق من جاهزية ملف PDF للتقرير. يرجى إعادة المحاولة."
                 : "Report PDF availability confirmation failed. Please retry."
-              const specificMsg = finalTransRecord?.errorMessage?.trim()
-              setError(specificMsg || fallbackMsg)
+              setError(realError || fallbackMsg)
               logDiagnosticEvent(id, "SUBMIT_PDF_CONFIRMATION_FAILED", {
                 projectId: project.id,
                 responseId: id,
-                reason: specificMsg || "bilingual_pdf_not_verified_in_storage",
+                reason: realError || "bilingual_pdf_not_verified_in_storage",
               })
             }
           }
