@@ -1196,6 +1196,7 @@ export function InspectionReportForm({
           // Monitor translation and PDF generation performed by the background worker
           let pdfGenSuccess = false
           let finalTransRecord: any = null
+          let lastSeenTrans: any = null
           const startTime = Date.now()
           while (Date.now() - startTime < 60_000) {
             await new Promise((resolve) => setTimeout(resolve, 1500))
@@ -1209,19 +1210,20 @@ export function InspectionReportForm({
               if (res.ok) {
                 const payload = await res.json()
                 const trans = payload?.data?.translation
-                const transGenMs = trans?.generatedAt ? new Date(trans.generatedAt).getTime() : 0
-                const isFresh = transGenMs >= startTime - 5000
-                // STRICT CHECK: Bilingual PDF must be generated and persisted in storage for the current submission
-                if (trans && trans.bilingualPdfPath && trans.translatedContent && !trans.isStale && isFresh) {
+                if (trans) {
+                  lastSeenTrans = trans
+                }
+                const isCompletedStatus = trans?.status === "completed" || trans?.status === "approved"
+                if (trans && isCompletedStatus && trans.bilingualPdfPath && trans.translatedContent && !trans.isStale) {
                   pdfGenSuccess = true
                   finalTransRecord = trans
                   break
                 }
-                if (trans && (trans.status === "completed" || trans.status === "approved") && trans.translatedContent && !trans.isStale && isFresh) {
+                if (trans && isCompletedStatus && trans.translatedContent && !trans.isStale) {
                   finalTransRecord = trans
                   // Translation is complete, waiting for the background worker to finish PDF upload
                 }
-                if (trans?.status === "failed" && isFresh) {
+                if (trans?.status === "failed") {
                   finalTransRecord = trans
                   break
                 }
@@ -1246,7 +1248,8 @@ export function InspectionReportForm({
             // "Preparing translation & PDFs" failed - do NOT advance to "Confirming PDF availability"
             steps = updateStep(steps, stepIdx, "error")
 
-            const realError = extractSubmissionFailureReason(id, finalTransRecord)
+            const failureTrans = finalTransRecord || lastSeenTrans
+            const realError = extractSubmissionFailureReason(id, failureTrans)
             const fallbackMsg = locale === "ar"
               ? "تعذر إنشاء الترجمة وملفات PDF للتقرير. يرجى إعادة المحاولة."
               : "Preparing translation & PDFs failed. Please retry."
@@ -1257,8 +1260,10 @@ export function InspectionReportForm({
               projectId: project.id,
               responseId: id,
               reason: realError || "pdf_not_generated_or_failed",
-              hasTranslatedContent: Boolean(finalTransRecord?.translatedContent),
-              hasBilingualPdfPath: Boolean(finalTransRecord?.bilingualPdfPath),
+              hasTranslatedContent: Boolean(failureTrans?.translatedContent),
+              hasBilingualPdfPath: Boolean(failureTrans?.bilingualPdfPath),
+              translationStatus: failureTrans?.status || null,
+              isStale: failureTrans?.isStale ?? null,
             })
           } else {
             // PDF generation succeeded -> mark "Preparing translation & PDFs" as done
@@ -1327,7 +1332,7 @@ export function InspectionReportForm({
             } else {
               const activeErrIdx = stepIdx < steps.length ? stepIdx : steps.length - 1
               steps = updateStep(steps, activeErrIdx, "error")
-              const realError = extractSubmissionFailureReason(id, finalTransRecord)
+              const realError = extractSubmissionFailureReason(id, finalTransRecord || lastSeenTrans)
               const fallbackMsg = locale === "ar"
                 ? "تعذر التحقق من جاهزية ملف PDF للتقرير. يرجى إعادة المحاولة."
                 : "Report PDF availability confirmation failed. Please retry."
