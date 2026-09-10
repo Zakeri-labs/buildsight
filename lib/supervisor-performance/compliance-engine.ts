@@ -660,8 +660,17 @@ export function calculateSupervisorVisitCompliance(input: {
   const rangeStart = weeks.length > 0 ? weeks[0].startDate : today
   const rangeEnd = weeks.length > 0 ? weeks[weeks.length - 1].endDate : today
 
-  // Build ProjectComplianceTimelineRow for each project
-  const projectRows = projects.map((project) =>
+  // Deduplicate input projects by ID to guarantee unique project rows in matrix
+  const uniqueProjectMap = new Map<string, RawProjectRecord>()
+  for (const project of projects) {
+    if (project?.id && !uniqueProjectMap.has(project.id)) {
+      uniqueProjectMap.set(project.id, project)
+    }
+  }
+  const distinctProjects = Array.from(uniqueProjectMap.values())
+
+  // Build ProjectComplianceTimelineRow for each distinct project
+  const projectRows = distinctProjects.map((project) =>
     buildProjectTimelineRow({
       project,
       supervisorProfiles,

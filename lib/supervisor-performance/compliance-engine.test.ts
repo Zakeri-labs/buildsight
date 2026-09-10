@@ -634,6 +634,76 @@ function runUnitTests() {
     console.log("✓ Timeline 8-week window, date normalization, and backward/forward navigation verified.")
   }
 
+  // -----------------------------------------------------------------------------
+  // TEST GROUP 12: Duplicate Project Row Deduplication (Multi-Supervisor Support)
+  // -----------------------------------------------------------------------------
+  console.log("\n--- 12. Duplicate Project Row Deduplication ---")
+  {
+    const weeks = generateWeeklyWindow({ referenceDate: "2026-09-18", pastWeeks: 2, futureWeeks: 2 })
+
+    // Simulate multi-supervisor project duplicated in input projects list
+    const sharedProject: RawProjectRecord = {
+      id: "p_multi",
+      name: "Shared Multi-Supervisor Project",
+      code: "SHR-100",
+      status: "active",
+      supervision_type: "monthly_2",
+      assigned_supervisor_id: "sup_1",
+      start_date: "2026-01-01",
+    }
+
+    // Input projects array contains duplicates of the same project (e.g., from multiple supervisor joins)
+    const inputProjects: RawProjectRecord[] = [
+      sharedProject,
+      sharedProject, // Duplicate record
+      { id: "p_single", name: "Single Supervisor Project", code: "SNG-1", status: "active", supervision_type: "monthly_2", assigned_supervisor_id: "sup_1", start_date: "2026-01-01" },
+    ]
+
+    const participants: RawParticipantRecord[] = [
+      { project_id: "p_multi", key_contact_user_id: "sup_2", status: "active", participant_type: "consultancy", participant_role_label: "Supervisor" },
+    ]
+
+    const profiles = new Map([
+      ["sup_1", { id: "sup_1", name: "Supervisor One", email: "sup1@example.com", avatarUrl: null }],
+      ["sup_2", { id: "sup_2", name: "Supervisor Two", email: "sup2@example.com", avatarUrl: null }],
+    ])
+
+    const reports: RawReportRecord[] = [
+      { id: "r1", project_id: "p_multi", status: "submitted", submitted_at: "2026-09-05T00:00:00Z", visit_date: "2026-09-05", created_by: "sup_1" },
+      { id: "r2", project_id: "p_multi", status: "submitted", submitted_at: "2026-09-18T00:00:00Z", visit_date: "2026-09-18", created_by: "sup_2" },
+    ]
+
+    const dashboard = calculateSupervisorVisitCompliance({
+      projects: inputProjects,
+      participants,
+      reports,
+      supervisorProfiles: profiles,
+      weeks,
+      today: "2026-09-18",
+    })
+
+    // 1. Must contain exactly 2 project rows (p_multi and p_single), NOT 3
+    console.assert(dashboard.projects.length === 2, `Expected 2 distinct project rows, got ${dashboard.projects.length}`)
+
+    // 2. Multi-supervisor project row must be unique
+    const multiRows = dashboard.projects.filter((p) => p.projectId === "p_multi")
+    console.assert(multiRows.length === 1, `Multi-supervisor project MUST appear exactly once, found ${multiRows.length}`)
+
+    // 3. Multi-supervisor project must retain all assigned supervisors
+    const multiRow = multiRows[0]
+    console.assert(multiRow.supervisors.length === 2, `Multi-supervisor project MUST retain 2 supervisors, got ${multiRow.supervisors.length}`)
+    console.assert(multiRow.supervisors.some((s) => s.id === "sup_1" && s.isPrimary), "sup_1 is primary")
+    console.assert(multiRow.supervisors.some((s) => s.id === "sup_2" && !s.isPrimary), "sup_2 is co-supervisor")
+
+    // 4. Visits from both supervisors must count toward compliance
+    const p1Period = multiRow.periods.find((p) => p.monthKey === "2026-09" && p.periodIndex === 1)
+    const p2Period = multiRow.periods.find((p) => p.monthKey === "2026-09" && p.periodIndex === 2)
+    console.assert(p1Period?.status === "done" && p1Period.actualVisits === 1, "P1 satisfied by sup_1 visit")
+    console.assert(p2Period?.status === "done" && p2Period.actualVisits === 1, "P2 satisfied by sup_2 visit")
+
+    console.log("✓ Duplicate project row deduplication verified while preserving multi-supervisor assignments and collective visits.")
+  }
+
   console.log("\n================================================================================")
   console.log("ALL SUPERVISOR VISIT COMPLIANCE DOMAIN ENGINE TESTS PASSED! 🎉")
   console.log("================================================================================\n")

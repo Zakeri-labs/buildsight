@@ -128,7 +128,7 @@ export function SupervisorVisitComplianceDashboard({
       showIssuesOnly,
     } = filters
 
-    return projects.filter((project) => {
+    const filtered = projects.filter((project) => {
       // 1. Text Search query (Project Name, Code, or Supervisor Name)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim()
@@ -176,6 +176,14 @@ export function SupervisorVisitComplianceDashboard({
         if (!hasIssues) return false
       }
 
+      return true
+    })
+
+    // Defensive deduplication by projectId to prevent duplicate matrix rows
+    const seenIds = new Set<string>()
+    return filtered.filter((project) => {
+      if (seenIds.has(project.projectId)) return false
+      seenIds.add(project.projectId)
       return true
     })
   }, [projects, filters])

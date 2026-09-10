@@ -233,8 +233,15 @@ export async function loadSupervisorVisitComplianceData(
 
   if (projectsErr) throw projectsErr
 
-  const projects: RawProjectRecord[] = projectsData ?? []
-  const projectIds = projects.filter((p) => p.id).map((p) => p.id)
+  const rawProjects: RawProjectRecord[] = projectsData ?? []
+  const uniqueProjectsMap = new Map<string, RawProjectRecord>()
+  for (const p of rawProjects) {
+    if (p?.id && !uniqueProjectsMap.has(p.id)) {
+      uniqueProjectsMap.set(p.id, p)
+    }
+  }
+  const projects = Array.from(uniqueProjectsMap.values())
+  const projectIds = projects.map((p) => p.id)
 
   if (!projectIds.length) {
     return calculateSupervisorVisitCompliance({
