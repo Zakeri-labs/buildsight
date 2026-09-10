@@ -2962,7 +2962,7 @@ async function renderImageGrid(
   }
 
   // 2-column side-by-side image grid
-  const gap = 4
+  const gap = 2
   const colWidth = (flow.width - gap) / 2
   const maxImgH = 68
 
@@ -2993,11 +2993,11 @@ async function renderImageGrid(
       const ratio = Math.min(colWidth / img.width, maxImgH / img.height)
       const w = img.width * ratio
       const h = img.height * ratio
-      rowH = Math.max(rowH, h + (pair[idx].caption ? 7 : 0) + 3)
+      rowH = Math.max(rowH, h + (pair[idx].caption ? 6 : 0) + 1.5)
       return { w, h }
     })
 
-    ensureSpace(flow, rowH + 4)
+    ensureSpace(flow, rowH + 2)
 
     for (let idx = 0; idx < pair.length; idx += 1) {
       const img = loadedPair[idx]
@@ -3078,7 +3078,7 @@ async function renderImageGrid(
         }, flow.rtl)
       }
     }
-    flow.y += rowH + 4
+    flow.y += rowH + 2
   }
 
   logDiagnosticEvent(responseId, "PDF_IMAGES_SUMMARY", {
@@ -5107,7 +5107,7 @@ async function renderBilingualImageGrid(
   let decodeFailures = 0
   let embedFailures = 0
 
-  const gap = 4
+  const gap = 2
   const colWidth = (flow.width - gap) / 2
   const maxImgH = 68
 
@@ -5139,11 +5139,11 @@ async function renderBilingualImageGrid(
       const ratio = Math.min(colWidth / img.width, maxImgH / img.height)
       const w = img.width * ratio
       const h = img.height * ratio
-      rowH = Math.max(rowH, h + (pair[idx].caption || arPair[idx]?.caption ? 8 : 0) + 3)
+      rowH = Math.max(rowH, h + (pair[idx].caption || arPair[idx]?.caption ? 7 : 0) + 1.5)
       return { w, h }
     })
 
-    ensureSpace(flow, rowH + 4)
+    ensureSpace(flow, rowH + 2)
 
     for (let idx = 0; idx < pair.length; idx += 1) {
       const img = loadedPair[idx]
@@ -5236,7 +5236,7 @@ async function renderBilingualImageGrid(
         }
       }
     }
-    flow.y += rowH + 4
+    flow.y += rowH + 2
   }
 
   logDiagnosticEvent(responseId, "PDF_IMAGES_SUMMARY", {
