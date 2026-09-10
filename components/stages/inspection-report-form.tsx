@@ -2539,33 +2539,12 @@ export function InspectionReportForm({
                       </Button>
                     </div>
 
-                    <div className="mt-2.5 flex items-center gap-2">
+                    <div className="mt-3 flex items-center justify-end">
                       <Button
                         type="button"
                         size="sm"
                         variant="outline"
-                        className="h-8 gap-1.5 rounded-lg border-red-300 bg-white px-3 text-xs font-semibold text-red-800 shadow-xs hover:bg-red-100 dark:border-red-800 dark:bg-red-900/40 dark:text-red-200 dark:hover:bg-red-900/60"
-                        onClick={() => {
-                          setError(null)
-                          setSubmitSteps((prev) => prev.map((s) => s.status === "error" ? { ...s, status: "pending" } : s))
-                          if (responseId && project?.id) {
-                            enqueueStageTranslationJob({
-                              projectId: project.id,
-                              stageId: resolvedStageId || stage.id,
-                              responseId,
-                              retry: true,
-                            })
-                          }
-                        }}
-                      >
-                        <RotateCw className="size-3.5" />
-                        <span>{locale === "ar" ? "إعادة المحاولة" : "Retry"}</span>
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 gap-1.5 rounded-lg px-2 text-xs font-semibold text-red-700 hover:bg-red-100 dark:text-red-300 dark:hover:bg-red-900/40"
+                        className="h-8 w-full gap-1.5 rounded-lg border-red-300 bg-white px-3 text-xs font-semibold text-red-800 shadow-xs hover:bg-red-50 dark:border-red-800 dark:bg-red-900/40 dark:text-red-200 dark:hover:bg-red-900/60"
                         onClick={() => {
                           setSubmitModalOpen(false)
                           setError(null)
@@ -2577,7 +2556,7 @@ export function InspectionReportForm({
                           }
                         }}
                       >
-                        <span>{locale === "ar" ? "عرض التقرير" : "Close & View Report"}</span>
+                        <span>{locale === "ar" ? "إغلاق وعرض التقرير" : "Close & View Report"}</span>
                       </Button>
                     </div>
                   </div>
