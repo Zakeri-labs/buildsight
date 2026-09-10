@@ -80,7 +80,7 @@ export function ComplianceWeekCell({
                 <span>Completed</span>
               </span>
               <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
-                Required: {requiredVisits} • Done: {requiredVisits > 0 ? Math.min(completedVisits, requiredVisits) : completedVisits}
+                Required: {requiredVisits} • Done: {completedVisits}
               </span>
               {showExtraIndicator && (
                 <div className="mt-0.5 flex items-center justify-between rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 ring-1 ring-amber-500/20 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30">
