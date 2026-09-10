@@ -13,6 +13,7 @@ import {
   getFallbackStageChecklist,
 } from "@/lib/stages/execution"
 import { roleLabel } from "@/lib/db/types"
+import { parseTranslationContent } from "@/lib/stage-translations/content"
 
 export type ProjectStagePerson = {
   id: string
@@ -314,7 +315,7 @@ export async function loadProjectStageExecution(
       ? admin.from("approvals").select("id, response_id, reviewer_id, decision, comments, decided_at").in("response_id", responseIds).order("decided_at", { ascending: false })
       : Promise.resolve({ data: [] as any[] }),
     responseIds.length
-      ? admin.from("translation_documents").select("id, response_id, translation_status, generated_at, original_pdf_url, arabic_pdf_url, bilingual_pdf_url").in("response_id", responseIds)
+      ? admin.from("translation_documents").select("id, response_id, translation_status, generated_at, original_pdf_url, arabic_pdf_url, bilingual_pdf_url, translated_content").in("response_id", responseIds)
       : Promise.resolve({ data: [] as any[] }),
   ])
 
@@ -379,6 +380,7 @@ export async function loadProjectStageExecution(
       originalPdfPath: translation.original_pdf_url,
       arabicPdfPath: translation.arabic_pdf_url,
       bilingualPdfPath: translation.bilingual_pdf_url,
+      translatedContent: parseTranslationContent(translation.translated_content),
     })
   }
 
