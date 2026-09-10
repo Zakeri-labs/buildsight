@@ -51,6 +51,13 @@ export function ComplianceWeekCell({
 
   const { status, requiredVisits, completedVisits, actualReports } = cell
   const hasVisits = actualReports.length > 0
+  const isCompleted =
+    status === "done" ||
+    (status === "extra" && requiredVisits > 0 && completedVisits >= requiredVisits) ||
+    (status === "extra" && requiredVisits === 0)
+  const extraVisitsCount =
+    requiredVisits > 0 ? Math.max(0, completedVisits - requiredVisits) : completedVisits
+  const showExtraIndicator = extraVisitsCount > 0
 
   return (
     <>
@@ -66,15 +73,23 @@ export function ComplianceWeekCell({
       >
         <div className="flex flex-col gap-1.5">
           {/* Main Weekly Compliance State */}
-          {status === "done" && (
+          {isCompleted && (
             <div className="flex flex-col gap-0.5">
               <span className="inline-flex w-fit items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-300">
                 <Check className="h-3 w-3 stroke-[2.5]" />
                 <span>Completed</span>
               </span>
               <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
-                Required: {requiredVisits} • Done: {completedVisits}
+                Required: {requiredVisits} • Done: {requiredVisits > 0 ? Math.min(completedVisits, requiredVisits) : completedVisits}
               </span>
+              {showExtraIndicator && (
+                <div className="mt-0.5 flex items-center justify-between rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 ring-1 ring-amber-500/20 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30">
+                  <span className="font-semibold">+ Extra</span>
+                  <span>
+                    {extraVisitsCount} additional visit{extraVisitsCount > 1 ? "s" : ""}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -90,6 +105,14 @@ export function ComplianceWeekCell({
               <span className="text-[10px] font-medium text-rose-600/80 dark:text-rose-400/80">
                 Action required
               </span>
+              {showExtraIndicator && (
+                <div className="mt-0.5 flex items-center justify-between rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 ring-1 ring-amber-500/20 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30">
+                  <span className="font-semibold">+ Extra</span>
+                  <span>
+                    {extraVisitsCount} additional visit{extraVisitsCount > 1 ? "s" : ""}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -104,18 +127,6 @@ export function ComplianceWeekCell({
               </span>
               <span className="text-[10px] text-muted-foreground">
                 Due this week
-              </span>
-            </div>
-          )}
-
-          {status === "extra" && (
-            <div className="flex flex-col gap-0.5">
-              <span className="inline-flex w-fit items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-                <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
-                <span>Extra</span>
-              </span>
-              <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300">
-                Required: {requiredVisits} • Done: {completedVisits}
               </span>
             </div>
           )}

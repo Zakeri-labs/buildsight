@@ -118,6 +118,11 @@ export function ComplianceCellDetailDialog({
                 <span className="text-muted-foreground">Completed visits</span>
                 <span className="text-sm font-bold text-foreground">
                   {completedVisits} visit{completedVisits !== 1 ? "s" : ""}
+                  {completedVisits > requiredVisits && requiredVisits > 0 && (
+                    <span className="ml-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                      (+{completedVisits - requiredVisits} extra)
+                    </span>
+                  )}
                 </span>
               </div>
             </div>

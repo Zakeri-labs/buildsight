@@ -65,20 +65,24 @@ export function ComplianceStatusBadge({
         </span>
       )
 
-    case "extra":
+    case "extra": {
+      const extraCount = Math.max(1, actualVisits - requiredVisits)
       return (
         <span
           className={cn(
-            "inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
+            "inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-300",
             compact && "px-1.5 py-0.5 text-[11px]",
             className,
           )}
-          title={`Extra visits: ${actualVisits} visits conducted (${requiredVisits} required)`}
+          title={`Completed with extra visits: ${actualVisits} visits conducted (${requiredVisits} required)`}
         >
-          <AlertCircle className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400" />
-          <span>{compact ? `${actualVisits}/${requiredVisits}` : `Extra (${actualVisits}/${requiredVisits})`}</span>
+          <Check className="h-3 w-3 shrink-0 stroke-[2.5]" />
+          <span>
+            {compact ? `${actualVisits}/${requiredVisits}` : `Completed (+${extraCount} Extra)`}
+          </span>
         </span>
       )
+    }
 
     case "not_applicable":
     default:
