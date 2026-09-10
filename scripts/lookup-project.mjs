@@ -26,21 +26,29 @@ const searchCode = process.argv[2] || "2023_105"
 const parts = searchCode.split("_")
 const numPattern = parts.length === 2 ? `${parts[0]}/${parts[1]}` : searchCode
 
-const { data, error } = await admin
+const { data: projects, error } = await admin
   .from("projects")
-  .select("id, name, code, client")
-  .or(`code.eq.Bonyan/sup/${numPattern},code.eq.${searchCode},code.ilike.%${numPattern}%`)
+  .select("id, name, code, status, supervision_type, assigned_supervisor_id, created_at, updated_at")
+  .in("id", ["db8a1600-2a7b-419a-b27d-628781d3e24c", "3cba5495-225c-4af5-83ea-0bc965bfa62a"])
 
-if (error) {
-  console.error("Error:", error.message)
-} else if (!data || data.length === 0) {
-  // Try searching all 2023 projects to display matches
-  const { data: allProj } = await admin
-    .from("projects")
-    .select("id, name, code, client")
-    .or(`code.ilike.%${parts[0]}%`)
-    .limit(10)
-  console.log(`No exact match for ${searchCode}. Sample ${parts[0]} projects in DB:`, JSON.stringify(allProj, null, 2))
-} else {
-  console.log(`Exact match for folder ${searchCode}:`, JSON.stringify(data, null, 2))
-}
+console.log("PROJECTS:", JSON.stringify(projects, null, 2))
+
+const { data: participants } = await admin
+  .from("project_participants")
+  .select("id, project_id, key_contact_user_id, status, participant_type, project_role, participant_role_label, source_key")
+  .in("project_id", ["db8a1600-2a7b-419a-b27d-628781d3e24c", "3cba5495-225c-4af5-83ea-0bc965bfa62a"])
+
+console.log("PARTICIPANTS:", JSON.stringify(participants, null, 2))
+
+const userIds = [...new Set([
+  ...(projects || []).map(p => p.assigned_supervisor_id),
+  ...(participants || []).map(p => p.key_contact_user_id)
+].filter(Boolean))]
+
+const { data: profiles } = await admin
+  .from("profiles")
+  .select("id, full_name, email")
+  .in("id", userIds)
+
+console.log("PROFILES:", JSON.stringify(profiles, null, 2))
+
