@@ -1150,6 +1150,7 @@ export function InspectionReportForm({
                   // Translation is complete, waiting for the background worker to finish PDF upload
                 }
                 if (trans?.status === "failed") {
+                  finalTransRecord = trans
                   break
                 }
               }
@@ -1222,14 +1223,15 @@ export function InspectionReportForm({
           } else {
             const activeErrIdx = stepIdx < steps.length ? stepIdx : steps.length - 1
             steps = updateStep(steps, activeErrIdx, "error")
-            const failMsg = locale === "ar"
+            const fallbackMsg = locale === "ar"
               ? "تعذر التحقق من جاهزية ملف PDF للتقرير. يرجى إعادة المحاولة."
               : "Report PDF availability confirmation failed. Please retry."
-            setError(failMsg)
+            const specificMsg = finalTransRecord?.errorMessage?.trim()
+            setError(specificMsg || fallbackMsg)
             logDiagnosticEvent(id, "SUBMIT_PDF_CONFIRMATION_FAILED", {
               projectId: project.id,
               responseId: id,
-              reason: "bilingual_pdf_not_verified_in_storage",
+              reason: specificMsg || "bilingual_pdf_not_verified_in_storage",
             })
           }
         } else if (isSubmitMode) {
@@ -2435,10 +2437,14 @@ export function InspectionReportForm({
                   <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
                     <div className="flex items-center gap-1.5 font-bold text-red-700 dark:text-red-300">
                       <AlertCircle className="size-4 shrink-0 text-red-600 dark:text-red-400" />
-                      <span>{locale === "ar" ? "فشل إنشاء الترجمة وملفات PDF" : "Translation / PDF Generation Failed"}</span>
+                      <span>
+                        {submitSteps.slice(0, 3).some((s) => s.status === "error")
+                          ? (locale === "ar" ? "فشل تقديم التقرير" : "Submission Failed")
+                          : (locale === "ar" ? "فشل إنشاء الترجمة وملفات PDF" : "Translation / PDF Generation Failed")}
+                      </span>
                     </div>
                     <p className="mt-1.5 font-medium leading-relaxed">
-                      {error || (locale === "ar" ? "تعذر إنشاء الترجمة وملفات PDF تلقائياً. يرجى إعادة المحاولة." : "Automatic translation/PDF generation failed. Please retry.")}
+                      {error || (locale === "ar" ? "حدث خطأ أثناء معالجة التقرير. يرجى إعادة المحاولة." : "An error occurred during report processing. Please retry.")}
                     </p>
                     <div className="mt-3 flex items-center gap-2">
                       <Button

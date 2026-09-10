@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation"
+import { notFound } from "next/navigation"
 import { InspectionReportForm } from "@/components/stages/inspection-report-form"
 import { requireOnboarded } from "@/lib/auth/session"
 import { loadNextProjectVisitNumber, loadProjectStage, loadSiteVisitReportContext } from "@/lib/db/project-stages"
@@ -33,9 +33,6 @@ export default async function NewStageReportPage({
     siteVisitRequestId ? loadSiteVisitReportContext(projectId, siteVisitRequestId) : Promise.resolve(null),
   ])
   if (siteVisitRequestId && !siteVisitContext) notFound()
-  if (siteVisitContext?.linkedReport) {
-    redirect(`/projects/${projectId}/stages/${siteVisitContext.linkedReport.projectStageId}/reports/${siteVisitContext.linkedReport.id}`)
-  }
   const nextVisitNumber = siteVisitContext?.visitNumber ?? await loadNextProjectVisitNumber(projectId)
   const currentUserPerson = {
     id: session.userId,
