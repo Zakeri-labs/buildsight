@@ -1198,7 +1198,7 @@ export function InspectionReportForm({
           let finalTransRecord: any = null
           let lastSeenTrans: any = null
           const startTime = Date.now()
-          while (Date.now() - startTime < 60_000) {
+          while (Date.now() - startTime < 120_000) {
             await new Promise((resolve) => setTimeout(resolve, 1500))
             try {
               const params = new URLSearchParams({
