@@ -192,14 +192,19 @@ export function ComplianceCellDetailDialog({
                       href={reportHref}
                       className="group flex flex-col gap-1 rounded-lg border bg-muted/20 p-2.5 text-xs transition-all hover:bg-muted/50 hover:border-primary/40 hover:shadow-xs cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 font-semibold text-foreground group-hover:text-primary transition-colors min-w-0">
-                          <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
-                          <span className="truncate">{report.reportTitle || `Inspection Report #${idx + 1}`}</span>
-                          <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex flex-1 items-start gap-1.5 min-w-0 font-semibold text-foreground group-hover:text-primary transition-colors">
+                          <FileText className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                          <span
+                            className="flex-1 min-w-0 text-xs font-semibold leading-snug break-words line-clamp-2"
+                            title={report.reportTitle || `Inspection Report #${idx + 1}`}
+                          >
+                            {report.reportTitle || `Inspection Report #${idx + 1}`}
+                          </span>
+                          <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
                         </div>
                         {report.visitNumber && (
-                          <Badge variant="outline" className="font-mono text-[10px] shrink-0">
+                          <Badge variant="outline" className="font-mono text-[10px] shrink-0 whitespace-nowrap">
                             Visit #{report.visitNumber}
                           </Badge>
                         )}
