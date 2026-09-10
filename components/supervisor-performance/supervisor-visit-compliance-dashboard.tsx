@@ -71,9 +71,9 @@ export function SupervisorVisitComplianceDashboard({
 
   const [anchorSaturday, setAnchorSaturday] = useState<string>(defaultAnchorSaturday)
 
-  // Generate 8 visible weeks: 2 weeks before anchor + anchor week + 5 following weeks
+  // Generate 8 visible weeks: 6 weeks before anchor + anchor week (col 7) + 1 following week (col 8)
   const visibleWeeks = useMemo(() => {
-    const startSaturday = addCalendarDays(anchorSaturday, -14)
+    const startSaturday = addCalendarDays(anchorSaturday, -42)
     const endFriday = addCalendarDays(startSaturday, VISIBLE_WEEKS_COUNT * 7 - 1)
     return generateCalendarWeeks({
       rangeStart: startSaturday,
