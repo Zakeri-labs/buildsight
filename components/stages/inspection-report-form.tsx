@@ -1328,7 +1328,34 @@ export function InspectionReportForm({
   const handleSendLogViaWhatsApp = () => {
     const currentRespId = responseId || initialResponseId || null
     const logText = formatDiagnosticLogAsText(currentRespId)
-    const url = `https://wa.me/?text=${encodeURIComponent(logText)}`
+
+    const lines: string[] = [
+      "BuildSight Report Issue",
+      "",
+      "Project:",
+      project?.name || "Project",
+    ]
+
+    if (project?.code) {
+      lines.push("", "Project Code:", project.code)
+    }
+
+    const cleanTitle = (reportTitle || defaultReportTitlePattern || subject || "Inspection Report").trim()
+    lines.push("", "Report:", cleanTitle)
+
+    if (translation?.bilingualPdfPath && currentRespId) {
+      const origin = typeof window !== "undefined" ? window.location.origin : "https://app.bonyanec.com"
+      const microCode = currentRespId.split("-")[0]
+      const pdfUrl = microCode
+        ? `${origin}/r/${microCode}`
+        : `${origin}/api/stage-translations/pdf?projectId=${project.id}&responseId=${currentRespId}&kind=bilingual`
+      lines.push("", "PDF:", pdfUrl)
+    }
+
+    lines.push("", "--------------------", "", "Diagnostic Log:", logText)
+
+    const message = lines.join("\n")
+    const url = `https://wa.me/?text=${encodeURIComponent(message)}`
     window.open(url, "_blank")
   }
 
