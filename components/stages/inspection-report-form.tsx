@@ -62,7 +62,7 @@ import { StageTranslationActions } from "@/components/stages/stage-translation-a
 import { optimizeEvidenceImageFile } from "@/lib/stages/optimize-evidence-image"
 import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
 import { ReportDownloadSection } from "@/components/stages/report-download-section"
-import { logDiagnosticEvent, readDiagnosticEvents } from "@/lib/stage-translations/debug-timeline"
+import { formatDiagnosticLogAsText, logDiagnosticEvent, readDiagnosticEvents } from "@/lib/stage-translations/debug-timeline"
 import type { ProjectStageAttachment, ProjectStageApproval, ProjectStagePerson, ProjectStageTranslationSummary } from "@/lib/db/project-stages"
 import { partitionReportCcRecipients, type ProjectCcCandidate, type ReportCcRecipient, type ReportCcSelection } from "@/lib/report-cc/types"
 import {
@@ -549,6 +549,7 @@ export function InspectionReportForm({
     bilingual?: { blob: Blob; filename: string }
   } | null>(null)
   const [copiedModalShare, setCopiedModalShare] = useState(false)
+  const [copiedDebugLog, setCopiedDebugLog] = useState(false)
   const [actionBusy, setActionBusy] = useState<"share" | "copy" | "english_pdf" | "bilingual_pdf" | null>(null)
   const [basicOpen, setBasicOpen] = useState(false)
   const [reviewComments, setReviewComments] = useState("")
@@ -1308,6 +1309,27 @@ export function InspectionReportForm({
     } finally {
       setBusy(null)
     }
+  }
+
+  const handleCopyDebugLog = async () => {
+    const currentRespId = responseId || initialResponseId || null
+    const logText = formatDiagnosticLogAsText(currentRespId)
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(logText)
+        setCopiedDebugLog(true)
+        setTimeout(() => setCopiedDebugLog(false), 2000)
+      }
+    } catch (err) {
+      console.warn("Failed to copy debug log", err)
+    }
+  }
+
+  const handleSendLogViaWhatsApp = () => {
+    const currentRespId = responseId || initialResponseId || null
+    const logText = formatDiagnosticLogAsText(currentRespId)
+    const url = `https://wa.me/?text=${encodeURIComponent(logText)}`
+    window.open(url, "_blank")
   }
 
   const addImages = (files: File[]) => {
@@ -2491,7 +2513,33 @@ export function InspectionReportForm({
                     <p className="mt-1.5 font-medium leading-relaxed">
                       {error || (locale === "ar" ? "حدث خطأ أثناء معالجة التقرير. يرجى إعادة المحاولة." : "An error occurred during report processing. Please retry.")}
                     </p>
-                    <div className="mt-3 flex items-center gap-2">
+
+                    {/* Diagnostic Debug Log Sharing */}
+                    <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-red-200/80 pt-2.5 dark:border-red-900/60">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 gap-1.5 rounded-lg border-red-300/80 bg-white px-2.5 text-[11px] font-semibold text-red-800 shadow-2xs hover:bg-red-50 dark:border-red-800 dark:bg-red-900/40 dark:text-red-200 dark:hover:bg-red-900/60"
+                        onClick={handleCopyDebugLog}
+                      >
+                        {copiedDebugLog ? <Check className="size-3 text-emerald-600 dark:text-emerald-400" /> : <Copy className="size-3" />}
+                        <span>{copiedDebugLog ? (locale === "ar" ? "تم النسخ!" : "Copied!") : (locale === "ar" ? "نسخ سجل التشخيص" : "Copy Debug Log")}</span>
+                      </Button>
+
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 gap-1.5 rounded-lg border-emerald-400/80 bg-white px-2.5 text-[11px] font-semibold text-emerald-700 shadow-2xs hover:bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+                        onClick={handleSendLogViaWhatsApp}
+                      >
+                        <Share2 className="size-3 text-emerald-600 dark:text-emerald-400" />
+                        <span>{locale === "ar" ? "إرسال السجل عبر واتساب" : "Send Log via WhatsApp"}</span>
+                      </Button>
+                    </div>
+
+                    <div className="mt-2.5 flex items-center gap-2">
                       <Button
                         type="button"
                         size="sm"
