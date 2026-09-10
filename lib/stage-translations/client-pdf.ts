@@ -49,7 +49,7 @@ const PAGE = {
   landscapeWidth: 297,
   landscapeHeight: 210,
   margin: 14,
-  footer: 23,
+  footer: 19.5,
 } as const
 
 type JsPdfDocument = any
@@ -3208,7 +3208,7 @@ function drawPreservedSourcePageHeader(flow: Flow, sourcePage: number, totalPage
   flow.x = PAGE.margin
   flow.width = pageWidth - PAGE.margin * 2
   flow.y = 18
-  flow.bottom = flow.pageHeight - PAGE.footer - 5
+  flow.bottom = flow.pageHeight - PAGE.footer - 1
 }
 
 function positionedSubFlow(flow: Flow, leftRatio: number, widthRatio: number, desiredY: number, minimumWidth = 45) {
@@ -3224,7 +3224,7 @@ async function renderPreservedSourceLayout(flow: Flow, layout: NonNullable<Langu
   const translatedCaptions = flow.rtl ? captionLinesFromHtml(layout.contentHtml) : []
   let imageCaptionIndex = 0
   const pageTop = 18
-  const pageContentHeight = flow.pageHeight - pageTop - PAGE.footer - 5
+  const pageContentHeight = flow.pageHeight - pageTop - PAGE.footer - 1
 
   for (let pageIndex = 0; pageIndex < layout.pages.length; pageIndex += 1) {
     if (pageIndex > 0) {
@@ -3371,7 +3371,7 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     }
 
     // ── Footer Top Accent Line ──────────────────────────────────────────
-    const footerTopY = height - 23.5
+    const footerTopY = height - 19.5
     doc.setFillColor(180, 138, 32)
     doc.rect(margin, footerTopY, width - margin * 2, 0.6, "F")
 
@@ -3391,8 +3391,8 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
         doc,
         contactLines,
         margin,
-        footerTopY + 4,
-        { align: "left", lineHeightFactor: 1.2 },
+        footerTopY + 3.2,
+        { align: "left", lineHeightFactor: 1.15 },
         false,
       )
     }
@@ -3404,23 +3404,23 @@ function addPageNumbers(doc: JsPdfDocument, rtl: boolean) {
     // Draw Line 1 (English CR/PO - right aligned, bold dark)
     setLanguage(doc, false, 6.5, true)
     doc.setTextColor(0, 0, 0)
-    doc.text(enAddressLine1, width - margin, footerTopY + 4, { align: "right" })
+    doc.text(enAddressLine1, width - margin, footerTopY + 3.2, { align: "right" })
 
     // Draw Line 2 (English Address - right aligned)
     if (enAddressLine2) {
       setLanguage(doc, false, 6.5, false)
       doc.setTextColor(0, 0, 0)
-      doc.text(enAddressLine2, width - margin, footerTopY + 8, { align: "right" })
+      doc.text(enAddressLine2, width - margin, footerTopY + 6.8, { align: "right" })
     }
 
     // Sub-Footer Divider Line
-    const subFooterDividerY = footerTopY + 12.7
+    const subFooterDividerY = footerTopY + 10.5
     doc.setDrawColor(200, 200, 200)
     doc.setLineWidth(0.15)
     doc.line(margin, subFooterDividerY, width - margin, subFooterDividerY)
 
     // Sub-Footer Left: Company Name
-    const subFooterTextY = subFooterDividerY + 3.2
+    const subFooterTextY = subFooterDividerY + 3.0
     setLanguage(doc, false, 6, false)
     doc.setTextColor(0, 0, 0)
     doc.text(org.name.toUpperCase(), margin, subFooterTextY, { align: "left" })
@@ -4135,7 +4135,7 @@ async function buildLanguagePdfBlob(
     x: PAGE.margin,
     y: 0,
     width: PAGE.portraitWidth - PAGE.margin * 2,
-    bottom: PAGE.portraitHeight - PAGE.footer - 5,
+    bottom: PAGE.portraitHeight - PAGE.footer - 1,
     pageNumber: 1,
     logoImage,
     closingLogoImage,
@@ -5447,7 +5447,7 @@ async function buildNativeBilingualPdfBlob(input: {
     x: PAGE.margin,
     y: 0,
     width: PAGE.portraitWidth - PAGE.margin * 2,  // 182 mm
-    bottom: PAGE.portraitHeight - PAGE.footer - 5,
+    bottom: PAGE.portraitHeight - PAGE.footer - 1,
     pageNumber: 1,
     logoImage,
     closingLogoImage,
