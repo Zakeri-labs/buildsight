@@ -9,6 +9,7 @@ import type {
   TranslationReportContent,
   TranslationSectionKey,
 } from "@/lib/stage-translations/types"
+import { isReportContentStale, parseTranslationContent } from "@/lib/stage-translations/content"
 import { sanitizeReportHtml } from "@/lib/stages/execution"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { OPENAI_CONFIG } from "@/lib/openai-config"
@@ -407,7 +408,7 @@ export async function prepareStageTranslationGeneration(input: {
 
   const { data: existing, error: existingError } = await admin
     .from("translation_documents")
-    .select("id, translation_status, translated_content, generated_at, original_pdf_url, arabic_pdf_url, bilingual_pdf_url, updated_at")
+    .select("id, translation_status, original_content, translated_content, generated_at, original_pdf_url, arabic_pdf_url, bilingual_pdf_url, updated_at")
     .eq("response_id", input.responseId)
     .eq("project_id", input.projectId)
     .eq("project_stage_id", input.stageId)
@@ -459,7 +460,9 @@ export async function prepareStageTranslationGeneration(input: {
 
   const status = existing.translation_status === "completed" || existing.translation_status === "failed" ? existing.translation_status : "pending"
   const generatedAt = validDateMs(existing.generated_at)
-  const translationFresh = Boolean(existing.translated_content && generatedAt && generatedAt >= responseUpdatedAt)
+  const existingOriginal = parseTranslationContent(existing.original_content)
+  const isStale = existingOriginal ? isReportContentStale(original, existingOriginal) : (generatedAt ? responseUpdatedAt > generatedAt : false)
+  const translationFresh = Boolean(existing.translated_content && generatedAt && !isStale)
 
   if (status === "completed" && translationFresh) {
     return {

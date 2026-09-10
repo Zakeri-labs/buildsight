@@ -1,15 +1,21 @@
 import "server-only"
 
 import { loadDirectProjectStageReport, loadProjectStageReport, loadProjectStageTerm, type ProjectTermResponse } from "@/lib/db/project-stages"
-import { buildOriginalTranslationContent, parseTranslationContent } from "@/lib/stage-translations/content"
-import type { StageTranslationPageData, StageTranslationRecord } from "@/lib/stage-translations/types"
+import { buildOriginalTranslationContent, isReportContentStale, parseTranslationContent } from "@/lib/stage-translations/content"
+import type { StageTranslationPageData, StageTranslationRecord, TranslationReportContent } from "@/lib/stage-translations/types"
 import { createAdminClient } from "@/lib/supabase/admin"
 
-function mapTranslation(row: any, fallbackOriginal: StageTranslationRecord["originalContent"]): StageTranslationRecord {
+function mapTranslation(
+  row: any,
+  fallbackOriginal: StageTranslationRecord["originalContent"],
+  currentContent?: TranslationReportContent,
+): StageTranslationRecord {
+  const originalContent = parseTranslationContent(row.original_content) ?? fallbackOriginal
+  const isStale = currentContent ? isReportContentStale(currentContent, originalContent) : false
   return {
     id: row.id,
     status: row.translation_status,
-    originalContent: parseTranslationContent(row.original_content) ?? fallbackOriginal,
+    originalContent,
     translatedContent: parseTranslationContent(row.translated_content),
     generatedAt: row.generated_at,
     createdAt: row.created_at,
@@ -17,6 +23,7 @@ function mapTranslation(row: any, fallbackOriginal: StageTranslationRecord["orig
     originalPdfPath: row.original_pdf_url,
     arabicPdfPath: row.arabic_pdf_url,
     bilingualPdfPath: row.bilingual_pdf_url,
+    isStale,
   }
 }
 
@@ -84,7 +91,7 @@ async function buildPageData(
       createdBy: response.createdBy ? { id: response.createdBy.id, name: response.createdBy.name, email: response.createdBy.email } : null,
       attachments: response.attachments,
     },
-    translation: translation ? mapTranslation(translation, originalContent) : null,
+    translation: translation ? mapTranslation(translation, originalContent, originalContent) : null,
   }
 }
 
@@ -133,7 +140,7 @@ async function buildDirectStagePageData(
       createdBy: response.createdBy ? { id: response.createdBy.id, name: response.createdBy.name, email: response.createdBy.email } : null,
       attachments: response.attachments,
     },
-    translation: translation ? mapTranslation(translation, originalContent) : null,
+    translation: translation ? mapTranslation(translation, originalContent, originalContent) : null,
   }
 }
 

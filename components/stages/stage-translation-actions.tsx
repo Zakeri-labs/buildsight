@@ -45,7 +45,7 @@ export function StageTranslationActions({
   stageId,
   termId,
   responseId,
-  responseUpdatedAt = new Date().toISOString(),
+  responseUpdatedAt,
   translation: initialTranslation,
   inHeader = false,
 }: {
@@ -68,6 +68,7 @@ export function StageTranslationActions({
       arabicPdfPath: null,
       bilingualPdfPath: null,
       translatedContent: null,
+      isStale: false,
     },
   )
   const [busy, setBusy] = useState<PdfKind | null>(null)
@@ -76,7 +77,8 @@ export function StageTranslationActions({
   const isDirectStage = !termId || termId === stageId
 
   const stale = Boolean(
-    translation.generatedAt && new Date(responseUpdatedAt).getTime() > new Date(translation.generatedAt).getTime(),
+    translation.isStale ??
+      (translation.generatedAt && responseUpdatedAt && new Date(responseUpdatedAt).getTime() > new Date(translation.generatedAt).getTime()),
   )
 
   const allGeneratedPdfsReady = Boolean(
@@ -101,6 +103,7 @@ export function StageTranslationActions({
         originalPdfPath: initialTranslation.originalPdfPath ?? current.originalPdfPath,
         arabicPdfPath: initialTranslation.arabicPdfPath ?? current.arabicPdfPath,
         translatedContent: initialTranslation.translatedContent ?? current.translatedContent,
+        isStale: initialTranslation.isStale ?? current.isStale,
       }))
     }
   }, [initialTranslation])
@@ -160,6 +163,7 @@ export function StageTranslationActions({
             arabicPdfPath: fetched.arabicPdfPath ?? current.arabicPdfPath,
             bilingualPdfPath: fetched.bilingualPdfPath ?? current.bilingualPdfPath,
             translatedContent: fetched.translatedContent ?? current.translatedContent,
+            isStale: fetched.isStale ?? false,
           }))
         }
       } catch {
@@ -206,6 +210,7 @@ export function StageTranslationActions({
         originalPdfPath: kind === "original" ? savedPath : current.originalPdfPath,
         arabicPdfPath: kind === "arabic" ? savedPath : current.arabicPdfPath,
         bilingualPdfPath: kind === "bilingual" ? savedPath : current.bilingualPdfPath,
+        isStale: false,
       }))
     }
   }

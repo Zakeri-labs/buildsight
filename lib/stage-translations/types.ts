@@ -56,6 +56,7 @@ export type StageTranslationRecord = {
   originalPdfPath: string | null
   arabicPdfPath: string | null
   bilingualPdfPath: string | null
+  isStale?: boolean
 }
 
 export type StageTranslationPageData = {

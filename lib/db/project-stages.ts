@@ -77,6 +77,7 @@ export type ProjectStageTranslationSummary = {
   arabicPdfPath: string | null
   bilingualPdfPath: string | null
   translatedContent?: unknown
+  isStale?: boolean
 }
 
 export type ProjectStageTermExecution = {

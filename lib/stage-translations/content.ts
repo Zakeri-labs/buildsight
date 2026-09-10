@@ -135,3 +135,46 @@ export function parseTranslationContent(value: unknown): TranslationReportConten
     attachmentTranslations: parseAttachmentTranslations(row.attachmentTranslations),
   }
 }
+
+export function isReportContentStale(
+  current: TranslationReportContent | null | undefined,
+  translatedOriginal: TranslationReportContent | null | undefined,
+): boolean {
+  if (!current || !translatedOriginal) return false
+
+  if ((current.reportTitle || "").trim() !== (translatedOriginal.reportTitle || "").trim()) return true
+  if ((current.subject || "").trim() !== (translatedOriginal.subject || "").trim()) return true
+  if ((current.reportType || "").trim() !== (translatedOriginal.reportType || "").trim()) return true
+  if ((current.stageName || "").trim() !== (translatedOriginal.stageName || "").trim()) return true
+  if ((current.termName || "").trim() !== (translatedOriginal.termName || "").trim()) return true
+
+  const sectionKeys: TranslationSectionKey[] = [
+    "feedback",
+    "observation",
+    "findings",
+    "recommendations",
+    "correctiveActions",
+    "recommendationsDuringCasting",
+  ]
+  for (const key of sectionKeys) {
+    const currSec = (current.sections?.[key] || "").trim()
+    const origSec = (translatedOriginal.sections?.[key] || "").trim()
+    if (currSec !== origSec) return true
+  }
+
+  const currChecklist = current.checklist || []
+  const origChecklist = translatedOriginal.checklist || []
+  if (currChecklist.length !== origChecklist.length) return true
+  for (let i = 0; i < currChecklist.length; i++) {
+    const c = currChecklist[i]
+    const o = origChecklist[i]
+    if (c.id !== o.id) return true
+    if ((c.label || "").trim() !== (o.label || "").trim()) return true
+    if (c.checked !== o.checked) return true
+    if ((c.result || "") !== (o.result || "")) return true
+    if ((c.notes || "").trim() !== (o.notes || "").trim()) return true
+  }
+
+  return false
+}
+

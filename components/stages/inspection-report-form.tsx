@@ -1459,7 +1459,7 @@ export function InspectionReportForm({
                   stageId={resolvedStageId}
                   termId={isDirectStageReport ? resolvedStageId : reportDefinition.id}
                   responseId={responseId}
-                  responseUpdatedAt={response?.updatedAt ?? new Date().toISOString()}
+                  responseUpdatedAt={response?.updatedAt ?? response?.createdAt ?? undefined}
                   translation={translation}
                   inHeader
                 />

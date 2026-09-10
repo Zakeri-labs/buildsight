@@ -58,9 +58,11 @@ export function ReportDownloadSection({
   const isPending = !isCompleted && !isFailed
 
   const isStale = Boolean(
-    translation?.generatedAt &&
-      responseUpdatedAt &&
-      new Date(responseUpdatedAt).getTime() > new Date(translation.generatedAt).getTime(),
+    translation?.isStale ?? (
+      translation?.generatedAt &&
+        responseUpdatedAt &&
+        new Date(responseUpdatedAt).getTime() > new Date(translation.generatedAt).getTime()
+    ),
   )
 
   useEffect(() => {
