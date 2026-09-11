@@ -2965,6 +2965,9 @@ async function renderImageGrid(
   const gap = 2
   const colWidth = (flow.width - gap) / 2 * 0.92
   const maxImgH = 68 * 0.92
+  // After the 8% size reduction the two columns no longer fill flow.width.
+  // gridOffset shifts the whole block right so left and right margins are equal.
+  const gridOffset = (flow.width - (2 * colWidth + gap)) / 2
 
   for (let i = 0; i < images.length; i += 2) {
     const pair = images.slice(i, i + 2)
@@ -3007,7 +3010,7 @@ async function renderImageGrid(
       const imageKey = (block as any).id || `img_${globalIdx + 1}`
       const filename = (block as any).originalFilename || block.src.split("/").pop()?.split("?")[0] || `image_${globalIdx + 1}.jpg`
       const col = flow.rtl ? (pair.length === 1 ? 0 : 1 - idx) : idx
-      const x = flow.x + col * (colWidth + gap)
+      const x = flow.x + gridOffset + col * (colWidth + gap)
 
       if (!img) {
         fallbackImages += 1
@@ -5110,6 +5113,8 @@ async function renderBilingualImageGrid(
   const gap = 2
   const colWidth = (flow.width - gap) / 2 * 0.92
   const maxImgH = 68 * 0.92
+  // Centre the two-column block so left and right outer margins are equal.
+  const gridOffset = (flow.width - (2 * colWidth + gap)) / 2
 
   for (let i = 0; i < images.length; i += 2) {
     const pair = images.slice(i, i + 2)
@@ -5153,7 +5158,7 @@ async function renderBilingualImageGrid(
       const globalIdx = i + idx
       const imageKey = (engBlock as any).id || `img_${globalIdx + 1}`
       const filename = (engBlock as any).originalFilename || engBlock.src.split("/").pop()?.split("?")[0] || `image_${globalIdx + 1}.jpg`
-      const x = flow.x + idx * (colWidth + gap)
+      const x = flow.x + gridOffset + idx * (colWidth + gap)
 
       if (!img) {
         fallbackImages += 1
