@@ -93,7 +93,17 @@ function RequestRow({
           {date.month ? <span className="mt-px text-[9px] leading-none text-muted-foreground lg:mt-0.5 lg:text-[11px] lg:leading-normal">{date.month}</span> : null}
         </div>
         <div className="min-w-0 self-center px-2 py-0.5 lg:px-3 lg:py-2.5">
-          <p className="truncate text-[12px] font-semibold leading-3.5 lg:text-sm lg:leading-normal">{request.projectName}</p>
+          {request.projectId ? (
+            <Link
+              href={`/projects/${encodeURIComponent(request.projectId)}`}
+              className="inline-block max-w-full truncate text-[12px] font-semibold leading-3.5 text-foreground transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring lg:text-sm lg:leading-normal"
+              title={request.projectName}
+            >
+              {request.projectName}
+            </Link>
+          ) : (
+            <p className="truncate text-[12px] font-semibold leading-3.5 lg:text-sm lg:leading-normal">{request.projectName}</p>
+          )}
           <div className="mt-px grid min-w-0 grid-cols-1 gap-x-3 gap-y-0 lg:mt-1 lg:grid-cols-2">
             {request.projectCode ? <MetaLine><span className="lg:hidden">{request.projectCode}</span><span className="hidden lg:inline">Code: {request.projectCode}</span></MetaLine> : null}
             {request.stageName ? <MetaLine>Stage: {request.stageName}</MetaLine> : null}
@@ -150,9 +160,19 @@ function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
 
         {/* MIDDLE CONTENT AREA: Project Name, Code, Stage Name, Visit Number */}
         <div className="flex min-w-0 flex-1 flex-col justify-center px-3 py-2">
-          <h3 className="truncate text-xs font-bold text-foreground sm:text-sm">
-            {visit.projectName}
-          </h3>
+          {visit.projectId ? (
+            <Link
+              href={`/projects/${encodeURIComponent(visit.projectId)}`}
+              className="inline-block max-w-full truncate text-xs font-bold text-foreground transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:text-sm"
+              title={visit.projectName}
+            >
+              {visit.projectName}
+            </Link>
+          ) : (
+            <h3 className="truncate text-xs font-bold text-foreground sm:text-sm">
+              {visit.projectName}
+            </h3>
+          )}
 
           {visit.projectCode ? (
             <p className="truncate font-mono text-[11px] text-muted-foreground">

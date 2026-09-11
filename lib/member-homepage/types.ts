@@ -9,6 +9,7 @@ export type MemberHomepageSummary = {
 
 export type MemberHomepageRequest = {
   id: string
+  projectId?: string
   requestedDate: string | null
   preferredTimeLabel: string | null
   projectName: string
@@ -19,6 +20,7 @@ export type MemberHomepageRequest = {
 
 export type MemberHomepageVisit = {
   id: string
+  projectId?: string
   status: "scheduled" | "completed"
   scheduledDate: string
   scheduledTime: string | null
