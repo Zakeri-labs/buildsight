@@ -1123,22 +1123,24 @@ export function InspectionReportForm({
         stageId: routeStageId,
       })
 
-      // Commit pending deletions of existing attachments that were removed from the UI
-      const persisted = persistedAttachmentsRef.current
-      const removedAttachments = persisted.filter(
-        (orig) => !existingAttachments.some((curr) => curr.id === orig.id),
-      )
-      if (removedAttachments.length > 0) {
-        for (const att of removedAttachments) {
-          const deleteRes = await deleteResponseAttachmentAction({
-            projectId: project.id,
-            attachmentId: att.id,
-          })
-          if (!deleteRes.ok) {
-            console.warn("[inspection-report-form] Failed to delete removed attachment:", att.id, deleteRes.error)
+      // Commit pending deletions of existing attachments ONLY on submit
+      if (isSubmitMode) {
+        const persisted = persistedAttachmentsRef.current
+        const removedAttachments = persisted.filter(
+          (orig) => !existingAttachments.some((curr) => curr.id === orig.id),
+        )
+        if (removedAttachments.length > 0) {
+          for (const att of removedAttachments) {
+            const deleteRes = await deleteResponseAttachmentAction({
+              projectId: project.id,
+              attachmentId: att.id,
+            })
+            if (!deleteRes.ok) {
+              console.warn("[inspection-report-form] Failed to delete removed attachment:", att.id, deleteRes.error)
+            }
           }
+          persistedAttachmentsRef.current = existingAttachments
         }
-        persistedAttachmentsRef.current = existingAttachments
       }
 
       if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
