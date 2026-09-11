@@ -9,7 +9,7 @@ import type {
   TranslationReportContent,
   TranslationSectionKey,
 } from "@/lib/stage-translations/types"
-import { isReportContentStale, parseTranslationContent } from "@/lib/stage-translations/content"
+import { isReportContentStale, isReportTextStale, parseTranslationContent } from "@/lib/stage-translations/content"
 import { sanitizeReportHtml } from "@/lib/stages/execution"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { OPENAI_CONFIG } from "@/lib/openai-config"
@@ -355,6 +355,7 @@ function normalizeTranslation(
     checklist,
     approvals,
     attachmentTranslations,
+    attachments: original.attachments ?? [],
   }
 }
 
@@ -462,9 +463,35 @@ export async function prepareStageTranslationGeneration(input: {
   const generatedAt = validDateMs(existing.generated_at)
   const existingOriginal = parseTranslationContent(existing.original_content)
   const isStale = existingOriginal ? isReportContentStale(original, existingOriginal) : (generatedAt ? responseUpdatedAt > generatedAt : false)
-  const translationFresh = Boolean(existing.translated_content && generatedAt && !isStale)
+  const isTextStale = existingOriginal ? isReportTextStale(original, existingOriginal) : isStale
+  const translationFresh = Boolean(existing.translated_content && generatedAt && !isTextStale)
 
   if (status === "completed" && translationFresh) {
+    // Clear PDF paths so the worker generates fresh PDFs for the CURRENT submission,
+    // and update original_content so the translation document retains current attachment metadata.
+    //
+    // Without this, an existing bilingual_pdf_url (from a previous submit) satisfies
+    // the worker's allPdfPaths() early-exit, causing the worker to exit immediately
+    // and the frontend to accept the OLD PDF as proof that the current generation
+    // succeeded — silently omitting any attachments added/removed since the last PDF was built.
+    //
+    // The translation text (translated_content, generated_at, translation_status) is
+    // fully preserved; shouldRun=false means no new OpenAI call is triggered.
+    // The eq("translation_status", "completed") guard makes this safe under concurrency:
+    // if another caller has already changed the row, the update affects 0 rows and
+    // each caller's worker independently handles PDF generation.
+    await admin
+      .from("translation_documents")
+      .update({
+        original_content: original,
+        original_pdf_url: null,
+        arabic_pdf_url: null,
+        bilingual_pdf_url: null,
+        updated_at: now,
+      })
+      .eq("id", existing.id)
+      .eq("translation_status", "completed")
+
     return {
       translationId: existing.id,
       status: "completed",
@@ -478,7 +505,14 @@ export async function prepareStageTranslationGeneration(input: {
   if (status === "failed" && input.retry && translationFresh) {
     const { data: resumed, error: resumeError } = await admin
       .from("translation_documents")
-      .update({ translation_status: "completed", original_content: original, updated_at: now })
+      .update({
+        translation_status: "completed",
+        original_content: original,
+        original_pdf_url: null,
+        arabic_pdf_url: null,
+        bilingual_pdf_url: null,
+        updated_at: now,
+      })
       .eq("id", existing.id)
       .eq("translation_status", "failed")
       .select("id")

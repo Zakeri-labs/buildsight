@@ -27,6 +27,14 @@ export type TranslationApprovalItem = {
   decidedAt: string
 }
 
+export type TranslationAttachmentItem = {
+  id: string
+  storagePath: string
+  originalFilename: string
+  attachmentKind?: string
+  sortOrder?: number
+}
+
 export type AttachmentTranslation = {
   attachmentId: string
   filename: string
@@ -43,6 +51,7 @@ export type TranslationReportContent = {
   checklist: TranslationChecklistItem[]
   approvals: TranslationApprovalItem[]
   attachmentTranslations: AttachmentTranslation[]
+  attachments?: TranslationAttachmentItem[]
 }
 
 export type StageTranslationRecord = {

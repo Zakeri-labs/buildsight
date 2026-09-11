@@ -632,6 +632,7 @@ export function InspectionReportForm({
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const documentInputRef = useRef<HTMLInputElement | null>(null)
   const pendingImagesRef = useRef<PendingFile[]>([])
+  const persistedAttachmentsRef = useRef<ProjectStageAttachment[]>(response?.attachments ?? [])
 
   useEffect(() => {
     pendingImagesRef.current = pendingImages
@@ -649,6 +650,7 @@ export function InspectionReportForm({
       setReportNumber(response.reportNumber)
       setStatus(response.status)
       setExistingAttachments(response.attachments ?? [])
+      persistedAttachmentsRef.current = response.attachments ?? []
       setApprovalHistory(response.approvals ?? [])
     }
   }, [response])
@@ -991,6 +993,7 @@ export function InspectionReportForm({
             createdAt: new Date().toISOString(),
           }))
           setExistingAttachments((current) => [...current, ...newAttachments])
+          persistedAttachmentsRef.current = [...persistedAttachmentsRef.current, ...newAttachments]
 
           const successSet = new Set(successfulItemIds)
           if (kind === "evidence_image") {
@@ -1109,19 +1112,49 @@ export function InspectionReportForm({
         mode,
       })
 
-      // Ensure the report record exists in DB first so attachments & CC recipients can be linked
-      const savedResponse = await ensureResponse(mode === "progress" ? "in_progress" : "draft")
-      const id = savedResponse.responseId
-      let routeStageId = savedResponse.projectStageId
+      let id = responseId ?? initialResponseId
+      let routeStageId = resolvedStageId
 
-      logDiagnosticEvent(id, "REPORT_SAVE_SUCCESS", {
-        projectId: project.id,
-        responseId: id,
-        stageId: routeStageId,
-      })
+      // For a brand-new report that has never been created in DB, ensure the response record exists first
+      if (!id) {
+        const savedResponse = await ensureResponse("draft")
+        id = savedResponse.responseId
+        routeStageId = savedResponse.projectStageId
+      }
+
+      // Step 1: Commit pending deletions of existing attachments BEFORE saving the report
+      const persisted = persistedAttachmentsRef.current
+      const removedAttachments = persisted.filter(
+        (orig) => !existingAttachments.some((curr) => curr.id === orig.id),
+      )
+      if (removedAttachments.length > 0) {
+        for (const att of removedAttachments) {
+          const deleteRes = await deleteResponseAttachmentAction({
+            projectId: project.id,
+            attachmentId: att.id,
+          })
+          if (!deleteRes.ok) {
+            console.warn("[inspection-report-form] Failed to delete removed attachment:", att.id, deleteRes.error)
+          }
+        }
+        persistedAttachmentsRef.current = existingAttachments
+      }
 
       if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
 
+      // Step 2: Upload and register any new pending attachments
+      if (hasImages) {
+        if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
+        await uploadFiles(id, pendingImages, "evidence_image")
+        if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
+      }
+      if (hasDocs) {
+        if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
+        await uploadFiles(id, pendingDocuments, "document")
+        if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
+      }
+
+      // Step 3: Save CC recipients if applicable
       if (ccSelection.internalUserIds.length || ccSelection.externalRecipients.length || initialCcRecipients.length) {
         const ccResult = await saveReportCcRecipientsAction({
           projectId: project.id,
@@ -1135,46 +1168,57 @@ export function InspectionReportForm({
         if (!ccResult.ok) throw new Error(ccResult.error)
       }
 
-      if (hasImages) {
-        if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
-        await uploadFiles(id, pendingImages, "evidence_image")
-        if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
+      // Step 4: Save the report data and status
+      // All attachment deletions/uploads are already committed in Postgres, so the server revalidation query will load the exact updated attachments.
+      if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
+
+      const parsedStateVisit = typeof visitNumber === "number"
+        ? visitNumber
+        : typeof visitNumber === "string"
+          ? parseInt(visitNumber, 10)
+          : null
+      const currentVisitNo = Number.isInteger(parsedStateVisit) && (parsedStateVisit as number) > 0
+        ? (parsedStateVisit as number)
+        : (response?.visitNumber ?? suggestedVisitNumber ?? 1)
+
+      const reportInput = {
+        projectId: project.id,
+        responseId: id,
+        reportType,
+        subject,
+        reportTitle,
+        content,
+        visitNumber: currentVisitNo,
+        visitDate: visitDate || todayLocalDate(),
+        approvalRequired: reportDefinition.approvalRequired,
+        responseType: reportDefinition.responseType,
+        responsibleUserId: reportDefinition.responsibleUser?.id ?? null,
+        templateReference: reportDefinition.templateReference,
+        instructions: reportDefinition.instructions,
+        submit: isSubmitMode ? (true as const) : undefined,
+        saveStatus: isSubmitMode ? undefined : (mode === "progress" ? "in_progress" : "draft"),
       }
-      if (hasDocs) {
-        if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
-        await uploadFiles(id, pendingDocuments, "document")
-        if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
-      }
+
+      const result = isDirectStageReport
+        ? await saveStageReportAction({ ...reportInput, stageId: routeStageId, siteVisitRequestId })
+        : await saveTermResponseAction({ ...reportInput, termId: reportDefinition.id })
+      if (!result.ok) throw new Error(result.error)
+
+      routeStageId = result.data.projectStageId
+      setResolvedStageId(result.data.projectStageId)
+      setVisitNumber(result.data.visitNumber)
+      if (result.data.visitDate) setVisitDate(result.data.visitDate)
+      setStatus(result.data.status as ResponseStatus)
+
+      logDiagnosticEvent(id, "REPORT_SAVE_SUCCESS", {
+        projectId: project.id,
+        responseId: id,
+        stageId: routeStageId,
+        mode,
+      })
 
       if (mode === "submit") {
-        if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
-        const reportInput = {
-          projectId: project.id,
-          responseId: id,
-          reportType,
-          subject,
-          reportTitle,
-          content,
-          visitNumber: currentVisitNo,
-          visitDate: visitDate || todayLocalDate(),
-          approvalRequired: reportDefinition.approvalRequired,
-          responseType: reportDefinition.responseType,
-          responsibleUserId: reportDefinition.responsibleUser?.id ?? null,
-          templateReference: reportDefinition.templateReference,
-          instructions: reportDefinition.instructions,
-          submit: true as const,
-        }
-        const result = isDirectStageReport
-          ? await saveStageReportAction({ ...reportInput, stageId: routeStageId, siteVisitRequestId })
-          : await saveTermResponseAction({ ...reportInput, termId: reportDefinition.id })
-        if (!result.ok) throw new Error(result.error)
         if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
-
-        routeStageId = result.data.projectStageId
-        setResolvedStageId(result.data.projectStageId)
-        setVisitNumber(result.data.visitNumber)
-        if (result.data.visitDate) setVisitDate(result.data.visitDate)
-        setStatus(result.data.status as ResponseStatus)
         setSuccess(copy.submitted)
 
         logDiagnosticEvent(id, "REPORT_SUBMITTED", {
@@ -1479,13 +1523,8 @@ export function InspectionReportForm({
     } else setPendingDocuments((current) => current.filter((row) => row.id !== id))
   }
 
-  const removeExisting = async (attachment: ProjectStageAttachment) => {
+  const removeExisting = (attachment: ProjectStageAttachment) => {
     setError(null)
-    const result = await deleteResponseAttachmentAction({ projectId: project.id, attachmentId: attachment.id })
-    if (!result.ok) {
-      setError(result.error)
-      return
-    }
     setExistingAttachments((current) => current.filter((item) => item.id !== attachment.id))
   }
 

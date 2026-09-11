@@ -66,6 +66,7 @@ async function buildPageData(
       comments: approval.comments,
       decidedAt: approval.decidedAt,
     })),
+    attachments: response.attachments,
   })
   const { translation, projectDetails } = await loadTranslationContext(response.id, execution.project.id)
   return {
@@ -115,6 +116,7 @@ async function buildDirectStagePageData(
       comments: approval.comments,
       decidedAt: approval.decidedAt,
     })),
+    attachments: response.attachments,
   })
   const { translation, projectDetails } = await loadTranslationContext(response.id, execution.project.id)
   return {

@@ -38,6 +38,7 @@ export function buildOriginalTranslationContent(input: {
   reportType: string
   responseContent: TermResponseContent
   approvals: Array<{ id: string; reviewerName: string; decision: string; comments: string | null; decidedAt: string }>
+  attachments?: Array<{ id: string; storagePath: string; originalFilename: string; sortOrder?: number; attachmentKind?: string }>
 }): TranslationReportContent {
   return {
     stageName: input.stageName,
@@ -68,6 +69,13 @@ export function buildOriginalTranslationContent(input: {
       decidedAt: item.decidedAt,
     })),
     attachmentTranslations: [],
+    attachments: (input.attachments ?? []).map((item) => ({
+      id: item.id,
+      storagePath: item.storagePath,
+      originalFilename: item.originalFilename,
+      sortOrder: item.sortOrder,
+      attachmentKind: item.attachmentKind,
+    })),
   }
 }
 
@@ -111,6 +119,20 @@ function parseAttachmentTranslations(value: unknown): AttachmentTranslation[] {
   }).filter((item) => item.attachmentId || item.filename || item.contentHtml)
 }
 
+function parseAttachments(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.slice(0, 100).map((item) => {
+    const row = objectValue(item)
+    return {
+      id: stringValue(row.id, 100),
+      storagePath: stringValue(row.storagePath, 2_000),
+      originalFilename: stringValue(row.originalFilename, 1_000),
+      sortOrder: typeof row.sortOrder === "number" ? row.sortOrder : undefined,
+      attachmentKind: stringValue(row.attachmentKind, 50) || undefined,
+    }
+  }).filter((item) => item.id || item.storagePath)
+}
+
 export function parseTranslationContent(value: unknown): TranslationReportContent | null {
   const row = objectValue(value)
   if (!Object.keys(row).length) return null
@@ -133,10 +155,11 @@ export function parseTranslationContent(value: unknown): TranslationReportConten
     checklist: parseChecklist(row.checklist),
     approvals: parseApprovals(row.approvals),
     attachmentTranslations: parseAttachmentTranslations(row.attachmentTranslations),
+    attachments: parseAttachments(row.attachments),
   }
 }
 
-export function isReportContentStale(
+export function isReportTextStale(
   current: TranslationReportContent | null | undefined,
   translatedOriginal: TranslationReportContent | null | undefined,
 ): boolean {
@@ -173,6 +196,29 @@ export function isReportContentStale(
     if (c.checked !== o.checked) return true
     if ((c.result || "") !== (o.result || "")) return true
     if ((c.notes || "").trim() !== (o.notes || "").trim()) return true
+  }
+
+  return false
+}
+
+export function isReportContentStale(
+  current: TranslationReportContent | null | undefined,
+  translatedOriginal: TranslationReportContent | null | undefined,
+): boolean {
+  if (!current || !translatedOriginal) return false
+  if (isReportTextStale(current, translatedOriginal)) return true
+
+  const currAttachments = current.attachments || []
+  const origAttachments = translatedOriginal.attachments || []
+  if (currAttachments.length !== origAttachments.length) return true
+  for (let i = 0; i < currAttachments.length; i++) {
+    const c = currAttachments[i]
+    const o = origAttachments[i]
+    if (c.id !== o.id) return true
+    if ((c.storagePath || "") !== (o.storagePath || "")) return true
+    if ((c.originalFilename || "") !== (o.originalFilename || "")) return true
+    if (c.sortOrder !== o.sortOrder) return true
+    if ((c.attachmentKind || "") !== (o.attachmentKind || "")) return true
   }
 
   return false
