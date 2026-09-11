@@ -316,6 +316,7 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
         if (!project) return []
         return [{
           id: row.id,
+          projectId: row.project_id,
           requestedDate: typeof row.preferred_date === "string" ? row.preferred_date : null,
           preferredTimeLabel: preferredTimeLabel(row.preferred_time),
           projectName: project.name?.trim() || "Project",
@@ -416,6 +417,7 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
 
         return [{
           id: row.id,
+          projectId: row.project_id,
           status: isCompleted ? "completed" as const : "scheduled" as const,
           scheduledDate: row.scheduled_date,
           scheduledTime: clockTime(row.scheduled_time),
