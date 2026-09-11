@@ -1186,6 +1186,17 @@ export function InspectionReportForm({
         })
 
         if (isDirectStageReport && isSubmitMode) {
+          // Clear stale PDF paths from client state — the backend has already cleared
+          // original_pdf_url / bilingual_pdf_url / arabic_pdf_url on the DB row.
+          // Keeping the old paths in React state causes TRANSLATION_UI_STATE to show
+          // non-null PDF paths while the DB and API correctly return null, creating
+          // inconsistent diagnostic logs and risking a false-positive readiness signal.
+          setTranslation((prev) =>
+            prev
+              ? { ...prev, originalPdfPath: null, bilingualPdfPath: null, arabicPdfPath: null }
+              : prev,
+          )
+
           steps = updateStep(steps, stepIdx, "active")
           enqueueStageTranslationJob({
             projectId: project.id,
