@@ -1112,18 +1112,17 @@ export function InspectionReportForm({
         mode,
       })
 
-      // Ensure the report record exists in DB first so attachments & CC recipients can be linked
-      const savedResponse = await ensureResponse(mode === "progress" ? "in_progress" : "draft")
-      const id = savedResponse.responseId
-      let routeStageId = savedResponse.projectStageId
+      let id = responseId ?? initialResponseId
+      let routeStageId = resolvedStageId
 
-      logDiagnosticEvent(id, "REPORT_SAVE_SUCCESS", {
-        projectId: project.id,
-        responseId: id,
-        stageId: routeStageId,
-      })
+      // For a brand-new report that has never been created in DB, ensure the response record exists first
+      if (!id) {
+        const savedResponse = await ensureResponse("draft")
+        id = savedResponse.responseId
+        routeStageId = savedResponse.projectStageId
+      }
 
-      // Commit pending deletions of existing attachments on save (draft, progress, or submit)
+      // Step 1: Commit pending deletions of existing attachments BEFORE saving the report
       const persisted = persistedAttachmentsRef.current
       const removedAttachments = persisted.filter(
         (orig) => !existingAttachments.some((curr) => curr.id === orig.id),
@@ -1143,6 +1142,19 @@ export function InspectionReportForm({
 
       if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
 
+      // Step 2: Upload and register any new pending attachments
+      if (hasImages) {
+        if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
+        await uploadFiles(id, pendingImages, "evidence_image")
+        if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
+      }
+      if (hasDocs) {
+        if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
+        await uploadFiles(id, pendingDocuments, "document")
+        if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
+      }
+
+      // Step 3: Save CC recipients if applicable
       if (ccSelection.internalUserIds.length || ccSelection.externalRecipients.length || initialCcRecipients.length) {
         const ccResult = await saveReportCcRecipientsAction({
           projectId: project.id,
@@ -1156,46 +1168,57 @@ export function InspectionReportForm({
         if (!ccResult.ok) throw new Error(ccResult.error)
       }
 
-      if (hasImages) {
-        if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
-        await uploadFiles(id, pendingImages, "evidence_image")
-        if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
+      // Step 4: Save the report data and status
+      // All attachment deletions/uploads are already committed in Postgres, so the server revalidation query will load the exact updated attachments.
+      if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
+
+      const parsedStateVisit = typeof visitNumber === "number"
+        ? visitNumber
+        : typeof visitNumber === "string"
+          ? parseInt(visitNumber, 10)
+          : null
+      const currentVisitNo = Number.isInteger(parsedStateVisit) && (parsedStateVisit as number) > 0
+        ? (parsedStateVisit as number)
+        : (response?.visitNumber ?? suggestedVisitNumber ?? 1)
+
+      const reportInput = {
+        projectId: project.id,
+        responseId: id,
+        reportType,
+        subject,
+        reportTitle,
+        content,
+        visitNumber: currentVisitNo,
+        visitDate: visitDate || todayLocalDate(),
+        approvalRequired: reportDefinition.approvalRequired,
+        responseType: reportDefinition.responseType,
+        responsibleUserId: reportDefinition.responsibleUser?.id ?? null,
+        templateReference: reportDefinition.templateReference,
+        instructions: reportDefinition.instructions,
+        submit: isSubmitMode ? (true as const) : undefined,
+        saveStatus: isSubmitMode ? undefined : (mode === "progress" ? "in_progress" : "draft"),
       }
-      if (hasDocs) {
-        if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
-        await uploadFiles(id, pendingDocuments, "document")
-        if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
-      }
+
+      const result = isDirectStageReport
+        ? await saveStageReportAction({ ...reportInput, stageId: routeStageId, siteVisitRequestId })
+        : await saveTermResponseAction({ ...reportInput, termId: reportDefinition.id })
+      if (!result.ok) throw new Error(result.error)
+
+      routeStageId = result.data.projectStageId
+      setResolvedStageId(result.data.projectStageId)
+      setVisitNumber(result.data.visitNumber)
+      if (result.data.visitDate) setVisitDate(result.data.visitDate)
+      setStatus(result.data.status as ResponseStatus)
+
+      logDiagnosticEvent(id, "REPORT_SAVE_SUCCESS", {
+        projectId: project.id,
+        responseId: id,
+        stageId: routeStageId,
+        mode,
+      })
 
       if (mode === "submit") {
-        if (isSubmitMode) steps = updateStep(steps, stepIdx, "active")
-        const reportInput = {
-          projectId: project.id,
-          responseId: id,
-          reportType,
-          subject,
-          reportTitle,
-          content,
-          visitNumber: currentVisitNo,
-          visitDate: visitDate || todayLocalDate(),
-          approvalRequired: reportDefinition.approvalRequired,
-          responseType: reportDefinition.responseType,
-          responsibleUserId: reportDefinition.responsibleUser?.id ?? null,
-          templateReference: reportDefinition.templateReference,
-          instructions: reportDefinition.instructions,
-          submit: true as const,
-        }
-        const result = isDirectStageReport
-          ? await saveStageReportAction({ ...reportInput, stageId: routeStageId, siteVisitRequestId })
-          : await saveTermResponseAction({ ...reportInput, termId: reportDefinition.id })
-        if (!result.ok) throw new Error(result.error)
         if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
-
-        routeStageId = result.data.projectStageId
-        setResolvedStageId(result.data.projectStageId)
-        setVisitNumber(result.data.visitNumber)
-        if (result.data.visitDate) setVisitDate(result.data.visitDate)
-        setStatus(result.data.status as ResponseStatus)
         setSuccess(copy.submitted)
 
         logDiagnosticEvent(id, "REPORT_SUBMITTED", {

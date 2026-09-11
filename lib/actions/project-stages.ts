@@ -812,6 +812,12 @@ export async function registerResponseAttachmentsAction(input: {
     if (error) throw error
     revalidatePath(`/projects/${input.projectId}/stages`)
     revalidatePath(`/projects/${input.projectId}/stages`, "page")
+    if (response.project_stage_id) {
+      revalidatePath(`/projects/${input.projectId}/stages/${response.project_stage_id}/reports/${input.responseId}`)
+    }
+    if (response.project_stage_term_id && response.project_stage_id) {
+      revalidatePath(`/projects/${input.projectId}/stages/${response.project_stage_id}/terms/${response.project_stage_term_id}/reports/${input.responseId}`)
+    }
     return { ok: true, data: { ids: (data ?? []).map((row: any) => row.id as string) } }
   } catch (error) {
     return actionError(error, "Could not save attachment metadata.")
@@ -855,6 +861,12 @@ export async function deleteResponseAttachmentAction(input: {
     if (error) throw error
     await admin.storage.from("project-stage-evidence").remove([attachment.storage_path])
     revalidatePath(`/projects/${input.projectId}/stages`)
+    if (response.project_stage_id) {
+      revalidatePath(`/projects/${input.projectId}/stages/${response.project_stage_id}/reports/${attachment.response_id}`)
+    }
+    if (response.project_stage_term_id && response.project_stage_id) {
+      revalidatePath(`/projects/${input.projectId}/stages/${response.project_stage_id}/terms/${response.project_stage_term_id}/reports/${attachment.response_id}`)
+    }
     return { ok: true }
   } catch (error) {
     return actionError(error, "Could not delete the attachment.")
