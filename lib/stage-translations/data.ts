@@ -34,6 +34,7 @@ async function loadTranslationContext(responseId: string, projectId: string) {
       .from("translation_documents")
       .select("id, translation_status, original_content, translated_content, original_pdf_url, arabic_pdf_url, bilingual_pdf_url, generated_at, created_at, updated_at")
       .eq("response_id", responseId)
+      .eq("project_id", projectId)
       .maybeSingle(),
     admin
       .from("projects")
