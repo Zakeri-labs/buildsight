@@ -694,6 +694,48 @@ export function InspectionReportForm({
     }
   }, [submitModalOpen, submitResult?.responseId, submitResult?.stageId, project.id, readyPdfs?.original, readyPdfs?.bilingual, translation?.status, translation?.originalPdfPath, translation?.bilingualPdfPath, translation?.translatedContent])
 
+  useEffect(() => {
+    const isPreparationMessage = success === COPY.en.submitted || success === COPY.ar.submitted
+    if (!isPreparationMessage) return
+
+    const stale = Boolean(
+      translation?.isStale ??
+        (translation?.generatedAt && response?.updatedAt && new Date(response.updatedAt).getTime() > new Date(translation.generatedAt).getTime()),
+    )
+    const allGeneratedPdfsReady = Boolean(
+      translation?.originalPdfPath && translation?.bilingualPdfPath,
+    )
+    const isFullyReady = Boolean(
+      translation?.status === "completed" &&
+        !stale &&
+        (isDirectStageReport ? allGeneratedPdfsReady : Boolean(translation?.translatedContent)),
+    )
+    const isFailed = translation?.status === "failed" || translation?.status === "error"
+    const isProcessing = !isFullyReady && !isFailed
+
+    if (isFullyReady) {
+      setSuccess(null)
+      logDiagnosticEvent(responseId || null, "TOAST_LIFECYCLE", {
+        action: "CLEAR_PREPARATION_MESSAGE",
+        reason: "PDFS_AND_TRANSLATION_FULLY_READY",
+        translationStatus: translation?.status || null,
+        isProcessing: false,
+        isFullyReady: true,
+        allGeneratedPdfsReady: true,
+      })
+    } else if (isFailed) {
+      setSuccess(null)
+      logDiagnosticEvent(responseId || null, "TOAST_LIFECYCLE", {
+        action: "CLEAR_PREPARATION_MESSAGE",
+        reason: "TRANSLATION_OR_PDF_FAILED",
+        translationStatus: translation?.status || null,
+        isProcessing: false,
+        isFullyReady: false,
+        allGeneratedPdfsReady,
+      })
+    }
+  }, [success, translation, response?.updatedAt, isDirectStageReport, responseId])
+
   const evidenceImages = existingAttachments.filter((item) => item.attachmentKind === "evidence_image")
   const documentAttachments = existingAttachments.filter((item) => item.attachmentKind === "document")
   const statusLocked = status === "approved" || status === "completed"
@@ -1225,6 +1267,15 @@ export function InspectionReportForm({
         if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
         setSuccess(copy.submitted)
 
+        logDiagnosticEvent(id, "TOAST_LIFECYCLE", {
+          action: "SHOW_PREPARATION_MESSAGE",
+          condition: "REPORT_SUBMITTED",
+          translationStatus: translation?.status || null,
+          isProcessing: true,
+          isFullyReady: false,
+          allGeneratedPdfsReady: false,
+        })
+
         logDiagnosticEvent(id, "REPORT_SUBMITTED", {
           projectId: project.id,
           stageId: routeStageId,
@@ -1314,6 +1365,16 @@ export function InspectionReportForm({
               : "Preparing translation & PDFs failed. Please retry."
 
             setError(realError || fallbackMsg)
+            setSuccess(null)
+
+            logDiagnosticEvent(id, "TOAST_LIFECYCLE", {
+              action: "CLEAR_PREPARATION_MESSAGE",
+              reason: "SUBMIT_PREPARATION_FAILED",
+              translationStatus: failureTrans?.status || null,
+              isProcessing: false,
+              isFullyReady: false,
+              allGeneratedPdfsReady: false,
+            })
 
             logDiagnosticEvent(id, "SUBMIT_PREPARATION_FAILED", {
               projectId: project.id,
@@ -1385,8 +1446,17 @@ export function InspectionReportForm({
                 arabicPdfPath: current?.arabicPdfPath ?? null,
                 translatedContent: finalTransRecord.translatedContent,
                 generatedAt: finalTransRecord.generatedAt,
-                isStale: current?.isStale,
+                isStale: false,
               }))
+              setSuccess(null)
+              logDiagnosticEvent(id, "TOAST_LIFECYCLE", {
+                action: "CLEAR_PREPARATION_MESSAGE",
+                reason: "PDFS_AND_TRANSLATION_FULLY_READY",
+                translationStatus: finalTransRecord.status,
+                isProcessing: false,
+                isFullyReady: true,
+                allGeneratedPdfsReady: true,
+              })
               setSubmitResult({ responseId: id, stageId: routeStageId })
             } else {
               const activeErrIdx = stepIdx < steps.length ? stepIdx : steps.length - 1
@@ -1396,6 +1466,15 @@ export function InspectionReportForm({
                 ? "تعذر التحقق من جاهزية ملف PDF للتقرير. يرجى إعادة المحاولة."
                 : "Report PDF availability confirmation failed. Please retry."
               setError(realError || fallbackMsg)
+              setSuccess(null)
+              logDiagnosticEvent(id, "TOAST_LIFECYCLE", {
+                action: "CLEAR_PREPARATION_MESSAGE",
+                reason: "SUBMIT_PDF_CONFIRMATION_FAILED",
+                translationStatus: finalTransRecord?.status || lastSeenTrans?.status || null,
+                isProcessing: false,
+                isFullyReady: false,
+                allGeneratedPdfsReady: false,
+              })
               logDiagnosticEvent(id, "SUBMIT_PDF_CONFIRMATION_FAILED", {
                 projectId: project.id,
                 responseId: id,
