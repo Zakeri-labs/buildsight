@@ -632,6 +632,7 @@ export function InspectionReportForm({
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const documentInputRef = useRef<HTMLInputElement | null>(null)
   const pendingImagesRef = useRef<PendingFile[]>([])
+  const persistedAttachmentsRef = useRef<ProjectStageAttachment[]>(response?.attachments ?? [])
 
   useEffect(() => {
     pendingImagesRef.current = pendingImages
@@ -649,6 +650,7 @@ export function InspectionReportForm({
       setReportNumber(response.reportNumber)
       setStatus(response.status)
       setExistingAttachments(response.attachments ?? [])
+      persistedAttachmentsRef.current = response.attachments ?? []
       setApprovalHistory(response.approvals ?? [])
     }
   }, [response])
@@ -991,6 +993,7 @@ export function InspectionReportForm({
             createdAt: new Date().toISOString(),
           }))
           setExistingAttachments((current) => [...current, ...newAttachments])
+          persistedAttachmentsRef.current = [...persistedAttachmentsRef.current, ...newAttachments]
 
           const successSet = new Set(successfulItemIds)
           if (kind === "evidence_image") {
@@ -1119,6 +1122,24 @@ export function InspectionReportForm({
         responseId: id,
         stageId: routeStageId,
       })
+
+      // Commit pending deletions of existing attachments that were removed from the UI
+      const persisted = persistedAttachmentsRef.current
+      const removedAttachments = persisted.filter(
+        (orig) => !existingAttachments.some((curr) => curr.id === orig.id),
+      )
+      if (removedAttachments.length > 0) {
+        for (const att of removedAttachments) {
+          const deleteRes = await deleteResponseAttachmentAction({
+            projectId: project.id,
+            attachmentId: att.id,
+          })
+          if (!deleteRes.ok) {
+            console.warn("[inspection-report-form] Failed to delete removed attachment:", att.id, deleteRes.error)
+          }
+        }
+        persistedAttachmentsRef.current = existingAttachments
+      }
 
       if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
 
@@ -1479,13 +1500,8 @@ export function InspectionReportForm({
     } else setPendingDocuments((current) => current.filter((row) => row.id !== id))
   }
 
-  const removeExisting = async (attachment: ProjectStageAttachment) => {
+  const removeExisting = (attachment: ProjectStageAttachment) => {
     setError(null)
-    const result = await deleteResponseAttachmentAction({ projectId: project.id, attachmentId: attachment.id })
-    if (!result.ok) {
-      setError(result.error)
-      return
-    }
     setExistingAttachments((current) => current.filter((item) => item.id !== attachment.id))
   }
 

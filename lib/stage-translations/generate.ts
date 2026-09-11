@@ -9,7 +9,7 @@ import type {
   TranslationReportContent,
   TranslationSectionKey,
 } from "@/lib/stage-translations/types"
-import { isReportContentStale, parseTranslationContent } from "@/lib/stage-translations/content"
+import { isReportContentStale, isReportTextStale, parseTranslationContent } from "@/lib/stage-translations/content"
 import { sanitizeReportHtml } from "@/lib/stages/execution"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { OPENAI_CONFIG } from "@/lib/openai-config"
@@ -355,6 +355,7 @@ function normalizeTranslation(
     checklist,
     approvals,
     attachmentTranslations,
+    attachments: original.attachments ?? [],
   }
 }
 
@@ -462,15 +463,17 @@ export async function prepareStageTranslationGeneration(input: {
   const generatedAt = validDateMs(existing.generated_at)
   const existingOriginal = parseTranslationContent(existing.original_content)
   const isStale = existingOriginal ? isReportContentStale(original, existingOriginal) : (generatedAt ? responseUpdatedAt > generatedAt : false)
-  const translationFresh = Boolean(existing.translated_content && generatedAt && !isStale)
+  const isTextStale = existingOriginal ? isReportTextStale(original, existingOriginal) : isStale
+  const translationFresh = Boolean(existing.translated_content && generatedAt && !isTextStale)
 
   if (status === "completed" && translationFresh) {
-    // Clear PDF paths so the worker generates fresh PDFs for the CURRENT submission.
+    // Clear PDF paths so the worker generates fresh PDFs for the CURRENT submission,
+    // and update original_content so the translation document retains current attachment metadata.
     //
     // Without this, an existing bilingual_pdf_url (from a previous submit) satisfies
     // the worker's allPdfPaths() early-exit, causing the worker to exit immediately
     // and the frontend to accept the OLD PDF as proof that the current generation
-    // succeeded — silently omitting any attachments added since the last PDF was built.
+    // succeeded — silently omitting any attachments added/removed since the last PDF was built.
     //
     // The translation text (translated_content, generated_at, translation_status) is
     // fully preserved; shouldRun=false means no new OpenAI call is triggered.
@@ -480,6 +483,7 @@ export async function prepareStageTranslationGeneration(input: {
     await admin
       .from("translation_documents")
       .update({
+        original_content: original,
         original_pdf_url: null,
         arabic_pdf_url: null,
         bilingual_pdf_url: null,
