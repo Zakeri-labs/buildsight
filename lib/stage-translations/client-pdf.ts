@@ -775,6 +775,46 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
   }
 }
 
+function isRetryableImageFetchError(status: number, errorMsg: string, isTimeout: boolean): boolean {
+  if (status === 0 || isTimeout) {
+    return true
+  }
+  if (status === 408 || status === 429 || (status >= 500 && status <= 599)) {
+    return true
+  }
+  if (status >= 400 && status < 500) {
+    return false
+  }
+  const lower = (errorMsg || "").toLowerCase()
+  if (
+    lower.includes("failed to fetch") ||
+    lower.includes("network") ||
+    lower.includes("connection") ||
+    lower.includes("timed out") ||
+    lower.includes("timeout") ||
+    lower.includes("econnreset") ||
+    lower.includes("etimedout") ||
+    lower.includes("socket hang up")
+  ) {
+    return true
+  }
+  return false
+}
+
+let imageFetchQueue: Promise<unknown> = Promise.resolve()
+
+function runExclusiveImageFetch<T>(fn: () => Promise<T>): Promise<T> {
+  const next = imageFetchQueue.then(
+    () => fn(),
+    () => fn(),
+  )
+  imageFetchQueue = next.then(
+    () => {},
+    () => {},
+  )
+  return next
+}
+
 interface FetchImageWithRetryResult {
   blob: Blob
   httpStatus: number
@@ -785,85 +825,195 @@ async function fetchEvidenceImageWithRetry(
   src: string,
   meta?: PdfImageMeta,
 ): Promise<FetchImageWithRetryResult> {
-  const pdfKind = meta?.pdfKind || "original"
-  const responseId = meta?.responseId || "unknown"
-  const translationId = meta?.translationId || null
-  const filename = meta?.filename || src.split("/").pop()?.split("?")[0] || "evidence-image"
-  const imageKey = meta?.imageKey || meta?.attachmentId || `img_${Math.random().toString(36).slice(2, 8)}`
-  const attachmentId = meta?.attachmentId || null
-  const storagePath = meta?.storagePath || null
-  const imageIndex = meta?.imageIndex ?? null
-  const totalImages = meta?.totalImages ?? null
+  return runExclusiveImageFetch(async () => {
+    const pdfKind = meta?.pdfKind || "original"
+    const responseId = meta?.responseId || "unknown"
+    const translationId = meta?.translationId || null
+    const filename = meta?.filename || src.split("/").pop()?.split("?")[0] || "evidence-image"
+    const imageKey = meta?.imageKey || meta?.attachmentId || `img_${Math.random().toString(36).slice(2, 8)}`
+    const attachmentId = meta?.attachmentId || null
+    const storagePath = meta?.storagePath || null
+    const imageIndex = meta?.imageIndex ?? null
+    const totalImages = meta?.totalImages ?? null
 
-  const MAX_ATTEMPTS = 4
-  const DELAYS = [0, 1000, 3000, 5000]
+    const MAX_ATTEMPTS = 10
+    // Attempt 1: immediate
+    // Attempt 2: wait 2s
+    // Attempt 3: wait 4s
+    // Attempt 4..10: wait 5s
+    const RETRY_DELAYS_MS = [2000, 4000, 5000, 5000, 5000, 5000, 5000, 5000, 5000]
 
-  let lastHttpStatus = 0
-  let lastErrorMessage = ""
-  let lastErrorType = ""
+    let lastHttpStatus = 0
+    let lastErrorMessage = ""
+    let lastErrorType = ""
+    let isRetryable = true
+    let attemptsCompleted = 0
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    if (attempt > 1) {
-      const delayMs = DELAYS[attempt - 1] ?? 5000
-      logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_RETRY_SCHEDULED", {
-        sessionId: responseId,
-        responseId,
-        translationId,
-        imageIndex,
-        attachmentId,
-        storagePath,
-        filename,
-        attemptNumber: attempt,
-        maxAttempts: MAX_ATTEMPTS,
-        delayMs,
-        previousError: lastErrorMessage,
-        errorType: lastErrorType,
-        pdfKind,
-        imageKey,
-      })
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      attemptsCompleted = attempt
+      if (attempt > 1) {
+        const delayMs = RETRY_DELAYS_MS[attempt - 2] ?? 5000
+        logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_RETRY_SCHEDULED", {
+          sessionId: responseId,
+          responseId,
+          translationId,
+          imageIndex,
+          attachmentId,
+          storagePath,
+          filename,
+          attemptNumber: attempt,
+          maxAttempts: MAX_ATTEMPTS,
+          delayMs,
+          isRetryable: true,
+          previousError: lastErrorMessage,
+          errorType: lastErrorType,
+          pdfKind,
+          imageKey,
+        })
 
-      await new Promise((r) => setTimeout(r, delayMs))
+        await new Promise((r) => setTimeout(r, delayMs))
 
-      logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_RETRY_STARTED", {
-        sessionId: responseId,
-        responseId,
-        translationId,
-        imageIndex,
-        attachmentId,
-        storagePath,
-        filename,
-        attemptNumber: attempt,
-        maxAttempts: MAX_ATTEMPTS,
-        pdfKind,
-        imageKey,
-      })
-    } else {
-      logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_STARTED", {
-        sessionId: responseId,
-        responseId,
-        translationId,
-        imageIndex,
-        attachmentId,
-        storagePath,
-        filename,
-        attemptNumber: 1,
-        maxAttempts: MAX_ATTEMPTS,
-        pdfKind,
-        imageKey,
-        sourceType: "http_url",
-        totalImages,
-      })
-    }
+        logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_RETRY_STARTED", {
+          sessionId: responseId,
+          responseId,
+          translationId,
+          imageIndex,
+          attachmentId,
+          storagePath,
+          filename,
+          attemptNumber: attempt,
+          maxAttempts: MAX_ATTEMPTS,
+          pdfKind,
+          imageKey,
+        })
+      } else {
+        logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_STARTED", {
+          sessionId: responseId,
+          responseId,
+          translationId,
+          imageIndex,
+          attachmentId,
+          storagePath,
+          filename,
+          attemptNumber: 1,
+          maxAttempts: MAX_ATTEMPTS,
+          pdfKind,
+          imageKey,
+          sourceType: "http_url",
+          totalImages,
+        })
+      }
 
-    const attemptStart = Date.now()
-    try {
-      const response = await fetchWithTimeout(src, { cache: "no-store", credentials: "same-origin" }, FETCH_TIMEOUT_MS)
-      const durationMs = Date.now() - attemptStart
-      lastHttpStatus = response.status
+      const attemptStart = Date.now()
+      try {
+        const response = await fetchWithTimeout(src, { cache: "no-store", credentials: "same-origin" }, FETCH_TIMEOUT_MS)
+        const durationMs = Date.now() - attemptStart
+        lastHttpStatus = response.status
 
-      if (!response.ok) {
-        lastErrorType = response.status >= 500 ? "IMAGE_HTTP_ERROR" : `IMAGE_HTTP_${response.status}`
-        lastErrorMessage = `HTTP ${response.status} request failed for ${filename}`
+        if (!response.ok) {
+          lastErrorType = response.status >= 500 ? "IMAGE_HTTP_ERROR" : `IMAGE_HTTP_${response.status}`
+          lastErrorMessage = `HTTP ${response.status} request failed for ${filename}`
+          isRetryable = isRetryableImageFetchError(response.status, lastErrorMessage, false)
+          const nextRetryDelayMs = (isRetryable && attempt < MAX_ATTEMPTS) ? (RETRY_DELAYS_MS[attempt - 1] ?? 5000) : null
+
+          if (attempt === 1) {
+            logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_FAILED", {
+              sessionId: responseId,
+              responseId,
+              translationId,
+              imageIndex,
+              attachmentId,
+              storagePath,
+              filename,
+              attemptNumber: 1,
+              maxAttempts: MAX_ATTEMPTS,
+              httpStatus: response.status,
+              durationMs,
+              isRetryable,
+              nextRetryDelayMs,
+              errorType: lastErrorType,
+              errorMessage: lastErrorMessage,
+              sanitizedError: lastErrorMessage,
+              pdfKind,
+              imageKey,
+            })
+          } else {
+            logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_RETRY_FAILED", {
+              sessionId: responseId,
+              responseId,
+              translationId,
+              imageIndex,
+              attachmentId,
+              storagePath,
+              filename,
+              attemptNumber: attempt,
+              maxAttempts: MAX_ATTEMPTS,
+              httpStatus: response.status,
+              durationMs,
+              isRetryable,
+              nextRetryDelayMs,
+              errorType: lastErrorType,
+              errorMessage: lastErrorMessage,
+              pdfKind,
+              imageKey,
+            })
+          }
+
+          if (!isRetryable) {
+            break
+          }
+          continue
+        }
+
+        const blob = await response.blob()
+        if (attempt > 1) {
+          logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_RETRY_SUCCESS", {
+            sessionId: responseId,
+            responseId,
+            translationId,
+            imageIndex,
+            attachmentId,
+            storagePath,
+            filename,
+            attemptNumber: attempt,
+            maxAttempts: MAX_ATTEMPTS,
+            httpStatus: response.status,
+            durationMs,
+            contentType: blob.type,
+            blobBytes: blob.size,
+            pdfKind,
+            imageKey,
+          })
+        } else {
+          logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_SUCCESS", {
+            sessionId: responseId,
+            responseId,
+            translationId,
+            imageIndex,
+            attachmentId,
+            storagePath,
+            filename,
+            attemptNumber: 1,
+            maxAttempts: MAX_ATTEMPTS,
+            httpStatus: response.status,
+            contentType: blob.type,
+            blobBytes: blob.size,
+            durationMs,
+            pdfKind,
+            imageKey,
+          })
+        }
+
+        return { blob, httpStatus: response.status, attemptsUsed: attempt }
+      } catch (fetchErr) {
+        const durationMs = Date.now() - attemptStart
+        const errStr = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
+        const isTimeout = fetchErr instanceof Error && (fetchErr.name === "AbortError" || errStr.toLowerCase().includes("timed out"))
+        lastErrorType = isTimeout ? "IMAGE_FETCH_TIMEOUT" : "IMAGE_FETCH_FAILED"
+        lastErrorMessage = errStr
+        lastHttpStatus = 0
+        isRetryable = isRetryableImageFetchError(0, errStr, isTimeout)
+        const nextRetryDelayMs = (isRetryable && attempt < MAX_ATTEMPTS) ? (RETRY_DELAYS_MS[attempt - 1] ?? 5000) : null
 
         if (attempt === 1) {
           logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_FAILED", {
@@ -876,8 +1026,10 @@ async function fetchEvidenceImageWithRetry(
             filename,
             attemptNumber: 1,
             maxAttempts: MAX_ATTEMPTS,
-            httpStatus: response.status,
+            httpStatus: 0,
             durationMs,
+            isRetryable,
+            nextRetryDelayMs,
             errorType: lastErrorType,
             errorMessage: lastErrorMessage,
             sanitizedError: lastErrorMessage,
@@ -895,131 +1047,50 @@ async function fetchEvidenceImageWithRetry(
             filename,
             attemptNumber: attempt,
             maxAttempts: MAX_ATTEMPTS,
-            httpStatus: response.status,
+            httpStatus: 0,
             durationMs,
+            isRetryable,
+            nextRetryDelayMs,
             errorType: lastErrorType,
             errorMessage: lastErrorMessage,
             pdfKind,
             imageKey,
           })
         }
-        continue
-      }
 
-      const blob = await response.blob()
-      if (attempt > 1) {
-        logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_RETRY_SUCCESS", {
-          sessionId: responseId,
-          responseId,
-          translationId,
-          imageIndex,
-          attachmentId,
-          storagePath,
-          filename,
-          attemptNumber: attempt,
-          maxAttempts: MAX_ATTEMPTS,
-          httpStatus: response.status,
-          durationMs,
-          contentType: blob.type,
-          blobBytes: blob.size,
-          pdfKind,
-          imageKey,
-        })
-      } else {
-        logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_SUCCESS", {
-          sessionId: responseId,
-          responseId,
-          translationId,
-          imageIndex,
-          attachmentId,
-          storagePath,
-          filename,
-          attemptNumber: 1,
-          maxAttempts: MAX_ATTEMPTS,
-          httpStatus: response.status,
-          contentType: blob.type,
-          blobBytes: blob.size,
-          durationMs,
-          pdfKind,
-          imageKey,
-        })
-      }
-
-      return { blob, httpStatus: response.status, attemptsUsed: attempt }
-    } catch (fetchErr) {
-      const durationMs = Date.now() - attemptStart
-      const errStr = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
-      const isTimeout = fetchErr instanceof Error && (fetchErr.name === "AbortError" || errStr.toLowerCase().includes("timed out"))
-      lastErrorType = isTimeout ? "IMAGE_FETCH_TIMEOUT" : "IMAGE_FETCH_FAILED"
-      lastErrorMessage = errStr
-      lastHttpStatus = 0
-
-      if (attempt === 1) {
-        logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_FAILED", {
-          sessionId: responseId,
-          responseId,
-          translationId,
-          imageIndex,
-          attachmentId,
-          storagePath,
-          filename,
-          attemptNumber: 1,
-          maxAttempts: MAX_ATTEMPTS,
-          httpStatus: 0,
-          durationMs,
-          errorType: lastErrorType,
-          errorMessage: lastErrorMessage,
-          sanitizedError: lastErrorMessage,
-          pdfKind,
-          imageKey,
-        })
-      } else {
-        logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_RETRY_FAILED", {
-          sessionId: responseId,
-          responseId,
-          translationId,
-          imageIndex,
-          attachmentId,
-          storagePath,
-          filename,
-          attemptNumber: attempt,
-          maxAttempts: MAX_ATTEMPTS,
-          httpStatus: 0,
-          durationMs,
-          errorType: lastErrorType,
-          errorMessage: lastErrorMessage,
-          pdfKind,
-          imageKey,
-        })
+        if (!isRetryable) {
+          break
+        }
       }
     }
-  }
 
-  logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_EXHAUSTED", {
-    sessionId: responseId,
-    responseId,
-    translationId,
-    imageIndex,
-    attachmentId,
-    storagePath,
-    filename,
-    totalAttempts: MAX_ATTEMPTS,
-    maxAttempts: MAX_ATTEMPTS,
-    lastHttpStatus,
-    errorType: lastErrorType || "IMAGE_FETCH_FAILED",
-    errorMessage: lastErrorMessage || "All fetch attempts exhausted",
-    pdfKind,
-    imageKey,
-  })
-
-  throw Object.assign(
-    new Error(`Image request failed for ${filename} after ${MAX_ATTEMPTS} attempts: ${lastErrorMessage}`),
-    {
-      attempts: MAX_ATTEMPTS,
+    logDiagnosticEvent(responseId, "PDF_IMAGE_FETCH_EXHAUSTED", {
+      sessionId: responseId,
+      responseId,
+      translationId,
+      imageIndex,
+      attachmentId,
+      storagePath,
+      filename,
+      totalAttempts: attemptsCompleted,
+      maxAttempts: MAX_ATTEMPTS,
+      lastHttpStatus,
+      isRetryable,
       errorType: lastErrorType || "IMAGE_FETCH_FAILED",
-      reason: lastErrorMessage || "All fetch attempts exhausted",
-    }
-  )
+      errorMessage: lastErrorMessage || "All fetch attempts exhausted",
+      pdfKind,
+      imageKey,
+    })
+
+    throw Object.assign(
+      new Error(`Image request failed for ${filename} after ${attemptsCompleted} attempts: ${lastErrorMessage}`),
+      {
+        attempts: attemptsCompleted,
+        errorType: lastErrorType || "IMAGE_FETCH_FAILED",
+        reason: lastErrorMessage || "All fetch attempts exhausted",
+      }
+    )
+  })
 }
 
 function loadImage(src: string, meta?: PdfImageMeta) {
@@ -1211,7 +1282,7 @@ function loadImage(src: string, meta?: PdfImageMeta) {
         filename,
         imageIndex: meta.imageIndex ?? null,
         reason: exactReason,
-        attempts: (err as any).attempts || 4,
+        attempts: (err as any).attempts || 10,
         errorType: errType,
       })
 
@@ -2824,7 +2895,7 @@ async function renderImageBlock(
       filename,
       imageIndex: meta.imageIndex ?? null,
       reason: `embed_failed: ${errStr}`,
-      attempts: 4,
+      attempts: 10,
     })
     logDiagnosticEvent(responseId, "PDF_IMAGE_EMBED_FAILED", {
       pdfKind,
@@ -2968,24 +3039,25 @@ async function renderImageGrid(
 
   for (let i = 0; i < images.length; i += 2) {
     const pair = images.slice(i, i + 2)
-    const loadedPair = await Promise.all(
-      pair.map((img, idx) => {
-        const globalIdx = i + idx
-        const imageKey = (img as any).id || `img_${globalIdx + 1}`
-        const filename = (img as any).originalFilename || img.src.split("/").pop()?.split("?")[0] || `image_${globalIdx + 1}.jpg`
-        return loadImage(img.src, {
-          pdfKind,
-          responseId,
-          imageKey,
-          filename,
-          attachmentId: (img as any).attachmentId || (img as any).id,
-          storagePath: (img as any).storagePath,
-          imageIndex: globalIdx,
-          totalImages: images.length,
-          tracker,
-        })
+    const loadedPair: (LoadedImage | null)[] = []
+    for (let idx = 0; idx < pair.length; idx += 1) {
+      const img = pair[idx]
+      const globalIdx = i + idx
+      const imageKey = (img as any).id || `img_${globalIdx + 1}`
+      const filename = (img as any).originalFilename || img.src.split("/").pop()?.split("?")[0] || `image_${globalIdx + 1}.jpg`
+      const loaded = await loadImage(img.src, {
+        pdfKind,
+        responseId,
+        imageKey,
+        filename,
+        attachmentId: (img as any).attachmentId || (img as any).id,
+        storagePath: (img as any).storagePath,
+        imageIndex: globalIdx,
+        totalImages: images.length,
+        tracker,
       })
-    )
+      loadedPair.push(loaded)
+    }
 
     let rowH = 0
     const dimensions = loadedPair.map((img, idx) => {
@@ -4110,11 +4182,9 @@ async function buildLanguagePdfBlob(
   const profile = await fetchOrganizationProfileFromDb()
   const pdfHeaderLogoSource = profile.pdfHeaderLogoUrl || "/LogoB.png"
   const closingLogoSource = profile.pdfLogoUrl || CLOSING_LOGO_URL
-  const [JsPdf, logoImage, closingLogoImage] = await Promise.all([
-    loadPdfTools(),
-    loadImage(pdfHeaderLogoSource),
-    options.appendClosingBlock ? loadImage(closingLogoSource) : Promise.resolve(null),
-  ])
+  const JsPdf = await loadPdfTools()
+  const logoImage = await loadImage(pdfHeaderLogoSource)
+  const closingLogoImage = options.appendClosingBlock ? await loadImage(closingLogoSource) : null
   const doc = new JsPdf({
     unit: "mm",
     format: "a4",
@@ -5114,24 +5184,25 @@ async function renderBilingualImageGrid(
   for (let i = 0; i < images.length; i += 2) {
     const pair = images.slice(i, i + 2)
     const arPair = arabicImages.slice(i, i + 2)
-    const loadedPair = await Promise.all(
-      pair.map((img, idx) => {
-        const globalIdx = i + idx
-        const imageKey = (img as any).id || `img_${globalIdx + 1}`
-        const filename = (img as any).originalFilename || img.src.split("/").pop()?.split("?")[0] || `image_${globalIdx + 1}.jpg`
-        return loadImage(img.src, {
-          pdfKind: "bilingual",
-          responseId,
-          imageKey,
-          filename,
-          attachmentId: (img as any).attachmentId || (img as any).id,
-          storagePath: (img as any).storagePath,
-          imageIndex: globalIdx,
-          totalImages: images.length,
-          tracker,
-        })
+    const loadedPair: (LoadedImage | null)[] = []
+    for (let idx = 0; idx < pair.length; idx += 1) {
+      const img = pair[idx]
+      const globalIdx = i + idx
+      const imageKey = (img as any).id || `img_${globalIdx + 1}`
+      const filename = (img as any).originalFilename || img.src.split("/").pop()?.split("?")[0] || `image_${globalIdx + 1}.jpg`
+      const loaded = await loadImage(img.src, {
+        pdfKind: "bilingual",
+        responseId,
+        imageKey,
+        filename,
+        attachmentId: (img as any).attachmentId || (img as any).id,
+        storagePath: (img as any).storagePath,
+        imageIndex: globalIdx,
+        totalImages: images.length,
+        tracker,
       })
-    )
+      loadedPair.push(loaded)
+    }
 
     let rowH = 0
     const dimensions = loadedPair.map((img, idx) => {
@@ -5424,11 +5495,9 @@ async function buildNativeBilingualPdfBlob(input: {
   const profile = await fetchOrganizationProfileFromDb()
   const pdfHeaderLogoSource = profile.pdfHeaderLogoUrl || "/LogoB.png"
   const closingLogoSource = profile.pdfLogoUrl || CLOSING_LOGO_URL
-  const [JsPdf, logoImage, closingLogoImage] = await Promise.all([
-    loadPdfTools(),
-    loadImage(pdfHeaderLogoSource),
-    appendClosingBlock ? loadImage(closingLogoSource) : Promise.resolve(null),
-  ])
+  const JsPdf = await loadPdfTools()
+  const logoImage = await loadImage(pdfHeaderLogoSource)
+  const closingLogoImage = appendClosingBlock ? await loadImage(closingLogoSource) : null
   const doc = new JsPdf({
     unit: "mm",
     format: "a4",
