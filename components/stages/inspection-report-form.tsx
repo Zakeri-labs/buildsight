@@ -970,11 +970,15 @@ export function InspectionReportForm({
             responseId: id,
             sanitizedError: registered.error,
           })
+          if (uploadedPaths.length > 0) {
+            await supabase.storage.from("project-stage-evidence").remove(uploadedPaths).catch(() => undefined)
+          }
           const regErrStr = registered.error
           const markAllFailed = (rows: PendingFile[]) =>
             rows.map((row) => (successfulItemIds.includes(row.id) ? { ...row, status: "failed" as const, errorMessage: regErrStr } : row))
           if (kind === "evidence_image") setPendingImages(markAllFailed)
           else setPendingDocuments(markAllFailed)
+          throw new Error(registered.error)
         } else {
           registeredCount = registered.data.ids.length
           logDiagnosticEvent(id, "IMAGE_ATTACHMENT_REGISTER_SUCCESS", {
@@ -1112,7 +1116,7 @@ export function InspectionReportForm({
         mode,
       })
 
-      let id = responseId ?? initialResponseId
+      let id = responseId
       let routeStageId = resolvedStageId
 
       // For a brand-new report that has never been created in DB, ensure the response record exists first
