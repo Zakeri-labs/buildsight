@@ -2963,8 +2963,8 @@ async function renderImageGrid(
 
   // 2-column side-by-side image grid
   const gap = 2
-  const colWidth = (flow.width - gap) / 2
-  const maxImgH = 68
+  const colWidth = (flow.width - gap) / 2 * 0.92
+  const maxImgH = 68 * 0.92
 
   for (let i = 0; i < images.length; i += 2) {
     const pair = images.slice(i, i + 2)
@@ -5108,8 +5108,8 @@ async function renderBilingualImageGrid(
   let embedFailures = 0
 
   const gap = 2
-  const colWidth = (flow.width - gap) / 2
-  const maxImgH = 68
+  const colWidth = (flow.width - gap) / 2 * 0.92
+  const maxImgH = 68 * 0.92
 
   for (let i = 0; i < images.length; i += 2) {
     const pair = images.slice(i, i + 2)
