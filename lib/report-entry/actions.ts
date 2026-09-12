@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 
 import { requireOnboarded } from "@/lib/auth/session"
 import { resolveCalendarProjectScope, resolveExplicitSupervisorProjectScope } from "@/lib/calendar/server"
+import { getReportEntryProjectStatsServer, type ReportEntryProjectStats } from "@/lib/report-entry/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
@@ -106,3 +107,9 @@ export async function startReportEntryAction(formData: FormData) {
 
   redirect(`/projects/${projectId}/stages/${finalProjectStageId}/reports/new`)
 }
+
+export async function getReportEntryProjectStats(projectId: string): Promise<ReportEntryProjectStats | null> {
+  const session = await requireOnboarded()
+  return getReportEntryProjectStatsServer(projectId, session.userId)
+}
+
