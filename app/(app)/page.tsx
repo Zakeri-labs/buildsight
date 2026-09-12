@@ -15,6 +15,9 @@ import { getDashboardData, type DashboardData } from "@/lib/db/domain"
 import { dashboardActivityDateFilter, resolveDashboardDateRange } from "@/lib/dashboard/date-range"
 import { getProjectSupervisorCandidates } from "@/lib/projects/supervisor-candidates-server"
 
+import { FailedReportGenerationsCard } from "@/components/dashboard/failed-report-generations-card"
+import { getFailedReportGenerations } from "@/lib/dashboard/failed-report-generations-server"
+
 // Deterministic upward sparkline that lands on `value`.
 function spark(value: number): number[] {
   const n = 12
@@ -70,6 +73,10 @@ export default async function DashboardPage({
     orgId && canManageProjectSupervisors && data.projects.some((project) => project.canEdit)
       ? await getProjectSupervisorCandidates(orgId)
       : []
+
+  const failedGenerations = hasAdminRole
+    ? await getFailedReportGenerations({ orgId, projectId })
+    : []
 
   const kpis: KpiCardData[] = [
     {
@@ -146,6 +153,14 @@ export default async function DashboardPage({
           </div>
         </div>
       </div>
+
+      {hasAdminRole ? (
+        <FailedReportGenerationsCard
+          initialData={failedGenerations}
+          orgId={orgId}
+          projectId={projectId}
+        />
+      ) : null}
     </div>
   )
 }
