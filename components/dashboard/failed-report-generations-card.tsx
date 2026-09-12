@@ -1,8 +1,8 @@
-﻿"use client"
+"use client"
 
 import Link from "next/link"
 import { useState } from "react"
-import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Download, Loader2, RefreshCw } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -126,6 +126,15 @@ export function FailedReportGenerationsCard({
     }
   }
 
+  function handleDownload(item: FailedReportGenerationItem, kind: "original" | "bilingual") {
+    const params = new URLSearchParams({
+      projectId: item.projectId,
+      translationId: item.translationId,
+      kind,
+    })
+    window.open(`/api/stage-translations/pdf?${params.toString()}`, "_blank")
+  }
+
   async function handleRetry(item: FailedReportGenerationItem) {
     setRetryingIds((prev) => new Set(prev).add(item.responseId))
     setRowErrors((prev) => {
@@ -226,6 +235,8 @@ export function FailedReportGenerationsCard({
                   const isRetrying = retryingIds.has(item.responseId)
                   const errorMsg = rowErrors[item.responseId]
                   const reportUrl = `/projects/${item.projectId}/stages/${item.projectStageId}/reports/${item.responseId}`
+                  const hasOriginalPdf = Boolean(item.originalPdfUrl)
+                  const hasBilingualPdf = Boolean(item.bilingualPdfUrl)
 
                   return (
                     <tr key={item.translationId} className="transition-colors hover:bg-muted/30">
@@ -259,24 +270,52 @@ export function FailedReportGenerationsCard({
                       </td>
                       <td className="py-3 pe-1 ps-4 text-end align-middle">
                         <div className="flex flex-col items-end gap-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleRetry(item)}
-                            disabled={isRetrying}
-                            className="h-8 gap-1.5 px-3 text-xs font-semibold"
-                          >
-                            {isRetrying ? (
-                              <>
-                                <Loader2 className="size-3.5 animate-spin" />
-                                <span>Generating...</span>
-                              </>
-                            ) : (
-                              <span>Retry Generation</span>
-                            )}
-                          </Button>
+                          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={!hasOriginalPdf}
+                              onClick={() => handleDownload(item, "original")}
+                              title={hasOriginalPdf ? "Download English PDF" : "English PDF unavailable"}
+                              className="h-8 gap-1 px-2.5 text-xs font-semibold disabled:opacity-40"
+                            >
+                              <Download className="size-3.5 shrink-0" />
+                              <span>EN</span>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={!hasBilingualPdf}
+                              onClick={() => handleDownload(item, "bilingual")}
+                              title={hasBilingualPdf ? "Download Bilingual PDF" : "Bilingual PDF unavailable"}
+                              className="h-8 gap-1 px-2.5 text-xs font-semibold disabled:opacity-40"
+                            >
+                              <Download className="size-3.5 shrink-0" />
+                              <span>EN / AR</span>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleRetry(item)}
+                              disabled={isRetrying}
+                              title="Retry PDF generation"
+                              className="h-8 gap-1 px-2.5 text-xs font-semibold"
+                            >
+                              {isRetrying ? (
+                                <>
+                                  <Loader2 className="size-3.5 animate-spin shrink-0" />
+                                  <span>Generating...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw className="size-3.5 shrink-0" />
+                                  <span>Retry</span>
+                                </>
+                              )}
+                            </Button>
+                          </div>
                           {errorMsg ? (
-                            <span className="text-[11px] text-red-600 dark:text-red-400">
+                            <span className="text-[11px] text-red-600 dark:text-red-400 max-w-[240px] truncate" title={errorMsg}>
                               {errorMsg}
                             </span>
                           ) : null}
