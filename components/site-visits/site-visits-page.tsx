@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 import { DateRangePill } from "@/components/dashboard/date-range-pill"
-import type { DashboardDateRange } from "@/lib/dashboard/date-range"
+import { SITE_VISIT_PRESET_OPTIONS, type SiteVisitDateRange } from "@/lib/site-visits/date-range"
 
 function dateTime(value: string) {
   const date = new Date(value)
@@ -30,8 +30,8 @@ function compactPreferredVisit(input: {
   if (!input.preferredDate) return `Date not set · ${preferredTimeLabel(input.preferredTime)}`
   const date = new Date(`${input.preferredDate}T00:00:00`)
   const label = Number.isNaN(date.getTime())
-    ? input.preferredDate
-    : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date)
+  ? input.preferredDate
+  : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date)
   return `${label} · ${preferredTimeLabel(input.preferredTime)}`
 }
 
@@ -40,7 +40,7 @@ export function SiteVisitsPage({
   dateRange,
 }: {
   data: SiteVisitPageData
-  dateRange?: DashboardDateRange
+  dateRange?: SiteVisitDateRange
 }) {
   const currentUser = useCurrentUser()
   const isMember = currentUser.role === "org_member"
@@ -94,6 +94,7 @@ export function SiteVisitsPage({
               startDate={dateRange.startDate}
               endDate={dateRange.endDate}
               showAllTime={false}
+              options={SITE_VISIT_PRESET_OPTIONS}
               ariaLabel={`Site visits date range: ${dateRange.label}`}
               dialogDescription="Choose inclusive calendar dates for site visit requests."
             />
