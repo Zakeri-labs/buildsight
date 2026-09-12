@@ -78,17 +78,33 @@ import {
 export type ProjectStatus = ProjectStatusValue
 export type ProjectType = "Residential" | "Commercial" | "Hospitality" | "Infrastructure" | "Industrial"
 
+export type ProjectReportSchedule = {
+  latestReport: {
+    id: string
+    stageId: string
+    title: string
+    submittedAt: string
+  } | null
+  compliance: {
+    state: "overdue" | "due_today" | "due_soon" | "on_track"
+    nextRequiredVisitDate: string
+    daysRemaining: number | null
+    daysOverdue: number | null
+  } | null
+}
+
 const PROJECT_TABLE_COLUMN_WIDTHS = [
-  "16%",
-  "11%",
-  "10.5%",
-  "10.5%",
-  "13%",
+  "15%",
   "9.5%",
-  "7.5%",
+  "9%",
+  "9%",
+  "10.5%",
   "8.5%",
-  "9.5%",
-  "4%",
+  "7%",
+  "7.5%",
+  "12.5%",
+  "8%",
+  "3.5%",
 ] as const
 
 export interface ProjectRow {
@@ -113,6 +129,72 @@ export interface ProjectRow {
   longitude?: number | null
   assignedSupervisorId?: string | null
   canEdit?: boolean
+  reportSchedule?: ProjectReportSchedule | null
+}
+
+function formatSubmittedReportDate(value: string | null) {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date)
+}
+
+function formatDueCalendarDate(value: string | null) {
+  if (!value) return ""
+  const [year, month, day] = value.split("-").map(Number)
+  if (!year || !month || !day) return value
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day, 12)))
+}
+
+function renderDueStatus(compliance: ProjectReportSchedule["compliance"]) {
+  if (!compliance) {
+    return <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
+  }
+
+  if (compliance.state === "overdue") {
+    const days = compliance.daysOverdue ?? 0
+    return (
+      <div className="flex items-center gap-1.5 font-medium text-red-600 dark:text-red-400">
+        <span className="size-1.5 shrink-0 rounded-full bg-red-500" />
+        <span className="truncate">Overdue {days} {days === 1 ? "day" : "days"}</span>
+      </div>
+    )
+  }
+
+  if (compliance.state === "due_today") {
+    return (
+      <div className="flex items-center gap-1.5 font-medium text-amber-600 dark:text-amber-400">
+        <span className="size-1.5 shrink-0 rounded-full bg-amber-500" />
+        <span className="truncate">Due today</span>
+      </div>
+    )
+  }
+
+  if (compliance.state === "due_soon") {
+    const days = compliance.daysRemaining ?? 0
+    return (
+      <div className="flex items-center gap-1.5 font-medium text-amber-600 dark:text-amber-400">
+        <span className="size-1.5 shrink-0 rounded-full bg-amber-500" />
+        <span className="truncate">Due in {days} {days === 1 ? "day" : "days"}</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
+      <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
+      <span className="truncate">Due {formatDueCalendarDate(compliance.nextRequiredVisitDate)}</span>
+    </div>
+  )
 }
 
 function TruncatedText({
@@ -933,6 +1015,7 @@ export function ProjectsList({
                 <th className="truncate px-2.5 py-3.5 text-start align-middle font-semibold">Project Type</th>
                 <th className="truncate px-2 py-3.5 text-center align-middle font-semibold">Status</th>
                 <th className="truncate px-2 py-3.5 text-center align-middle font-semibold">Start Date</th>
+                <th className="truncate px-2.5 py-3.5 text-start align-middle font-semibold">Report Schedule</th>
                 <th className="truncate px-2.5 py-3.5 text-start align-middle font-semibold">Progress</th>
                 <th className="truncate px-1.5 py-3.5 text-end align-middle font-semibold">Actions</th>
               </tr>
@@ -940,7 +1023,7 @@ export function ProjectsList({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
               {desktopProjects.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-5 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+                  <td colSpan={11} className="px-5 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
                     {locale === "ar" ? "لا توجد مشاريع مطابقة." : "No matching projects found."}
                   </td>
                 </tr>
@@ -1055,6 +1138,31 @@ export function ProjectsList({
                   {/* Start Date */}
                   <td className="min-w-0 overflow-hidden px-2 py-4 text-center align-middle text-xs text-slate-600 dark:text-slate-400">
                     <TruncatedText className="text-center">{row.startDate}</TruncatedText>
+                  </td>
+
+                  {/* Report Schedule */}
+                  <td className="min-w-0 overflow-hidden px-2.5 py-3.5 align-middle">
+                    <div className="flex min-w-0 flex-col gap-0.5 leading-tight">
+                      {row.reportSchedule?.latestReport ? (
+                        <div className="flex min-w-0 items-baseline gap-1 text-xs">
+                          <Link
+                            href={`/projects/${encodeURIComponent(row.id)}/stages/${encodeURIComponent(row.reportSchedule.latestReport.stageId)}/reports/${encodeURIComponent(row.reportSchedule.latestReport.id)}`}
+                            className="truncate font-semibold text-slate-900 transition-colors hover:text-blue-600 hover:underline dark:text-slate-100 dark:hover:text-blue-400"
+                            title={`${row.reportSchedule.latestReport.title} (${formatSubmittedReportDate(row.reportSchedule.latestReport.submittedAt)})`}
+                          >
+                            {row.reportSchedule.latestReport.title}
+                          </Link>
+                          <span className="shrink-0 text-[10px] text-slate-400">
+                            {formatSubmittedReportDate(row.reportSchedule.latestReport.submittedAt)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400 dark:text-slate-500">No reports yet</span>
+                      )}
+                      <div className="text-xs">
+                        {renderDueStatus(row.reportSchedule?.compliance)}
+                      </div>
+                    </div>
                   </td>
 
                   {/* Progress bar */}

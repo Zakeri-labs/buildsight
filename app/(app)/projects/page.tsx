@@ -8,6 +8,7 @@ import { getOrgProjects } from "@/lib/db/domain"
 import { PROJECT_TYPES, isProjectTypeValue } from "@/lib/projects/project-options"
 import { projectImageDisplayUrl } from "@/lib/projects/project-image"
 import { normalizeProjectStatus } from "@/lib/projects/project-status"
+import { loadProjectsReportSchedule } from "@/lib/projects/report-schedule-server"
 import { getProjectSupervisorCandidates } from "@/lib/projects/supervisor-candidates-server"
 import { createAdminClient } from "@/lib/supabase/admin"
 
@@ -75,10 +76,11 @@ export default async function ProjectsPage({
     return projects.map((project) => adminProjectSet.has(project.id))
   }
 
-  const [editPermissions, supervisorOptions, supervisorNameById] = await Promise.all([
+  const [editPermissions, supervisorOptions, supervisorNameById, reportScheduleByProject] = await Promise.all([
     getEditPermissions(),
     organizationId && canCreateProjects ? getProjectSupervisorCandidates(organizationId) : Promise.resolve([]),
     getAssignedSupervisorNames(assignedSupervisorIds),
+    loadProjectsReportSchedule(projectIds, projects),
   ])
 
   const rows: ProjectRow[] = projects.map((project, index) => ({
@@ -103,6 +105,7 @@ export default async function ProjectsPage({
     longitude: project.longitude,
     assignedSupervisorId: project.assignedSupervisorId,
     canEdit: editPermissions[index] ?? false,
+    reportSchedule: reportScheduleByProject.get(project.id) ?? null,
   }))
 
   return (
