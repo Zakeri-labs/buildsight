@@ -952,3 +952,18 @@ export async function removeProjectParticipantAction(input: {
     return { ok: false, error: error instanceof Error ? error.message : "Unable to remove the project participant." }
   }
 }
+
+export async function fetchProjectParticipantUserOptionsAction(
+  projectId: string,
+): Promise<{ ok: true; data: Array<import("@/lib/projects/project-participant-types").ProjectParticipantUserOption> } | { ok: false; error: string }> {
+  try {
+    await assertProjectAdmin(projectId)
+    const { getProjectParticipantUserOptions } = await import("@/lib/db/project-participants")
+    const options = await getProjectParticipantUserOptions(projectId)
+    return { ok: true, data: options }
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: error.message }
+    return { ok: false, error: error instanceof Error ? error.message : "Failed to load participant options" }
+  }
+}
+

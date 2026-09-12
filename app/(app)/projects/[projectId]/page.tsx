@@ -9,8 +9,7 @@ import { requireOnboarded } from "@/lib/auth/session"
 import { canAdministerProject } from "@/lib/auth/guards"
 import { isUserProjectSupervisor } from "@/lib/auth/project-access"
 import { getOrgProjects, getProjectInspectionAndNcrCounts } from "@/lib/db/domain"
-import { getProjectParticipants, getProjectParticipantUserOptions } from "@/lib/db/project-participants"
-import { getProjectSupervisorCandidates } from "@/lib/projects/supervisor-candidates-server"
+import { getProjectParticipants } from "@/lib/db/project-participants"
 import { normalizeDocumentType } from "@/lib/documents/document-types"
 import { getInitialDocumentsForScope } from "@/lib/initial-documents/server"
 import { toProjectRecord } from "@/lib/projects/project-record"
@@ -196,12 +195,6 @@ export default async function ProjectDetailPage({
     isUserProjectSupervisor(session.userId, project.id),
   ])
   const canEditLocation = canManageImages || isSupervisor
-  const [participantUsers, supervisorOptions] = canManageImages
-    ? await Promise.all([
-        getProjectParticipantUserOptions(project.id),
-        getProjectSupervisorCandidates(organizationId),
-      ])
-    : [[], []]
   const projectRecord = toProjectRecord(project, counts)
 
   return (
@@ -242,8 +235,6 @@ export default async function ProjectDetailPage({
       initialDocumentsError={initialDocumentsResult.errorMessage}
       siteVisitReports={siteVisitReports}
       participants={participants}
-      participantUsers={participantUsers}
-      supervisorOptions={supervisorOptions}
       canManageImages={canManageImages}
       canEditProject={canManageImages}
       canEditLocation={canEditLocation}

@@ -2001,3 +2001,19 @@ export async function getProjectStagesForEditAction(
     return { ok: false, error: err instanceof Error ? err.message : "Failed to load project stages." }
   }
 }
+
+export async function fetchProjectSupervisorCandidatesAction(
+  organizationId: string,
+): Promise<{ ok: true; data: Array<import("@/lib/projects/supervisor-candidates").ProjectSupervisorCandidate> } | { ok: false; error: string }> {
+  try {
+    const { requireOnboarded } = await import("@/lib/auth/session")
+    await requireOnboarded()
+    const { getProjectSupervisorCandidates } = await import("@/lib/projects/supervisor-candidates-server")
+    const candidates = await getProjectSupervisorCandidates(organizationId)
+    return { ok: true, data: candidates }
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: error.message }
+    return { ok: false, error: error instanceof Error ? error.message : "Failed to load supervisor candidates." }
+  }
+}
+

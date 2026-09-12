@@ -1,8 +1,9 @@
 "use client"
 
-import { Fragment, useMemo, useState, useTransition, type ChangeEvent, type KeyboardEvent } from "react"
+import { Fragment, useEffect, useMemo, useState, useTransition, type ChangeEvent, type KeyboardEvent } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { fetchProjectParticipantUserOptionsAction } from "@/lib/actions/project-participants"
 import {
   Building2,
   Check,
@@ -283,9 +284,11 @@ function ContractorRoleFields({
   )
 }
 
-function AddParticipantDialog({ projectId, users }: { projectId: string; users: ProjectParticipantUserOption[] }) {
+function AddParticipantDialog({ projectId, users: initialUsers = [] }: { projectId: string; users?: ProjectParticipantUserOption[] }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
+  const [users, setUsers] = useState<ProjectParticipantUserOption[]>(initialUsers)
+  const [loadingUsers, setLoadingUsers] = useState(false)
   const [participantType, setParticipantType] = useState<AddParticipantType | "">("")
   const [source, setSource] = useState<"existing_user" | "external_contact">("existing_user")
   const [selectedUserId, setSelectedUserId] = useState("")
@@ -299,6 +302,28 @@ function AddParticipantDialog({ projectId, users }: { projectId: string; users: 
   const [idCardFile, setIdCardFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+
+  useEffect(() => {
+    if (!open) return
+    if (users.length > 0) return
+    let active = true
+    setLoadingUsers(true)
+    fetchProjectParticipantUserOptionsAction(projectId)
+      .then((res) => {
+        if (active && res.ok) {
+          setUsers(res.data)
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load participant user options:", err)
+      })
+      .finally(() => {
+        if (active) setLoadingUsers(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [open, projectId, users.length])
 
   function reset() {
     setParticipantType("")
@@ -533,7 +558,17 @@ function AddParticipantDialog({ projectId, users }: { projectId: string; users: 
           ) : null}
 
           {showUserPicker ? (
-            <UserPicker users={users} value={selectedUserId} onChange={setSelectedUserId} disabled={pending} />
+            loadingUsers ? (
+              <div className="space-y-2">
+                <Label>Select User</Label>
+                <div className="flex h-10 w-full items-center gap-2 rounded-md border border-input bg-muted/20 px-3 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                  <span>Loading eligible users...</span>
+                </div>
+              </div>
+            ) : (
+              <UserPicker users={users} value={selectedUserId} onChange={setSelectedUserId} disabled={pending} />
+            )
           ) : null}
 
           {participantType === "supervisor" ? (
