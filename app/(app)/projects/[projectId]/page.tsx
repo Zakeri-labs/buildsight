@@ -178,7 +178,7 @@ export default async function ProjectDetailPage({
   const organizationId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id
   if (!organizationId) notFound()
 
-  const projects = await getOrgProjects(organizationId, session.userId)
+  const projects = await getOrgProjects(organizationId, session.userId, { skipProgress: true })
   const project = projects.find((item) => item.id === projectId)
   if (!project) return notFound()
 
