@@ -190,6 +190,87 @@ function runTests() {
     console.log("✓ Test 10 Passed: Project with no supervisors IS unassigned")
   }
 
+  // TEST 11 — Invariant for Periodic Project with Extra Reports (Monthly 2 quota = 2, reports = 3 -> completed = 2, extra = 1, total = 3)
+  {
+    const projects: RawProjectRecord[] = [
+      { id: "p11", name: "Project 11", code: "P11", status: "active", supervision_type: "monthly_2", assigned_supervisor_id: ali },
+    ]
+    const reports: RawReportRecord[] = [
+      { id: "r1", project_id: "p11", status: "submitted", submitted_at: "2026-08-01T10:00:00Z", created_by: ali },
+      { id: "r2", project_id: "p11", status: "submitted", submitted_at: "2026-08-05T10:00:00Z", created_by: ali },
+      { id: "r3", project_id: "p11", status: "submitted", submitted_at: "2026-08-10T10:00:00Z", created_by: ali },
+    ]
+
+    const res = calculateSupervisorPerformance({ month, projects, participants: [], reports })
+    const pMetrics = res.allProjectRows.find((p) => p.projectId === "p11")!
+    const aliPerf = res.supervisors.find((s) => s.supervisorId === ali)!
+
+    console.assert(pMetrics.totalSubmittedReports === 3, `Test 11 Failed: totalSubmittedReports should be 3, got ${pMetrics.totalSubmittedReports}`)
+    console.assert(pMetrics.completedReports === 2, `Test 11 Failed: completedReports should be 2, got ${pMetrics.completedReports}`)
+    console.assert(pMetrics.extraReports === 1, `Test 11 Failed: extraReports should be 1, got ${pMetrics.extraReports}`)
+    console.assert(pMetrics.completedReports + pMetrics.extraReports === pMetrics.totalSubmittedReports, "Test 11 Failed: Project Invariant")
+
+    console.assert(aliPerf.totalSubmittedReports === 3, `Test 11 Failed: Ali total should be 3, got ${aliPerf.totalSubmittedReports}`)
+    console.assert(aliPerf.completedReports === 2, `Test 11 Failed: Ali completed should be 2, got ${aliPerf.completedReports}`)
+    console.assert(aliPerf.extraReports === 1, `Test 11 Failed: Ali extra should be 1, got ${aliPerf.extraReports}`)
+    console.assert(aliPerf.completedReports + aliPerf.extraReports === aliPerf.totalSubmittedReports, "Test 11 Failed: Supervisor Invariant")
+
+    console.assert(res.organizationSummary.totalSubmittedReports === 3, "Test 11 Failed: Org total")
+    console.assert(res.organizationSummary.completedReports === 2, "Test 11 Failed: Org completed")
+    console.assert(res.organizationSummary.extraReports === 1, "Test 11 Failed: Org extra")
+    console.assert(res.organizationSummary.completedReports + res.organizationSummary.extraReports === res.organizationSummary.totalSubmittedReports, "Test 11 Failed: Org Invariant")
+
+    console.log("✓ Test 11 Passed: Periodic Project with Extra Reports preserves Invariant (2 completed + 1 extra = 3 total)")
+  }
+
+  // TEST 12 — Non-Periodic Projects (lump_sum, final_visit) have completed = count, extra = 0
+  {
+    const projects: RawProjectRecord[] = [
+      { id: "p12_ls", name: "Lump Sum Project", code: "P12LS", status: "active", supervision_type: "lump_sum", assigned_supervisor_id: ali },
+      { id: "p12_fv", name: "Final Visit Project", code: "P12FV", status: "final_visit", supervision_type: "monthly_4", assigned_supervisor_id: reza },
+    ]
+    const reports: RawReportRecord[] = [
+      { id: "r1", project_id: "p12_ls", status: "approved", submitted_at: "2026-08-01T10:00:00Z", created_by: ali },
+      { id: "r2", project_id: "p12_ls", status: "approved", submitted_at: "2026-08-05T10:00:00Z", created_by: ali },
+      { id: "r3", project_id: "p12_fv", status: "approved", submitted_at: "2026-08-10T10:00:00Z", created_by: reza },
+    ]
+
+    const res = calculateSupervisorPerformance({ month, projects, participants: [], reports })
+    const lsMetrics = res.allProjectRows.find((p) => p.projectId === "p12_ls")!
+
+    console.assert(lsMetrics.totalSubmittedReports === 2, "Test 12 Failed: ls totalSubmittedReports")
+    console.assert(lsMetrics.completedReports === 2, "Test 12 Failed: ls completedReports")
+    console.assert(lsMetrics.extraReports === 0, "Test 12 Failed: ls extraReports")
+
+    console.assert(res.organizationSummary.totalSubmittedReports === 3, `Test 12 Failed: Org total should be 3, got ${res.organizationSummary.totalSubmittedReports}`)
+    console.assert(res.organizationSummary.completedReports === 3, `Test 12 Failed: Org completed should be 3, got ${res.organizationSummary.completedReports}`)
+    console.assert(res.organizationSummary.extraReports === 0, `Test 12 Failed: Org extra should be 0, got ${res.organizationSummary.extraReports}`)
+    console.assert(res.organizationSummary.completedReports + res.organizationSummary.extraReports === res.organizationSummary.totalSubmittedReports, "Test 12 Failed: Invariant")
+
+    console.log("✓ Test 12 Passed: Non-Periodic and Final Visit Projects have completed = count, extra = 0, invariant preserved")
+  }
+
+  // TEST 13 — Report Activity Date uses submitted_at (fallback created_at) and ignores August visit_date for September submission
+  {
+    const projects: RawProjectRecord[] = [
+      { id: "p13", name: "Project 13", code: "P13", status: "active", supervision_type: "monthly_4", assigned_supervisor_id: ali },
+    ]
+    const reports: RawReportRecord[] = [
+      // submitted in August with August visit date -> included in August
+      { id: "r1", project_id: "p13", status: "submitted", submitted_at: "2026-08-15T10:00:00Z", visit_date: "2026-08-15", created_by: ali },
+      // submitted in August with July visit date -> included in August based on submitted_at
+      { id: "r2", project_id: "p13", status: "submitted", submitted_at: "2026-08-02T10:00:00Z", visit_date: "2026-07-28", created_by: ali },
+      // submitted in September with August visit date -> NOT included in August
+      { id: "r3", project_id: "p13", status: "submitted", submitted_at: "2026-09-02T10:00:00Z", visit_date: "2026-08-30", created_by: ali },
+      // draft -> excluded
+      { id: "r4", project_id: "p13", status: "draft", submitted_at: "2026-08-20T10:00:00Z", visit_date: "2026-08-20", created_by: ali },
+    ]
+
+    const res = calculateSupervisorPerformance({ month: "2026-08", projects, participants: [], reports })
+    console.assert(res.organizationSummary.totalSubmittedReports === 2, `Test 13 Failed: should count exactly 2 reports, got ${res.organizationSummary.totalSubmittedReports}`)
+    console.log("✓ Test 13 Passed: Date filtering uses submitted_at and excludes drafts")
+  }
+
   console.log("\nALL PHASE 1.2 MULTI-SUPERVISOR UNIT TESTS PASSED SUCCESSFULLY! 🎉\n")
 }
 
