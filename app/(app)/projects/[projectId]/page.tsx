@@ -8,7 +8,7 @@ import type { ProjectSiteVisitReport } from "@/components/projects/project-site-
 import { requireOnboarded } from "@/lib/auth/session"
 import { canAdministerProject } from "@/lib/auth/guards"
 import { isUserProjectSupervisor } from "@/lib/auth/project-access"
-import { getDashboardData, getOrgProjects } from "@/lib/db/domain"
+import { getOrgProjects, getProjectInspectionAndNcrCounts } from "@/lib/db/domain"
 import { getProjectParticipants, getProjectParticipantUserOptions } from "@/lib/db/project-participants"
 import { getProjectSupervisorCandidates } from "@/lib/projects/supervisor-candidates-server"
 import { normalizeDocumentType } from "@/lib/documents/document-types"
@@ -182,8 +182,8 @@ export default async function ProjectDetailPage({
   const project = projects.find((item) => item.id === projectId)
   if (!project) return notFound()
 
-  const [dashboardData, letters, initialDocumentsResult, siteVisitReports, participants, canManageImages, isSupervisor] = await Promise.all([
-    getDashboardData(organizationId, project.id, session.userId),
+  const [counts, letters, initialDocumentsResult, siteVisitReports, participants, canManageImages, isSupervisor] = await Promise.all([
+    getProjectInspectionAndNcrCounts(project.id),
     getProjectDocuments(project.id, session.userId, session.email),
     getInitialDocumentsForScope({
       projectId: project.id,
@@ -202,8 +202,7 @@ export default async function ProjectDetailPage({
         getProjectSupervisorCandidates(organizationId),
       ])
     : [[], []]
-  const projectCounts = dashboardData.projects.find((item) => item.id === project.id)
-  const projectRecord = toProjectRecord(project, projectCounts)
+  const projectRecord = toProjectRecord(project, counts)
 
   return (
     <ProjectDetail

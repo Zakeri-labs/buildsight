@@ -1721,3 +1721,25 @@ export async function getVos(orgId: string, projectId: string | null, userId?: s
     projectName: names.get(r.project_id) ?? "Unknown",
   }))
 }
+
+export async function getProjectInspectionAndNcrCounts(
+  projectId: string,
+): Promise<{ inspections: number; ncrs: number }> {
+  try {
+    if (!isProjectUuid(projectId)) {
+      return { inspections: 0, ncrs: 0 }
+    }
+    const admin = createAdminClient()
+    const [{ count: inspections, error: inspErr }, { count: ncrs, error: ncrErr }] = await Promise.all([
+      admin.from("inspections").select("id", { count: "exact", head: true }).eq("project_id", projectId),
+      admin.from("ncrs").select("id", { count: "exact", head: true }).eq("project_id", projectId).neq("status", "closed"),
+    ])
+    if (inspErr) throw inspErr
+    if (ncrErr) throw ncrErr
+    return { inspections: inspections ?? 0, ncrs: ncrs ?? 0 }
+  } catch (err) {
+    console.error("getProjectInspectionAndNcrCounts error:", err)
+    return { inspections: 0, ncrs: 0 }
+  }
+}
+
