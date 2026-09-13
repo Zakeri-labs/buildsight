@@ -1,6 +1,7 @@
 import "server-only"
 
 import { loadDirectProjectStageReport, loadProjectStageReport, loadProjectStageTerm, type ProjectTermResponse } from "@/lib/db/project-stages"
+import { loadReportCcRecipientsInternal } from "@/lib/report-cc/server"
 import { buildOriginalTranslationContent, isReportContentStale, parseTranslationContent } from "@/lib/stage-translations/content"
 import type { StageTranslationPageData, StageTranslationRecord, TranslationReportContent } from "@/lib/stage-translations/types"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -52,6 +53,10 @@ async function buildPageData(
   response: ProjectTermResponse,
 ): Promise<StageTranslationPageData | null> {
   if (!execution) return null
+  const [recipients, { translation, projectDetails }] = await Promise.all([
+    loadReportCcRecipientsInternal(execution.project.id, response.id, "report").catch(() => []),
+    loadTranslationContext(response.id, execution.project.id),
+  ])
   const originalContent = buildOriginalTranslationContent({
     stageName: execution.stage.name,
     termName: execution.term.reportName,
@@ -67,8 +72,8 @@ async function buildPageData(
       decidedAt: approval.decidedAt,
     })),
     attachments: response.attachments,
+    recipients,
   })
-  const { translation, projectDetails } = await loadTranslationContext(response.id, execution.project.id)
   return {
     project: {
       ...execution.project,
@@ -102,6 +107,10 @@ async function buildDirectStagePageData(
   response: ProjectTermResponse,
 ): Promise<StageTranslationPageData | null> {
   if (!execution || !response) return null
+  const [recipients, { translation, projectDetails }] = await Promise.all([
+    loadReportCcRecipientsInternal(execution.project.id, response.id, "report").catch(() => []),
+    loadTranslationContext(response.id, execution.project.id),
+  ])
   const originalContent = buildOriginalTranslationContent({
     stageName: execution.stage.name,
     termName: `${execution.stage.name} Report`,
@@ -117,8 +126,8 @@ async function buildDirectStagePageData(
       decidedAt: approval.decidedAt,
     })),
     attachments: response.attachments,
+    recipients,
   })
-  const { translation, projectDetails } = await loadTranslationContext(response.id, execution.project.id)
   return {
     project: {
       ...execution.project,

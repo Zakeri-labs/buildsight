@@ -14,6 +14,7 @@ import {
   Eye,
   Download,
   Loader2,
+  FileSpreadsheet,
 } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -226,6 +227,49 @@ export function ReportsList({
   const totalPages = Math.max(1, Math.ceil(totalFilteredReports / PAGE_SIZE))
   const currentPage = Math.min(clientPage, totalPages)
 
+  const [isExporting, setIsExporting] = useState(false)
+
+  async function handleExportExcel() {
+    if (isExporting) return
+    setIsExporting(true)
+    try {
+      const params = new URLSearchParams()
+      if (dateRange?.preset) {
+        params.set("range", dateRange.preset)
+      }
+      if (dateRange?.startDate) {
+        params.set("from", dateRange.startDate)
+      }
+      if (dateRange?.endDate) {
+        params.set("to", dateRange.endDate)
+      }
+      if (selectedSupervisorId) {
+        params.set("supervisorId", selectedSupervisorId)
+      }
+
+      const endpoint = `/api/reports/export-excel?${params.toString()}`
+      const response = await fetch(endpoint)
+      if (!response.ok) {
+        throw new Error("Failed to export Excel.")
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      const dateStr = new Date().toISOString().slice(0, 10)
+      a.download = `BuildSight_Reports_${dateStr}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error("Error exporting reports Excel:", err)
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   const displayedReports = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
     return filteredReports.slice(start, start + PAGE_SIZE)
@@ -233,11 +277,12 @@ export function ReportsList({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <PageHeader
-          title={t.reports.title}
-          subtitle={t.reports.subtitle}
-        />
+      <PageHeader
+        title={t.reports.title}
+        subtitle={t.reports.subtitle}
+      />
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Date Range Filter Dropdown */}
           <DropdownMenu>
@@ -339,6 +384,29 @@ export function ReportsList({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+        </div>
+
+        {/* Save as Excel Button (Aligned to right) */}
+        <div className="flex items-center gap-2.5">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isExporting}
+            onClick={handleExportExcel}
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted shadow-2xs"
+          >
+            {isExporting ? (
+              <>
+                <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                <span>Preparing Excel...</span>
+              </>
+            ) : (
+              <>
+                <FileSpreadsheet className="size-4 text-emerald-600 dark:text-emerald-400" />
+                <span>Save as Excel</span>
+              </>
+            )}
+          </Button>
         </div>
       </div>
 
