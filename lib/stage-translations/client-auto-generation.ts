@@ -391,11 +391,7 @@ export async function processStageTranslationJob(job: StageTranslationJob) {
       }
 
       const record = snapshot.data.translation
-      const generatedAt = record?.generatedAt ? new Date(record.generatedAt).getTime() : 0
-      const responseUpdatedAt = new Date(snapshot.data.response.updatedAt).getTime()
-      const stale = Boolean(
-        record?.isStale || (generatedAt && responseUpdatedAt > generatedAt),
-      )
+      const stale = Boolean(record?.isStale)
 
       logDiagnosticEvent(normalized.responseId, "STALE_CHECK", {
         caller: "processStageTranslationJob",

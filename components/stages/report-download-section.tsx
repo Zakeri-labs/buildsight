@@ -57,13 +57,7 @@ export function ReportDownloadSection({
   const isCompleted = status === "completed" || hasStoredPdf
   const isPending = !isCompleted && !isFailed
 
-  const isStale = Boolean(
-    translation?.isStale ?? (
-      translation?.generatedAt &&
-        responseUpdatedAt &&
-        new Date(responseUpdatedAt).getTime() > new Date(translation.generatedAt).getTime()
-    ),
-  )
+  const isStale = Boolean(translation?.isStale)
 
   useEffect(() => {
     logDiagnosticEvent(responseId, "DOWNLOAD_SECTION_STATE", {
