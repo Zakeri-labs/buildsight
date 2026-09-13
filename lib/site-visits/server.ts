@@ -1,5 +1,6 @@
 import { currentCalendarDateKey } from "@/lib/calendar/date"
 import type { DashboardDateRange } from "@/lib/dashboard/date-range"
+import type { SiteVisitDateRange } from "@/lib/site-visits/date-range"
 import { roleLabel } from "@/lib/db/types"
 import { preferredVisitLabel } from "@/lib/site-visits/format"
 import {
@@ -202,7 +203,7 @@ export async function getSiteVisitPageData({
 }: {
   userId: string
   projectId: string | null
-  dateRange?: DashboardDateRange | null
+  dateRange?: SiteVisitDateRange | DashboardDateRange | null
   memberSupervisorOnly?: boolean
 }): Promise<SiteVisitPageData> {
   const admin = createAdminClient()

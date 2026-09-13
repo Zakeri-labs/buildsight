@@ -20,16 +20,20 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import type { DashboardDateRangePreset } from "@/lib/dashboard/date-range"
+export type DateRangePresetOption = {
+  value: string
+  label: string
+}
 
 type DateRangePillProps = {
-  preset: DashboardDateRangePreset
+  preset: string
   label: string
   startDate: string | null
   endDate: string | null
   ariaLabel?: string
   dialogDescription?: string
   showAllTime?: boolean
+  options?: DateRangePresetOption[]
 }
 
 const DEFAULT_PRESET_OPTIONS: { value: Exclude<DashboardDateRangePreset, "custom">; label: string }[] = [
@@ -48,6 +52,7 @@ export function DateRangePill({
   ariaLabel = `Dashboard date range: ${label}`,
   dialogDescription = "Choose inclusive calendar dates for Dashboard activity.",
   showAllTime = true,
+  options,
 }: DateRangePillProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -57,9 +62,11 @@ export function DateRangePill({
   const [to, setTo] = useState(endDate ?? "")
   const [customError, setCustomError] = useState<string | null>(null)
 
-  const presetOptions = showAllTime
+  const defaultOptions = showAllTime
     ? DEFAULT_PRESET_OPTIONS
     : DEFAULT_PRESET_OPTIONS.filter((option) => option.value !== "all")
+
+  const presetOptions = options ?? defaultOptions
 
   useEffect(() => {
     if (preset === "custom") {
@@ -68,7 +75,7 @@ export function DateRangePill({
     }
   }, [preset, startDate, endDate])
 
-  function navigateToRange(nextPreset: Exclude<DashboardDateRangePreset, "custom">) {
+  function navigateToRange(nextPreset: string) {
     const params = new URLSearchParams(searchParams.toString())
     params.set("range", nextPreset)
     params.delete("from")

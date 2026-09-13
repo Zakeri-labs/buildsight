@@ -420,20 +420,18 @@ export function SupervisorPerformanceView({
               </CardContent>
             </Card>
 
-            {/* Card 4: Completed Visits */}
+            {/* Card 4: Submitted Reports */}
             <Card size="sm" className="bg-card shadow-2xs border">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-xs font-medium text-muted-foreground">
-                  Completed Visits
+                  Submitted Reports
                 </CardTitle>
                 <UserCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{organizationSummary.completedVisits}</div>
+                <div className="text-2xl font-bold">{organizationSummary.totalSubmittedReports ?? organizationSummary.completedVisits}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {organizationSummary.extraVisits > 0
-                    ? `${organizationSummary.extraVisits} extra visits`
-                    : "Valid submitted reports"}
+                  {`${organizationSummary.completedReports ?? organizationSummary.completedVisits} within quota • ${organizationSummary.extraReports ?? organizationSummary.extraVisits} extra`}
                 </p>
               </CardContent>
             </Card>
@@ -502,7 +500,7 @@ export function SupervisorPerformanceView({
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[300px]">Supervisor</TableHead>
+                        <TableHead className="w-[280px]">Supervisor</TableHead>
                         <TableHead className="text-center">Active Projects</TableHead>
                         <TableHead className="text-center">
                           <div className="inline-flex items-center gap-1">
@@ -513,6 +511,19 @@ export function SupervisorPerformanceView({
                               </TooltipTrigger>
                               <TooltipContent className="max-w-xs text-xs">
                                 Active projects tracked under Monthly 2, 3, or 4 supervision.
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center">
+                          <div className="inline-flex items-center gap-1">
+                            <span>Submitted Reports</span>
+                            <Tooltip>
+                              <TooltipTrigger render={<span className="cursor-help text-muted-foreground" />}>
+                                <Info className="h-3.5 w-3.5" />
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs text-xs">
+                                Total site visit reports submitted by this supervisor in the selected period.
                               </TooltipContent>
                             </Tooltip>
                           </div>
@@ -574,6 +585,16 @@ export function SupervisorPerformanceView({
                                 <Badge variant="secondary" className="font-normal">
                                   {supervisor.complianceProjectsCount}
                                 </Badge>
+                              ) : (
+                                <span className="text-muted-foreground">0</span>
+                              )}
+                            </TableCell>
+
+                            <TableCell className="text-center font-medium">
+                              {supervisor.totalSubmittedReports > 0 ? (
+                                <span className="font-semibold text-foreground">
+                                  {supervisor.totalSubmittedReports}
+                                </span>
                               ) : (
                                 <span className="text-muted-foreground">0</span>
                               )}

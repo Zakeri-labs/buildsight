@@ -8,9 +8,8 @@ import type { ProjectSiteVisitReport } from "@/components/projects/project-site-
 import { requireOnboarded } from "@/lib/auth/session"
 import { canAdministerProject } from "@/lib/auth/guards"
 import { isUserProjectSupervisor } from "@/lib/auth/project-access"
-import { getDashboardData, getOrgProjects } from "@/lib/db/domain"
-import { getProjectParticipants, getProjectParticipantUserOptions } from "@/lib/db/project-participants"
-import { getProjectSupervisorCandidates } from "@/lib/projects/supervisor-candidates-server"
+import { getOrgProjects, getProjectInspectionAndNcrCounts } from "@/lib/db/domain"
+import { getProjectParticipants } from "@/lib/db/project-participants"
 import { normalizeDocumentType } from "@/lib/documents/document-types"
 import { getInitialDocumentsForScope } from "@/lib/initial-documents/server"
 import { toProjectRecord } from "@/lib/projects/project-record"
@@ -178,12 +177,12 @@ export default async function ProjectDetailPage({
   const organizationId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id
   if (!organizationId) notFound()
 
-  const projects = await getOrgProjects(organizationId, session.userId)
+  const projects = await getOrgProjects(organizationId, session.userId, { skipProgress: true })
   const project = projects.find((item) => item.id === projectId)
   if (!project) return notFound()
 
-  const [dashboardData, letters, initialDocumentsResult, siteVisitReports, participants, canManageImages, isSupervisor] = await Promise.all([
-    getDashboardData(organizationId, project.id, session.userId),
+  const [counts, letters, initialDocumentsResult, siteVisitReports, participants, canManageImages, isSupervisor] = await Promise.all([
+    getProjectInspectionAndNcrCounts(project.id),
     getProjectDocuments(project.id, session.userId, session.email),
     getInitialDocumentsForScope({
       projectId: project.id,
@@ -196,14 +195,7 @@ export default async function ProjectDetailPage({
     isUserProjectSupervisor(session.userId, project.id),
   ])
   const canEditLocation = canManageImages || isSupervisor
-  const [participantUsers, supervisorOptions] = canManageImages
-    ? await Promise.all([
-        getProjectParticipantUserOptions(project.id),
-        getProjectSupervisorCandidates(organizationId),
-      ])
-    : [[], []]
-  const projectCounts = dashboardData.projects.find((item) => item.id === project.id)
-  const projectRecord = toProjectRecord(project, projectCounts)
+  const projectRecord = toProjectRecord(project, counts)
 
   return (
     <ProjectDetail
@@ -243,8 +235,6 @@ export default async function ProjectDetailPage({
       initialDocumentsError={initialDocumentsResult.errorMessage}
       siteVisitReports={siteVisitReports}
       participants={participants}
-      participantUsers={participantUsers}
-      supervisorOptions={supervisorOptions}
       canManageImages={canManageImages}
       canEditProject={canManageImages}
       canEditLocation={canEditLocation}

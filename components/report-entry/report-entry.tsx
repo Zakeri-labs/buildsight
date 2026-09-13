@@ -2,14 +2,14 @@
 
 import Link from "next/link"
 import { ArrowRight, Building2, Check, ChevronRight, ChevronsUpDown, ClipboardList, Eye, FileText, ImageIcon, MapPin, Plus, Search, X } from "lucide-react"
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import type { ReportEntryProject, ReportEntrySiteVisitContext } from "@/lib/report-entry/server"
-import { startReportEntryAction } from "@/lib/report-entry/actions"
+import type { ReportEntryProject, ReportEntryProjectStats, ReportEntrySiteVisitContext } from "@/lib/report-entry/server"
+import { getReportEntryProjectStats, startReportEntryAction } from "@/lib/report-entry/actions"
 import { cn, capitalizeWords } from "@/lib/utils"
 
 function stageNumber(index: number) {
@@ -164,45 +164,68 @@ export function ReportEntry({
   const [filter, setFilter] = useState<StageFilter>("all")
   const stageListRef = useRef<HTMLDivElement>(null)
 
+  const [statsCache, setStatsCache] = useState<Record<string, ReportEntryProjectStats>>({})
+  const [loadingStatsProjectId, setLoadingStatsProjectId] = useState<string | null>(null)
+
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId],
   )
 
-  const contextualLatestReport = selectedProject?.latestReport ?? null
+  useEffect(() => {
+    if (!selectedProjectId) return
+    if (statsCache[selectedProjectId]) return
+
+    let isMounted = true
+    setLoadingStatsProjectId(selectedProjectId)
+
+    getReportEntryProjectStats(selectedProjectId)
+      .then((stats) => {
+        if (isMounted && stats) {
+          setStatsCache((prev) => ({ ...prev, [selectedProjectId]: stats }))
+        }
+      })
+      .catch((err) => {
+        console.error("[report-entry] Failed to load project stats:", err)
+      })
+      .finally(() => {
+        if (isMounted) {
+          setLoadingStatsProjectId((curr) => (curr === selectedProjectId ? null : curr))
+        }
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [selectedProjectId, statsCache])
+
+  const currentStats = selectedProjectId ? statsCache[selectedProjectId] ?? null : null
+  const isStatsLoading = Boolean(selectedProjectId && loadingStatsProjectId === selectedProjectId && !currentStats)
+
+  const contextualLatestReport = currentStats?.latestReport ?? null
   const latestReportContextLabel = "Latest Project Report"
 
-  const reportedCount = useMemo(
-    () => selectedProject?.stages.filter((stage) => stage.reportsCount > 0).length ?? 0,
-    [selectedProject],
-  )
-
-  const totalProjectReports = useMemo(
-    () => selectedProject?.stages.reduce((acc, stage) => acc + stage.reportsCount, 0) ?? 0,
-    [selectedProject],
-  )
-
-  const completedProjectItems = useMemo(
-    () => selectedProject?.stages.reduce((acc, stage) => acc + stage.checkedChecklistItems, 0) ?? 0,
-    [selectedProject],
-  )
-
-  const totalProjectItems = useMemo(
-    () => selectedProject?.stages.reduce((acc, stage) => acc + stage.totalChecklistItems, 0) ?? 0,
-    [selectedProject],
-  )
-
-  const overallPercentage = useMemo(() => {
-    if (!totalProjectItems) return 0
-    return Math.round((completedProjectItems / totalProjectItems) * 100)
-  }, [completedProjectItems, totalProjectItems])
+  const totalProjectReports = currentStats?.totalProjectReports ?? 0
+  const completedProjectItems = currentStats?.completedProjectItems ?? 0
+  const totalProjectItems = currentStats?.totalProjectItems ?? 0
+  const overallPercentage = currentStats?.overallPercentage ?? 0
 
   const visibleStages = useMemo(() => {
     if (!selectedProject) return []
-    if (filter === "reported") return selectedProject.stages.filter((s) => s.reportsCount > 0)
-    if (filter === "no-reports") return selectedProject.stages.filter((s) => s.reportsCount === 0)
+    if (filter === "reported") {
+      return selectedProject.stages.filter((s) => {
+        const sStats = currentStats?.stageStats[s.id]
+        return (sStats?.reportsCount ?? 0) > 0
+      })
+    }
+    if (filter === "no-reports") {
+      return selectedProject.stages.filter((s) => {
+        const sStats = currentStats?.stageStats[s.id]
+        return (sStats?.reportsCount ?? 0) === 0
+      })
+    }
     return selectedProject.stages
-  }, [selectedProject, filter])
+  }, [selectedProject, filter, currentStats])
 
   const applyProjectChange = (projectId: string) => {
     setSelectedProjectId(projectId)
@@ -329,17 +352,24 @@ export function ReportEntry({
                 {selectedProject.code ? (
                   <p className="truncate font-mono text-[11px] text-muted-foreground">{selectedProject.code}</p>
                 ) : null}
-                <div className="mt-1 space-y-1">
-                  <p className="text-[11px] font-medium leading-none text-muted-foreground">
-                    {totalProjectReports} {totalProjectReports === 1 ? "Report" : "Reports"} · {completedProjectItems}/{totalProjectItems} · {overallPercentage}%
-                  </p>
-                  <div className="h-1.5 w-full max-w-[160px] overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all duration-300"
-                      style={{ width: `${overallPercentage}%` }}
-                    />
+                {isStatsLoading ? (
+                  <div className="mt-1 space-y-1.5 animate-pulse">
+                    <div className="h-2.5 w-28 rounded bg-muted" />
+                    <div className="h-1.5 w-36 rounded-full bg-muted" />
                   </div>
-                </div>
+                ) : (
+                  <div className="mt-1 space-y-1">
+                    <p className="text-[11px] font-medium leading-none text-muted-foreground">
+                      {totalProjectReports} {totalProjectReports === 1 ? "Report" : "Reports"} · {completedProjectItems}/{totalProjectItems} · {overallPercentage}%
+                    </p>
+                    <div className="h-1.5 w-full max-w-[160px] overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all duration-300"
+                        style={{ width: `${overallPercentage}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -395,7 +425,12 @@ export function ReportEntry({
                 {visibleStages.length ? (
                   <div className="divide-y divide-border/70" ref={stageListRef}>
                     {visibleStages.map((stage, index) => {
-                      const hasReports = stage.reportsCount > 0
+                      const sStats = currentStats?.stageStats[stage.id]
+                      const reportsCount = sStats?.reportsCount ?? 0
+                      const checkedChecklistItems = sStats?.checkedChecklistItems ?? 0
+                      const totalChecklistItems = sStats?.totalChecklistItems ?? 0
+                      const progressPercentage = sStats?.progressPercentage ?? 0
+                      const hasReports = reportsCount > 0
 
                       return (
                         <div
@@ -412,15 +447,17 @@ export function ReportEntry({
                                 {stageDisplayName(stage.name)}
                               </p>
 
-                              {hasReports ? (
+                              {isStatsLoading ? (
+                                <div className="mt-1.5 h-2 w-20 animate-pulse rounded bg-muted/60" />
+                              ) : hasReports ? (
                                 <div className="mt-1 space-y-1">
                                   <p className="text-[11px] font-medium leading-none text-muted-foreground">
-                                    {stage.reportsCount} {stage.reportsCount === 1 ? "Report" : "Reports"} · {stage.checkedChecklistItems}/{stage.totalChecklistItems} · {stage.progressPercentage}%
+                                    {reportsCount} {reportsCount === 1 ? "Report" : "Reports"} · {checkedChecklistItems}/{totalChecklistItems} · {progressPercentage}%
                                   </p>
                                   <div className="h-1 w-full max-w-[130px] overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                                     <div
                                       className="h-full rounded-full bg-primary transition-all duration-300"
-                                      style={{ width: `${stage.progressPercentage}%` }}
+                                      style={{ width: `${progressPercentage}%` }}
                                     />
                                   </div>
                                 </div>
@@ -430,7 +467,7 @@ export function ReportEntry({
 
                           {/* Right Action buttons: Eye icon if reports exist + '+ Report' button */}
                           <div className="flex shrink-0 items-center gap-1.5">
-                            {hasReports ? (
+                            {!isStatsLoading && hasReports ? (
                               <Link
                                 href={`/projects/${selectedProject.id}/stages/${stage.id}`}
                                 aria-label={`View stage reports for ${stageDisplayName(stage.name)}`}

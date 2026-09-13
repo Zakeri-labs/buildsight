@@ -91,21 +91,6 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
         .order("sort_order", { ascending: true })
     }
 
-    let reportResult: { data: any[] | null; error: any } = await admin
-      .from("term_responses")
-      .select("id, project_id, project_stage_id, report_number, report_title, subject, visit_number, created_at, response_content")
-      .in("project_id", projectIds)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-
-    if (reportResult.error) {
-      reportResult = await admin
-        .from("term_responses")
-        .select("id, project_id, project_stage_id, report_title, visit_number, created_at, response_content")
-        .in("project_id", projectIds)
-        .order("created_at", { ascending: false })
-    }
-
     const [projectResult, imageResult, libraryStagesResult] = await Promise.all([
       admin
         .from("projects")
@@ -136,7 +121,6 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
     const allStageNameById = new Map<string, string>()
     const stagesByProject = new Map<string, ReportEntryStage[]>()
 
-    const stageRowById = new Map<string, any>()
     for (const row of stageResult.data ?? []) {
       const projectId = (row as any).project_id
       const stageId = (row as any).id
@@ -144,7 +128,6 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
       if (!isUuid(projectId) || !projectIdSet.has(projectId) || !isUuid(stageId) || !name) continue
 
       allStageNameById.set(stageId, name)
-      stageRowById.set(stageId, row)
       if ((row as any).status === "disabled") continue
 
       const items = stagesByProject.get(projectId) ?? []
@@ -194,71 +177,6 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
       stages.sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
     }
 
-    const latestReportByProject = new Map<string, ReportEntryLatestReport>()
-    const latestReportByStage = new Map<string, ReportEntryLatestReport>()
-    const reportsByStage = new Map<string, Array<{ id: string; content?: any }>>()
-
-    for (const row of reportResult.data ?? []) {
-      const projectId = (row as any).project_id
-      const stageId = (row as any).project_stage_id
-      const reportId = (row as any).id
-      const visitNumber = Number((row as any).visit_number)
-      const createdAt = typeof (row as any).created_at === "string" ? (row as any).created_at : ""
-      const reportTitle = typeof (row as any).report_title === "string" ? (row as any).report_title.trim() : ""
-      const reportNumber = typeof (row as any).report_number === "string" && (row as any).report_number.trim()
-        ? (row as any).report_number.trim()
-        : null
-      const subject = typeof (row as any).subject === "string" && (row as any).subject.trim()
-        ? (row as any).subject.trim()
-        : null
-      if (
-        !isUuid(projectId) ||
-        !projectIdSet.has(projectId) ||
-        !isUuid(stageId) ||
-        !isUuid(reportId) ||
-        !Number.isInteger(visitNumber) ||
-        visitNumber <= 0 ||
-        !createdAt ||
-        !reportTitle
-      ) continue
-
-      const report: ReportEntryLatestReport = {
-        id: reportId,
-        stageId,
-        stageName: allStageNameById.get(stageId) ?? "Stage",
-        reportNumber,
-        reportTitle,
-        subject,
-        visitNumber,
-        createdAt,
-      }
-
-      if (!latestReportByProject.has(projectId)) latestReportByProject.set(projectId, report)
-      if (!latestReportByStage.has(stageId)) latestReportByStage.set(stageId, report)
-
-      const stageReports = reportsByStage.get(stageId) ?? []
-      stageReports.push({ id: reportId, content: (row as any).response_content })
-      reportsByStage.set(stageId, stageReports)
-    }
-
-    for (const stages of stagesByProject.values()) {
-      for (const stage of stages) {
-        stage.latestReport = latestReportByStage.get(stage.id) ?? null
-        const stageReports = reportsByStage.get(stage.id) ?? []
-        const stageRow = stageRowById.get(stage.id)
-        const stats = calculateStageStats({
-          name: stage.name,
-          reports: stageReports,
-          isPreCompleted: Boolean(stageRow?.is_pre_completed),
-          status: stageRow?.status,
-        })
-        stage.reportsCount = stats.reportsCount
-        stage.checkedChecklistItems = stats.checkedChecklistItems
-        stage.totalChecklistItems = stats.totalChecklistItems
-        stage.progressPercentage = stats.progressPercentage
-      }
-    }
-
     const coverPathByProject = new Map<string, string>()
     for (const row of imageResult.data ?? []) {
       const projectId = (row as any).project_id
@@ -280,7 +198,7 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
           location: region ?? location,
           status: typeof row.status === "string" && row.status.trim() ? row.status.trim() : null,
           imageUrl: projectImageDisplayUrl(coverValue, row.id),
-          latestReport: latestReportByProject.get(row.id) ?? null,
+          latestReport: null,
           stages: stagesByProject.get(row.id) ?? [],
         }]
       })
@@ -288,6 +206,172 @@ export async function getReportEntryProjects(userId: string): Promise<ReportEntr
   } catch (err) {
     console.error("[report-entry] getReportEntryProjects error:", err)
     return []
+  }
+}
+
+export type ReportEntryStageStats = {
+  reportsCount: number
+  checkedChecklistItems: number
+  totalChecklistItems: number
+  progressPercentage: number
+}
+
+export type ReportEntryProjectStats = {
+  projectId: string
+  latestReport: ReportEntryLatestReport | null
+  totalProjectReports: number
+  completedProjectItems: number
+  totalProjectItems: number
+  overallPercentage: number
+  stageStats: Record<string, ReportEntryStageStats>
+}
+
+/**
+ * Lazy-loads progress, checklist statistics, and latest report metadata
+ * for a single selected project.
+ */
+export async function getReportEntryProjectStatsServer(
+  projectId: string,
+  userId: string,
+): Promise<ReportEntryProjectStats | null> {
+  if (!isUuid(projectId) || !isUuid(userId)) return null
+
+  try {
+    const [explicitScope, calendarScope] = await Promise.all([
+      resolveExplicitSupervisorProjectScope(userId),
+      resolveCalendarProjectScope(userId),
+    ])
+    const hasAccess = [...explicitScope, ...calendarScope].some((p) => p && p.id === projectId)
+    if (!hasAccess) return null
+
+    const admin = createAdminClient()
+
+    let stageResult: { data: any[] | null; error: any } = await admin
+      .from("project_stages")
+      .select("id, project_id, name, status, sort_order, is_pre_completed")
+      .eq("project_id", projectId)
+      .order("sort_order", { ascending: true })
+
+    if (stageResult.error) {
+      stageResult = await admin
+        .from("project_stages")
+        .select("id, project_id, name, status, sort_order")
+        .eq("project_id", projectId)
+        .order("sort_order", { ascending: true })
+    }
+
+    let reportResult: { data: any[] | null; error: any } = await admin
+      .from("term_responses")
+      .select("id, project_id, project_stage_id, report_number, report_title, subject, visit_number, created_at, response_content")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+
+    if (reportResult.error) {
+      reportResult = await admin
+        .from("term_responses")
+        .select("id, project_id, project_stage_id, report_title, visit_number, created_at, response_content")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false })
+    }
+
+    const stageNameById = new Map<string, string>()
+    for (const row of stageResult.data ?? []) {
+      const stageId = (row as any).id
+      const name = typeof (row as any).name === "string" ? (row as any).name.trim() : ""
+      if (isUuid(stageId) && name) {
+        stageNameById.set(stageId, name)
+      }
+    }
+
+    let latestProjectReport: ReportEntryLatestReport | null = null
+    const reportsByStage = new Map<string, Array<{ id: string; content?: any }>>()
+
+    for (const row of reportResult.data ?? []) {
+      const stageId = (row as any).project_stage_id
+      const reportId = (row as any).id
+      const visitNumber = Number((row as any).visit_number)
+      const createdAt = typeof (row as any).created_at === "string" ? (row as any).created_at : ""
+      const reportTitle = typeof (row as any).report_title === "string" ? (row as any).report_title.trim() : ""
+      const reportNumber = typeof (row as any).report_number === "string" && (row as any).report_number.trim()
+        ? (row as any).report_number.trim()
+        : null
+      const subject = typeof (row as any).subject === "string" && (row as any).subject.trim()
+        ? (row as any).subject.trim()
+        : null
+
+      if (
+        !isUuid(stageId) ||
+        !isUuid(reportId) ||
+        !Number.isInteger(visitNumber) ||
+        visitNumber <= 0 ||
+        !createdAt ||
+        !reportTitle
+      ) continue
+
+      if (!latestProjectReport) {
+        latestProjectReport = {
+          id: reportId,
+          stageId,
+          stageName: stageNameById.get(stageId) ?? "Stage",
+          reportNumber,
+          reportTitle,
+          subject,
+          visitNumber,
+          createdAt,
+        }
+      }
+
+      const stageReports = reportsByStage.get(stageId) ?? []
+      stageReports.push({ id: reportId, content: (row as any).response_content })
+      reportsByStage.set(stageId, stageReports)
+    }
+
+    const stageStats: Record<string, ReportEntryStageStats> = {}
+    let totalProjectReports = 0
+    let completedProjectItems = 0
+    let totalProjectItems = 0
+
+    for (const stageRow of stageResult.data ?? []) {
+      const stageId = (stageRow as any).id
+      if (!isUuid(stageId)) continue
+
+      const stageReports = reportsByStage.get(stageId) ?? []
+      const stats = calculateStageStats({
+        name: (stageRow as any).name ?? "",
+        reports: stageReports,
+        isPreCompleted: Boolean((stageRow as any).is_pre_completed),
+        status: (stageRow as any).status,
+      })
+
+      stageStats[stageId] = {
+        reportsCount: stats.reportsCount,
+        checkedChecklistItems: stats.checkedChecklistItems,
+        totalChecklistItems: stats.totalChecklistItems,
+        progressPercentage: stats.progressPercentage,
+      }
+
+      totalProjectReports += stats.reportsCount
+      completedProjectItems += stats.checkedChecklistItems
+      totalProjectItems += stats.totalChecklistItems
+    }
+
+    const overallPercentage = totalProjectItems > 0
+      ? Math.round((completedProjectItems / totalProjectItems) * 100)
+      : 0
+
+    return {
+      projectId,
+      latestReport: latestProjectReport,
+      totalProjectReports,
+      completedProjectItems,
+      totalProjectItems,
+      overallPercentage,
+      stageStats,
+    }
+  } catch (err) {
+    console.error("[report-entry] getReportEntryProjectStatsServer error:", err)
+    return null
   }
 }
 

@@ -76,10 +76,7 @@ export function StageTranslationActions({
 
   const isDirectStage = !termId || termId === stageId
 
-  const stale = Boolean(
-    translation.isStale ??
-      (translation.generatedAt && responseUpdatedAt && new Date(responseUpdatedAt).getTime() > new Date(translation.generatedAt).getTime()),
-  )
+  const stale = Boolean(translation.isStale)
 
   const allGeneratedPdfsReady = Boolean(
     translation?.originalPdfPath && translation?.bilingualPdfPath,

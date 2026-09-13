@@ -218,12 +218,7 @@ export function StageTranslationViewer({
   const original = data.response.content
   const sourcePdf = getSourcePdfAttachment(data)
   const isDirectStage = !data.term?.id || data.term.id === data.stage.id
-  const translationIsStale = Boolean(
-    translation?.isStale ?? (
-      translation?.generatedAt &&
-      new Date(data.response.updatedAt).getTime() > new Date(translation.generatedAt).getTime()
-    ),
-  )
+  const translationIsStale = Boolean(translation?.isStale)
 
   const allGeneratedPdfsReady = Boolean(
     translation?.originalPdfPath && translation?.bilingualPdfPath,

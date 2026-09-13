@@ -1,6 +1,6 @@
 import { SiteVisitsPage } from "@/components/site-visits/site-visits-page"
 import { requireOnboarded } from "@/lib/auth/session"
-import { resolveDashboardDateRange } from "@/lib/dashboard/date-range"
+import { resolveSiteVisitDateRange } from "@/lib/site-visits/date-range"
 import { getSelectedProjectId } from "@/lib/project-scope"
 import { getSiteVisitPageData } from "@/lib/site-visits/server"
 
@@ -19,7 +19,7 @@ export default async function SiteVisitsRoute({
   const session = await requireOnboarded()
   const [params, storedProjectId] = await Promise.all([searchParams, getSelectedProjectId()])
   const requestedProjectId = params.project?.trim() || storedProjectId
-  const dateRange = resolveDashboardDateRange(params)
+  const dateRange = resolveSiteVisitDateRange(params)
   const memberSupervisorOnly = session.memberships[0]?.role === "org_member"
   const data = await getSiteVisitPageData({
     userId: session.userId,

@@ -56,6 +56,7 @@ import {
 import {
   attachProjectGalleryImages,
   attachProjectOwnerIdCards,
+  fetchProjectSupervisorCandidatesAction,
   getProjectStagesForEditAction,
   updateProject,
   type OwnerIdCardUploadInput,
@@ -290,6 +291,8 @@ export function ProjectEditDialog({
 
   const [contractorOrganizations, setContractorOrganizations] = useState<ContractorOrganization[]>([])
   const [users, setUsers] = useState<UserOption[]>([])
+  const [loadedSupervisorOptions, setLoadedSupervisorOptions] = useState<ProjectSupervisorCandidate[]>([])
+  const [loadingSupervisors, setLoadingSupervisors] = useState(false)
 
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -392,6 +395,19 @@ export function ProjectEditDialog({
           }
           if (currentProjectRow.contractor_phone && !contractorPhone) {
             setContractorPhone(currentProjectRow.contractor_phone)
+          }
+          if (currentProjectRow.supervising_organization_id && supervisorOptions.length === 0) {
+            setLoadingSupervisors(true)
+            fetchProjectSupervisorCandidatesAction(currentProjectRow.supervising_organization_id)
+              .then((res) => {
+                if (res.ok && active) {
+                  setLoadedSupervisorOptions(res.data)
+                }
+              })
+              .catch((err) => console.error("Failed to load supervisor candidates:", err))
+              .finally(() => {
+                if (active) setLoadingSupervisors(false)
+              })
           }
         }
 
@@ -496,9 +512,10 @@ export function ProjectEditDialog({
     }
   }, [project.id])
 
+  const effectiveSupervisorOptions = supervisorOptions.length > 0 ? supervisorOptions : loadedSupervisorOptions
   const supervisorsList: UserOption[] = useMemo(() => {
-    if (supervisorOptions.length > 0) {
-      return supervisorOptions.map((s) => ({
+    if (effectiveSupervisorOptions.length > 0) {
+      return effectiveSupervisorOptions.map((s) => ({
         id: s.id,
         name: s.name,
         email: s.email,
@@ -506,7 +523,7 @@ export function ProjectEditDialog({
       }))
     }
     return users
-  }, [supervisorOptions, users])
+  }, [effectiveSupervisorOptions, users])
 
   const activeContractorOrganizations = useMemo(
     () => contractorOrganizations.filter((o) => o.status === "active"),
@@ -1516,11 +1533,12 @@ export function ProjectEditDialog({
                   <Select
                     value={assignedSupervisorId || null}
                     onValueChange={(val) => setAssignedSupervisorId(val == null ? "" : String(val))}
-                    disabled={pending}
+                    disabled={pending || loadingSupervisors}
                   >
                     <SelectTrigger className="h-10 w-full">
                       <SelectValue placeholder={copy.assignSupervisorPlaceholder}>
                         {(value) => {
+                          if (loadingSupervisors) return isArabic ? "جارٍ تحميل المشرفين..." : "Loading supervisors..."
                           if (!value) return copy.assignSupervisorPlaceholder
                           const user = supervisorsList.find((item) => item.id === String(value))
                           return user ? userOptionLabel(user) : (isArabic ? "مشرف محدد" : "Selected supervisor")

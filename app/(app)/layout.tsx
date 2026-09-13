@@ -29,7 +29,7 @@ export default async function AppGroupLayout({
   const orgId = session.supervisingOrg?.id ?? primary?.organization?.id ?? null
 
   const [projects, selectedProjectId, stageManagementOrganization, siteVisitAccess, announcement] = await Promise.all([
-    orgId ? getOrgProjects(orgId, session.userId) : Promise.resolve([]),
+    orgId ? getOrgProjects(orgId, session.userId, { skipProgress: true }) : Promise.resolve([]),
     getSelectedProjectId(),
     resolveStageManagementOrganization(session.userId, session.supervisingOrg?.id),
     getSiteVisitProjectAccess(session.userId),

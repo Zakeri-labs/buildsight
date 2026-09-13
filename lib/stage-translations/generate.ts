@@ -462,35 +462,24 @@ export async function prepareStageTranslationGeneration(input: {
   const status = existing.translation_status === "completed" || existing.translation_status === "failed" ? existing.translation_status : "pending"
   const generatedAt = validDateMs(existing.generated_at)
   const existingOriginal = parseTranslationContent(existing.original_content)
-  const isStale = existingOriginal ? isReportContentStale(original, existingOriginal) : (generatedAt ? responseUpdatedAt > generatedAt : false)
+  const isStale = existingOriginal ? isReportContentStale(original, existingOriginal) : false
   const isTextStale = existingOriginal ? isReportTextStale(original, existingOriginal) : isStale
   const translationFresh = Boolean(existing.translated_content && generatedAt && !isTextStale)
 
   if (status === "completed" && translationFresh) {
-    // Clear PDF paths so the worker generates fresh PDFs for the CURRENT submission,
-    // and update original_content so the translation document retains current attachment metadata.
-    //
-    // Without this, an existing bilingual_pdf_url (from a previous submit) satisfies
-    // the worker's allPdfPaths() early-exit, causing the worker to exit immediately
-    // and the frontend to accept the OLD PDF as proof that the current generation
-    // succeeded — silently omitting any attachments added/removed since the last PDF was built.
-    //
-    // The translation text (translated_content, generated_at, translation_status) is
-    // fully preserved; shouldRun=false means no new OpenAI call is triggered.
-    // The eq("translation_status", "completed") guard makes this safe under concurrency:
-    // if another caller has already changed the row, the update affects 0 rows and
-    // each caller's worker independently handles PDF generation.
-    await admin
-      .from("translation_documents")
-      .update({
-        original_content: original,
-        original_pdf_url: null,
-        arabic_pdf_url: null,
-        bilingual_pdf_url: null,
-        updated_at: now,
-      })
-      .eq("id", existing.id)
-      .eq("translation_status", "completed")
+    if (isStale || input.retry) {
+      await admin
+        .from("translation_documents")
+        .update({
+          original_content: original,
+          original_pdf_url: null,
+          arabic_pdf_url: null,
+          bilingual_pdf_url: null,
+          updated_at: now,
+        })
+        .eq("id", existing.id)
+        .eq("translation_status", "completed")
+    }
 
     return {
       translationId: existing.id,

@@ -1,3 +1,5 @@
+import { addCalendarDays } from "@/lib/calendar/date"
+import { applicationDateStartUtc } from "@/lib/dashboard/date-range"
 import { normalizeProjectStatus } from "@/lib/projects/project-status"
 import type {
   OrganizationPerformanceSummary,
@@ -39,12 +41,33 @@ export function getEffectiveVisitDate(report: RawReportRecord): string | null {
   return null
 }
 
-export function isValidCompletedReport(report: RawReportRecord): boolean {
+export function getReportActivityTimestamp(report: RawReportRecord): string | null {
   const submittedAt = report.submitted_at ?? report.submittedAt
-  if (!submittedAt) return false
+  if (submittedAt && typeof submittedAt === "string" && submittedAt.trim().length > 0) {
+    return submittedAt.trim()
+  }
+  const createdAt = report.created_at ?? report.createdAt
+  if (createdAt && typeof createdAt === "string" && createdAt.trim().length > 0) {
+    return createdAt.trim()
+  }
+  return null
+}
 
+export function isReportInActivityRange(
+  report: RawReportRecord,
+  startUtc: string,
+  endExclusiveUtc: string,
+): boolean {
+  const ts = getReportActivityTimestamp(report)
+  if (!ts) return false
+  return ts >= startUtc && ts < endExclusiveUtc
+}
+
+export function isValidCompletedReport(report: RawReportRecord): boolean {
   const status = (report.status ?? "").trim().toLowerCase()
-  if (!status || status === "draft" || status === "in_progress") return false
+  if (!status || status === "draft" || status === "in_progress" || status === "deleted" || status === "cancelled") {
+    return false
+  }
 
   return ["submitted", "under_review", "approved", "rejected", "completed"].includes(status)
 }
@@ -162,29 +185,36 @@ export function isSupervisorParticipant(participant: RawParticipantRecord): bool
 export function calculateProjectMetrics(
   project: RawProjectRecord,
   reportsForProject: RawReportRecord[],
-  period: { startDate: string; endDate: string } | string,
   supervisorIds: string[],
 ): ProjectComplianceMetrics {
   const rawSupervisionType = project.supervision_type ?? project.supervisionType ?? null
   const normalizedType = normalizeComplianceSupervisionType(rawSupervisionType)
-  const isComplianceEligible = normalizedType !== null
-  const required = normalizedType ? REQUIRED_VISITS_BY_SUPERVISION_TYPE[normalizedType] : 0
+  const normalizedStatus = normalizeProjectStatus(project.status)
+  const isActive = normalizedStatus === "active"
+  const isComplianceEligible = isActive && normalizedType !== null
+  const required = isComplianceEligible && normalizedType ? REQUIRED_VISITS_BY_SUPERVISION_TYPE[normalizedType] : 0
 
   const assignedSupervisorId = project.assigned_supervisor_id ?? project.assignedSupervisorId ?? null
 
-  const isRange = typeof period === "object"
-  const validReports = reportsForProject.filter((report) => {
-    if (!isValidCompletedReport(report)) return false
-    if (isRange) {
-      return isReportInDateRange(report, period.startDate, period.endDate)
-    }
-    return isReportInMonth(report, period)
-  })
+  const totalSubmittedReports = reportsForProject.length
 
-  const completed = validReports.length
-  const creditedCompleted = isComplianceEligible ? Math.min(completed, required) : 0
-  const missed = isComplianceEligible ? Math.max(required - completed, 0) : 0
-  const extra = isComplianceEligible ? Math.max(completed - required, 0) : 0
+  let completedReports = 0
+  let extraReports = 0
+  let creditedCompleted = 0
+  let missed = 0
+
+  if (isComplianceEligible && required > 0) {
+    completedReports = Math.min(totalSubmittedReports, required)
+    extraReports = Math.max(totalSubmittedReports - required, 0)
+    creditedCompleted = completedReports
+    missed = Math.max(required - totalSubmittedReports, 0)
+  } else {
+    completedReports = totalSubmittedReports
+    extraReports = 0
+    creditedCompleted = 0
+    missed = 0
+  }
+
   const compliancePercentage =
     isComplianceEligible && required > 0
       ? Math.round((creditedCompleted / required) * 1000) / 10
@@ -200,10 +230,13 @@ export function calculateProjectMetrics(
     normalizedSupervisionType: normalizedType,
     isComplianceEligible,
     required,
-    completed,
+    completed: completedReports,
     creditedCompleted,
     missed,
-    extra,
+    extra: extraReports,
+    totalSubmittedReports,
+    completedReports,
+    extraReports,
     compliancePercentage,
   }
 }
@@ -262,6 +295,9 @@ export function calculateSupervisorPerformance(input: {
     displayMonth = normalizedMonth
   }
 
+  const startUtc = applicationDateStartUtc(startDate)
+  const endExclusiveUtc = applicationDateStartUtc(addCalendarDays(endDate, 1))
+
   // Filter Active Projects using canonical active status logic
   const activeProjects = projects.filter(
     (p) => normalizeProjectStatus(p.status) === "active",
@@ -281,13 +317,14 @@ export function calculateSupervisorPerformance(input: {
     }
   }
 
-  // Filter valid completed reports in target period across all projects
+  // Filter valid completed reports in target period matching /reports definition
   const validReports = reports.filter(
     (report) =>
-      isValidCompletedReport(report) && isReportInDateRange(report, startDate, endDate),
+      isValidCompletedReport(report) &&
+      isReportInActivityRange(report, startUtc, endExclusiveUtc),
   )
 
-  // Group reports by project_id for project-level compliance calculation
+  // Group reports by project_id
   const reportsByProjectId = new Map<string, RawReportRecord[]>()
   for (const report of validReports) {
     const projId = report.project_id ?? report.projectId
@@ -297,12 +334,54 @@ export function calculateSupervisorPerformance(input: {
     reportsByProjectId.set(projId, list)
   }
 
-  // Count actual completed visit activity by creator (created_by)
-  const reportsByCreator = new Map<string, number>()
+  // Tag every individual report as extra (true) or completed (false)
+  const reportIsExtraMap = new Map<string, boolean>()
+  for (const project of projects) {
+    const projReports = reportsByProjectId.get(project.id) ?? []
+    if (projReports.length === 0) continue
+
+    projReports.sort((a, b) => {
+      const tsA = getReportActivityTimestamp(a) ?? ""
+      const tsB = getReportActivityTimestamp(b) ?? ""
+      return tsA.localeCompare(tsB) || (a.id || "").localeCompare(b.id || "")
+    })
+
+    const normStatus = normalizeProjectStatus(project.status)
+    const isActive = normStatus === "active"
+    const rawSupervisionType = project.supervision_type ?? project.supervisionType ?? null
+    const normalizedType = normalizeComplianceSupervisionType(rawSupervisionType)
+    const isComplianceEligible = isActive && normalizedType !== null
+    const quota = isComplianceEligible && normalizedType ? REQUIRED_VISITS_BY_SUPERVISION_TYPE[normalizedType] : 0
+
+    for (let i = 0; i < projReports.length; i++) {
+      const rep = projReports[i]
+      if (isComplianceEligible && quota > 0) {
+        if (i < quota) {
+          reportIsExtraMap.set(rep.id, false)
+        } else {
+          reportIsExtraMap.set(rep.id, true)
+        }
+      } else {
+        reportIsExtraMap.set(rep.id, false)
+      }
+    }
+  }
+
+  // Safety fallback for any report whose project is not in projects list
+  for (const rep of validReports) {
+    if (!reportIsExtraMap.has(rep.id)) {
+      reportIsExtraMap.set(rep.id, false)
+    }
+  }
+
+  // Group valid reports by creator (created_by)
+  const reportsByCreator = new Map<string, RawReportRecord[]>()
   for (const report of validReports) {
     const creatorId = report.created_by ?? report.createdBy ?? null
     if (creatorId) {
-      reportsByCreator.set(creatorId, (reportsByCreator.get(creatorId) ?? 0) + 1)
+      const list = reportsByCreator.get(creatorId) ?? []
+      list.push(report)
+      reportsByCreator.set(creatorId, list)
     }
   }
 
@@ -320,7 +399,7 @@ export function calculateSupervisorPerformance(input: {
     }
 
     const supervisorIds = Array.from(supervisorSet)
-    return calculateProjectMetrics(project, projReports, { startDate, endDate }, supervisorIds)
+    return calculateProjectMetrics(project, projReports, supervisorIds)
   })
 
   // Group project rows by supervisor ID (supporting multi-supervisor workload attribution)
@@ -363,9 +442,13 @@ export function calculateSupervisorPerformance(input: {
       const compProjects = projRows.filter((p) => p.isComplianceEligible)
       const complianceProjectsCount = compProjects.length
 
-      // Actual Completed Visits Activity: Attributed directly to created_by
-      const completedVisits = reportsByCreator.get(supervisorId) ?? 0
+      // Author reports breakdown
+      const authorReports = reportsByCreator.get(supervisorId) ?? []
+      const totalSubmittedReports = authorReports.length
+      const completedReports = authorReports.filter((r) => reportIsExtraMap.get(r.id) === false).length
+      const extraReports = authorReports.filter((r) => reportIsExtraMap.get(r.id) === true).length
 
+      // Contractual compliance metrics for assigned projects
       const requiredVisits = compProjects.reduce((acc, p) => acc + p.required, 0)
       const creditedCompletedVisits = compProjects.reduce(
         (acc, p) => acc + p.creditedCompleted,
@@ -381,11 +464,14 @@ export function calculateSupervisorPerformance(input: {
         supervisorAvatarUrl,
         activeProjectsCount,
         complianceProjectsCount,
-        completedVisits,
+        completedVisits: totalSubmittedReports,
         requiredVisits,
         creditedCompletedVisits,
         missedVisits,
         extraVisits,
+        totalSubmittedReports,
+        completedReports,
+        extraReports,
         projects: projRows,
       }
     },
@@ -399,22 +485,31 @@ export function calculateSupervisorPerformance(input: {
 
   const totalActiveProjects = allProjectRows.length
   const activeSupervisorsCount = supervisors.filter(
-    (s) => s.activeProjectsCount > 0 || s.completedVisits > 0,
+    (s) => s.activeProjectsCount > 0 || s.totalSubmittedReports > 0,
   ).length
   const complianceEligibleProjectsCount = complianceEligibleRows.length
 
   const orgRequiredVisits = complianceEligibleRows.reduce((acc, p) => acc + p.required, 0)
-  const orgCompletedVisits = validReports.length
   const orgCreditedCompletedVisits = complianceEligibleRows.reduce(
     (acc, p) => acc + p.creditedCompleted,
     0,
   )
   const orgMissedVisits = complianceEligibleRows.reduce((acc, p) => acc + p.missed, 0)
-  const orgExtraVisits = complianceEligibleRows.reduce((acc, p) => acc + p.extra, 0)
   const orgVisitCompliancePercentage =
     orgRequiredVisits > 0
       ? Math.round((orgCreditedCompletedVisits / orgRequiredVisits) * 1000) / 10
       : null
+
+  const orgTotalSubmittedReports = validReports.length
+  let orgCompletedReports = 0
+  let orgExtraReports = 0
+  for (const r of validReports) {
+    if (reportIsExtraMap.get(r.id) === true) {
+      orgExtraReports += 1
+    } else {
+      orgCompletedReports += 1
+    }
+  }
 
   const unassignedActiveProjectsCount = unassignedProjects.length
   const unassignedComplianceProjectsCount = unassignedProjects.filter(
@@ -426,10 +521,13 @@ export function calculateSupervisorPerformance(input: {
     activeSupervisorsCount,
     complianceEligibleProjectsCount,
     requiredVisits: orgRequiredVisits,
-    completedVisits: orgCompletedVisits,
+    completedVisits: orgTotalSubmittedReports,
     creditedCompletedVisits: orgCreditedCompletedVisits,
     missedVisits: orgMissedVisits,
-    extraVisits: orgExtraVisits,
+    extraVisits: orgExtraReports,
+    totalSubmittedReports: orgTotalSubmittedReports,
+    completedReports: orgCompletedReports,
+    extraReports: orgExtraReports,
     visitCompliancePercentage: orgVisitCompliancePercentage,
     unassignedActiveProjectsCount,
     unassignedComplianceProjectsCount,

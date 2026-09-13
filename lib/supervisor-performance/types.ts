@@ -14,6 +14,9 @@ export type ProjectComplianceMetrics = {
   creditedCompleted: number
   missed: number
   extra: number
+  totalSubmittedReports: number
+  completedReports: number
+  extraReports: number
   compliancePercentage: number | null
 }
 
@@ -29,6 +32,9 @@ export type SupervisorPerformanceMetrics = {
   creditedCompletedVisits: number
   missedVisits: number
   extraVisits: number
+  totalSubmittedReports: number
+  completedReports: number
+  extraReports: number
   projects: ProjectComplianceMetrics[]
 }
 
@@ -41,6 +47,9 @@ export type OrganizationPerformanceSummary = {
   creditedCompletedVisits: number
   missedVisits: number
   extraVisits: number
+  totalSubmittedReports: number
+  completedReports: number
+  extraReports: number
   visitCompliancePercentage: number | null
   unassignedActiveProjectsCount: number
   unassignedComplianceProjectsCount: number

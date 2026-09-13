@@ -696,12 +696,7 @@ export function InspectionReportForm({
 
   useEffect(() => {
     const isPreparationMessage = success === COPY.en.submitted || success === COPY.ar.submitted
-    if (!isPreparationMessage) return
-
-    const stale = Boolean(
-      translation?.isStale ??
-        (translation?.generatedAt && response?.updatedAt && new Date(response.updatedAt).getTime() > new Date(translation.generatedAt).getTime()),
-    )
+    const stale = Boolean(translation?.isStale)
     const allGeneratedPdfsReady = Boolean(
       translation?.originalPdfPath && translation?.bilingualPdfPath,
     )

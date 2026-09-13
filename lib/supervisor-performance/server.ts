@@ -17,6 +17,9 @@ import type {
   SupervisorVisitComplianceDashboardData,
 } from "./types"
 
+import { addCalendarDays } from "@/lib/calendar/date"
+import { applicationDateStartUtc } from "@/lib/dashboard/date-range"
+
 export type LoadSupervisorPerformancePeriodOptions = {
   month?: string
   startDate?: string
@@ -62,10 +65,10 @@ export async function loadSupervisorPerformanceData(
     periodInput = { month: normalizedMonth, startDate: queryStart, endDate: queryEnd }
   }
 
-  const queryStartISO = `${queryStart}T00:00:00.000Z`
-  const queryEndISO = `${queryEnd}T23:59:59.999Z`
+  const startUtc = applicationDateStartUtc(queryStart)
+  const endExclusiveUtc = applicationDateStartUtc(addCalendarDays(queryEnd, 1))
 
-  // Query 1: Fetch active projects for supervising organization
+  // Query 1: Fetch projects for supervising organization
   const { data: projectsData, error: projectsErr } = await admin
     .from("projects")
     .select(
@@ -76,9 +79,9 @@ export async function loadSupervisorPerformanceData(
   if (projectsErr) throw projectsErr
 
   const projects: RawProjectRecord[] = projectsData ?? []
-  const activeProjectIds = projects.filter((p) => p.id).map((p) => p.id)
+  const allProjectIds = projects.filter((p) => p.id).map((p) => p.id)
 
-  if (!activeProjectIds.length) {
+  if (!allProjectIds.length) {
     return calculateSupervisorPerformance({
       ...periodInput,
       projects: [],
@@ -88,43 +91,35 @@ export async function loadSupervisorPerformanceData(
     })
   }
 
-  // Bounded Query 2 & Reports Queries 3 & 4 via Promise.all
-  const [participantsRes, queryA, queryB] = await Promise.all([
+  const validStatuses = ["submitted", "under_review", "approved", "rejected", "completed"]
+  const dateOrClause = `and(submitted_at.gte.${startUtc},submitted_at.lt.${endExclusiveUtc}),and(submitted_at.is.null,created_at.gte.${startUtc},created_at.lt.${endExclusiveUtc})`
+
+  // Parallel fetch: Participants + Reports matching /reports filter definition
+  const [participantsRes, reportsRes] = await Promise.all([
     admin
       .from("project_participants")
       .select(
         "id, project_id, key_contact_user_id, status, participant_type, project_role, participant_role_label",
       )
-      .in("project_id", activeProjectIds)
+      .in("project_id", allProjectIds)
       .eq("status", "active")
       .not("key_contact_user_id", "is", null),
     admin
       .from("term_responses")
-      .select("id, project_id, status, submitted_at, visit_date, created_at, created_by")
-      .in("project_id", activeProjectIds)
-      .gte("visit_date", queryStart)
-      .lte("visit_date", queryEnd),
-    admin
-      .from("term_responses")
-      .select("id, project_id, status, submitted_at, visit_date, created_at, created_by")
-      .in("project_id", activeProjectIds)
-      .is("visit_date", null)
-      .gte("created_at", queryStartISO)
-      .lte("created_at", queryEndISO),
+      .select(
+        "id, project_id, status, submitted_at, visit_date, created_at, created_by, report_number, report_title, visit_number",
+      )
+      .in("project_id", allProjectIds)
+      .is("project_stage_term_id", null)
+      .in("status", validStatuses)
+      .or(dateOrClause),
   ])
 
   if (participantsRes.error) throw participantsRes.error
-  if (queryA.error) throw queryA.error
-  if (queryB.error) throw queryB.error
+  if (reportsRes.error) throw reportsRes.error
 
   const participants: RawParticipantRecord[] = participantsRes.data ?? []
-
-  // Deduplicate reports by ID
-  const reportMap = new Map<string, RawReportRecord>()
-  for (const r of [...(queryA.data ?? []), ...(queryB.data ?? [])]) {
-    if (r.id) reportMap.set(r.id, r)
-  }
-  const reports = Array.from(reportMap.values())
+  const reports: RawReportRecord[] = reportsRes.data ?? []
 
   // Collect unique profile IDs for primary supervisors, additional participants, and report creators
   const profileIdsSet = new Set<string>()
@@ -139,7 +134,7 @@ export async function loadSupervisorPerformanceData(
   }
   const profileIds = Array.from(profileIdsSet)
 
-  // Query 5 (Batched Profiles Query): Fetch profiles
+  // Query 3 (Batched Profiles Query): Fetch profiles
   const { data: profilesData, error: profilesErr } = profileIds.length
     ? await admin
         .from("profiles")
