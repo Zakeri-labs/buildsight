@@ -277,11 +277,12 @@ export function ReportsList({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <PageHeader
-          title={t.reports.title}
-          subtitle={t.reports.subtitle}
-        />
+      <PageHeader
+        title={t.reports.title}
+        subtitle={t.reports.subtitle}
+      />
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Date Range Filter Dropdown */}
           <DropdownMenu>
@@ -383,8 +384,10 @@ export function ReportsList({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+        </div>
 
-          {/* Save as Excel Button */}
+        {/* Save as Excel Button (Aligned to right) */}
+        <div className="flex items-center gap-2.5">
           <Button
             type="button"
             variant="outline"
