@@ -3,6 +3,8 @@ import type {
   AttachmentTranslation,
   TranslationApprovalItem,
   TranslationChecklistItem,
+  TranslationRecipientItem,
+  TranslationRecipients,
   TranslationReportContent,
   TranslationSectionKey,
 } from "@/lib/stage-translations/types"
@@ -30,6 +32,108 @@ export function reportTypeLabel(value: string, language: "en" | "ar" = "en") {
   return language === "ar" ? definition.labelAr : definition.label
 }
 
+export function normalizeRecipientItem(item: unknown): TranslationRecipientItem | null {
+  if (!item || typeof item !== "object") return null
+  const row = item as Record<string, unknown>
+  const name = stringValue(row.name, 500).trim()
+  const email = stringValue(row.email, 500).trim()
+  const company = stringValue(row.company, 500).trim()
+  const role = stringValue(row.role, 500).trim()
+  const id = stringValue(row.id, 100).trim()
+  const type = stringValue(row.type, 50).trim()
+
+  if (!name && !email && !company && !id) return null
+
+  return {
+    ...(id ? { id } : {}),
+    ...(type ? { type } : {}),
+    name: name || email || "Recipient",
+    ...(email ? { email } : {}),
+    ...(company ? { company } : {}),
+    ...(role ? { role } : {}),
+  }
+}
+
+export function sortRecipients(items: TranslationRecipientItem[]): TranslationRecipientItem[] {
+  return [...items].sort((a, b) => {
+    const keyA = `${a.id || ""}|${a.name || ""}|${a.email || ""}|${a.company || ""}|${a.role || ""}`.toLowerCase()
+    const keyB = `${b.id || ""}|${b.name || ""}|${b.email || ""}|${b.company || ""}|${b.role || ""}`.toLowerCase()
+    return keyA.localeCompare(keyB)
+  })
+}
+
+export function parseRecipients(value: unknown): TranslationRecipients | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const row = value as Record<string, unknown>
+  const reportToRaw = Array.isArray(row.reportTo) ? row.reportTo : []
+  const ccToRaw = Array.isArray(row.ccTo) ? row.ccTo : []
+
+  const reportTo = sortRecipients(
+    reportToRaw
+      .map(normalizeRecipientItem)
+      .filter((item): item is TranslationRecipientItem => item !== null)
+  )
+  const ccTo = sortRecipients(
+    ccToRaw
+      .map(normalizeRecipientItem)
+      .filter((item): item is TranslationRecipientItem => item !== null)
+  )
+
+  if (!reportTo.length && !ccTo.length) return undefined
+  return { reportTo, ccTo }
+}
+
+export type BuildTranslationRecipientsInput =
+  | TranslationRecipients
+  | Array<{
+      id?: string
+      type?: string
+      recipient_type?: string
+      name?: string | null
+      external_name?: string | null
+      email?: string | null
+      external_email?: string | null
+      company?: string | null
+      external_company?: string | null
+      role?: string | null
+      external_role?: string | null
+      group?: "reportTo" | "ccTo" | string | null
+      recipient_group?: "reportTo" | "ccTo" | string | null
+    }>
+
+function formatRecipientsInput(input?: BuildTranslationRecipientsInput | null): TranslationRecipients | undefined {
+  if (!input) return undefined
+  if (typeof input === "object" && !Array.isArray(input)) {
+    return parseRecipients(input)
+  }
+  if (Array.isArray(input)) {
+    const reportToItems: TranslationRecipientItem[] = []
+    const ccToItems: TranslationRecipientItem[] = []
+    for (const r of input) {
+      const group = (r.group || r.recipient_group || "") as string
+      const item = normalizeRecipientItem({
+        id: r.id,
+        type: r.type || r.recipient_type,
+        name: r.name || r.external_name || "",
+        email: r.email || r.external_email || "",
+        company: r.company || r.external_company || "",
+        role: r.role || r.external_role || "",
+      })
+      if (!item) continue
+      if (group === "reportTo") {
+        reportToItems.push(item)
+      } else if (group === "ccTo") {
+        ccToItems.push(item)
+      }
+    }
+    const reportTo = sortRecipients(reportToItems)
+    const ccTo = sortRecipients(ccToItems)
+    if (!reportTo.length && !ccTo.length) return undefined
+    return { reportTo, ccTo }
+  }
+  return undefined
+}
+
 export function buildOriginalTranslationContent(input: {
   stageName: string
   termName: string
@@ -39,6 +143,7 @@ export function buildOriginalTranslationContent(input: {
   responseContent: TermResponseContent
   approvals: Array<{ id: string; reviewerName: string; decision: string; comments: string | null; decidedAt: string }>
   attachments?: Array<{ id: string; storagePath: string; originalFilename: string; sortOrder?: number; attachmentKind?: string }>
+  recipients?: BuildTranslationRecipientsInput | null
 }): TranslationReportContent {
   return {
     stageName: input.stageName,
@@ -76,6 +181,7 @@ export function buildOriginalTranslationContent(input: {
       sortOrder: item.sortOrder,
       attachmentKind: item.attachmentKind,
     })),
+    recipients: formatRecipientsInput(input.recipients),
   }
 }
 
@@ -156,6 +262,7 @@ export function parseTranslationContent(value: unknown): TranslationReportConten
     approvals: parseApprovals(row.approvals),
     attachmentTranslations: parseAttachmentTranslations(row.attachmentTranslations),
     attachments: parseAttachments(row.attachments),
+    recipients: parseRecipients(row.recipients),
   }
 }
 
@@ -201,6 +308,29 @@ export function isReportTextStale(
   return false
 }
 
+function areRecipientItemsEqual(a: TranslationRecipientItem, b: TranslationRecipientItem): boolean {
+  if ((a.id || "") !== (b.id || "")) return false
+  if ((a.type || "") !== (b.type || "")) return false
+  if ((a.name || "").trim() !== (b.name || "").trim()) return false
+  if ((a.email || "").trim().toLowerCase() !== (b.email || "").trim().toLowerCase()) return false
+  if ((a.company || "").trim() !== (b.company || "").trim()) return false
+  if ((a.role || "").trim() !== (b.role || "").trim()) return false
+  return true
+}
+
+function areRecipientArraysEqual(
+  curr: TranslationRecipientItem[] | undefined | null,
+  orig: TranslationRecipientItem[] | undefined | null,
+): boolean {
+  const listA = sortRecipients(curr || [])
+  const listB = sortRecipients(orig || [])
+  if (listA.length !== listB.length) return false
+  for (let i = 0; i < listA.length; i++) {
+    if (!areRecipientItemsEqual(listA[i], listB[i])) return false
+  }
+  return true
+}
+
 export function isReportContentStale(
   current: TranslationReportContent | null | undefined,
   translatedOriginal: TranslationReportContent | null | undefined,
@@ -220,6 +350,14 @@ export function isReportContentStale(
     if (c.sortOrder !== o.sortOrder) return true
     if ((c.attachmentKind || "") !== (o.attachmentKind || "")) return true
   }
+
+  const currReportTo = current.recipients?.reportTo || []
+  const origReportTo = translatedOriginal.recipients?.reportTo || []
+  if (!areRecipientArraysEqual(currReportTo, origReportTo)) return true
+
+  const currCcTo = current.recipients?.ccTo || []
+  const origCcTo = translatedOriginal.recipients?.ccTo || []
+  if (!areRecipientArraysEqual(currCcTo, origCcTo)) return true
 
   return false
 }

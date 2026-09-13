@@ -41,6 +41,20 @@ export type AttachmentTranslation = {
   contentHtml: string
 }
 
+export type TranslationRecipientItem = {
+  id?: string
+  type?: string
+  name: string
+  email?: string
+  company?: string
+  role?: string
+}
+
+export type TranslationRecipients = {
+  reportTo: TranslationRecipientItem[]
+  ccTo: TranslationRecipientItem[]
+}
+
 export type TranslationReportContent = {
   stageName: string
   termName: string
@@ -52,6 +66,7 @@ export type TranslationReportContent = {
   approvals: TranslationApprovalItem[]
   attachmentTranslations: AttachmentTranslation[]
   attachments?: TranslationAttachmentItem[]
+  recipients?: TranslationRecipients
 }
 
 export type StageTranslationRecord = {

@@ -32,8 +32,7 @@ function validUuidList(values: unknown[]): string[] {
   return Array.from(new Set(values.map(asUuid).filter((value): value is string => Boolean(value))))
 }
 
-export async function loadProjectCcCandidates(projectId: string): Promise<ProjectCcCandidate[]> {
-  await assertProjectMember(projectId)
+export async function loadProjectCcCandidatesInternal(projectId: string): Promise<ProjectCcCandidate[]> {
   const admin = createAdminClient()
   const { data: project, error: projectError } = await admin
     .from("projects")
@@ -107,13 +106,17 @@ export async function loadProjectCcCandidates(projectId: string): Promise<Projec
     .sort((left: ProjectCcCandidate, right: ProjectCcCandidate) => left.name.localeCompare(right.name))
 }
 
+export async function loadProjectCcCandidates(projectId: string): Promise<ProjectCcCandidate[]> {
+  await assertProjectMember(projectId)
+  return loadProjectCcCandidatesInternal(projectId)
+}
+
 /**
  * Returns only project participants (contractor, owner, consultant, etc.)
  * excluding internal team members and organization members.
  * Used for the Report to / CC to dropdowns.
  */
-export async function loadProjectParticipantsOnly(projectId: string): Promise<ProjectCcCandidate[]> {
-  await assertProjectMember(projectId)
+export async function loadProjectParticipantsOnlyInternal(projectId: string): Promise<ProjectCcCandidate[]> {
   const participants = await getProjectParticipants(projectId)
 
   return participants
@@ -147,14 +150,18 @@ export async function loadProjectParticipantsOnly(projectId: string): Promise<Pr
     .sort((left: ProjectCcCandidate, right: ProjectCcCandidate) => left.name.localeCompare(right.name))
 }
 
+export async function loadProjectParticipantsOnly(projectId: string): Promise<ProjectCcCandidate[]> {
+  await assertProjectMember(projectId)
+  return loadProjectParticipantsOnlyInternal(projectId)
+}
+
 export { partitionReportCcRecipients } from "@/lib/report-cc/types"
 
-export async function loadReportCcRecipients(
+export async function loadReportCcRecipientsInternal(
   projectId: string,
   responseId: string,
   context: ReportCcContext,
 ): Promise<ReportCcRecipient[]> {
-  await assertProjectMember(projectId)
   const admin = createAdminClient()
   const { data: rows, error } = await admin
     .from("report_cc_recipients")
@@ -173,8 +180,8 @@ export async function loadReportCcRecipients(
     userIds.length
       ? admin.from("profiles").select("id, full_name, email, avatar_url").in("id", userIds)
       : Promise.resolve({ data: [] as any[], error: null }),
-    userIds.length ? loadProjectCcCandidates(projectId) : Promise.resolve([] as ProjectCcCandidate[]),
-    loadProjectParticipantsOnly(projectId).catch(() => [] as ProjectCcCandidate[]),
+    userIds.length ? loadProjectCcCandidatesInternal(projectId) : Promise.resolve([] as ProjectCcCandidate[]),
+    loadProjectParticipantsOnlyInternal(projectId).catch(() => [] as ProjectCcCandidate[]),
   ])
   if (profileError) throw profileError
   const profileById = new Map<string, any>((profiles ?? []).map((profile: any) => [profile.id as string, profile]))
@@ -222,6 +229,15 @@ export async function loadReportCcRecipients(
       createdAt: row.created_at,
     } satisfies ReportCcRecipient
   })
+}
+
+export async function loadReportCcRecipients(
+  projectId: string,
+  responseId: string,
+  context: ReportCcContext,
+): Promise<ReportCcRecipient[]> {
+  await assertProjectMember(projectId)
+  return loadReportCcRecipientsInternal(projectId, responseId, context)
 }
 
 async function accessibleProjectIdsForUser(userId: string) {
