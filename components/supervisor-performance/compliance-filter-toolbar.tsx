@@ -12,6 +12,8 @@ import {
   CalendarDays,
   Activity,
   Clock,
+  FileSpreadsheet,
+  Loader2,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -61,6 +63,8 @@ export type ComplianceFilterToolbarProps = {
   onResetToCurrentWeek?: () => void
   isCurrentAnchorWeek?: boolean
   visibleRangeLabel?: string
+  onExport?: () => void
+  isExporting?: boolean
   className?: string
 }
 
@@ -85,6 +89,8 @@ export function ComplianceFilterToolbar({
   onResetToCurrentWeek,
   isCurrentAnchorWeek = true,
   visibleRangeLabel,
+  onExport,
+  isExporting = false,
   className,
 }: ComplianceFilterToolbarProps) {
   const activeAnchorDate = anchorWeekSaturday ?? anchorWeekSunday
@@ -283,6 +289,31 @@ export function ComplianceFilterToolbar({
           >
             <RotateCcw className="h-3 w-3" />
             <span>Reset</span>
+          </Button>
+        )}
+
+        {/* 8. Export Compliance Report Button */}
+        {onExport && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={isExporting}
+            onClick={onExport}
+            className="h-8 gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted shadow-2xs"
+            title="Export Compliance Matrix to Excel"
+          >
+            {isExporting ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                <span>Preparing Excel...</span>
+              </>
+            ) : (
+              <>
+                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Export Compliance Report</span>
+              </>
+            )}
           </Button>
         )}
 

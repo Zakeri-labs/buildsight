@@ -195,6 +195,55 @@ export function SupervisorVisitComplianceDashboard({
     filters.selectedStatus !== "all" ||
     filters.showIssuesOnly
 
+  const [isExporting, setIsExporting] = useState(false)
+
+  const handleExportCompliance = async () => {
+    if (isExporting) return
+    setIsExporting(true)
+    try {
+      const params = new URLSearchParams()
+      if (filters.searchQuery.trim()) {
+        params.set("searchQuery", filters.searchQuery.trim())
+      }
+      if (filters.selectedSupervisor !== "all") {
+        params.set("selectedSupervisor", filters.selectedSupervisor)
+      }
+      if (filters.selectedFrequency !== "all") {
+        params.set("selectedFrequency", filters.selectedFrequency)
+      }
+      if (filters.selectedStatus !== "all") {
+        params.set("selectedStatus", filters.selectedStatus)
+      }
+      if (filters.showIssuesOnly) {
+        params.set("showIssuesOnly", "true")
+      }
+      if (anchorSaturday) {
+        params.set("anchorSaturday", anchorSaturday)
+      }
+
+      const endpoint = `/api/supervisor-performance/export-compliance-excel?${params.toString()}`
+      const response = await fetch(endpoint)
+      if (!response.ok) {
+        throw new Error("Failed to export Compliance Report.")
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      const dateStr = new Date().toISOString().slice(0, 10)
+      a.download = `BuildSight_Compliance_Matrix_${dateStr}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error("Error exporting compliance excel:", err)
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   return (
     <Card className={className}>
       <CardHeader className="pb-4">
@@ -237,7 +286,7 @@ export function SupervisorVisitComplianceDashboard({
       </CardHeader>
 
       <CardContent className="space-y-4 pt-0">
-        {/* Filter Toolbar (with integrated View From anchor date picker) */}
+        {/* Filter Toolbar (with integrated View From anchor date picker & Excel Export) */}
         <ComplianceFilterToolbar
           projects={projects}
           supervisors={supervisors}
@@ -251,6 +300,8 @@ export function SupervisorVisitComplianceDashboard({
           onResetToCurrentWeek={handleResetToCurrentWeek}
           isCurrentAnchorWeek={isCurrentAnchorWeek}
           visibleRangeLabel={visibleRangeLabel}
+          onExport={handleExportCompliance}
+          isExporting={isExporting}
         />
 
         {/* Matrix Table (with circular Previous / Next week navigation buttons on table headers) */}
