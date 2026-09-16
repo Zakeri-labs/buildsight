@@ -27,6 +27,7 @@ import {
   MessageSquare,
   Mic,
   MicOff,
+  Pencil,
   Phone,
   Plus,
   Redo2,
@@ -68,7 +69,9 @@ import { partitionReportCcRecipients, type ProjectCcCandidate, type ReportCcReci
 import {
   EMPTY_TERM_RESPONSE_CONTENT,
   PREDEFINED_CASTING_RECOMMENDATIONS_HTML,
+  PREDEFINED_CASTING_RECOMMENDATIONS_HTML_AR,
   REPORT_TYPES,
+  sanitizeReportHtml,
   reportTypeLabel,
   STAGE_DOCUMENT_ACCEPT,
   STAGE_DOCUMENT_MAX_FILES,
@@ -328,6 +331,62 @@ function extractSubmissionFailureReason(
 
 function plainResponseText(value: string) {
   return value.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim()
+}
+
+function castingHtmlToEditableText(html: string): string {
+  if (!html) return ""
+  if (!/<[a-z][\s\S]*>/i.test(html)) return html
+
+  let text = html
+    .replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, "\n$1\n")
+    .replace(/<li[^>]*>(.*?)<\/li>/gi, "• $1\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<p[^>]*>(.*?)<\/p>/gi, "$1\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#039;/gi, "'")
+
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line, idx, arr) => line !== "" || (idx > 0 && arr[idx - 1] !== ""))
+    .join("\n")
+    .trim()
+}
+
+function editableTextToCastingHtml(text: string): string {
+  if (!text.trim()) return ""
+  if (/<(ul|ol|li|h3|h4|p|div)\b/i.test(text)) return text
+
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean)
+  let html = ""
+  let inList = false
+
+  for (const line of lines) {
+    if (/^[•\-\*]\s*/.test(line)) {
+      const itemText = line.replace(/^[•\-\*]\s*/, "")
+      if (!inList) {
+        html += "<ul>"
+        inList = true
+      }
+      html += `<li>${itemText}</li>`
+    } else {
+      if (inList) {
+        html += "</ul>"
+        inList = false
+      }
+      html += `<h3>${line}</h3>`
+    }
+  }
+  if (inList) {
+    html += "</ul>"
+  }
+
+  return html
 }
 
 function configuredResponseError(
@@ -624,6 +683,8 @@ export function InspectionReportForm({
   const [reviewComments, setReviewComments] = useState("")
   const [approvalHistory, setApprovalHistory] = useState(response?.approvals ?? [])
   const [expandedChecklistCommentId, setExpandedChecklistCommentId] = useState<string | null>(null)
+  const [isEditingCastingRecs, setIsEditingCastingRecs] = useState(false)
+  const [castingRecsText, setCastingRecsText] = useState("")
   const [ccSelection, setCcSelection] = useState<ReportCcSelection>(() => initialRecipientSelection(
     ccCandidates,
     initialCcRecipients,
@@ -2218,6 +2279,27 @@ export function InspectionReportForm({
                 </p>
               </div>
               <div className="flex items-center gap-2.5">
+                {Boolean(content.recommendationsDuringCasting) && !isLocked ? (
+                  isEditingCastingRecs ? (
+                    <span className="text-xs font-semibold text-primary">
+                      {locale === "ar" ? "جاري التعديل..." : "Editing"}
+                    </span>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2.5 text-xs font-medium"
+                      onClick={() => {
+                        setCastingRecsText(castingHtmlToEditableText(content.recommendationsDuringCasting))
+                        setIsEditingCastingRecs(true)
+                      }}
+                    >
+                      <Pencil className="mr-1 size-3" />
+                      {locale === "ar" ? "تعديل" : "Edit"}
+                    </Button>
+                  )
+                ) : null}
                 <span className="text-xs font-medium text-muted-foreground">
                   {Boolean(content.recommendationsDuringCasting)
                     ? (locale === "ar" ? "مفعل" : "Enabled")
@@ -2227,9 +2309,14 @@ export function InspectionReportForm({
                   checked={Boolean(content.recommendationsDuringCasting)}
                   disabled={isLocked}
                   onCheckedChange={(checked) => {
+                    if (!checked) {
+                      setIsEditingCastingRecs(false)
+                    }
                     setContent((current) => ({
                       ...current,
-                      recommendationsDuringCasting: checked ? PREDEFINED_CASTING_RECOMMENDATIONS_HTML : "",
+                      recommendationsDuringCasting: checked
+                        ? (locale === "ar" ? PREDEFINED_CASTING_RECOMMENDATIONS_HTML_AR : PREDEFINED_CASTING_RECOMMENDATIONS_HTML)
+                        : "",
                     }))
                   }}
                   aria-label={locale === "ar" ? "توصيات أثناء صب الخرسانة" : "Recommendations During Casting"}
@@ -2238,56 +2325,32 @@ export function InspectionReportForm({
             </CardHeader>
             {Boolean(content.recommendationsDuringCasting) ? (
               <CardContent className="px-4 pb-4 pt-0 md:px-5 md:pb-5">
-                <div className="rounded-xl border border-border/80 bg-muted/40 p-4 text-xs leading-relaxed text-foreground md:text-sm">
-                  <div className="mb-3">
-                    <h4 className="font-semibold text-foreground">
-                      {locale === "ar" ? "توصيات أثناء الصب" : "Recommendations During Casting"}
-                    </h4>
-                    <ul className="mt-2 list-inside list-disc space-y-1.5 text-muted-foreground">
-                      {locale === "ar" ? (
-                        <>
-                          <li>ألا تقل رتبة الخرسانة عن M30 SRC، كما هو محدد في المخططات المعتمدة.</li>
-                          <li>أثناء صب الخرسانة، يجب توخي الحذر لتجنب الانفصال الحبيبي وإزاحة حديد التسليح. يجب ألا يتجاوز السقوط الحر للخرسانة 2.0 متر كحد أقصى.</li>
-                          <li>يجب دمك الخرسانة جيداً باستخدام الهزازات الميكانيكية من الأسفل حتى المنسوب المطلوب، مع توفير هزاز إضافي واحد على الأقل في وضع الاستعداد.</li>
-                          <li>ألا تتجاوز درجة حرارة الخرسانة وقت الصب 30 درجة مئوية، مع فحص وتسجيل درجة حرارة الخرسانة (لكل شاحنة).</li>
-                          <li>يجب أن تكون قيمة الهبوط (Slump) في حدود 100 ± 25 مم.</li>
-                          <li>7 أيام (3 مكعبات لكل مجموعة).</li>
-                          <li>28 يوماً (3 مكعبات لكل مجموعة).</li>
-                        </>
-                      ) : (
-                        <>
-                          <li>The grade of concrete shall not be less than M30 SRC, as specified in the approved drawings.</li>
-                          <li>During concrete placement, care shall be taken to avoid segregation and displacement of reinforcement. The concrete free fall shall be restricted to a maximum of 2.0 metres.</li>
-                          <li>Concrete shall be compacted thoroughly using vibrators from the bottom to the required level. At least one additional vibrator shall be kept on standby.</li>
-                          <li>The concrete temperature at the time of placement does not exceed 30 degrees. The temperature for concrete (Each truck) will be tested and recorded.</li>
-                          <li>Slump value should be in the range of 100+/-25.</li>
-                          <li>7 Days (3 Cubes for each Set)</li>
-                          <li>28 Days (3 Cubes for each Set)</li>
-                        </>
-                      )}
-                    </ul>
+                {isEditingCastingRecs ? (
+                  <textarea
+                    autoFocus
+                    rows={12}
+                    className="w-full min-h-[220px] resize-y rounded-xl border border-input bg-background p-3.5 text-xs leading-relaxed text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 md:text-sm"
+                    value={castingRecsText}
+                    onChange={(e) => setCastingRecsText(e.target.value)}
+                    onBlur={() => {
+                      const updatedHtml = editableTextToCastingHtml(castingRecsText)
+                      setContent((current) => ({
+                        ...current,
+                        recommendationsDuringCasting: updatedHtml,
+                      }))
+                      setIsEditingCastingRecs(false)
+                    }}
+                  />
+                ) : (
+                  <div className="rounded-xl border border-border/80 bg-muted/40 p-4 text-xs leading-relaxed text-foreground md:text-sm">
+                    <div
+                      className="prose prose-sm dark:prose-invert max-w-none text-foreground [&_h3]:font-semibold [&_h3]:text-foreground [&_h4]:font-semibold [&_h4]:text-foreground [&_ul]:mt-1 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:ps-5 [&_li]:mt-0.5 [&_li]:text-muted-foreground"
+                      dangerouslySetInnerHTML={{
+                        __html: sanitizeReportHtml(content.recommendationsDuringCasting),
+                      }}
+                    />
                   </div>
-                  <div className="border-t border-border/60 pt-3">
-                    <h4 className="font-semibold text-foreground">
-                      {locale === "ar" ? "أعمال ما بعد الصب" : "Post Concrete Work"}
-                    </h4>
-                    <ul className="mt-2 list-inside list-disc space-y-1.5 text-muted-foreground">
-                      {locale === "ar" ? (
-                        <>
-                          <li>بعد التصلب الأولي، يتم عمل حبسات أسمنتية فوق القواعد، وإزالة تجمعات المياه وكذلك فرم جوانب القواعد، وتغطيتها بالخيش مع استمرار المعالجة بالرش المستمر بالماء.</li>
-                          <li>تستمر المعالجة بالماء لمدة لا تقل عن 7 أيام.</li>
-                          <li>في حال ملاحظة أي تعشيش أو عيوب سطحية، يجب إبلاغ الاستشاري قبل البدء بأي أعمال معالجة أو إصلاح.</li>
-                        </>
-                      ) : (
-                        <>
-                          <li>After the initial settlement, cement bundles are to be provided on footings, and the water stagnation, as well as the footings' side shuttering, are to be removed and covered with hessian cloth with continuous curing.</li>
-                          <li>Further curing will continue for a minimum of 7 days.</li>
-                          <li>If any honeycombs or surface defects are observed, they shall be reported to the consultant before any rectification work.</li>
-                        </>
-                      )}
-                    </ul>
-                  </div>
-                </div>
+                )}
               </CardContent>
             ) : null}
           </Card>
