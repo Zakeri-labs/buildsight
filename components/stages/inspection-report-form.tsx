@@ -1526,32 +1526,7 @@ export function InspectionReportForm({
     const currentRespId = responseId || initialResponseId || null
     const logText = formatDiagnosticLogAsText(currentRespId)
 
-    const lines: string[] = [
-      "BuildSight Report Issue",
-      "",
-      "Project:",
-      project?.name || "Project",
-    ]
-
-    if (project?.code) {
-      lines.push("", "Project Code:", project.code)
-    }
-
     const cleanTitle = (reportTitle || defaultReportTitlePattern || subject || "Inspection Report").trim()
-    lines.push("", "Report:", cleanTitle)
-
-    if (translation?.bilingualPdfPath && currentRespId) {
-      const origin = typeof window !== "undefined" ? window.location.origin : "https://app.bonyanec.com"
-      const microCode = currentRespId.split("-")[0]
-      const pdfUrl = microCode
-        ? `${origin}/r/${microCode}`
-        : `${origin}/api/stage-translations/pdf?projectId=${project.id}&responseId=${currentRespId}&kind=bilingual`
-      lines.push("", "PDF:", pdfUrl)
-    }
-
-    lines.push("", "--------------------", "", "Diagnostic Log:", logText)
-
-    const message = lines.join("\n")
 
     const now = new Date()
     const yyyy = now.getFullYear()
@@ -1563,25 +1538,83 @@ export function InspectionReportForm({
     const timestamp = `${yyyy}${mm}${dd}-${hh}${min}${ss}`
     const filename = `BuildSight-Diagnostic-${timestamp}.txt`
 
-    const txtFile = new File([message], filename, { type: "text/plain" })
+    // Full un-truncated log formatted for the .txt file
+    const logFileLines: string[] = [
+      "BuildSight Report Issue",
+      "",
+      "Project:",
+      project?.name || "Project",
+    ]
+
+    if (project?.code) {
+      logFileLines.push("", "Project Code:", project.code)
+    }
+
+    logFileLines.push("", "Report:", cleanTitle)
+
+    if (translation?.bilingualPdfPath && currentRespId) {
+      const origin = typeof window !== "undefined" ? window.location.origin : "https://app.bonyanec.com"
+      const microCode = currentRespId.split("-")[0]
+      const pdfUrl = microCode
+        ? `${origin}/r/${microCode}`
+        : `${origin}/api/stage-translations/pdf?projectId=${project.id}&responseId=${currentRespId}&kind=bilingual`
+      logFileLines.push("", "PDF:", pdfUrl)
+    }
+
+    logFileLines.push("", "--------------------", "", "Diagnostic Log:", logText)
+
+    const fullMessage = logFileLines.join("\n")
+    const txtFile = new File([fullMessage], filename, { type: "text/plain" })
 
     setActionBusy("share")
 
     try {
-      if (typeof navigator === "undefined" || !navigator.canShare?.({ files: [txtFile] })) {
-        setError(
-          locale === "ar"
-            ? "مشاركة الملفات غير مدعومة على هذا الجهاز."
-            : "File sharing is not supported on this device.",
-        )
-        return
-      }
+      const canShareFiles =
+        typeof navigator !== "undefined" &&
+        typeof navigator.share === "function" &&
+        typeof navigator.canShare === "function" &&
+        navigator.canShare({ files: [txtFile] })
 
-      await navigator.share({
-        title: "BuildSight Diagnostic Log",
-        text: "BuildSight diagnostic log",
-        files: [txtFile],
-      })
+      if (canShareFiles) {
+        // Mobile / Native File Share flow
+        await navigator.share({
+          title: "BuildSight Diagnostic Log",
+          text: "BuildSight diagnostic log",
+          files: [txtFile],
+        })
+      } else {
+        // Desktop / PC Fallback flow:
+        // 1. Download the TXT file locally
+        const objectUrl = URL.createObjectURL(txtFile)
+        const link = document.createElement("a")
+        link.href = objectUrl
+        link.download = filename
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(objectUrl)
+
+        // 2. Open WhatsApp Web with a SHORT message (never including full log in URL)
+        const shortLines: string[] = [
+          "BuildSight Diagnostic Log",
+          "",
+          `Project: ${project?.name || "Project"}`,
+        ]
+        if (project?.code) {
+          shortLines.push(`Project Code: ${project.code}`)
+        }
+        shortLines.push(`Report: ${cleanTitle}`)
+        shortLines.push("")
+        shortLines.push(
+          locale === "ar"
+            ? `تم تنزيل سجل التشخيص كملف نصي (${filename}). يرجى إرفاق الملف بهذه المحادثة.`
+            : `The diagnostic log has been downloaded as a TXT file (${filename}). Please attach the file to this conversation.`,
+        )
+
+        const shortMessage = shortLines.join("\n")
+        const waUrl = `https://wa.me/?text=${encodeURIComponent(shortMessage)}`
+        window.open(waUrl, "_blank")
+      }
     } catch (shareErr) {
       if (shareErr instanceof DOMException && shareErr.name === "AbortError") {
         return
