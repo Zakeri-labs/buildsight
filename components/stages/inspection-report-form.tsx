@@ -3281,19 +3281,22 @@ function SimpleRichTextEditor({
   }
 
   const restoreSelection = () => {
-    editorRef.current?.focus()
     const selection = window.getSelection()
     if (selection && savedRangeRef.current) {
       selection.removeAllRanges()
       selection.addRange(savedRangeRef.current)
+    } else {
+      editorRef.current?.focus()
     }
   }
 
   const handleBold = () => {
     restoreSelection()
-    const selection = window.getSelection()
-    if (!selection || selection.isCollapsed) return
+    try {
+      document.execCommand("styleWithCSS", false, false)
+    } catch {}
     document.execCommand("bold", false)
+    saveSelection()
     const newHtml = editorRef.current?.innerHTML ?? ""
     onChange(newHtml)
   }
@@ -3477,14 +3480,22 @@ function RichSectionEditor({
   }
 
   const restore = () => {
-    editorRef.current?.focus()
     const selection = window.getSelection()
-    if (selection && savedRangeRef.current) { selection.removeAllRanges(); selection.addRange(savedRangeRef.current) }
+    if (selection && savedRangeRef.current) {
+      selection.removeAllRanges()
+      selection.addRange(savedRangeRef.current)
+    } else {
+      editorRef.current?.focus()
+    }
   }
 
   const command = (name: string, argument?: string) => {
     restore()
+    try {
+      document.execCommand("styleWithCSS", false, false)
+    } catch {}
     document.execCommand(name, false, argument)
+    saveSelection()
     onChange(editorRef.current?.innerHTML ?? "")
   }
 
@@ -3831,11 +3842,7 @@ function RichSectionEditor({
             label="Bold"
             onMouseDown={(e) => {
               e.preventDefault()
-              restore()
-              const selection = window.getSelection()
-              if (!selection || selection.isCollapsed) return
-              document.execCommand("bold", false)
-              onChange(editorRef.current?.innerHTML ?? "")
+              command("bold")
             }}
             disabled={disabled}
           >

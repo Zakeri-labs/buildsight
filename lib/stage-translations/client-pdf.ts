@@ -507,6 +507,24 @@ function htmlToBlocks(html: string): PdfBlock[] {
     }
   })
 
+  function nodeToFormattedText(node: Node): string {
+    let result = ""
+    for (const child of Array.from(node.childNodes)) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        result += child.textContent || ""
+      } else if (child instanceof Element) {
+        const tag = child.tagName.toLowerCase()
+        const childText = nodeToFormattedText(child)
+        if ((tag === "b" || tag === "strong") && childText.trim()) {
+          result += `**${childText}**`
+        } else {
+          result += childText
+        }
+      }
+    }
+    return result
+  }
+
   const blocks: PdfBlock[] = []
   const visit = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -525,14 +543,14 @@ function htmlToBlocks(html: string): PdfBlock[] {
       return
     }
     if (tag === "p" || tag === "blockquote") {
-      const text = normalizeText(node.textContent || "")
+      const text = normalizeText(nodeToFormattedText(node))
       const isRedundantHeader = /^(?:Observations|Directives|Recommendations|الملاحظات|مشاهدات|التوجيهات|دستورالعمل‌ها)\s*[\/:]/i.test(text)
       if (text && !isRedundantHeader) blocks.push({ type: "paragraph", text })
       for (const image of Array.from(node.querySelectorAll(":scope > img"))) visit(image)
       return
     }
     if (tag === "ul" || tag === "ol") {
-      const items = directChildElements(node, "li").map((item) => normalizeText(item.textContent || "")).filter(Boolean)
+      const items = directChildElements(node, "li").map((item) => normalizeText(nodeToFormattedText(item))).filter(Boolean)
       if (items.length) blocks.push({ type: "list", ordered: tag === "ol", items })
       return
     }
@@ -2257,12 +2275,94 @@ function renderHeading(flow: Flow, block: Extract<PdfBlock, { type: "heading" }>
   flow.y += height
 }
 
+export interface FormattedWord {
+  word: string
+  bold: boolean
+}
+
+export function parseFormattedWords(text: string): FormattedWord[] {
+  const parts = text.split(/(\*\*.*?\*\*)/g)
+  const words: FormattedWord[] = []
+
+  for (const part of parts) {
+    if (!part) continue
+    const isBold = part.startsWith("**") && part.endsWith("**") && part.length >= 4
+    const rawContent = isBold ? part.slice(2, -2) : part
+    const splitWords = rawContent.split(/\s+/).filter(Boolean)
+    for (const w of splitWords) {
+      words.push({ word: w, bold: isBold })
+    }
+  }
+  return words
+}
+
+function renderFormattedLine(
+  doc: JsPdfDocument,
+  lineWords: FormattedWord[],
+  x: number,
+  y: number,
+  options: { align?: "left" | "right"; rtl?: boolean } = {},
+) {
+  if (!lineWords.length) return
+  const { align = "left", rtl = false } = options
+  const isRtl = rtl || lineWords.some((w) => containsArabic(w.word))
+
+  setLanguage(doc, isRtl, 9, false)
+  const spaceWidth = doc.getTextWidth(" ")
+
+  const wordWidths = lineWords.map((w) => {
+    setLanguage(doc, isRtl, 9, w.bold)
+    const textToMeasure = isRtl ? (shapeArabicText(doc, w.word) as string) : w.word
+    return doc.getTextWidth(textToMeasure)
+  })
+
+  const totalLineWidth = wordWidths.reduce((a, b) => a + b, 0) + Math.max(0, lineWords.length - 1) * spaceWidth
+
+  if (isRtl) {
+    if (align === "right") {
+      let currRightX = x
+      lineWords.forEach((w, i) => {
+        setLanguage(doc, true, 9, w.bold)
+        const shaped = shapeArabicText(doc, w.word) as string
+        doc.text(shaped, currRightX, y, { ...ARABIC_TEXT_OPTIONS, align: "right" })
+        currRightX -= (wordWidths[i] + spaceWidth)
+      })
+    } else {
+      let currX = x
+      lineWords.forEach((w, i) => {
+        setLanguage(doc, true, 9, w.bold)
+        const shaped = shapeArabicText(doc, w.word) as string
+        doc.text(shaped, currX, y, { align: "left" })
+        currX += wordWidths[i] + spaceWidth
+      })
+    }
+  } else {
+    if (align === "right") {
+      let currX = x - totalLineWidth
+      lineWords.forEach((w, i) => {
+        setLanguage(doc, false, 9, w.bold)
+        doc.text(w.word, currX, y, { align: "left" })
+        currX += wordWidths[i] + spaceWidth
+      })
+    } else {
+      let currX = x
+      lineWords.forEach((w, i) => {
+        setLanguage(doc, false, 9, w.bold)
+        doc.text(w.word, currX, y, { align: "left" })
+        currX += wordWidths[i] + spaceWidth
+      })
+    }
+  }
+}
+
 function renderParagraph(flow: Flow, text: string, options: { indent?: number; bullet?: string; justify?: boolean } = {}) {
+  const hasFormatting = text.includes("**")
+  const cleanText = hasFormatting ? text.replace(/\*\*/g, "") : text
   setLanguage(flow.doc, flow.rtl, 9, false)
   const indent = options.indent ?? 0
   const bulletWidth = options.bullet ? 6 : 0
   const available = flow.width - indent - bulletWidth
-  const lines = textLines(flow.doc, text, available)
+  const lines = textLines(flow.doc, cleanText, available)
   const lineHeight = 4.4
   const height = Math.max(lineHeight, lines.length * lineHeight) + 0.6
   ensureSpace(flow, height)
@@ -2285,7 +2385,30 @@ function renderParagraph(flow: Flow, text: string, options: { indent?: number; b
     ? flow.x + flow.width - indent - bulletWidth
     : flow.x + indent + bulletWidth
 
-  if (options.justify) {
+  if (hasFormatting) {
+    const allFormattedWords = parseFormattedWords(text)
+    let wordIdx = 0
+
+    lines.forEach((line, lineIdx) => {
+      const isFinal = lineIdx === lines.length - 1
+      const lineY = flow.y + lineIdx * lineHeight
+      const lineCleanWords = line.trim().split(/\s+/).filter(Boolean)
+      const lineFormattedWords: FormattedWord[] = lineCleanWords.map((cw: string) => {
+        if (wordIdx < allFormattedWords.length) {
+          const matched = allFormattedWords[wordIdx]
+          wordIdx++
+          return matched
+        }
+        return { word: cw, bold: false }
+      })
+
+      if (options.justify) {
+        renderJustifiedLine(flow.doc, line, textX, lineY, available, isFinal, flow.rtl, 9, lineFormattedWords)
+      } else {
+        renderFormattedLine(flow.doc, lineFormattedWords, textX, lineY, { align: flow.rtl ? "right" : "left", rtl: flow.rtl })
+      }
+    })
+  } else if (options.justify) {
     lines.forEach((line, lineIdx) => {
       const isFinal = lineIdx === lines.length - 1
       const lineY = flow.y + lineIdx * lineHeight
@@ -4626,6 +4749,7 @@ function renderJustifiedLine(
   isFinalLine: boolean,
   rtl: boolean,
   fontSize: number = 8.5,
+  lineFormattedWords?: FormattedWord[],
 ) {
   const normalized = normalizeText(line).trim()
   if (!normalized) return
@@ -4638,50 +4762,76 @@ function renderJustifiedLine(
   const prefixWidth = prefix ? doc.getTextWidth(isRtl ? (shapeArabicText(doc, prefix) as string) : prefix) : 0
 
   if (isFinalLine || !body.trim()) {
-    writePdfText(doc, normalized, isRtl ? x + colWidth : x, y, { align: isRtl ? "right" : "left", lineHeightFactor: 1.05 }, isRtl)
+    if (lineFormattedWords && lineFormattedWords.length > 0) {
+      renderFormattedLine(doc, lineFormattedWords, isRtl ? x + colWidth : x, y, { align: isRtl ? "right" : "left", rtl: isRtl })
+    } else {
+      writePdfText(doc, normalized, isRtl ? x + colWidth : x, y, { align: isRtl ? "right" : "left", lineHeightFactor: 1.05 }, isRtl)
+    }
     return
   }
 
-  const words = body.trim().split(/\s+/).filter(Boolean)
+  const rawWords = body.trim().split(/\s+/).filter(Boolean)
+  const words: FormattedWord[] = lineFormattedWords && lineFormattedWords.length >= rawWords.length
+    ? lineFormattedWords
+    : rawWords.map((w) => ({ word: w, bold: false }))
 
   if (words.length < 3) {
-    writePdfText(doc, normalized, isRtl ? x + colWidth : x, y, { align: isRtl ? "right" : "left", lineHeightFactor: 1.05 }, isRtl)
+    if (lineFormattedWords && lineFormattedWords.length > 0) {
+      renderFormattedLine(doc, lineFormattedWords, isRtl ? x + colWidth : x, y, { align: isRtl ? "right" : "left", rtl: isRtl })
+    } else {
+      writePdfText(doc, normalized, isRtl ? x + colWidth : x, y, { align: isRtl ? "right" : "left", lineHeightFactor: 1.05 }, isRtl)
+    }
     return
   }
 
   const availWidth = Math.max(10, colWidth - prefixWidth)
 
   if (!isRtl) {
-    doc.setFont(LATIN_FONT_FAMILY, "normal")
-    const wordWidths = words.map((w) => doc.getTextWidth(w))
+    const wordWidths = words.map((w) => {
+      doc.setFont(LATIN_FONT_FAMILY, w.bold ? "bold" : "normal")
+      return doc.getTextWidth(w.word)
+    })
     const totalWordsWidth = wordWidths.reduce((a, b) => a + b, 0)
     const extraSpace = availWidth - totalWordsWidth
     const gapWidth = extraSpace / (words.length - 1)
 
     if (gapWidth <= 0 || gapWidth > 6.5) {
-      writePdfText(doc, normalized, x, y, { align: "left", lineHeightFactor: 1.05 }, false)
+      if (lineFormattedWords && lineFormattedWords.length > 0) {
+        renderFormattedLine(doc, lineFormattedWords, x, y, { align: "left", rtl: false })
+      } else {
+        writePdfText(doc, normalized, x, y, { align: "left", lineHeightFactor: 1.05 }, false)
+      }
       return
     }
 
     if (prefix) {
+      doc.setFont(LATIN_FONT_FAMILY, "normal")
       doc.text(prefix, x, y, { align: "left" })
     }
 
     let currX = x + prefixWidth
     words.forEach((w, i) => {
-      doc.text(w, currX, y, { align: "left" })
+      doc.setFont(LATIN_FONT_FAMILY, w.bold ? "bold" : "normal")
+      doc.text(w.word, currX, y, { align: "left" })
       currX += wordWidths[i] + gapWidth
     })
   } else {
     doc.setFont(ARABIC_FONT_FAMILY, "normal")
-    const shapedWords = words.map((w) => shapeArabicText(doc, w) as string)
-    const wordWidths = shapedWords.map((w) => doc.getTextWidth(w))
+    const shapedWords = words.map((w) => shapeArabicText(doc, w.word) as string)
+    const wordWidths = shapedWords.map((w, i) => {
+      setLanguage(doc, true, fontSize, words[i].bold)
+      return doc.getTextWidth(w)
+    })
     const totalWordsWidth = wordWidths.reduce((a, b) => a + b, 0)
     const extraSpace = availWidth - totalWordsWidth
     const gapWidth = extraSpace / (words.length - 1)
 
     if (gapWidth <= 0 || gapWidth > 6.5) {
-      writePdfText(doc, normalized, x + colWidth, y, { align: "right", lineHeightFactor: 1.05 }, true)
+      if (lineFormattedWords && lineFormattedWords.length > 0) {
+        renderFormattedLine(doc, lineFormattedWords, x + colWidth, y, { align: "right", rtl: true })
+      } else {
+        writePdfText(doc, normalized, x + colWidth, y, { align: "right", lineHeightFactor: 1.05 }, true)
+      }
       return
     }
 
@@ -4694,6 +4844,7 @@ function renderJustifiedLine(
 
     let currRightX = columnRightX - prefixWidth
     shapedWords.forEach((sw, i) => {
+      setLanguage(doc, true, fontSize, words[i].bold)
       doc.text(sw, currRightX, y, { ...ARABIC_TEXT_OPTIONS, align: "right" })
       currRightX -= (wordWidths[i] + gapWidth)
     })
@@ -4710,9 +4861,10 @@ function bilingualCellLines(
 ) {
   const value = normalizeText(text || "")
   if (!value) return [] as string[]
-  const hasArabic = containsArabic(value)
+  const cleanValue = value.replace(/\*\*/g, "")
+  const hasArabic = containsArabic(cleanValue)
   setLanguage(doc, rtl || hasArabic, fontSize, bold)
-  const split = doc.splitTextToSize(value, Math.max(8, width))
+  const split = doc.splitTextToSize(cleanValue, Math.max(8, width))
   return Array.isArray(split) ? split.map(String) : [String(split)]
 }
 
@@ -5123,11 +5275,17 @@ function renderBilingualTextRow(
   // 4. BODY PARAGRAPHS (Borderless, clean side-by-side text block matching image 1:1)
   const gap = 8
   const colW = (flow.width - gap) / 2
+  const engHasFormatting = (englishText || "").includes("**")
+  const arHasFormatting = (arabicText || "").includes("**")
   const engLines = bilingualCellLines(doc, englishText, colW, false, 8.5, false)
   const arLines = bilingualCellLines(doc, arabicText, colW, true, 8.5, false)
 
   let engOffset = 0
   let arOffset = 0
+  const engAllWords = engHasFormatting ? parseFormattedWords(englishText || "") : []
+  const arAllWords = arHasFormatting ? parseFormattedWords(arabicText || "") : []
+  let engWordIdx = 0
+  let arWordIdx = 0
 
   do {
     if (flow.y + 8 > flow.bottom) addBilingualContinuationPage(flow)
@@ -5148,30 +5306,44 @@ function renderBilingualTextRow(
     if (engSeg.length) {
       setLanguage(doc, false, 8.5, false)
       doc.setTextColor(51, 65, 85)
-      if (options.justify) {
-        engSeg.forEach((line, lineIdx) => {
-          const globalLineIdx = engOffset + lineIdx
-          const isFinal = globalLineIdx === engLines.length - 1
-          renderJustifiedLine(doc, line, flow.x, flow.y + 2.8 + lineIdx * lineH, colW, isFinal, false)
-        })
-      } else {
-        writePdfText(doc, engSeg, flow.x, flow.y + 2.8, { align: "left", lineHeightFactor: 1.05 }, false)
-      }
+      engSeg.forEach((line, lineIdx) => {
+        const globalLineIdx = engOffset + lineIdx
+        const isFinal = globalLineIdx === engLines.length - 1
+        let lineFormattedWords: FormattedWord[] | undefined
+        if (engHasFormatting) {
+          const lineCleanWords = line.trim().split(/\s+/).filter(Boolean)
+          lineFormattedWords = lineCleanWords.map((cw: string) => engAllWords[engWordIdx++] || { word: cw, bold: false })
+        }
+        if (options.justify) {
+          renderJustifiedLine(doc, line, flow.x, flow.y + 2.8 + lineIdx * lineH, colW, isFinal, false, 8.5, lineFormattedWords)
+        } else if (lineFormattedWords) {
+          renderFormattedLine(doc, lineFormattedWords, flow.x, flow.y + 2.8 + lineIdx * lineH, { align: "left", rtl: false })
+        } else {
+          writePdfText(doc, line, flow.x, flow.y + 2.8 + lineIdx * lineH, { align: "left", lineHeightFactor: 1.05 }, false)
+        }
+      })
     }
 
     if (arSeg.length) {
       setLanguage(doc, true, 8.5, false)
       doc.setTextColor(51, 65, 85)
       const arColX = flow.x + flow.width - colW
-      if (options.justify) {
-        arSeg.forEach((line, lineIdx) => {
-          const globalLineIdx = arOffset + lineIdx
-          const isFinal = globalLineIdx === arLines.length - 1
-          renderJustifiedLine(doc, line, arColX, flow.y + 2.8 + lineIdx * lineH, colW, isFinal, true)
-        })
-      } else {
-        writePdfText(doc, arSeg, flow.x + flow.width, flow.y + 2.8, { align: "right", lineHeightFactor: 1.05 }, true)
-      }
+      arSeg.forEach((line, lineIdx) => {
+        const globalLineIdx = arOffset + lineIdx
+        const isFinal = globalLineIdx === arLines.length - 1
+        let lineFormattedWords: FormattedWord[] | undefined
+        if (arHasFormatting) {
+          const lineCleanWords = line.trim().split(/\s+/).filter(Boolean)
+          lineFormattedWords = lineCleanWords.map((cw: string) => arAllWords[arWordIdx++] || { word: cw, bold: false })
+        }
+        if (options.justify) {
+          renderJustifiedLine(doc, line, arColX, flow.y + 2.8 + lineIdx * lineH, colW, isFinal, true, 8.5, lineFormattedWords)
+        } else if (lineFormattedWords) {
+          renderFormattedLine(doc, lineFormattedWords, arColX, flow.y + 2.8 + lineIdx * lineH, { align: "right", rtl: true })
+        } else {
+          writePdfText(doc, line, flow.x + flow.width, flow.y + 2.8, { align: "right", lineHeightFactor: 1.05 }, true)
+        }
+      })
     }
 
     flow.y += segH
