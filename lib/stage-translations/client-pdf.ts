@@ -2926,9 +2926,10 @@ async function renderImageBlock(
   flow.y += 3
 }
 
-function isJustifiedReportSection(key?: string): boolean {
-  if (!key) return false
-  const k = key.toLowerCase().trim()
+function isJustifiedReportSection(key?: string, title?: string): boolean {
+  if (!key && !title) return false
+  const k = (key || "").toLowerCase().trim()
+  const t = (title || "").toLowerCase().trim()
   return (
     k === "observation" ||
     k === "observations" ||
@@ -2937,12 +2938,28 @@ function isJustifiedReportSection(key?: string): boolean {
     k === "recommendationsduringcasting" ||
     k === "recommendations_during_casting" ||
     k === "rectificationandsubsequentwork" ||
-    k === "rectification_and_subsequent_work"
+    k === "rectification_and_subsequent_work" ||
+    k === "workcompleted" ||
+    k === "work_completed" ||
+    t.includes("observation") ||
+    t.includes("work progress") ||
+    t.includes("instruction") ||
+    t.includes("recommendation") ||
+    t.includes("rectification") ||
+    t.includes("subsequent work") ||
+    t.includes("casting") ||
+    t.includes("الملاحظات") ||
+    t.includes("تقدم الأعمال") ||
+    t.includes("التعليمات") ||
+    t.includes("التوصيات") ||
+    t.includes("المعالجة") ||
+    t.includes("الصب") ||
+    t.includes("اللاحقة")
   )
 }
 
-async function renderBlocks(flow: Flow, blocks: PdfBlock[], sectionKey?: string) {
-  const justify = isJustifiedReportSection(sectionKey)
+async function renderBlocks(flow: Flow, blocks: PdfBlock[], sectionKey?: string, sectionTitle?: string) {
+  const justify = isJustifiedReportSection(sectionKey, sectionTitle)
   for (const block of blocks) {
     if (block.type === "heading") renderHeading(flow, block)
     else if (block.type === "paragraph") renderParagraph(flow, block.text, { indent: (block as any).indent, bullet: (block as any).bullet, justify })
@@ -4257,13 +4274,13 @@ async function buildLanguagePdfBlob(
     renderSectionTitle(flow, section.title)
 
     if (flowedContent.length) {
-      await renderBlocks(flow, flowedContent, section.key)
+      await renderBlocks(flow, flowedContent, section.key, section.title)
     }
 
     if (section.documentsTitle && hasDocuments) {
       renderHeading(flow, { type: "heading", level: 3, text: section.documentsTitle })
-      if (reconstructedSource.length) await renderBlocks(flow, reconstructedSource, section.key)
-      if (otherDocumentBlocks.length) await renderBlocks(flow, otherDocumentBlocks, section.key)
+      if (reconstructedSource.length) await renderBlocks(flow, reconstructedSource, section.key, section.title)
+      if (otherDocumentBlocks.length) await renderBlocks(flow, otherDocumentBlocks, section.key, section.title)
     }
 
     if (hasGalleryImages) {
@@ -4565,10 +4582,16 @@ function isJustifiedBilingualSection(key: string, title: string): boolean {
     t.includes("work progress") ||
     t.includes("instruction") ||
     t.includes("recommendation") ||
+    t.includes("rectification") ||
+    t.includes("subsequent work") ||
+    t.includes("casting") ||
     t.includes("الملاحظات") ||
     t.includes("تقدم الأعمال") ||
     t.includes("التعليمات") ||
-    t.includes("التوصيات")
+    t.includes("التوصيات") ||
+    t.includes("المعالجة") ||
+    t.includes("الصب") ||
+    t.includes("اللاحقة")
   )
 }
 
@@ -4635,7 +4658,7 @@ function renderJustifiedLine(
     const extraSpace = availWidth - totalWordsWidth
     const gapWidth = extraSpace / (words.length - 1)
 
-    if (gapWidth <= 0 || gapWidth > 3.5) {
+    if (gapWidth <= 0 || gapWidth > 6.5) {
       writePdfText(doc, normalized, x, y, { align: "left", lineHeightFactor: 1.05 }, false)
       return
     }
@@ -4657,7 +4680,7 @@ function renderJustifiedLine(
     const extraSpace = availWidth - totalWordsWidth
     const gapWidth = extraSpace / (words.length - 1)
 
-    if (gapWidth <= 0 || gapWidth > 2.5) {
+    if (gapWidth <= 0 || gapWidth > 6.5) {
       writePdfText(doc, normalized, x + colWidth, y, { align: "right", lineHeightFactor: 1.05 }, true)
       return
     }
