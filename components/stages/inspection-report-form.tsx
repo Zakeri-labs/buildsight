@@ -2296,7 +2296,6 @@ export function InspectionReportForm({
                       size="sm"
                       className="h-7 px-2.5 text-xs font-medium"
                       onClick={() => {
-                        setCastingRecsText(castingHtmlToEditableText(content.recommendationsDuringCasting))
                         setIsEditingCastingRecs(true)
                       }}
                     >
@@ -2331,18 +2330,17 @@ export function InspectionReportForm({
             {Boolean(content.recommendationsDuringCasting) ? (
               <CardContent className="px-4 pb-4 pt-0 md:px-5 md:pb-5">
                 {isEditingCastingRecs ? (
-                  <textarea
-                    autoFocus
-                    rows={12}
-                    className="w-full min-h-[220px] resize-y rounded-xl border border-input bg-background p-3.5 text-xs leading-relaxed text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 md:text-sm"
-                    value={castingRecsText}
-                    onChange={(e) => setCastingRecsText(e.target.value)}
-                    onBlur={() => {
-                      const updatedHtml = editableTextToCastingHtml(castingRecsText)
+                  <SimpleRichTextEditor
+                    value={content.recommendationsDuringCasting}
+                    minHeight="200px"
+                    disabled={isLocked}
+                    onChange={(updatedHtml) => {
                       setContent((current) => ({
                         ...current,
                         recommendationsDuringCasting: updatedHtml,
                       }))
+                    }}
+                    onBlur={() => {
                       setIsEditingCastingRecs(false)
                     }}
                   />
@@ -2385,7 +2383,6 @@ export function InspectionReportForm({
                       size="sm"
                       className="h-7 px-2.5 text-xs font-medium"
                       onClick={() => {
-                        setRectificationWorkText(castingHtmlToEditableText(content.rectificationAndSubsequentWork))
                         setIsEditingRectificationWork(true)
                       }}
                     >
@@ -2420,18 +2417,17 @@ export function InspectionReportForm({
             {Boolean(content.rectificationAndSubsequentWork) ? (
               <CardContent className="px-4 pb-4 pt-0 md:px-5 md:pb-5">
                 {isEditingRectificationWork ? (
-                  <textarea
-                    autoFocus
-                    rows={8}
-                    className="w-full min-h-[160px] resize-y rounded-xl border border-input bg-background p-3.5 text-xs leading-relaxed text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 md:text-sm"
-                    value={rectificationWorkText}
-                    onChange={(e) => setRectificationWorkText(e.target.value)}
-                    onBlur={() => {
-                      const updatedHtml = editableTextToCastingHtml(rectificationWorkText)
+                  <SimpleRichTextEditor
+                    value={content.rectificationAndSubsequentWork}
+                    minHeight="150px"
+                    disabled={isLocked}
+                    onChange={(updatedHtml) => {
                       setContent((current) => ({
                         ...current,
                         rectificationAndSubsequentWork: updatedHtml,
                       }))
+                    }}
+                    onBlur={() => {
                       setIsEditingRectificationWork(false)
                     }}
                   />
@@ -3255,6 +3251,96 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;")
 }
 
+function SimpleRichTextEditor({
+  value,
+  onChange,
+  onBlur,
+  minHeight = "160px",
+  disabled = false,
+}: {
+  value: string
+  onChange: (html: string) => void
+  onBlur?: () => void
+  minHeight?: string
+  disabled?: boolean
+}) {
+  const editorRef = useRef<HTMLDivElement | null>(null)
+  const savedRangeRef = useRef<Range | null>(null)
+
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.innerHTML !== value) {
+      editorRef.current.innerHTML = value || ""
+    }
+  }, [value])
+
+  const saveSelection = () => {
+    const selection = window.getSelection()
+    if (selection?.rangeCount && editorRef.current?.contains(selection.anchorNode)) {
+      savedRangeRef.current = selection.getRangeAt(0).cloneRange()
+    }
+  }
+
+  const restoreSelection = () => {
+    editorRef.current?.focus()
+    const selection = window.getSelection()
+    if (selection && savedRangeRef.current) {
+      selection.removeAllRanges()
+      selection.addRange(savedRangeRef.current)
+    }
+  }
+
+  const handleBold = () => {
+    restoreSelection()
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed) return
+    document.execCommand("bold", false)
+    const newHtml = editorRef.current?.innerHTML ?? ""
+    onChange(newHtml)
+  }
+
+  const handleInput = () => {
+    saveSelection()
+    const newHtml = editorRef.current?.innerHTML ?? ""
+    onChange(newHtml)
+  }
+
+  return (
+    <div className="rounded-xl border border-input bg-background shadow-xs overflow-hidden">
+      <div className="flex items-center gap-1 border-b bg-muted/35 px-2.5 py-1.5">
+        <button
+          type="button"
+          disabled={disabled}
+          onMouseDown={(e) => {
+            e.preventDefault()
+            handleBold()
+          }}
+          title="Bold"
+          aria-label="Bold"
+          className="flex h-7 px-2.5 items-center justify-center gap-1 rounded-md text-xs font-bold transition-colors hover:bg-accent text-foreground hover:text-accent-foreground border border-border/60 bg-background cursor-pointer disabled:opacity-50"
+        >
+          <Bold className="size-3.5" />
+          <span>Bold</span>
+        </button>
+      </div>
+      <div
+        ref={editorRef}
+        contentEditable={!disabled}
+        suppressContentEditableWarning
+        onInput={handleInput}
+        onKeyUp={saveSelection}
+        onMouseUp={saveSelection}
+        onBlur={() => {
+          const finalHtml = editorRef.current?.innerHTML ?? ""
+          onChange(finalHtml)
+          onBlur?.()
+        }}
+        style={{ minHeight }}
+        className="prose prose-sm dark:prose-invert max-w-none p-3.5 text-xs leading-relaxed text-foreground outline-none md:text-sm [&_h3]:font-semibold [&_h3]:text-foreground [&_h4]:font-semibold [&_h4]:text-foreground [&_p]:mt-1 [&_p]:mb-2 [&_p]:text-muted-foreground [&_ul]:mt-1 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:ps-5 [&_li]:mt-0.5 [&_li]:text-muted-foreground"
+      />
+    </div>
+  )
+}
+
 function RichSectionEditor({
   title,
   description,
@@ -3739,6 +3825,21 @@ function RichSectionEditor({
 
           <EditorButton label="Redo" onClick={handleRedo} disabled={disabled || historyIndex >= history.length - 1}>
             <Redo2 />
+          </EditorButton>
+
+          <EditorButton
+            label="Bold"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              restore()
+              const selection = window.getSelection()
+              if (!selection || selection.isCollapsed) return
+              document.execCommand("bold", false)
+              onChange(editorRef.current?.innerHTML ?? "")
+            }}
+            disabled={disabled}
+          >
+            <Bold className="size-4 font-bold" />
           </EditorButton>
 
           <EditorButton
