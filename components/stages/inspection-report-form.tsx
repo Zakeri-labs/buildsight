@@ -1522,7 +1522,7 @@ export function InspectionReportForm({
     }
   }
 
-  const handleSendLogViaWhatsApp = () => {
+  const handleSendLogViaWhatsApp = async () => {
     const currentRespId = responseId || initialResponseId || null
     const logText = formatDiagnosticLogAsText(currentRespId)
 
@@ -1552,8 +1552,45 @@ export function InspectionReportForm({
     lines.push("", "--------------------", "", "Diagnostic Log:", logText)
 
     const message = lines.join("\n")
-    const url = `https://wa.me/?text=${encodeURIComponent(message)}`
-    window.open(url, "_blank")
+
+    const now = new Date()
+    const yyyy = now.getFullYear()
+    const mm = String(now.getMonth() + 1).padStart(2, "0")
+    const dd = String(now.getDate()).padStart(2, "0")
+    const hh = String(now.getHours()).padStart(2, "0")
+    const min = String(now.getMinutes()).padStart(2, "0")
+    const ss = String(now.getSeconds()).padStart(2, "0")
+    const timestamp = `${yyyy}${mm}${dd}-${hh}${min}${ss}`
+    const filename = `BuildSight-Diagnostic-${timestamp}.txt`
+
+    const txtFile = new File([message], filename, { type: "text/plain" })
+
+    setActionBusy("share")
+
+    try {
+      if (typeof navigator === "undefined" || !navigator.canShare?.({ files: [txtFile] })) {
+        setError(
+          locale === "ar"
+            ? "مشاركة الملفات غير مدعومة على هذا الجهاز."
+            : "File sharing is not supported on this device.",
+        )
+        return
+      }
+
+      await navigator.share({
+        title: "BuildSight Diagnostic Log",
+        text: "BuildSight diagnostic log",
+        files: [txtFile],
+      })
+    } catch (shareErr) {
+      if (shareErr instanceof DOMException && shareErr.name === "AbortError") {
+        return
+      }
+      console.warn("Failed to share diagnostic log file:", shareErr)
+      setError(locale === "ar" ? "تعذر مشاركة سجل التشخيص." : "Unable to share diagnostic log.")
+    } finally {
+      setActionBusy(null)
+    }
   }
 
   const addImages = (files: File[]) => {
@@ -2750,11 +2787,20 @@ export function InspectionReportForm({
                         type="button"
                         size="sm"
                         variant="outline"
+                        disabled={actionBusy === "share"}
                         className="h-7 gap-1.5 rounded-lg border-emerald-400/80 bg-white px-2.5 text-[11px] font-semibold text-emerald-700 shadow-2xs hover:bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
-                        onClick={handleSendLogViaWhatsApp}
+                        onClick={() => void handleSendLogViaWhatsApp()}
                       >
-                        <Share2 className="size-3 text-emerald-600 dark:text-emerald-400" />
-                        <span>{locale === "ar" ? "إرسال السجل عبر واتساب" : "Send Log via WhatsApp"}</span>
+                        {actionBusy === "share" ? (
+                          <Loader2 className="size-3 animate-spin text-emerald-600 dark:text-emerald-400" />
+                        ) : (
+                          <Share2 className="size-3 text-emerald-600 dark:text-emerald-400" />
+                        )}
+                        <span>
+                          {actionBusy === "share"
+                            ? (locale === "ar" ? "إعداد سجل التشخيص..." : "Preparing diagnostic log...")
+                            : (locale === "ar" ? "إرسال السجل عبر واتساب" : "Send Log via WhatsApp")}
+                        </span>
                       </Button>
                     </div>
 
