@@ -649,7 +649,7 @@ export function InspectionReportForm({
 
     return {
       ...(response?.content ?? EMPTY_TERM_RESPONSE_CONTENT),
-      rectificationAndSubsequentWork: response?.content?.rectificationAndSubsequentWork ?? (response === null ? (locale === "ar" ? PREDEFINED_RECTIFICATION_WORK_HTML_AR : PREDEFINED_RECTIFICATION_WORK_HTML) : (response?.content?.rectificationAndSubsequentWork ?? "")),
+      rectificationAndSubsequentWork: response?.content?.rectificationAndSubsequentWork ?? "",
       checklist: initialChecklist,
     }
   })
