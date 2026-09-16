@@ -381,7 +381,7 @@ function editableTextToCastingHtml(text: string): string {
         html += "</ul>"
         inList = false
       }
-      html += `<h3>${line}</h3>`
+      html += `<p>${line}</p>`
     }
   }
   if (inList) {
