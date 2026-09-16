@@ -3293,7 +3293,7 @@ function SimpleRichTextEditor({
   const handleBold = () => {
     restoreSelection()
     try {
-      document.execCommand("styleWithCSS", false, false)
+      document.execCommand("styleWithCSS", false, "false")
     } catch {}
     document.execCommand("bold", false)
     saveSelection()
@@ -3492,7 +3492,7 @@ function RichSectionEditor({
   const command = (name: string, argument?: string) => {
     restore()
     try {
-      document.execCommand("styleWithCSS", false, false)
+      document.execCommand("styleWithCSS", false, "false")
     } catch {}
     document.execCommand(name, false, argument)
     saveSelection()
@@ -3840,10 +3840,7 @@ function RichSectionEditor({
 
           <EditorButton
             label="Bold"
-            onMouseDown={(e) => {
-              e.preventDefault()
-              command("bold")
-            }}
+            onClick={() => command("bold")}
             disabled={disabled}
           >
             <Bold className="size-4 font-bold" />
