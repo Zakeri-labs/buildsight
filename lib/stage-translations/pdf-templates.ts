@@ -615,6 +615,7 @@ export const PDF_UI_SECTION_KEYS = [
   "recommendations",
   "correctiveActions",
   "recommendationsDuringCasting",
+  "rectificationAndSubsequentWork",
   "attachments",
 ] as const
 
