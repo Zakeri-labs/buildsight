@@ -2935,7 +2935,9 @@ function isJustifiedReportSection(key?: string): boolean {
     k === "recommendations" ||
     k === "instructions" ||
     k === "recommendationsduringcasting" ||
-    k === "recommendations_during_casting"
+    k === "recommendations_during_casting" ||
+    k === "rectificationandsubsequentwork" ||
+    k === "rectification_and_subsequent_work"
   )
 }
 
@@ -4555,6 +4557,8 @@ function isJustifiedBilingualSection(key: string, title: string): boolean {
     k === "instructions" ||
     k === "recommendationsduringcasting" ||
     k === "recommendations_during_casting" ||
+    k === "rectificationandsubsequentwork" ||
+    k === "rectification_and_subsequent_work" ||
     k === "workcompleted" ||
     k === "work_completed" ||
     t.includes("observation") ||

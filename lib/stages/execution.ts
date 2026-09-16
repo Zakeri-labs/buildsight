@@ -100,6 +100,7 @@ export type ReportSectionKey =
   | "recommendations"
   | "correctiveActions"
   | "recommendationsDuringCasting"
+  | "rectificationAndSubsequentWork"
 
 export type ChecklistResult = "" | "pass" | "fail" | "na" | "in_progress"
 
@@ -143,6 +144,10 @@ export const PREDEFINED_CASTING_RECOMMENDATIONS_HTML_AR = `<ul>
 <li>في حال ملاحظة أي تعشيش أو عيوب سطحية، يجب إبلاغ الاستشاري قبل البدء بأي أعمال معالجة أو إصلاح.</li>
 </ul>`.trim()
 
+export const PREDEFINED_RECTIFICATION_WORK_HTML = `<p>Upon completion of all required rectification works, the Contractor shall submit a formal inspection request to the Consultant. No subsequent stage of work shall commence until the inspection has been carried out and the rectified works have been reviewed and approved by the Consultant.</p><p>Should the Contractor proceed with any subsequent works without the Consultant’s inspection and approval, full responsibility for any resulting consequences, defects, rework, delays, or associated costs shall rest solely with the Contractor.</p>`.trim()
+
+export const PREDEFINED_RECTIFICATION_WORK_HTML_AR = `<p>عند الانتهاء من جميع أعمال المعالجة والإصلاح المطلوبة، يجب على المقاول تقديم طلب تفتيش رسمي إلى الاستشاري. ولا يجوز البدء في أي مرحلة عمل لاحقة حتى يتم إجراء التفتيش ومراجعة الأعمال المصححة واعتمادها من قبل الاستشاري.</p><p>وفي حال قيام المقاول بالبدء في أي أعمال لاحقة دون تفتيش واعتماد الاستشاري، فإن المسؤولية الكاملة عن أي عواقب أو عيوب أو إعادة عمل أو تأخيرات أو تكاليف مرتبطة بذلك تقع على عاتق المقاول بمفرده.</p>`.trim()
+
 export type TermResponseContent = Record<ReportSectionKey, string> & {
   checklist: ChecklistItem[]
   answer: string
@@ -159,6 +164,7 @@ export const EMPTY_TERM_RESPONSE_CONTENT: TermResponseContent = {
   recommendations: "",
   correctiveActions: "",
   recommendationsDuringCasting: "",
+  rectificationAndSubsequentWork: "",
   checklist: [],
   answer: "",
   selection: "",

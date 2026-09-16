@@ -70,6 +70,8 @@ import {
   EMPTY_TERM_RESPONSE_CONTENT,
   PREDEFINED_CASTING_RECOMMENDATIONS_HTML,
   PREDEFINED_CASTING_RECOMMENDATIONS_HTML_AR,
+  PREDEFINED_RECTIFICATION_WORK_HTML,
+  PREDEFINED_RECTIFICATION_WORK_HTML_AR,
   REPORT_TYPES,
   sanitizeReportHtml,
   reportTypeLabel,
@@ -647,6 +649,7 @@ export function InspectionReportForm({
 
     return {
       ...(response?.content ?? EMPTY_TERM_RESPONSE_CONTENT),
+      rectificationAndSubsequentWork: response?.content?.rectificationAndSubsequentWork ?? (response === null ? (locale === "ar" ? PREDEFINED_RECTIFICATION_WORK_HTML_AR : PREDEFINED_RECTIFICATION_WORK_HTML) : (response?.content?.rectificationAndSubsequentWork ?? "")),
       checklist: initialChecklist,
     }
   })
@@ -685,6 +688,8 @@ export function InspectionReportForm({
   const [expandedChecklistCommentId, setExpandedChecklistCommentId] = useState<string | null>(null)
   const [isEditingCastingRecs, setIsEditingCastingRecs] = useState(false)
   const [castingRecsText, setCastingRecsText] = useState("")
+  const [isEditingRectificationWork, setIsEditingRectificationWork] = useState(false)
+  const [rectificationWorkText, setRectificationWorkText] = useState("")
   const [ccSelection, setCcSelection] = useState<ReportCcSelection>(() => initialRecipientSelection(
     ccCandidates,
     initialCcRecipients,
@@ -2347,6 +2352,95 @@ export function InspectionReportForm({
                       className="prose prose-sm dark:prose-invert max-w-none text-foreground [&_h3]:font-semibold [&_h3]:text-foreground [&_h4]:font-semibold [&_h4]:text-foreground [&_ul]:mt-1 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:ps-5 [&_li]:mt-0.5 [&_li]:text-muted-foreground"
                       dangerouslySetInnerHTML={{
                         __html: sanitizeReportHtml(content.recommendationsDuringCasting),
+                      }}
+                    />
+                  </div>
+                )}
+              </CardContent>
+            ) : null}
+          </Card>
+
+          <Card className="rounded-2xl border bg-card shadow-sm transition-shadow hover:shadow-md">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 md:p-5">
+              <div className="space-y-1">
+                <CardTitle className="text-base font-semibold">
+                  {locale === "ar" ? "أعمال المعالجة والأعمال اللاحقة" : "Rectification & Subsequent Work"}
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  {locale === "ar"
+                    ? "تضمين اشتراطات أعمال المعالجة والموافقات المطلوبة قبل البدء بالأعمال اللاحقة (اختياري)"
+                    : "Include required rectification works and approval conditions for subsequent work (Optional)"}
+                </p>
+              </div>
+              <div className="flex items-center gap-2.5">
+                {Boolean(content.rectificationAndSubsequentWork) && !isLocked ? (
+                  isEditingRectificationWork ? (
+                    <span className="text-xs font-semibold text-primary">
+                      {locale === "ar" ? "جاري التعديل..." : "Editing"}
+                    </span>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2.5 text-xs font-medium"
+                      onClick={() => {
+                        setRectificationWorkText(castingHtmlToEditableText(content.rectificationAndSubsequentWork))
+                        setIsEditingRectificationWork(true)
+                      }}
+                    >
+                      <Pencil className="mr-1 size-3" />
+                      {locale === "ar" ? "تعديل" : "Edit"}
+                    </Button>
+                  )
+                ) : null}
+                <span className="text-xs font-medium text-muted-foreground">
+                  {Boolean(content.rectificationAndSubsequentWork)
+                    ? (locale === "ar" ? "مفعل" : "Enabled")
+                    : (locale === "ar" ? "معطل" : "Disabled")}
+                </span>
+                <Switch
+                  checked={Boolean(content.rectificationAndSubsequentWork)}
+                  disabled={isLocked}
+                  onCheckedChange={(checked) => {
+                    if (!checked) {
+                      setIsEditingRectificationWork(false)
+                    }
+                    setContent((current) => ({
+                      ...current,
+                      rectificationAndSubsequentWork: checked
+                        ? (locale === "ar" ? PREDEFINED_RECTIFICATION_WORK_HTML_AR : PREDEFINED_RECTIFICATION_WORK_HTML)
+                        : "",
+                    }))
+                  }}
+                  aria-label={locale === "ar" ? "أعمال المعالجة والأعمال اللاحقة" : "Rectification & Subsequent Work"}
+                />
+              </div>
+            </CardHeader>
+            {Boolean(content.rectificationAndSubsequentWork) ? (
+              <CardContent className="px-4 pb-4 pt-0 md:px-5 md:pb-5">
+                {isEditingRectificationWork ? (
+                  <textarea
+                    autoFocus
+                    rows={8}
+                    className="w-full min-h-[160px] resize-y rounded-xl border border-input bg-background p-3.5 text-xs leading-relaxed text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 md:text-sm"
+                    value={rectificationWorkText}
+                    onChange={(e) => setRectificationWorkText(e.target.value)}
+                    onBlur={() => {
+                      const updatedHtml = editableTextToCastingHtml(rectificationWorkText)
+                      setContent((current) => ({
+                        ...current,
+                        rectificationAndSubsequentWork: updatedHtml,
+                      }))
+                      setIsEditingRectificationWork(false)
+                    }}
+                  />
+                ) : (
+                  <div className="rounded-xl border border-border/80 bg-muted/40 p-4 text-xs leading-relaxed text-foreground md:text-sm">
+                    <div
+                      className="prose prose-sm dark:prose-invert max-w-none text-foreground [&_h3]:font-semibold [&_h3]:text-foreground [&_h4]:font-semibold [&_h4]:text-foreground [&_p]:mt-1 [&_p]:mb-2 [&_p]:text-muted-foreground"
+                      dangerouslySetInnerHTML={{
+                        __html: sanitizeReportHtml(content.rectificationAndSubsequentWork),
                       }}
                     />
                   </div>

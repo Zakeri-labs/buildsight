@@ -51,6 +51,7 @@ function normalizeContent(value: Partial<TermResponseContent>): TermResponseCont
     recommendations: sanitizeReportHtml(value.recommendations),
     correctiveActions: sanitizeReportHtml(value.correctiveActions),
     recommendationsDuringCasting: sanitizeReportHtml(value.recommendationsDuringCasting),
+    rectificationAndSubsequentWork: sanitizeReportHtml(value.rectificationAndSubsequentWork),
     checklist: Array.isArray(value.checklist)
       ? value.checklist.slice(0, 100).map((item) => ({
           id: String(item.id || crypto.randomUUID()).slice(0, 100),
