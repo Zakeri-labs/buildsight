@@ -2318,6 +2318,33 @@ export function parseFormattedWords(text: string): FormattedWord[] {
   return words
 }
 
+export interface FormattedRun {
+  text: string
+  bold: boolean
+}
+
+export function wordsToRuns(words: FormattedWord[]): FormattedRun[] {
+  if (!words.length) return []
+  const runs: FormattedRun[] = []
+  let currentRun: FormattedRun | null = null
+
+  for (const w of words) {
+    if (!w.word) continue
+    if (!currentRun) {
+      currentRun = { text: w.word, bold: w.bold }
+    } else if (currentRun.bold === w.bold) {
+      currentRun.text += " " + w.word
+    } else {
+      runs.push(currentRun)
+      currentRun = { text: w.word, bold: w.bold }
+    }
+  }
+  if (currentRun) {
+    runs.push(currentRun)
+  }
+  return runs
+}
+
 function renderFormattedLine(
   doc: JsPdfDocument,
   lineWords: FormattedWord[],
@@ -2329,49 +2356,53 @@ function renderFormattedLine(
   const { align = "left", rtl = false, fontSize = 9 } = options
   const isRtl = rtl || lineWords.some((w) => containsArabic(w.word))
 
+  const runs = wordsToRuns(lineWords)
+  if (!runs.length) return
+
   setLanguage(doc, isRtl, fontSize, false)
   const spaceWidth = doc.getTextWidth(" ")
 
-  const wordWidths = lineWords.map((w) => {
-    setLanguage(doc, isRtl, fontSize, w.bold)
-    const textToMeasure = isRtl ? (shapeArabicText(doc, w.word) as string) : w.word
+  const runWidths = runs.map((r) => {
+    setLanguage(doc, isRtl, fontSize, r.bold)
+    const textToMeasure = isRtl ? (shapeArabicText(doc, r.text) as string) : r.text
     return doc.getTextWidth(textToMeasure)
   })
 
-  const totalLineWidth = wordWidths.reduce((a, b) => a + b, 0) + Math.max(0, lineWords.length - 1) * spaceWidth
+  const totalLineWidth = runWidths.reduce((a, b) => a + b, 0) + Math.max(0, runs.length - 1) * spaceWidth
 
   if (isRtl) {
     if (align === "right") {
       let currRightX = x
-      lineWords.forEach((w, i) => {
-        setLanguage(doc, true, fontSize, w.bold)
-        const shaped = shapeArabicText(doc, w.word) as string
+      runs.forEach((r, i) => {
+        setLanguage(doc, true, fontSize, r.bold)
+        const shaped = shapeArabicText(doc, r.text) as string
         doc.text(shaped, currRightX, y, { ...ARABIC_TEXT_OPTIONS, align: "right" })
-        currRightX -= (wordWidths[i] + spaceWidth)
+        currRightX -= (runWidths[i] + spaceWidth)
       })
     } else {
       let currX = x
-      lineWords.forEach((w, i) => {
-        setLanguage(doc, true, fontSize, w.bold)
-        const shaped = shapeArabicText(doc, w.word) as string
+      runs.forEach((r, i) => {
+        setLanguage(doc, true, fontSize, r.bold)
+        const shaped = shapeArabicText(doc, r.text) as string
         doc.text(shaped, currX, y, { align: "left" })
-        currX += wordWidths[i] + spaceWidth
+        currX += runWidths[i] + spaceWidth
       })
     }
+    doc.setTextRenderingMode?.(0)
   } else {
     if (align === "right") {
       let currX = x - totalLineWidth
-      lineWords.forEach((w, i) => {
-        setLanguage(doc, false, fontSize, w.bold)
-        doc.text(w.word, currX, y, { align: "left" })
-        currX += wordWidths[i] + spaceWidth
+      runs.forEach((r, i) => {
+        setLanguage(doc, false, fontSize, r.bold)
+        doc.text(r.text, currX, y, { align: "left" })
+        currX += runWidths[i] + spaceWidth
       })
     } else {
       let currX = x
-      lineWords.forEach((w, i) => {
-        setLanguage(doc, false, fontSize, w.bold)
-        doc.text(w.word, currX, y, { align: "left" })
-        currX += wordWidths[i] + spaceWidth
+      runs.forEach((r, i) => {
+        setLanguage(doc, false, fontSize, r.bold)
+        doc.text(r.text, currX, y, { align: "left" })
+        currX += runWidths[i] + spaceWidth
       })
     }
   }
