@@ -69,6 +69,24 @@ function normalizeContent(value: Partial<TermResponseContent>): TermResponseCont
   }
 }
 
+async function invalidateTranslationPdfs(responseId: string, projectId: string) {
+  try {
+    const admin = createAdminClient()
+    await admin
+      .from("translation_documents")
+      .update({
+        original_pdf_url: null,
+        arabic_pdf_url: null,
+        bilingual_pdf_url: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("response_id", responseId)
+      .eq("project_id", projectId)
+  } catch (err) {
+    console.warn("[stage-report] Failed to invalidate cached PDF URLs:", err)
+  }
+}
+
 async function termScope(projectId: string, termId: string) {
   const admin = createAdminClient()
   const { data: byId, error: errorId } = await admin
@@ -624,6 +642,8 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       }
     }
 
+    await invalidateTranslationPdfs(input.responseId, input.projectId)
+
     const linkedSiteVisitId = siteVisitRequestId || existing?.site_visit_request_id
     if (linkedSiteVisitId && assignedVisitNumber) {
       await admin
@@ -853,6 +873,7 @@ export async function registerResponseAttachmentsAction(input: {
     if (response.project_stage_term_id && response.project_stage_id) {
       revalidatePath(`/projects/${input.projectId}/stages/${response.project_stage_id}/terms/${response.project_stage_term_id}/reports/${input.responseId}`)
     }
+    await invalidateTranslationPdfs(input.responseId, input.projectId)
     return { ok: true, data: { ids: (data ?? []).map((row: any) => row.id as string) } }
   } catch (error) {
     return actionError(error, "Could not save attachment metadata.")
@@ -902,6 +923,7 @@ export async function deleteResponseAttachmentAction(input: {
     if (response.project_stage_term_id && response.project_stage_id) {
       revalidatePath(`/projects/${input.projectId}/stages/${response.project_stage_id}/terms/${response.project_stage_term_id}/reports/${attachment.response_id}`)
     }
+    await invalidateTranslationPdfs(attachment.response_id, input.projectId)
     return { ok: true }
   } catch (error) {
     return actionError(error, "Could not delete the attachment.")

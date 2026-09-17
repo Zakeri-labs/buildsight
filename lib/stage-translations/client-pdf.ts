@@ -442,16 +442,27 @@ export async function ensureBilingualPdfStored(input: {
       return { storagePath: null }
     }
 
+    const isStale = Boolean(data.translation?.isStale)
+
     logDiagnosticEvent(input.responseId, "ENSURE_BILINGUAL_TRANSLATION_LOOKUP", {
       http: res.status,
       translationStatus: data.translation.status,
       translatedContentPresent: Boolean(data.translation.translatedContent),
       bilingualPdfPath: data.translation.bilingualPdfPath || null,
+      isStale,
     })
 
-    if (data.translation?.bilingualPdfPath) {
+    if (data.translation?.bilingualPdfPath && !isStale) {
       logDiagnosticEvent(input.responseId, "ENSURE_BILINGUAL_STORED_EXISTING", { bilingualPdfPath: data.translation.bilingualPdfPath })
       return { storagePath: data.translation.bilingualPdfPath, translation: data.translation }
+    }
+
+    if (data.translation?.bilingualPdfPath && isStale) {
+      logDiagnosticEvent(input.responseId, "ENSURE_BILINGUAL_CACHE_BYPASSED_STALE", {
+        previousBilingualPdfPath: data.translation.bilingualPdfPath,
+        isStale: true,
+        reason: "content_stale",
+      })
     }
 
     logDiagnosticEvent(input.responseId, "ENSURE_BILINGUAL_GENERATION_STARTED", {
