@@ -269,6 +269,8 @@ export function parseTranslationContent(value: unknown): TranslationReportConten
   }
 }
 
+export const PREDEFINED_TEMPLATE_VERSION = 1
+
 export function isReportTextStale(
   current: TranslationReportContent | null | undefined,
   translatedOriginal: TranslationReportContent | null | undefined,
@@ -288,6 +290,7 @@ export function isReportTextStale(
     "recommendations",
     "correctiveActions",
     "recommendationsDuringCasting",
+    "rectificationAndSubsequentWork",
   ]
   for (const key of sectionKeys) {
     const currSec = (current.sections?.[key] || "").trim()
