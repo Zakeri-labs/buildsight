@@ -4771,9 +4771,16 @@ function renderJustifiedLine(
   }
 
   const rawWords = body.trim().split(/\s+/).filter(Boolean)
-  const words: FormattedWord[] = lineFormattedWords && lineFormattedWords.length >= rawWords.length
+  let words: FormattedWord[] = lineFormattedWords && lineFormattedWords.length >= rawWords.length
     ? lineFormattedWords
     : rawWords.map((w) => ({ word: w, bold: false }))
+
+  if (prefix && words.length > 0) {
+    const cleanPrefix = prefix.trim()
+    if (words[0].word.trim() === cleanPrefix) {
+      words = words.slice(1)
+    }
+  }
 
   if (words.length < 3) {
     if (lineFormattedWords && lineFormattedWords.length > 0) {
