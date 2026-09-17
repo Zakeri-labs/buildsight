@@ -1349,8 +1349,8 @@ function setLanguage(doc: JsPdfDocument, rtl: boolean, fontSize = 10, bold = fal
   doc.setCharSpace?.(0)
 
   if (rtl && bold) {
-    doc.setTextRenderingMode?.(2) // Fill then stroke for subtle Arabic bold enhancement
-    doc.setLineWidth?.(0.06)
+    doc.setTextRenderingMode?.(2) // Fill then stroke for high-contrast Arabic bold rendering
+    doc.setLineWidth?.(0.12)
   } else {
     doc.setTextRenderingMode?.(0) // Standard fill mode
   }
