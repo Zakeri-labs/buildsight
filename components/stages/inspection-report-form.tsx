@@ -2269,16 +2269,9 @@ export function InspectionReportForm({
 
           <Card className="rounded-2xl border bg-card shadow-sm transition-shadow hover:shadow-md">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 md:p-5">
-              <div className="space-y-1">
-                <CardTitle className="text-base font-semibold">
-                  {locale === "ar" ? "توصيات أثناء صب الخرسانة" : "Recommendations During Casting"}
-                </CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  {locale === "ar"
-                    ? "تضمين اشتراطات وتوصيات الصب والمعالجة المعتمدة في التقرير (اختياري)"
-                    : "Include predefined casting and curing recommendations in the report (Optional)"}
-                </p>
-              </div>
+              <CardTitle className="text-base font-semibold">
+                {locale === "ar" ? "توصيات أثناء صب الخرسانة" : "Recommendations During Casting"}
+              </CardTitle>
               <div className="flex items-center gap-2.5">
                 <span className="text-xs font-medium text-muted-foreground">
                   {Boolean(content.recommendationsDuringCasting)
@@ -2319,16 +2312,9 @@ export function InspectionReportForm({
 
           <Card className="rounded-2xl border bg-card shadow-sm transition-shadow hover:shadow-md">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 md:p-5">
-              <div className="space-y-1">
-                <CardTitle className="text-base font-semibold">
-                  {locale === "ar" ? "أعمال المعالجة والأعمال اللاحقة" : "Rectification & Subsequent Work"}
-                </CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  {locale === "ar"
-                    ? "تضمين اشتراطات أعمال المعالجة والموافقات المطلوبة قبل البدء بالأعمال اللاحقة (اختياري)"
-                    : "Include required rectification works and approval conditions for subsequent work (Optional)"}
-                </p>
-              </div>
+              <CardTitle className="text-base font-semibold">
+                {locale === "ar" ? "أعمال المعالجة والأعمال اللاحقة" : "Rectification & Subsequent Work"}
+              </CardTitle>
               <div className="flex items-center gap-2.5">
                 <span className="text-xs font-medium text-muted-foreground">
                   {Boolean(content.rectificationAndSubsequentWork)
