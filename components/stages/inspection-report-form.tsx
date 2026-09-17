@@ -3268,7 +3268,7 @@ function SimpleRichTextEditor({
   const savedRangeRef = useRef<Range | null>(null)
 
   useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== value) {
+    if (editorRef.current && document.activeElement !== editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value || ""
     }
   }, [value])
@@ -3282,7 +3282,7 @@ function SimpleRichTextEditor({
 
   const restoreSelection = () => {
     const selection = window.getSelection()
-    if (selection && savedRangeRef.current) {
+    if (selection && savedRangeRef.current && savedRangeRef.current.startContainer.isConnected) {
       selection.removeAllRanges()
       selection.addRange(savedRangeRef.current)
     } else {
@@ -3394,7 +3394,7 @@ function RichSectionEditor({
   const debounceTimerRef = useRef<any>(null)
 
   useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== value) {
+    if (editorRef.current && document.activeElement !== editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value || "<p><br></p>"
     }
   }, [value])
@@ -3481,7 +3481,7 @@ function RichSectionEditor({
 
   const restore = () => {
     const selection = window.getSelection()
-    if (selection && savedRangeRef.current) {
+    if (selection && savedRangeRef.current && savedRangeRef.current.startContainer.isConnected) {
       selection.removeAllRanges()
       selection.addRange(savedRangeRef.current)
     } else {
@@ -3884,7 +3884,6 @@ function RichSectionEditor({
             suppressContentEditableWarning
             role="textbox"
             aria-multiline="true"
-            onFocus={saveSelection}
             onKeyUp={saveSelection}
             onMouseUp={saveSelection}
             onKeyDown={handleKeyDown}
