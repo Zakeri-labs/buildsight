@@ -32,8 +32,10 @@ const AUTOTABLE_SCRIPT_URLS = [
   "https://unpkg.com/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js",
 ]
 const ARABIC_FONT_FILENAME = "GretaArabic-Regular.ttf"
+const ARABIC_BOLD_FONT_FILENAME = "GretaArabic-Bold.ttf"
 const ARABIC_FONT_FAMILY = "GretaArabic"
 const ARABIC_FONT_URL = "/fonts/GretaArabic-Regular.ttf"
+const ARABIC_BOLD_FONT_URL = "/fonts/GretaArabic-Bold.ttf"
 const CLOSING_LOGO_URL = "/bonyan-closing-logo.png"
 
 const LATIN_FONT_FILENAME = "helvetica"
@@ -169,10 +171,11 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
 }
 
 let arabicFontPromise: Promise<string> | null = null
+let arabicBoldFontPromise: Promise<string> | null = null
 let latinFontPromise: Promise<string> | null = null
 
-async function loadFontBase64(url: string, isArabic: boolean) {
-  const cache = isArabic ? arabicFontPromise : latinFontPromise
+async function loadFontBase64(url: string, kind: "arabic" | "arabic-bold" | "latin") {
+  const cache = kind === "arabic" ? arabicFontPromise : kind === "arabic-bold" ? arabicBoldFontPromise : latinFontPromise
   if (cache) return cache
 
   const promise = (async () => {
@@ -184,32 +187,43 @@ async function loadFontBase64(url: string, isArabic: boolean) {
     if (bytes.byteLength < 20000) throw new Error(`Invalid font bytes for ${url}`)
     return arrayBufferToBase64(bytes)
   })().catch((error) => {
-    if (isArabic) arabicFontPromise = null
+    if (kind === "arabic") arabicFontPromise = null
+    else if (kind === "arabic-bold") arabicBoldFontPromise = null
     else latinFontPromise = null
     throw error
   })
 
-  if (isArabic) arabicFontPromise = promise
+  if (kind === "arabic") arabicFontPromise = promise
+  else if (kind === "arabic-bold") arabicBoldFontPromise = promise
   else latinFontPromise = promise
   return promise
 }
 
 async function installFonts(doc: JsPdfDocument) {
-  const [arBase64, laBase64] = await Promise.all([
-    loadFontBase64(ARABIC_FONT_URL, true),
-    loadFontBase64(LATIN_FONT_URL, false),
+  const [arBase64, arBoldBase64, laBase64] = await Promise.all([
+    loadFontBase64(ARABIC_FONT_URL, "arabic"),
+    loadFontBase64(ARABIC_BOLD_FONT_URL, "arabic-bold"),
+    loadFontBase64(LATIN_FONT_URL, "latin"),
   ])
 
   if (!doc.existsFileInVFS?.(ARABIC_FONT_FILENAME)) {
     doc.addFileToVFS(ARABIC_FONT_FILENAME, arBase64)
+  }
+  if (!doc.existsFileInVFS?.(ARABIC_BOLD_FONT_FILENAME)) {
+    doc.addFileToVFS(ARABIC_BOLD_FONT_FILENAME, arBoldBase64)
   }
   if (!doc.existsFileInVFS?.(LATIN_FONT_FILENAME)) {
     doc.addFileToVFS(LATIN_FONT_FILENAME, laBase64)
   }
 
   const fontList = doc.getFontList?.() as Record<string, string[]> | undefined
-  if (!fontList?.[ARABIC_FONT_FAMILY]) {
+  const existingGretaStyles = fontList?.[ARABIC_FONT_FAMILY] ?? []
+
+  if (!existingGretaStyles.includes("normal")) {
     doc.addFont(ARABIC_FONT_FILENAME, ARABIC_FONT_FAMILY, "normal")
+  }
+  if (!existingGretaStyles.includes("bold")) {
+    doc.addFont(ARABIC_BOLD_FONT_FILENAME, ARABIC_FONT_FAMILY, "bold")
   }
   if (!fontList?.[LATIN_FONT_FAMILY]) {
     doc.addFont(LATIN_FONT_FILENAME, LATIN_FONT_FAMILY, "normal")
@@ -1330,7 +1344,7 @@ function setLanguage(doc: JsPdfDocument, rtl: boolean, fontSize = 10, bold = fal
   // the Arabic parser and reordered by the BiDi text options per text run.
   doc.setR2L?.(false)
   doc.setLanguage?.(rtl ? "ar-SA" : "en-GB")
-  doc.setFont(rtl ? ARABIC_FONT_FAMILY : LATIN_FONT_FAMILY, rtl ? "normal" : bold ? "bold" : "normal")
+  doc.setFont(rtl ? ARABIC_FONT_FAMILY : LATIN_FONT_FAMILY, bold ? "bold" : "normal")
   doc.setFontSize(fontSize)
   doc.setCharSpace?.(0)
 }
@@ -1362,16 +1376,17 @@ function writePdfText(
     ? text.some((item) => containsArabic(item))
     : containsArabic(text)
 
+  const currentStyle = doc.getFont()?.fontStyle || "normal"
   if (rtl && !containsAnyArabic) {
-    doc.setFont(LATIN_FONT_FAMILY, "normal")
+    doc.setFont(LATIN_FONT_FAMILY, currentStyle)
     doc.text(text, x, y, options)
-    doc.setFont(ARABIC_FONT_FAMILY, "normal")
+    doc.setFont(ARABIC_FONT_FAMILY, currentStyle)
     return
   }
 
   const useArabicMode = rtl || containsAnyArabic
   if (containsAnyArabic) {
-    doc.setFont(ARABIC_FONT_FAMILY, "normal")
+    doc.setFont(ARABIC_FONT_FAMILY, currentStyle)
   }
   const preparedText = useArabicMode ? shapeArabicText(doc, text) : text
   doc.text(preparedText, x, y, useArabicMode ? { ...options, ...ARABIC_TEXT_OPTIONS } : options)
@@ -4823,7 +4838,7 @@ function renderJustifiedLine(
       currX += wordWidths[i] + gapWidth
     })
   } else {
-    doc.setFont(ARABIC_FONT_FAMILY, "normal")
+    setLanguage(doc, true, fontSize, words[0]?.bold ?? false)
     const shapedWords = words.map((w) => shapeArabicText(doc, w.word) as string)
     const wordWidths = shapedWords.map((w, i) => {
       setLanguage(doc, true, fontSize, words[i].bold)
