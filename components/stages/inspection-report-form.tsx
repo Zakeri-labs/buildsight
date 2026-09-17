@@ -686,10 +686,6 @@ export function InspectionReportForm({
   const [reviewComments, setReviewComments] = useState("")
   const [approvalHistory, setApprovalHistory] = useState(response?.approvals ?? [])
   const [expandedChecklistCommentId, setExpandedChecklistCommentId] = useState<string | null>(null)
-  const [isEditingCastingRecs, setIsEditingCastingRecs] = useState(false)
-  const [castingRecsText, setCastingRecsText] = useState("")
-  const [isEditingRectificationWork, setIsEditingRectificationWork] = useState(false)
-  const [rectificationWorkText, setRectificationWorkText] = useState("")
   const [ccSelection, setCcSelection] = useState<ReportCcSelection>(() => initialRecipientSelection(
     ccCandidates,
     initialCcRecipients,
@@ -2284,26 +2280,6 @@ export function InspectionReportForm({
                 </p>
               </div>
               <div className="flex items-center gap-2.5">
-                {Boolean(content.recommendationsDuringCasting) && !isLocked ? (
-                  isEditingCastingRecs ? (
-                    <span className="text-xs font-semibold text-primary">
-                      {locale === "ar" ? "جاري التعديل..." : "Editing"}
-                    </span>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2.5 text-xs font-medium"
-                      onClick={() => {
-                        setIsEditingCastingRecs(true)
-                      }}
-                    >
-                      <Pencil className="mr-1 size-3" />
-                      {locale === "ar" ? "تعديل" : "Edit"}
-                    </Button>
-                  )
-                ) : null}
                 <span className="text-xs font-medium text-muted-foreground">
                   {Boolean(content.recommendationsDuringCasting)
                     ? (locale === "ar" ? "مفعل" : "Enabled")
@@ -2313,9 +2289,6 @@ export function InspectionReportForm({
                   checked={Boolean(content.recommendationsDuringCasting)}
                   disabled={isLocked}
                   onCheckedChange={(checked) => {
-                    if (!checked) {
-                      setIsEditingCastingRecs(false)
-                    }
                     setContent((current) => ({
                       ...current,
                       recommendationsDuringCasting: checked
@@ -2329,31 +2302,17 @@ export function InspectionReportForm({
             </CardHeader>
             {Boolean(content.recommendationsDuringCasting) ? (
               <CardContent className="px-4 pb-4 pt-0 md:px-5 md:pb-5">
-                {isEditingCastingRecs ? (
-                  <SimpleRichTextEditor
-                    value={content.recommendationsDuringCasting}
-                    minHeight="200px"
-                    disabled={isLocked}
-                    onChange={(updatedHtml) => {
-                      setContent((current) => ({
-                        ...current,
-                        recommendationsDuringCasting: updatedHtml,
-                      }))
-                    }}
-                    onBlur={() => {
-                      setIsEditingCastingRecs(false)
-                    }}
-                  />
-                ) : (
-                  <div className="rounded-xl border border-border/80 bg-muted/40 p-4 text-xs leading-relaxed text-foreground md:text-sm">
-                    <div
-                      className="prose prose-sm dark:prose-invert max-w-none text-foreground [&_h3]:font-semibold [&_h3]:text-foreground [&_h4]:font-semibold [&_h4]:text-foreground [&_ul]:mt-1 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:ps-5 [&_li]:mt-0.5 [&_li]:text-muted-foreground"
-                      dangerouslySetInnerHTML={{
-                        __html: sanitizeReportHtml(content.recommendationsDuringCasting),
-                      }}
-                    />
-                  </div>
-                )}
+                <SimpleRichTextEditor
+                  value={content.recommendationsDuringCasting}
+                  minHeight="200px"
+                  disabled={isLocked}
+                  onChange={(updatedHtml) => {
+                    setContent((current) => ({
+                      ...current,
+                      recommendationsDuringCasting: updatedHtml,
+                    }))
+                  }}
+                />
               </CardContent>
             ) : null}
           </Card>
@@ -2371,26 +2330,6 @@ export function InspectionReportForm({
                 </p>
               </div>
               <div className="flex items-center gap-2.5">
-                {Boolean(content.rectificationAndSubsequentWork) && !isLocked ? (
-                  isEditingRectificationWork ? (
-                    <span className="text-xs font-semibold text-primary">
-                      {locale === "ar" ? "جاري التعديل..." : "Editing"}
-                    </span>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2.5 text-xs font-medium"
-                      onClick={() => {
-                        setIsEditingRectificationWork(true)
-                      }}
-                    >
-                      <Pencil className="mr-1 size-3" />
-                      {locale === "ar" ? "تعديل" : "Edit"}
-                    </Button>
-                  )
-                ) : null}
                 <span className="text-xs font-medium text-muted-foreground">
                   {Boolean(content.rectificationAndSubsequentWork)
                     ? (locale === "ar" ? "مفعل" : "Enabled")
@@ -2400,9 +2339,6 @@ export function InspectionReportForm({
                   checked={Boolean(content.rectificationAndSubsequentWork)}
                   disabled={isLocked}
                   onCheckedChange={(checked) => {
-                    if (!checked) {
-                      setIsEditingRectificationWork(false)
-                    }
                     setContent((current) => ({
                       ...current,
                       rectificationAndSubsequentWork: checked
@@ -2416,31 +2352,17 @@ export function InspectionReportForm({
             </CardHeader>
             {Boolean(content.rectificationAndSubsequentWork) ? (
               <CardContent className="px-4 pb-4 pt-0 md:px-5 md:pb-5">
-                {isEditingRectificationWork ? (
-                  <SimpleRichTextEditor
-                    value={content.rectificationAndSubsequentWork}
-                    minHeight="150px"
-                    disabled={isLocked}
-                    onChange={(updatedHtml) => {
-                      setContent((current) => ({
-                        ...current,
-                        rectificationAndSubsequentWork: updatedHtml,
-                      }))
-                    }}
-                    onBlur={() => {
-                      setIsEditingRectificationWork(false)
-                    }}
-                  />
-                ) : (
-                  <div className="rounded-xl border border-border/80 bg-muted/40 p-4 text-xs leading-relaxed text-foreground md:text-sm">
-                    <div
-                      className="prose prose-sm dark:prose-invert max-w-none text-foreground [&_h3]:font-semibold [&_h3]:text-foreground [&_h4]:font-semibold [&_h4]:text-foreground [&_p]:mt-1 [&_p]:mb-2 [&_p]:text-muted-foreground"
-                      dangerouslySetInnerHTML={{
-                        __html: sanitizeReportHtml(content.rectificationAndSubsequentWork),
-                      }}
-                    />
-                  </div>
-                )}
+                <SimpleRichTextEditor
+                  value={content.rectificationAndSubsequentWork}
+                  minHeight="150px"
+                  disabled={isLocked}
+                  onChange={(updatedHtml) => {
+                    setContent((current) => ({
+                      ...current,
+                      rectificationAndSubsequentWork: updatedHtml,
+                    }))
+                  }}
+                />
               </CardContent>
             ) : null}
           </Card>
