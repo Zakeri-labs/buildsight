@@ -468,21 +468,7 @@ export async function prepareStageTranslationGeneration(input: {
   const isTextStale = existingOriginal ? isReportTextStale(original, existingOriginal) : isStale
   const translationFresh = Boolean(existing.translated_content && generatedAt && !isTextStale)
 
-  if (status === "completed" && translationFresh) {
-    if (isStale || input.retry) {
-      await admin
-        .from("translation_documents")
-        .update({
-          original_content: original,
-          original_pdf_url: null,
-          arabic_pdf_url: null,
-          bilingual_pdf_url: null,
-          updated_at: now,
-        })
-        .eq("id", existing.id)
-        .eq("translation_status", "completed")
-    }
-
+  if (status === "completed" && translationFresh && !isStale && !input.retry) {
     return {
       translationId: existing.id,
       status: "completed",
@@ -493,7 +479,7 @@ export async function prepareStageTranslationGeneration(input: {
 
   // A PDF-only failure keeps the translated content. Retry should resume PDF
   // preparation without paying for or duplicating the translation itself.
-  if (status === "failed" && input.retry && translationFresh) {
+  if (status === "failed" && input.retry && translationFresh && !isStale) {
     const { data: resumed, error: resumeError } = await admin
       .from("translation_documents")
       .update({
@@ -517,7 +503,7 @@ export async function prepareStageTranslationGeneration(input: {
     }
   }
 
-  if (status === "failed" && !input.retry) {
+  if (status === "failed" && !input.retry && !isStale) {
     return {
       translationId: existing.id,
       status: "failed",
@@ -526,7 +512,7 @@ export async function prepareStageTranslationGeneration(input: {
     }
   }
 
-  if (status === "pending") {
+  if (status === "pending" && !isStale) {
     const updatedAt = validDateMs(existing.updated_at)
     if (updatedAt && Date.now() - updatedAt < PENDING_GENERATION_STALE_MS) {
       return {
@@ -545,6 +531,7 @@ export async function prepareStageTranslationGeneration(input: {
     .update({
       translation_status: "pending",
       original_content: original,
+      translated_content: null,
       original_pdf_url: null,
       arabic_pdf_url: null,
       bilingual_pdf_url: null,

@@ -51,10 +51,10 @@ export function ReportDownloadSection({
   const [sharing, setSharing] = useState(false)
   const [copiedShare, setCopiedShare] = useState(false)
 
-  const hasStoredPdf = Boolean(translation?.bilingualPdfPath || translation?.originalPdfPath)
+  const hasStoredPdf = Boolean(translation?.bilingualPdfPath && translation?.originalPdfPath)
   const status = translation?.status ?? "pending"
   const isFailed = (status === "failed" || status === "error") && !hasStoredPdf
-  const isCompleted = status === "completed" || hasStoredPdf
+  const isCompleted = status === "completed" && (termId ? Boolean(translation?.translatedContent) : hasStoredPdf)
   const isPending = !isCompleted && !isFailed
 
   const isStale = Boolean(translation?.isStale)
@@ -71,15 +71,7 @@ export function ReportDownloadSection({
 
   useEffect(() => {
     if (initialTranslation) {
-      setTranslation((current) => {
-        if (!current) return initialTranslation
-        return {
-          ...current,
-          ...initialTranslation,
-          bilingualPdfPath: initialTranslation.bilingualPdfPath || current.bilingualPdfPath,
-          originalPdfPath: initialTranslation.originalPdfPath || current.originalPdfPath,
-        }
-      })
+      setTranslation(initialTranslation)
     }
   }, [initialTranslation])
 

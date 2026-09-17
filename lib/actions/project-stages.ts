@@ -75,6 +75,8 @@ async function invalidateTranslationPdfs(responseId: string, projectId: string) 
     await admin
       .from("translation_documents")
       .update({
+        translation_status: "pending",
+        translated_content: null,
         original_pdf_url: null,
         arabic_pdf_url: null,
         bilingual_pdf_url: null,

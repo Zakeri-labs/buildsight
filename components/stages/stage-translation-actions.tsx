@@ -93,15 +93,7 @@ export function StageTranslationActions({
 
   useEffect(() => {
     if (initialTranslation) {
-      setTranslation((current) => ({
-        ...current,
-        ...initialTranslation,
-        bilingualPdfPath: initialTranslation.bilingualPdfPath ?? current.bilingualPdfPath,
-        originalPdfPath: initialTranslation.originalPdfPath ?? current.originalPdfPath,
-        arabicPdfPath: initialTranslation.arabicPdfPath ?? current.arabicPdfPath,
-        translatedContent: initialTranslation.translatedContent ?? current.translatedContent,
-        isStale: initialTranslation.isStale ?? current.isStale,
-      }))
+      setTranslation(initialTranslation)
     }
   }, [initialTranslation])
 
