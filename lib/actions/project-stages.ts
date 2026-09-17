@@ -310,6 +310,7 @@ type SaveReportResponseInput = {
   siteVisitRequestId?: string | null
   visitNumber?: number | null
   visitDate?: string | null
+  activeAttachmentIds?: string[]
 }
 
 type SavedReportResponse = { responseId: string; projectStageId: string; reportNumber: string; visitNumber: number; visitDate: string | null; status: string }
@@ -587,6 +588,39 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       if (insertError) {
         if (insertError.code === "23505") return { ok: false, error: "A report with this identifier already exists." }
         throw insertError
+      }
+    }
+
+    if (Array.isArray(input.activeAttachmentIds)) {
+      const activeSet = new Set(input.activeAttachmentIds.filter(Boolean))
+      const { data: existingDbAttachments, error: fetchAttError } = await admin
+        .from("response_attachments")
+        .select("id, storage_path")
+        .eq("response_id", input.responseId)
+
+      if (!fetchAttError && existingDbAttachments && existingDbAttachments.length > 0) {
+        const toDelete = existingDbAttachments.filter((att) => !activeSet.has(att.id))
+        if (toDelete.length > 0) {
+          const deleteIds = toDelete.map((att) => att.id)
+          const deletePaths = toDelete.map((att) => att.storage_path).filter((att): att is string => Boolean(att))
+
+          const { error: delDbError } = await admin
+            .from("response_attachments")
+            .delete()
+            .in("id", deleteIds)
+
+          if (delDbError) {
+            console.error("[stage-report] failed to delete reconciled attachment records from database", {
+              responseId: input.responseId,
+              deleteIds,
+              error: delDbError.message,
+            })
+          } else if (deletePaths.length > 0) {
+            await admin.storage
+              .from("project-stage-evidence")
+              .remove(deletePaths)
+          }
+        }
       }
     }
 

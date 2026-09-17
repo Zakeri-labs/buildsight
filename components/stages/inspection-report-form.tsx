@@ -847,6 +847,7 @@ export function InspectionReportForm({
       templateReference: reportDefinition.templateReference,
       instructions: reportDefinition.instructions,
       saveStatus,
+      activeAttachmentIds: existingAttachments.map((att) => att.id),
     }
     const result = isDirectStageReport
       ? await saveStageReportAction({ ...reportInput, stageId: resolvedStageId, siteVisitRequestId })
@@ -1299,7 +1300,8 @@ export function InspectionReportForm({
         templateReference: reportDefinition.templateReference,
         instructions: reportDefinition.instructions,
         submit: isSubmitMode ? (true as const) : undefined,
-        saveStatus: isSubmitMode ? undefined : (mode === "progress" ? "in_progress" : "draft"),
+        saveStatus: isSubmitMode ? undefined : mode === "progress" ? ("in_progress" as const) : ("draft" as const),
+        activeAttachmentIds: existingAttachments.map((att) => att.id),
       }
 
       const result = isDirectStageReport
