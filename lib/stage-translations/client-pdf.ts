@@ -4869,11 +4869,22 @@ function renderJustifiedLine(
       doc.text(prefix, x, y, { align: "left" })
     }
 
+    const spaceWidth = doc.getTextWidth(" ")
+    const extraWordSpace = gapWidth - spaceWidth
+    const runs = wordsToRuns(words)
+
     let currX = x + prefixWidth
-    words.forEach((w, i) => {
-      doc.setFont(LATIN_FONT_FAMILY, w.bold ? "bold" : "normal")
-      doc.text(w.word, currX, y, { align: "left" })
-      currX += wordWidths[i] + gapWidth
+    runs.forEach((r) => {
+      doc.setFont(LATIN_FONT_FAMILY, r.bold ? "bold" : "normal")
+      const runWordsCount = r.text.trim().split(/\s+/).filter(Boolean).length
+      let runWidth = doc.getTextWidth(r.text)
+      if (runWordsCount > 1) {
+        runWidth += (runWordsCount - 1) * extraWordSpace
+      }
+      doc.setWordSpace?.(extraWordSpace)
+      doc.text(r.text, currX, y, { align: "left" })
+      doc.setWordSpace?.(0)
+      currX += runWidth + gapWidth
     })
   } else {
     setLanguage(doc, true, fontSize, words[0]?.bold ?? false)
@@ -4902,12 +4913,28 @@ function renderJustifiedLine(
       doc.text(preparedPrefix, columnRightX, y, { ...ARABIC_TEXT_OPTIONS, align: "right" })
     }
 
+    setLanguage(doc, true, fontSize, false)
+    const spaceWidth = doc.getTextWidth(" ")
+    const extraWordSpace = gapWidth - spaceWidth
+    const runs = wordsToRuns(words)
+
     let currRightX = columnRightX - prefixWidth
-    shapedWords.forEach((sw, i) => {
-      setLanguage(doc, true, fontSize, words[i].bold)
-      doc.text(sw, currRightX, y, { ...ARABIC_TEXT_OPTIONS, align: "right" })
-      currRightX -= (wordWidths[i] + gapWidth)
+    runs.forEach((r) => {
+      setLanguage(doc, true, fontSize, r.bold)
+      const shapedRun = shapeArabicText(doc, r.text) as string
+      const runWordsCount = r.text.trim().split(/\s+/).filter(Boolean).length
+      let runWidth = doc.getTextWidth(shapedRun)
+      if (runWordsCount > 1) {
+        runWidth += (runWordsCount - 1) * extraWordSpace
+      }
+
+      doc.setWordSpace?.(extraWordSpace)
+      doc.text(shapedRun, currRightX, y, { ...ARABIC_TEXT_OPTIONS, align: "right" })
+      doc.setWordSpace?.(0)
+
+      currRightX -= (runWidth + gapWidth)
     })
+    doc.setTextRenderingMode?.(0)
   }
 }
 
