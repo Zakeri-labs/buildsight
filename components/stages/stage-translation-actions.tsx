@@ -191,6 +191,15 @@ export function StageTranslationActions({
 
     downloadPdfBlob(pdf.blob, pdf.filename)
 
+    if (pdf.warnings && pdf.warnings.length > 0) {
+      const count = pdf.warnings[0].count
+      setError(
+        locale === "ar"
+          ? `تم تنزيل ملف PDF ولكن تعذر تضمين ${count} من الصور.`
+          : `PDF downloaded, but ${count} inspection image(s) could not be included.`
+      )
+    }
+
     if (pageData.translation?.id) {
       const savedPath = await storeTranslationPdf({
         projectId,

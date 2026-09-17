@@ -6,7 +6,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import type { ProjectStageTranslationSummary } from "@/lib/db/project-stages"
 import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto-generation"
-import { exportTranslationPdf, downloadPdfBlob, storeTranslationPdf, ensureBilingualPdfStored } from "@/lib/stage-translations/client-pdf"
+import { exportTranslationPdf, downloadPdfBlob, storeTranslationPdf, ensureBilingualPdfStored, type PdfWarning } from "@/lib/stage-translations/client-pdf"
 import { buildShareMessage, buildWhatsAppShareUrl } from "@/lib/stage-translations/whatsapp-share"
 import { cn } from "@/lib/utils"
 import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
@@ -50,6 +50,7 @@ export function ReportDownloadSection({
   const [downloading, setDownloading] = useState<"original" | "bilingual" | null>(null)
   const [sharing, setSharing] = useState(false)
   const [copiedShare, setCopiedShare] = useState(false)
+  const [pdfWarnings, setPdfWarnings] = useState<PdfWarning[] | null>(null)
 
   const hasStoredPdf = Boolean(translation?.bilingualPdfPath || translation?.originalPdfPath)
   const status = translation?.status ?? "pending"
@@ -153,7 +154,6 @@ export function ReportDownloadSection({
     const res = await ensureBilingualPdfStored({
       projectId,
       stageId,
-      termId: termId || undefined,
       responseId,
       existingPath: translation?.bilingualPdfPath,
       caller: "report_download_section",
@@ -337,6 +337,12 @@ export function ReportDownloadSection({
         appendClosingBlock: true,
       })
 
+      if (pdfResult.warnings && pdfResult.warnings.length > 0) {
+        setPdfWarnings(pdfResult.warnings)
+      } else {
+        setPdfWarnings(null)
+      }
+
       downloadPdfBlob(pdfResult.blob, pdfResult.filename)
 
       if (data.translation?.id) {
@@ -426,6 +432,32 @@ export function ReportDownloadSection({
             </div>
           )}
         </div>
+
+        {pdfWarnings && pdfWarnings.length > 0 && (
+          <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-50/80 p-3.5 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/50 dark:text-amber-200">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="size-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold">
+                  {locale === "ar"
+                    ? "تم إنشاء ملف PDF مع وجود تحذيرات بشأن الصور"
+                    : "PDF generated with image warnings"}
+                </p>
+                <p className="text-amber-800 dark:text-amber-300">
+                  {locale === "ar"
+                    ? `تعذر تضمين ${pdfWarnings[0].count} من الصور في ملف PDF. قد يرجع ذلك إلى أسماء الملفات غير المدعومة أو مشاكل مؤقتة في التحميل.`
+                    : `Could not include ${pdfWarnings[0].count} inspection image(s) in this PDF. Possible reasons include unsupported file names or temporary loading issues.`}
+                </p>
+                {pdfWarnings[0].filenames && pdfWarnings[0].filenames.length > 0 && (
+                  <p className="text-[11px] font-mono text-amber-700 dark:text-amber-400 opacity-90">
+                    {locale === "ar" ? "الملفات المتأثرة: " : "Affected files: "}
+                    {pdfWarnings[0].filenames.join(", ")}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3 sm:justify-between">
           {isPending ? (

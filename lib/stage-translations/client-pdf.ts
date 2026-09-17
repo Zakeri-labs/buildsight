@@ -5782,6 +5782,19 @@ function formatCcRecipientForPdf(recipient: ReportCcRecipient) {
   return [normalizedName, ...details].join("\n")
 }
 
+export interface PdfWarning {
+  type: "image_failed"
+  count: number
+  filenames?: string[]
+  reason?: string
+}
+
+export interface ExportPdfResult {
+  blob: Blob
+  filename: string
+  warnings?: PdfWarning[]
+}
+
 export async function exportTranslationPdf({
   data,
   translation,
@@ -5794,7 +5807,7 @@ export async function exportTranslationPdf({
   kind: PdfKind
   ccRecipients?: ReportCcRecipient[]
   appendClosingBlock?: boolean
-}) {
+}): Promise<ExportPdfResult> {
   const respId = data?.response?.id
   const translationId = translation?.id || null
   const isOriginal = kind === "original"
@@ -5830,12 +5843,12 @@ export async function exportTranslationPdf({
     const englishTemplate = stripStaticFooterFromDocumentTemplate(rawEnglishTemplate, sourceDocument)
     ;(englishTemplate as any).responseId = respId
 
-    const validateImageCheckpoint = () => {
+    const collectImageWarnings = (): PdfWarning[] | undefined => {
       const result = imageTracker.getResult()
       const durationMs = Date.now() - renderStartTime
 
-      if (!result.success) {
-        logDiagnosticEvent(respId, "PDF_GENERATION_BLOCKED_IMAGE_FAILURE", {
+      if (!result.success && result.failedImages.length > 0) {
+        logDiagnosticEvent(respId, "PDF_GENERATION_COMPLETED_WITH_IMAGE_WARNINGS", {
           sessionId: respId,
           responseId: respId,
           translationId,
@@ -5851,33 +5864,42 @@ export async function exportTranslationPdf({
           })),
           durationMs,
         })
-        const failedNames = result.failedImages.map((f) => f.filename).join(", ")
-        throw new Error(`PDF generation blocked: ${result.failedImages.length} required image(s) failed to load (${failedNames}).`)
-      } else {
-        logDiagnosticEvent(respId, "PDF_IMAGE_LOADING_SUMMARY", {
-          sessionId: respId,
-          responseId: respId,
-          translationId,
-          totalImages: result.totalImages,
-          loadedImages: result.loadedImages,
-          failedImages: 0,
-          retriesUsed: result.retriesUsed,
-          durationMs,
-        })
+        const filenames = result.failedImages.map((f) => f.filename)
+        return [
+          {
+            type: "image_failed",
+            count: result.failedImages.length,
+            filenames,
+            reason: "Some inspection images could not be included in this PDF. Possible reasons include unsupported file names, temporary loading issues, or invalid image files.",
+          },
+        ]
       }
+
+      logDiagnosticEvent(respId, "PDF_IMAGE_LOADING_SUMMARY", {
+        sessionId: respId,
+        responseId: respId,
+        translationId,
+        totalImages: result.totalImages,
+        loadedImages: result.loadedImages,
+        failedImages: 0,
+        retriesUsed: result.retriesUsed,
+        durationMs,
+      })
+      return undefined
     }
 
     if (kind === "original") {
       validateTemplateAssets(englishTemplate, sourceDocument)
       const blob = await buildLanguagePdfBlob(englishTemplate, { appendClosingBlock, tracker: imageTracker })
-      validateImageCheckpoint()
+      const warnings = collectImageWarnings()
       const filename = formatReportPdfFilename(projectName, submissionDate, "English")
       logDiagnosticEvent(respId, "ORIGINAL_PDF_RENDER_SUCCESS", {
         filename,
         blobSize: blob.size,
         translationId,
+        warningsCount: warnings?.length ?? 0,
       })
-      return { blob, filename }
+      return { blob, filename, warnings }
     }
 
     const rawArabicTemplate = buildLanguagePdfTemplate({ data, translation, language: "ar", sourceDocument, ccRecipientsList: ccRecipients, ccRecipients: ccMetadata })
@@ -5899,11 +5921,12 @@ export async function exportTranslationPdf({
     if (kind === "arabic") {
       validateTemplateAssets(arabicTemplate, sourceDocument)
       const arabicBlob = await buildLanguagePdfBlob(arabicTemplate, { appendClosingBlock, tracker: imageTracker })
-      validateImageCheckpoint()
+      const warnings = collectImageWarnings()
       const filename = formatReportPdfFilename(projectName, submissionDate, "Arabic")
       return {
         blob: arabicBlob,
         filename,
+        warnings,
       }
     }
 
@@ -5916,16 +5939,18 @@ export async function exportTranslationPdf({
       appendClosingBlock,
       tracker: imageTracker,
     })
-    validateImageCheckpoint()
+    const warnings = collectImageWarnings()
     const filename = formatReportPdfFilename(projectName, submissionDate, "Bilingual")
     logDiagnosticEvent(respId, "BILINGUAL_PDF_RENDER_SUCCESS", {
       filename,
       blobSize: bilingualBlob.size,
       translationId,
+      warningsCount: warnings?.length ?? 0,
     })
     return {
       blob: bilingualBlob,
       filename,
+      warnings,
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err)
