@@ -5,7 +5,7 @@ import { useEffect, useState } from "react"
 import { Download, Languages, Loader2 } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import type { ProjectStageTranslationSummary } from "@/lib/db/project-stages"
-import { downloadPdfBlob, exportTranslationPdf, storeTranslationPdf } from "@/lib/stage-translations/client-pdf"
+import { downloadPdfBlob, exportTranslationPdf, storeTranslationPdf, PdfImageLoadingError } from "@/lib/stage-translations/client-pdf"
 import type { StageTranslationPageData } from "@/lib/stage-translations/types"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -276,7 +276,16 @@ export function StageTranslationActions({
     try {
       await generateAndStore(kind)
     } catch (downloadError) {
-      setError(downloadError instanceof Error ? downloadError.message : copy.failed)
+      if (downloadError instanceof PdfImageLoadingError || (downloadError && (downloadError as any).name === "PdfImageLoadingError")) {
+        const failedDetails = (downloadError as PdfImageLoadingError).failedImages || []
+        const failedList = failedDetails.map((f) => `- ${f.filename || f.path || "Image"}`).join("\n")
+        const msg = locale === "ar"
+          ? `فشل إنشاء ملف PDF لأن صورة أو أكثر من صور المعاينة لم يتم تحميلها. يرجى التحقق من الصور المرفوعة والمحاولة مرة أخرى.${failedList ? `\n\nالصور الفاشلة:\n${failedList}` : ""}`
+          : `PDF generation failed because one or more inspection images could not be loaded. Please check the uploaded images and try again.${failedList ? `\n\nFailed images:\n${failedList}` : ""}`
+        setError(msg)
+      } else {
+        setError(downloadError instanceof Error ? downloadError.message : copy.failed)
+      }
     } finally {
       setBusy(null)
       setDownloading(null)

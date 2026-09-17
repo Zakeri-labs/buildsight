@@ -6,7 +6,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import type { ProjectStageTranslationSummary } from "@/lib/db/project-stages"
 import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto-generation"
-import { exportTranslationPdf, downloadPdfBlob, storeTranslationPdf, ensureBilingualPdfStored } from "@/lib/stage-translations/client-pdf"
+import { exportTranslationPdf, downloadPdfBlob, storeTranslationPdf, ensureBilingualPdfStored, PdfImageLoadingError } from "@/lib/stage-translations/client-pdf"
 import { buildShareMessage, buildWhatsAppShareUrl } from "@/lib/stage-translations/whatsapp-share"
 import { cn } from "@/lib/utils"
 import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
@@ -354,7 +354,16 @@ export function ReportDownloadSection({
           error: err instanceof Error ? err.message : String(err),
         })
       }
-      console.error("PDF download error:", err)
+      if (err instanceof PdfImageLoadingError || (err && (err as any).name === "PdfImageLoadingError")) {
+        const failedDetails = (err as PdfImageLoadingError).failedImages || []
+        const failedList = failedDetails.map((f) => `- ${f.filename || f.path || "Image"}`).join("\n")
+        const msg = locale === "ar"
+          ? `فشل إنشاء ملف PDF لأن صورة أو أكثر من صور المعاينة لم يتم تحميلها. يرجى التحقق من الصور المرفوعة والمحاولة مرة أخرى.${failedList ? `\n\nالصور الفاشلة:\n${failedList}` : ""}`
+          : `PDF generation failed because one or more inspection images could not be loaded. Please check the uploaded images and try again.${failedList ? `\n\nFailed images:\n${failedList}` : ""}`
+        console.error("PDF image loading error:", msg, err)
+      } else {
+        console.error("PDF download error:", err)
+      }
     } finally {
       setDownloading(null)
     }

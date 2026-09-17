@@ -719,6 +719,23 @@ export interface PdfImageFailedDetail {
   errorType: "IMAGE_FETCH_TIMEOUT" | "IMAGE_HTTP_ERROR" | "IMAGE_FETCH_FAILED" | "IMAGE_DECODE_FAILED" | "IMAGE_CONVERSION_FAILED" | "IMAGE_EMBED_FAILED" | string
 }
 
+export class PdfImageLoadingError extends Error {
+  failedImages: Array<{
+    filename?: string
+    path?: string
+    reason?: string
+    attachmentId?: string | null
+    imageIndex?: number | null
+  }>
+
+  constructor(failedImages: Array<{ filename?: string; path?: string; reason?: string; attachmentId?: string | null; imageIndex?: number | null }>) {
+    const fileList = failedImages.map((img) => img.filename || img.path || "unknown image").join(", ")
+    super(`PDF generation failed because one or more inspection images could not be loaded: ${fileList}`)
+    this.name = "PdfImageLoadingError"
+    this.failedImages = failedImages
+  }
+}
+
 export interface PdfImageLoadingResult {
   success: boolean
   loadedImages: number
@@ -6146,8 +6163,15 @@ export async function exportTranslationPdf({
           })),
           durationMs,
         })
-        const failedNames = result.failedImages.map((f) => f.filename).join(", ")
-        throw new Error(`PDF generation blocked: ${result.failedImages.length} required image(s) failed to load (${failedNames}).`)
+        throw new PdfImageLoadingError(
+          result.failedImages.map((f) => ({
+            filename: f.filename,
+            path: f.attachmentId || f.filename,
+            reason: f.reason || f.errorType || "Image could not be loaded from storage",
+            attachmentId: f.attachmentId,
+            imageIndex: f.imageIndex,
+          }))
+        )
       } else {
         logDiagnosticEvent(respId, "PDF_IMAGE_LOADING_SUMMARY", {
           sessionId: respId,
