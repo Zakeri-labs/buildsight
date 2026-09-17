@@ -1347,6 +1347,13 @@ function setLanguage(doc: JsPdfDocument, rtl: boolean, fontSize = 10, bold = fal
   doc.setFont(rtl ? ARABIC_FONT_FAMILY : LATIN_FONT_FAMILY, bold ? "bold" : "normal")
   doc.setFontSize(fontSize)
   doc.setCharSpace?.(0)
+
+  if (rtl && bold) {
+    doc.setTextRenderingMode?.(2) // Fill then stroke for subtle Arabic bold enhancement
+    doc.setLineWidth?.(0.06)
+  } else {
+    doc.setTextRenderingMode?.(0) // Standard fill mode
+  }
 }
 
 function shapeArabicText(doc: JsPdfDocument, text: string | string[]) {
