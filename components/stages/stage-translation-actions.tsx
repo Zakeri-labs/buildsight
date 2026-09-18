@@ -5,7 +5,7 @@ import { useEffect, useState } from "react"
 import { Download, Languages, Loader2 } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import type { ProjectStageTranslationSummary } from "@/lib/db/project-stages"
-import { downloadPdfBlob, exportTranslationPdf, storeTranslationPdf } from "@/lib/stage-translations/client-pdf"
+import { downloadPdfBlob, exportTranslationPdf, storeTranslationPdf, PdfImageLoadingError } from "@/lib/stage-translations/client-pdf"
 import type { StageTranslationPageData } from "@/lib/stage-translations/types"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -93,15 +93,7 @@ export function StageTranslationActions({
 
   useEffect(() => {
     if (initialTranslation) {
-      setTranslation((current) => ({
-        ...current,
-        ...initialTranslation,
-        bilingualPdfPath: initialTranslation.bilingualPdfPath ?? current.bilingualPdfPath,
-        originalPdfPath: initialTranslation.originalPdfPath ?? current.originalPdfPath,
-        arabicPdfPath: initialTranslation.arabicPdfPath ?? current.arabicPdfPath,
-        translatedContent: initialTranslation.translatedContent ?? current.translatedContent,
-        isStale: initialTranslation.isStale ?? current.isStale,
-      }))
+      setTranslation(initialTranslation)
     }
   }, [initialTranslation])
 
@@ -241,7 +233,7 @@ export function StageTranslationActions({
         setDownloading(null)
         return
       }
-      const params = new URLSearchParams({ projectId, translationId: translation.id, kind })
+      const params = new URLSearchParams({ projectId, translationId: translation.id, kind, v: Date.now().toString() })
       const endpointPath = `/api/stage-translations/pdf?${params.toString()}`
 
       logDiagnosticEvent(responseId, "BROWSER_DOWNLOAD_STORED_STARTED", {
@@ -261,7 +253,7 @@ export function StageTranslationActions({
       return
     }
     if (storedPath && kind !== "original") {
-      const params = new URLSearchParams({ projectId, translationId: translation.id, kind })
+      const params = new URLSearchParams({ projectId, translationId: translation.id, kind, v: Date.now().toString() })
       const endpointPath = `/api/stage-translations/pdf?${params.toString()}`
 
       logDiagnosticEvent(responseId, "BROWSER_DOWNLOAD_STORED_STARTED", {
@@ -285,7 +277,16 @@ export function StageTranslationActions({
     try {
       await generateAndStore(kind)
     } catch (downloadError) {
-      setError(downloadError instanceof Error ? downloadError.message : copy.failed)
+      if (downloadError instanceof PdfImageLoadingError || (downloadError && (downloadError as any).name === "PdfImageLoadingError")) {
+        const failedDetails = (downloadError as PdfImageLoadingError).failedImages || []
+        const failedList = failedDetails.map((f) => `- ${f.filename || f.path || "Image"}`).join("\n")
+        const msg = locale === "ar"
+          ? `فشل إنشاء ملف PDF لأن صورة أو أكثر من صور المعاينة لم يتم تحميلها. يرجى التحقق من الصور المرفوعة والمحاولة مرة أخرى.${failedList ? `\n\nالصور الفاشلة:\n${failedList}` : ""}`
+          : `PDF generation failed because one or more inspection images could not be loaded. Please check the uploaded images and try again.${failedList ? `\n\nFailed images:\n${failedList}` : ""}`
+        setError(msg)
+      } else {
+        setError(downloadError instanceof Error ? downloadError.message : copy.failed)
+      }
     } finally {
       setBusy(null)
       setDownloading(null)

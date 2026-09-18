@@ -6,7 +6,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import type { ProjectStageTranslationSummary } from "@/lib/db/project-stages"
 import { enqueueStageTranslationJob } from "@/lib/stage-translations/client-auto-generation"
-import { exportTranslationPdf, downloadPdfBlob, storeTranslationPdf, ensureBilingualPdfStored, type PdfWarning } from "@/lib/stage-translations/client-pdf"
+import { exportTranslationPdf, downloadPdfBlob, storeTranslationPdf, ensureBilingualPdfStored, PdfImageLoadingError } from "@/lib/stage-translations/client-pdf"
 import { buildShareMessage, buildWhatsAppShareUrl } from "@/lib/stage-translations/whatsapp-share"
 import { cn } from "@/lib/utils"
 import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
@@ -50,12 +50,11 @@ export function ReportDownloadSection({
   const [downloading, setDownloading] = useState<"original" | "bilingual" | null>(null)
   const [sharing, setSharing] = useState(false)
   const [copiedShare, setCopiedShare] = useState(false)
-  const [pdfWarnings, setPdfWarnings] = useState<PdfWarning[] | null>(null)
 
-  const hasStoredPdf = Boolean(translation?.bilingualPdfPath || translation?.originalPdfPath)
+  const hasStoredPdf = Boolean(translation?.bilingualPdfPath && translation?.originalPdfPath)
   const status = translation?.status ?? "pending"
   const isFailed = (status === "failed" || status === "error") && !hasStoredPdf
-  const isCompleted = status === "completed" || hasStoredPdf
+  const isCompleted = status === "completed" && (termId ? Boolean(translation?.translatedContent) : hasStoredPdf)
   const isPending = !isCompleted && !isFailed
 
   const isStale = Boolean(translation?.isStale)
@@ -72,15 +71,7 @@ export function ReportDownloadSection({
 
   useEffect(() => {
     if (initialTranslation) {
-      setTranslation((current) => {
-        if (!current) return initialTranslation
-        return {
-          ...current,
-          ...initialTranslation,
-          bilingualPdfPath: initialTranslation.bilingualPdfPath || current.bilingualPdfPath,
-          originalPdfPath: initialTranslation.originalPdfPath || current.originalPdfPath,
-        }
-      })
+      setTranslation(initialTranslation)
     }
   }, [initialTranslation])
 
@@ -154,6 +145,7 @@ export function ReportDownloadSection({
     const res = await ensureBilingualPdfStored({
       projectId,
       stageId,
+      termId: termId || undefined,
       responseId,
       existingPath: translation?.bilingualPdfPath,
       caller: "report_download_section",
@@ -284,6 +276,7 @@ export function ReportDownloadSection({
             projectId,
             translationId: translation.id,
             kind: "bilingual",
+            v: Date.now().toString(),
           })
           window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
           setTimeout(() => setDownloading(null), 2500)
@@ -296,6 +289,7 @@ export function ReportDownloadSection({
             projectId,
             translationId: translation.id,
             kind: "original",
+            v: Date.now().toString(),
           })
           window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
           setTimeout(() => setDownloading(null), 2500)
@@ -337,12 +331,6 @@ export function ReportDownloadSection({
         appendClosingBlock: true,
       })
 
-      if (pdfResult.warnings && pdfResult.warnings.length > 0) {
-        setPdfWarnings(pdfResult.warnings)
-      } else {
-        setPdfWarnings(null)
-      }
-
       downloadPdfBlob(pdfResult.blob, pdfResult.filename)
 
       if (data.translation?.id) {
@@ -360,7 +348,16 @@ export function ReportDownloadSection({
           error: err instanceof Error ? err.message : String(err),
         })
       }
-      console.error("PDF download error:", err)
+      if (err instanceof PdfImageLoadingError || (err && (err as any).name === "PdfImageLoadingError")) {
+        const failedDetails = (err as PdfImageLoadingError).failedImages || []
+        const failedList = failedDetails.map((f) => `- ${f.filename || f.path || "Image"}`).join("\n")
+        const msg = locale === "ar"
+          ? `فشل إنشاء ملف PDF لأن صورة أو أكثر من صور المعاينة لم يتم تحميلها. يرجى التحقق من الصور المرفوعة والمحاولة مرة أخرى.${failedList ? `\n\nالصور الفاشلة:\n${failedList}` : ""}`
+          : `PDF generation failed because one or more inspection images could not be loaded. Please check the uploaded images and try again.${failedList ? `\n\nFailed images:\n${failedList}` : ""}`
+        console.error("PDF image loading error:", msg, err)
+      } else {
+        console.error("PDF download error:", err)
+      }
     } finally {
       setDownloading(null)
     }
@@ -432,32 +429,6 @@ export function ReportDownloadSection({
             </div>
           )}
         </div>
-
-        {pdfWarnings && pdfWarnings.length > 0 && (
-          <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-50/80 p-3.5 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/50 dark:text-amber-200">
-            <div className="flex items-start gap-2.5">
-              <AlertCircle className="size-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-semibold">
-                  {locale === "ar"
-                    ? "تم إنشاء ملف PDF مع وجود تحذيرات بشأن الصور"
-                    : "PDF generated with image warnings"}
-                </p>
-                <p className="text-amber-800 dark:text-amber-300">
-                  {locale === "ar"
-                    ? `تعذر تضمين ${pdfWarnings[0].count} من الصور في ملف PDF. قد يرجع ذلك إلى أسماء الملفات غير المدعومة أو مشاكل مؤقتة في التحميل.`
-                    : `Could not include ${pdfWarnings[0].count} inspection image(s) in this PDF. Possible reasons include unsupported file names or temporary loading issues.`}
-                </p>
-                {pdfWarnings[0].filenames && pdfWarnings[0].filenames.length > 0 && (
-                  <p className="text-[11px] font-mono text-amber-700 dark:text-amber-400 opacity-90">
-                    {locale === "ar" ? "الملفات المتأثرة: " : "Affected files: "}
-                    {pdfWarnings[0].filenames.join(", ")}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3 sm:justify-between">
           {isPending ? (

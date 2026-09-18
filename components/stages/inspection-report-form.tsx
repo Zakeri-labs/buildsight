@@ -27,6 +27,7 @@ import {
   MessageSquare,
   Mic,
   MicOff,
+  Pencil,
   Phone,
   Plus,
   Redo2,
@@ -68,7 +69,11 @@ import { partitionReportCcRecipients, type ProjectCcCandidate, type ReportCcReci
 import {
   EMPTY_TERM_RESPONSE_CONTENT,
   PREDEFINED_CASTING_RECOMMENDATIONS_HTML,
+  PREDEFINED_CASTING_RECOMMENDATIONS_HTML_AR,
+  PREDEFINED_RECTIFICATION_WORK_HTML,
+  PREDEFINED_RECTIFICATION_WORK_HTML_AR,
   REPORT_TYPES,
+  sanitizeReportHtml,
   reportTypeLabel,
   STAGE_DOCUMENT_ACCEPT,
   STAGE_DOCUMENT_MAX_FILES,
@@ -330,6 +335,62 @@ function plainResponseText(value: string) {
   return value.replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim()
 }
 
+function castingHtmlToEditableText(html: string): string {
+  if (!html) return ""
+  if (!/<[a-z][\s\S]*>/i.test(html)) return html
+
+  let text = html
+    .replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, "\n$1\n")
+    .replace(/<li[^>]*>(.*?)<\/li>/gi, "• $1\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<p[^>]*>(.*?)<\/p>/gi, "$1\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#039;/gi, "'")
+
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line, idx, arr) => line !== "" || (idx > 0 && arr[idx - 1] !== ""))
+    .join("\n")
+    .trim()
+}
+
+function editableTextToCastingHtml(text: string): string {
+  if (!text.trim()) return ""
+  if (/<(ul|ol|li|h3|h4|p|div)\b/i.test(text)) return text
+
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean)
+  let html = ""
+  let inList = false
+
+  for (const line of lines) {
+    if (/^[•\-\*]\s*/.test(line)) {
+      const itemText = line.replace(/^[•\-\*]\s*/, "")
+      if (!inList) {
+        html += "<ul>"
+        inList = true
+      }
+      html += `<li>${itemText}</li>`
+    } else {
+      if (inList) {
+        html += "</ul>"
+        inList = false
+      }
+      html += `<p>${line}</p>`
+    }
+  }
+  if (inList) {
+    html += "</ul>"
+  }
+
+  return html
+}
+
 function configuredResponseError(
   responseType: SubtermResponseType,
   content: TermResponseContent,
@@ -588,6 +649,7 @@ export function InspectionReportForm({
 
     return {
       ...(response?.content ?? EMPTY_TERM_RESPONSE_CONTENT),
+      rectificationAndSubsequentWork: response?.content?.rectificationAndSubsequentWork ?? "",
       checklist: initialChecklist,
     }
   })
@@ -785,6 +847,7 @@ export function InspectionReportForm({
       templateReference: reportDefinition.templateReference,
       instructions: reportDefinition.instructions,
       saveStatus,
+      activeAttachmentIds: persistedAttachmentsRef.current.map((att) => att.id),
     }
     const result = isDirectStageReport
       ? await saveStageReportAction({ ...reportInput, stageId: resolvedStageId, siteVisitRequestId })
@@ -1237,7 +1300,8 @@ export function InspectionReportForm({
         templateReference: reportDefinition.templateReference,
         instructions: reportDefinition.instructions,
         submit: isSubmitMode ? (true as const) : undefined,
-        saveStatus: isSubmitMode ? undefined : (mode === "progress" ? "in_progress" : "draft"),
+        saveStatus: isSubmitMode ? undefined : mode === "progress" ? ("in_progress" as const) : ("draft" as const),
+        activeAttachmentIds: persistedAttachmentsRef.current.map((att) => att.id),
       }
 
       const result = isDirectStageReport
@@ -1280,14 +1344,12 @@ export function InspectionReportForm({
         })
 
         if (isDirectStageReport && isSubmitMode) {
+          setReadyPdfs(null)
           // Clear stale PDF paths from client state — the backend has already cleared
           // original_pdf_url / bilingual_pdf_url / arabic_pdf_url on the DB row.
-          // Keeping the old paths in React state causes TRANSLATION_UI_STATE to show
-          // non-null PDF paths while the DB and API correctly return null, creating
-          // inconsistent diagnostic logs and risking a false-positive readiness signal.
           setTranslation((prev) =>
             prev
-              ? { ...prev, originalPdfPath: null, bilingualPdfPath: null, arabicPdfPath: null }
+              ? { ...prev, status: "pending", originalPdfPath: null, bilingualPdfPath: null, arabicPdfPath: null, translatedContent: null, isStale: false }
               : prev,
           )
 
@@ -1319,7 +1381,7 @@ export function InspectionReportForm({
                   lastSeenTrans = trans
                 }
                 const isCompletedStatus = trans?.status === "completed" || trans?.status === "approved"
-                if (trans && isCompletedStatus && trans.bilingualPdfPath && trans.translatedContent && !trans.isStale) {
+                if (trans && isCompletedStatus && trans.originalPdfPath && trans.bilingualPdfPath && trans.translatedContent && !trans.isStale) {
                   pdfGenSuccess = true
                   finalTransRecord = trans
                   break
@@ -1346,8 +1408,14 @@ export function InspectionReportForm({
           }
 
           // Step 1: "Preparing translation & PDFs"
-          // CRITICAL: Do NOT mark as done unless PDF readiness is confirmed (both translatedContent and bilingualPdfPath exist)
-          const isPdfReady = Boolean(pdfGenSuccess && finalTransRecord?.bilingualPdfPath && finalTransRecord?.translatedContent)
+          // CRITICAL: Do NOT mark as done unless PDF readiness is confirmed (both originalPdfPath, bilingualPdfPath, and translatedContent exist)
+          const isPdfReady = Boolean(
+            pdfGenSuccess &&
+              finalTransRecord?.originalPdfPath &&
+              finalTransRecord?.bilingualPdfPath &&
+              finalTransRecord?.translatedContent &&
+              !finalTransRecord?.isStale
+          )
 
           if (!isPdfReady) {
             // "Preparing translation & PDFs" failed - do NOT advance to "Confirming PDF availability"
@@ -1376,6 +1444,7 @@ export function InspectionReportForm({
               responseId: id,
               reason: realError || "pdf_not_generated_or_failed",
               hasTranslatedContent: Boolean(failureTrans?.translatedContent),
+              hasOriginalPdfPath: Boolean(failureTrans?.originalPdfPath),
               hasBilingualPdfPath: Boolean(failureTrans?.bilingualPdfPath),
               translationStatus: failureTrans?.status || null,
               isStale: failureTrans?.isStale ?? null,
@@ -1390,8 +1459,12 @@ export function InspectionReportForm({
               steps = updateStep(steps, stepIdx, "active")
             }
 
-            // Step 2: "Confirming PDF availability" - trust verified bilingualPdfPath returned by database/worker
-            let storageConfirmed = Boolean(pdfGenSuccess && finalTransRecord?.bilingualPdfPath)
+            // Step 2: "Confirming PDF availability" - trust verified originalPdfPath and bilingualPdfPath returned by database/worker
+            let storageConfirmed = Boolean(
+              pdfGenSuccess &&
+                finalTransRecord?.originalPdfPath &&
+                finalTransRecord?.bilingualPdfPath
+            )
 
             if (!storageConfirmed) {
               const retryDelays = [1000, 2000, 4000]
@@ -1408,7 +1481,7 @@ export function InspectionReportForm({
                   if (checkRes.ok) {
                     const checkPayload = await checkRes.json()
                     const trans = checkPayload?.data?.translation
-                    if (trans && trans.bilingualPdfPath) {
+                    if (trans && trans.originalPdfPath && trans.bilingualPdfPath && !trans.isStale) {
                       finalTransRecord = trans
                       storageConfirmed = true
                       pdfGenSuccess = true
@@ -1522,11 +1595,24 @@ export function InspectionReportForm({
     }
   }
 
-  const handleSendLogViaWhatsApp = () => {
+  const handleSendLogViaWhatsApp = async () => {
     const currentRespId = responseId || initialResponseId || null
     const logText = formatDiagnosticLogAsText(currentRespId)
 
-    const lines: string[] = [
+    const cleanTitle = (reportTitle || defaultReportTitlePattern || subject || "Inspection Report").trim()
+
+    const now = new Date()
+    const yyyy = now.getFullYear()
+    const mm = String(now.getMonth() + 1).padStart(2, "0")
+    const dd = String(now.getDate()).padStart(2, "0")
+    const hh = String(now.getHours()).padStart(2, "0")
+    const min = String(now.getMinutes()).padStart(2, "0")
+    const ss = String(now.getSeconds()).padStart(2, "0")
+    const timestamp = `${yyyy}${mm}${dd}-${hh}${min}${ss}`
+    const filename = `BuildSight-Diagnostic-${timestamp}.txt`
+
+    // Full un-truncated log formatted for the .txt file
+    const logFileLines: string[] = [
       "BuildSight Report Issue",
       "",
       "Project:",
@@ -1534,11 +1620,10 @@ export function InspectionReportForm({
     ]
 
     if (project?.code) {
-      lines.push("", "Project Code:", project.code)
+      logFileLines.push("", "Project Code:", project.code)
     }
 
-    const cleanTitle = (reportTitle || defaultReportTitlePattern || subject || "Inspection Report").trim()
-    lines.push("", "Report:", cleanTitle)
+    logFileLines.push("", "Report:", cleanTitle)
 
     if (translation?.bilingualPdfPath && currentRespId) {
       const origin = typeof window !== "undefined" ? window.location.origin : "https://app.bonyanec.com"
@@ -1546,14 +1631,72 @@ export function InspectionReportForm({
       const pdfUrl = microCode
         ? `${origin}/r/${microCode}`
         : `${origin}/api/stage-translations/pdf?projectId=${project.id}&responseId=${currentRespId}&kind=bilingual`
-      lines.push("", "PDF:", pdfUrl)
+      logFileLines.push("", "PDF:", pdfUrl)
     }
 
-    lines.push("", "--------------------", "", "Diagnostic Log:", logText)
+    logFileLines.push("", "--------------------", "", "Diagnostic Log:", logText)
 
-    const message = lines.join("\n")
-    const url = `https://wa.me/?text=${encodeURIComponent(message)}`
-    window.open(url, "_blank")
+    const fullMessage = logFileLines.join("\n")
+    const txtFile = new File([fullMessage], filename, { type: "text/plain" })
+
+    setActionBusy("share")
+
+    try {
+      const canShareFiles =
+        typeof navigator !== "undefined" &&
+        typeof navigator.share === "function" &&
+        typeof navigator.canShare === "function" &&
+        navigator.canShare({ files: [txtFile] })
+
+      if (canShareFiles) {
+        // Mobile / Native File Share flow
+        await navigator.share({
+          title: "BuildSight Diagnostic Log",
+          text: "BuildSight diagnostic log",
+          files: [txtFile],
+        })
+      } else {
+        // Desktop / PC Fallback flow:
+        // 1. Download the TXT file locally
+        const objectUrl = URL.createObjectURL(txtFile)
+        const link = document.createElement("a")
+        link.href = objectUrl
+        link.download = filename
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(objectUrl)
+
+        // 2. Open WhatsApp Web with a SHORT message (never including full log in URL)
+        const shortLines: string[] = [
+          "BuildSight Diagnostic Log",
+          "",
+          `Project: ${project?.name || "Project"}`,
+        ]
+        if (project?.code) {
+          shortLines.push(`Project Code: ${project.code}`)
+        }
+        shortLines.push(`Report: ${cleanTitle}`)
+        shortLines.push("")
+        shortLines.push(
+          locale === "ar"
+            ? `تم تنزيل سجل التشخيص كملف نصي (${filename}). يرجى إرفاق الملف بهذه المحادثة.`
+            : `The diagnostic log has been downloaded as a TXT file (${filename}). Please attach the file to this conversation.`,
+        )
+
+        const shortMessage = shortLines.join("\n")
+        const waUrl = `https://wa.me/?text=${encodeURIComponent(shortMessage)}`
+        window.open(waUrl, "_blank")
+      }
+    } catch (shareErr) {
+      if (shareErr instanceof DOMException && shareErr.name === "AbortError") {
+        return
+      }
+      console.warn("Failed to share diagnostic log file:", shareErr)
+      setError(locale === "ar" ? "تعذر مشاركة سجل التشخيص." : "Unable to share diagnostic log.")
+    } finally {
+      setActionBusy(null)
+    }
   }
 
   const addImages = (files: File[]) => {
@@ -2137,16 +2280,9 @@ export function InspectionReportForm({
 
           <Card className="rounded-2xl border bg-card shadow-sm transition-shadow hover:shadow-md">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 md:p-5">
-              <div className="space-y-1">
-                <CardTitle className="text-base font-semibold">
-                  {locale === "ar" ? "توصيات أثناء صب الخرسانة" : "Recommendations During Casting"}
-                </CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  {locale === "ar"
-                    ? "تضمين اشتراطات وتوصيات الصب والمعالجة المعتمدة في التقرير (اختياري)"
-                    : "Include predefined casting and curing recommendations in the report (Optional)"}
-                </p>
-              </div>
+              <CardTitle className="text-base font-semibold">
+                {locale === "ar" ? "توصيات أثناء صب الخرسانة" : "Recommendations During Casting"}
+              </CardTitle>
               <div className="flex items-center gap-2.5">
                 <span className="text-xs font-medium text-muted-foreground">
                   {Boolean(content.recommendationsDuringCasting)
@@ -2159,7 +2295,9 @@ export function InspectionReportForm({
                   onCheckedChange={(checked) => {
                     setContent((current) => ({
                       ...current,
-                      recommendationsDuringCasting: checked ? PREDEFINED_CASTING_RECOMMENDATIONS_HTML : "",
+                      recommendationsDuringCasting: checked
+                        ? (locale === "ar" ? PREDEFINED_CASTING_RECOMMENDATIONS_HTML_AR : PREDEFINED_CASTING_RECOMMENDATIONS_HTML)
+                        : "",
                     }))
                   }}
                   aria-label={locale === "ar" ? "توصيات أثناء صب الخرسانة" : "Recommendations During Casting"}
@@ -2168,56 +2306,60 @@ export function InspectionReportForm({
             </CardHeader>
             {Boolean(content.recommendationsDuringCasting) ? (
               <CardContent className="px-4 pb-4 pt-0 md:px-5 md:pb-5">
-                <div className="rounded-xl border border-border/80 bg-muted/40 p-4 text-xs leading-relaxed text-foreground md:text-sm">
-                  <div className="mb-3">
-                    <h4 className="font-semibold text-foreground">
-                      {locale === "ar" ? "توصيات أثناء الصب" : "Recommendations During Casting"}
-                    </h4>
-                    <ul className="mt-2 list-inside list-disc space-y-1.5 text-muted-foreground">
-                      {locale === "ar" ? (
-                        <>
-                          <li>ألا تقل رتبة الخرسانة عن M30 SRC، كما هو محدد في المخططات المعتمدة.</li>
-                          <li>أثناء صب الخرسانة، يجب توخي الحذر لتجنب الانفصال الحبيبي وإزاحة حديد التسليح. يجب ألا يتجاوز السقوط الحر للخرسانة 2.0 متر كحد أقصى.</li>
-                          <li>يجب دمك الخرسانة جيداً باستخدام الهزازات الميكانيكية من الأسفل حتى المنسوب المطلوب، مع توفير هزاز إضافي واحد على الأقل في وضع الاستعداد.</li>
-                          <li>ألا تتجاوز درجة حرارة الخرسانة وقت الصب 30 درجة مئوية، مع فحص وتسجيل درجة حرارة الخرسانة (لكل شاحنة).</li>
-                          <li>يجب أن تكون قيمة الهبوط (Slump) في حدود 100 ± 25 مم.</li>
-                          <li>7 أيام (3 مكعبات لكل مجموعة).</li>
-                          <li>28 يوماً (3 مكعبات لكل مجموعة).</li>
-                        </>
-                      ) : (
-                        <>
-                          <li>The grade of concrete shall not be less than M30 SRC, as specified in the approved drawings.</li>
-                          <li>During concrete placement, care shall be taken to avoid segregation and displacement of reinforcement. The concrete free fall shall be restricted to a maximum of 2.0 metres.</li>
-                          <li>Concrete shall be compacted thoroughly using vibrators from the bottom to the required level. At least one additional vibrator shall be kept on standby.</li>
-                          <li>The concrete temperature at the time of placement does not exceed 30 degrees. The temperature for concrete (Each truck) will be tested and recorded.</li>
-                          <li>Slump value should be in the range of 100+/-25.</li>
-                          <li>7 Days (3 Cubes for each Set)</li>
-                          <li>28 Days (3 Cubes for each Set)</li>
-                        </>
-                      )}
-                    </ul>
-                  </div>
-                  <div className="border-t border-border/60 pt-3">
-                    <h4 className="font-semibold text-foreground">
-                      {locale === "ar" ? "أعمال ما بعد الصب" : "Post Concrete Work"}
-                    </h4>
-                    <ul className="mt-2 list-inside list-disc space-y-1.5 text-muted-foreground">
-                      {locale === "ar" ? (
-                        <>
-                          <li>بعد التصلب الأولي، يتم عمل حبسات أسمنتية فوق القواعد، وإزالة تجمعات المياه وكذلك فرم جوانب القواعد، وتغطيتها بالخيش مع استمرار المعالجة بالرش المستمر بالماء.</li>
-                          <li>تستمر المعالجة بالماء لمدة لا تقل عن 7 أيام.</li>
-                          <li>في حال ملاحظة أي تعشيش أو عيوب سطحية، يجب إبلاغ الاستشاري قبل البدء بأي أعمال معالجة أو إصلاح.</li>
-                        </>
-                      ) : (
-                        <>
-                          <li>After the initial settlement, cement bundles are to be provided on footings, and the water stagnation, as well as the footings' side shuttering, are to be removed and covered with hessian cloth with continuous curing.</li>
-                          <li>Further curing will continue for a minimum of 7 days.</li>
-                          <li>If any honeycombs or surface defects are observed, they shall be reported to the consultant before any rectification work.</li>
-                        </>
-                      )}
-                    </ul>
-                  </div>
-                </div>
+                <SimpleRichTextEditor
+                  value={content.recommendationsDuringCasting}
+                  minHeight="200px"
+                  disabled={isLocked}
+                  onChange={(updatedHtml) => {
+                    setContent((current) => ({
+                      ...current,
+                      recommendationsDuringCasting: updatedHtml,
+                    }))
+                  }}
+                />
+              </CardContent>
+            ) : null}
+          </Card>
+
+          <Card className="rounded-2xl border bg-card shadow-sm transition-shadow hover:shadow-md">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 md:p-5">
+              <CardTitle className="text-base font-semibold">
+                {locale === "ar" ? "أعمال المعالجة والأعمال اللاحقة" : "Rectification & Subsequent Work"}
+              </CardTitle>
+              <div className="flex items-center gap-2.5">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {Boolean(content.rectificationAndSubsequentWork)
+                    ? (locale === "ar" ? "مفعل" : "Enabled")
+                    : (locale === "ar" ? "معطل" : "Disabled")}
+                </span>
+                <Switch
+                  checked={Boolean(content.rectificationAndSubsequentWork)}
+                  disabled={isLocked}
+                  onCheckedChange={(checked) => {
+                    setContent((current) => ({
+                      ...current,
+                      rectificationAndSubsequentWork: checked
+                        ? (locale === "ar" ? PREDEFINED_RECTIFICATION_WORK_HTML_AR : PREDEFINED_RECTIFICATION_WORK_HTML)
+                        : "",
+                    }))
+                  }}
+                  aria-label={locale === "ar" ? "أعمال المعالجة والأعمال اللاحقة" : "Rectification & Subsequent Work"}
+                />
+              </div>
+            </CardHeader>
+            {Boolean(content.rectificationAndSubsequentWork) ? (
+              <CardContent className="px-4 pb-4 pt-0 md:px-5 md:pb-5">
+                <SimpleRichTextEditor
+                  value={content.rectificationAndSubsequentWork}
+                  minHeight="150px"
+                  disabled={isLocked}
+                  onChange={(updatedHtml) => {
+                    setContent((current) => ({
+                      ...current,
+                      rectificationAndSubsequentWork: updatedHtml,
+                    }))
+                  }}
+                />
               </CardContent>
             ) : null}
           </Card>
@@ -2383,7 +2525,7 @@ export function InspectionReportForm({
                         } else {
                           const respId = submitResult?.responseId || responseId
                           const query = translation?.id ? `translationId=${translation.id}` : `responseId=${respId}`
-                          window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&${query}&kind=original`)
+                          window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&${query}&kind=original&v=${Date.now()}`)
                         }
                       } finally {
                         setActionBusy(null)
@@ -2441,7 +2583,7 @@ export function InspectionReportForm({
                             }).catch(() => null)
                           }
                           const query = translation?.id ? `translationId=${translation.id}` : `responseId=${respId}`
-                          const endpointPath = `/api/stage-translations/pdf?projectId=${project.id}&${query}&kind=bilingual`
+                          const endpointPath = `/api/stage-translations/pdf?projectId=${project.id}&${query}&kind=bilingual&v=${Date.now()}`
 
                           logDiagnosticEvent(respId, "BROWSER_DOWNLOAD_STORED_STARTED", {
                             clickId,
@@ -2750,11 +2892,20 @@ export function InspectionReportForm({
                         type="button"
                         size="sm"
                         variant="outline"
+                        disabled={actionBusy === "share"}
                         className="h-7 gap-1.5 rounded-lg border-emerald-400/80 bg-white px-2.5 text-[11px] font-semibold text-emerald-700 shadow-2xs hover:bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
-                        onClick={handleSendLogViaWhatsApp}
+                        onClick={() => void handleSendLogViaWhatsApp()}
                       >
-                        <Share2 className="size-3 text-emerald-600 dark:text-emerald-400" />
-                        <span>{locale === "ar" ? "إرسال السجل عبر واتساب" : "Send Log via WhatsApp"}</span>
+                        {actionBusy === "share" ? (
+                          <Loader2 className="size-3 animate-spin text-emerald-600 dark:text-emerald-400" />
+                        ) : (
+                          <Share2 className="size-3 text-emerald-600 dark:text-emerald-400" />
+                        )}
+                        <span>
+                          {actionBusy === "share"
+                            ? (locale === "ar" ? "إعداد سجل التشخيص..." : "Preparing diagnostic log...")
+                            : (locale === "ar" ? "إرسال السجل عبر واتساب" : "Send Log via WhatsApp")}
+                        </span>
                       </Button>
                     </div>
 
@@ -3019,6 +3170,121 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;")
 }
 
+function SimpleRichTextEditor({
+  value,
+  onChange,
+  onBlur,
+  minHeight = "160px",
+  disabled = false,
+}: {
+  value: string
+  onChange: (html: string) => void
+  onBlur?: () => void
+  minHeight?: string
+  disabled?: boolean
+}) {
+  const editorRef = useRef<HTMLDivElement | null>(null)
+  const savedRangeRef = useRef<Range | null>(null)
+
+  useEffect(() => {
+    if (editorRef.current && document.activeElement !== editorRef.current && editorRef.current.innerHTML !== value) {
+      editorRef.current.innerHTML = value || ""
+    }
+  }, [value])
+
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const selection = window.getSelection()
+      if (selection?.rangeCount && editorRef.current?.contains(selection.anchorNode)) {
+        savedRangeRef.current = selection.getRangeAt(0).cloneRange()
+      }
+    }
+    document.addEventListener("selectionchange", handleSelectionChange)
+    return () => document.removeEventListener("selectionchange", handleSelectionChange)
+  }, [])
+
+  const saveSelection = () => {
+    const selection = window.getSelection()
+    if (selection?.rangeCount && editorRef.current?.contains(selection.anchorNode)) {
+      savedRangeRef.current = selection.getRangeAt(0).cloneRange()
+    }
+  }
+
+  const restoreSelection = () => {
+    const selection = window.getSelection()
+    if (!selection) return
+    if (selection.rangeCount > 0) {
+      const currentRange = selection.getRangeAt(0)
+      if (editorRef.current?.contains(currentRange.anchorNode) || editorRef.current?.contains(currentRange.commonAncestorContainer)) {
+        return
+      }
+    }
+    if (savedRangeRef.current && savedRangeRef.current.startContainer.isConnected) {
+      selection.removeAllRanges()
+      selection.addRange(savedRangeRef.current)
+    } else {
+      editorRef.current?.focus()
+    }
+  }
+
+  const handleBold = () => {
+    restoreSelection()
+    try {
+      document.execCommand("styleWithCSS", false, "false")
+    } catch {}
+    document.execCommand("bold", false)
+    saveSelection()
+    const newHtml = editorRef.current?.innerHTML ?? ""
+    onChange(newHtml)
+  }
+
+  const handleInput = () => {
+    saveSelection()
+    const newHtml = editorRef.current?.innerHTML ?? ""
+    onChange(newHtml)
+  }
+
+  return (
+    <div className="rounded-xl border border-input bg-background shadow-xs overflow-hidden">
+      <div className="flex items-center gap-1 border-b bg-muted/35 px-2.5 py-1.5">
+        <button
+          type="button"
+          disabled={disabled}
+          onMouseDown={(e) => {
+            e.preventDefault()
+            handleBold()
+          }}
+          onTouchStart={(e) => {
+            e.preventDefault()
+            handleBold()
+          }}
+          title="Bold"
+          aria-label="Bold"
+          className="flex h-7 px-2.5 items-center justify-center gap-1 rounded-md text-xs font-bold transition-colors hover:bg-accent text-foreground hover:text-accent-foreground border border-border/60 bg-background cursor-pointer disabled:opacity-50"
+        >
+          <Bold className="size-3.5" />
+          <span>Bold</span>
+        </button>
+      </div>
+      <div
+        ref={editorRef}
+        contentEditable={!disabled}
+        suppressContentEditableWarning
+        onInput={handleInput}
+        onKeyUp={saveSelection}
+        onMouseUp={saveSelection}
+        onBlur={() => {
+          const finalHtml = editorRef.current?.innerHTML ?? ""
+          onChange(finalHtml)
+          onBlur?.()
+        }}
+        style={{ minHeight }}
+        className="prose prose-sm dark:prose-invert max-w-none p-3.5 text-xs leading-relaxed text-foreground outline-none md:text-sm [&_h3]:font-semibold [&_h3]:text-foreground [&_h4]:font-semibold [&_h4]:text-foreground [&_p]:mt-1 [&_p]:mb-2 [&_p]:text-muted-foreground [&_ul]:mt-1 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:ps-5 [&_li]:mt-0.5 [&_li]:text-muted-foreground"
+      />
+    </div>
+  )
+}
+
 function RichSectionEditor({
   title,
   description,
@@ -3069,7 +3335,7 @@ function RichSectionEditor({
   const debounceTimerRef = useRef<any>(null)
 
   useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== value) {
+    if (editorRef.current && document.activeElement !== editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value || "<p><br></p>"
     }
   }, [value])
@@ -3149,20 +3415,46 @@ function RichSectionEditor({
     onChange(html)
   }
 
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const selection = window.getSelection()
+      if (selection?.rangeCount && editorRef.current?.contains(selection.anchorNode)) {
+        savedRangeRef.current = selection.getRangeAt(0).cloneRange()
+      }
+    }
+    document.addEventListener("selectionchange", handleSelectionChange)
+    return () => document.removeEventListener("selectionchange", handleSelectionChange)
+  }, [])
+
   const saveSelection = () => {
     const selection = window.getSelection()
     if (selection?.rangeCount && editorRef.current?.contains(selection.anchorNode)) savedRangeRef.current = selection.getRangeAt(0).cloneRange()
   }
 
   const restore = () => {
-    editorRef.current?.focus()
     const selection = window.getSelection()
-    if (selection && savedRangeRef.current) { selection.removeAllRanges(); selection.addRange(savedRangeRef.current) }
+    if (!selection) return
+    if (selection.rangeCount > 0) {
+      const currentRange = selection.getRangeAt(0)
+      if (editorRef.current?.contains(currentRange.anchorNode) || editorRef.current?.contains(currentRange.commonAncestorContainer)) {
+        return
+      }
+    }
+    if (savedRangeRef.current && savedRangeRef.current.startContainer.isConnected) {
+      selection.removeAllRanges()
+      selection.addRange(savedRangeRef.current)
+    } else {
+      editorRef.current?.focus()
+    }
   }
 
   const command = (name: string, argument?: string) => {
     restore()
+    try {
+      document.execCommand("styleWithCSS", false, "false")
+    } catch {}
     document.execCommand(name, false, argument)
+    saveSelection()
     onChange(editorRef.current?.innerHTML ?? "")
   }
 
@@ -3506,6 +3798,14 @@ function RichSectionEditor({
           </EditorButton>
 
           <EditorButton
+            label="Bold"
+            onClick={() => command("bold")}
+            disabled={disabled}
+          >
+            <Bold className="size-4 font-bold" />
+          </EditorButton>
+
+          <EditorButton
             label={copiedText ? "Copied!" : "Copy text"}
             onClick={handleCopyText}
             disabled={disabled}
@@ -3543,7 +3843,6 @@ function RichSectionEditor({
             suppressContentEditableWarning
             role="textbox"
             aria-multiline="true"
-            onFocus={saveSelection}
             onKeyUp={saveSelection}
             onMouseUp={saveSelection}
             onKeyDown={handleKeyDown}
@@ -3680,13 +3979,19 @@ function RichSectionEditor({
 }
 
 function EditorButton({ label, onClick, disabled, className, children }: { label: string; onClick: () => void; disabled?: boolean; className?: string; children: ReactNode }) {
+  const handleAction = (event: React.SyntheticEvent) => {
+    event.preventDefault()
+    onClick()
+  }
+
   return (
     <button
       type="button"
       title={label}
       aria-label={label}
       disabled={disabled}
-      onMouseDown={(event) => { event.preventDefault(); onClick() }}
+      onMouseDown={handleAction}
+      onTouchStart={handleAction}
       className={cn("inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-40 [&_svg]:size-4", className)}
     >
       {children}

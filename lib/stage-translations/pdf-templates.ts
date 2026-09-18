@@ -4,7 +4,7 @@ import type {
   TranslationReportContent,
   TranslationSectionKey,
 } from "@/lib/stage-translations/types"
-import { PREDEFINED_CASTING_RECOMMENDATIONS_HTML_AR, statusLabel } from "@/lib/stages/execution"
+import { PREDEFINED_CASTING_RECOMMENDATIONS_HTML_AR, PREDEFINED_RECTIFICATION_WORK_HTML_AR, statusLabel } from "@/lib/stages/execution"
 
 import { partitionReportCcRecipients } from "@/lib/report-cc/types"
 
@@ -169,6 +169,7 @@ const SECTION_LABELS: Array<{ key: TranslationSectionKey; en: string; ar: string
   { key: "recommendations", en: "Instructions / Recommendations", ar: "التعليمات / التوصيات" },
   { key: "correctiveActions", en: "Corrective Actions", ar: "الإجراءات التصحيحية" },
   { key: "recommendationsDuringCasting", en: "Recommendations During Casting", ar: "توصيات أثناء الصب" },
+  { key: "rectificationAndSubsequentWork", en: "Rectification & Subsequent Work", ar: "أعمال المعالجة والأعمال اللاحقة" },
 ]
 
 const LABELS = {
@@ -614,6 +615,7 @@ export const PDF_UI_SECTION_KEYS = [
   "recommendations",
   "correctiveActions",
   "recommendationsDuringCasting",
+  "rectificationAndSubsequentWork",
   "attachments",
 ] as const
 
@@ -700,7 +702,8 @@ export function buildLanguagePdfTemplate(input: {
       key: section.key,
       title: language === "ar" ? section.ar : section.en,
       html: content.sections[section.key]
-        || (language === "ar" && section.key === "recommendationsDuringCasting" && (englishContent?.sections?.recommendationsDuringCasting || (englishContent as any)?.recommendationsDuringCasting) ? PREDEFINED_CASTING_RECOMMENDATIONS_HTML_AR : ""),
+        || (language === "ar" && section.key === "recommendationsDuringCasting" && (englishContent?.sections?.recommendationsDuringCasting || (englishContent as any)?.recommendationsDuringCasting) ? PREDEFINED_CASTING_RECOMMENDATIONS_HTML_AR : "")
+        || (language === "ar" && section.key === "rectificationAndSubsequentWork" && (englishContent?.sections?.rectificationAndSubsequentWork || (englishContent as any)?.rectificationAndSubsequentWork) ? PREDEFINED_RECTIFICATION_WORK_HTML_AR : ""),
     })),
     attachmentsSection({ data, content, language, sourceDocument }),
   ]

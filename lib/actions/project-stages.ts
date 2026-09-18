@@ -51,6 +51,7 @@ function normalizeContent(value: Partial<TermResponseContent>): TermResponseCont
     recommendations: sanitizeReportHtml(value.recommendations),
     correctiveActions: sanitizeReportHtml(value.correctiveActions),
     recommendationsDuringCasting: sanitizeReportHtml(value.recommendationsDuringCasting),
+    rectificationAndSubsequentWork: sanitizeReportHtml(value.rectificationAndSubsequentWork),
     checklist: Array.isArray(value.checklist)
       ? value.checklist.slice(0, 100).map((item) => ({
           id: String(item.id || crypto.randomUUID()).slice(0, 100),
@@ -65,6 +66,26 @@ function normalizeContent(value: Partial<TermResponseContent>): TermResponseCont
     measurementValue: typeof value.measurementValue === "string" ? value.measurementValue.trim().slice(0, 100) : "",
     measurementUnit: typeof value.measurementUnit === "string" ? value.measurementUnit.trim().slice(0, 100) : "",
     dateValue: typeof value.dateValue === "string" ? value.dateValue.trim().slice(0, 30) : "",
+  }
+}
+
+async function invalidateTranslationPdfs(responseId: string, projectId: string) {
+  try {
+    const admin = createAdminClient()
+    await admin
+      .from("translation_documents")
+      .update({
+        translation_status: "pending",
+        translated_content: null,
+        original_pdf_url: null,
+        arabic_pdf_url: null,
+        bilingual_pdf_url: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("response_id", responseId)
+      .eq("project_id", projectId)
+  } catch (err) {
+    console.warn("[stage-report] Failed to invalidate cached PDF URLs:", err)
   }
 }
 
@@ -309,6 +330,7 @@ type SaveReportResponseInput = {
   siteVisitRequestId?: string | null
   visitNumber?: number | null
   visitDate?: string | null
+  activeAttachmentIds?: string[]
 }
 
 type SavedReportResponse = { responseId: string; projectStageId: string; reportNumber: string; visitNumber: number; visitDate: string | null; status: string }
@@ -589,6 +611,41 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       }
     }
 
+    if (Array.isArray(input.activeAttachmentIds)) {
+      const activeSet = new Set(input.activeAttachmentIds.filter(Boolean))
+      const { data: existingDbAttachments, error: fetchAttError } = await admin
+        .from("response_attachments")
+        .select("id, storage_path")
+        .eq("response_id", input.responseId)
+
+      if (!fetchAttError && existingDbAttachments && existingDbAttachments.length > 0) {
+        const toDelete = existingDbAttachments.filter((att) => !activeSet.has(att.id))
+        if (toDelete.length > 0) {
+          const deleteIds = toDelete.map((att) => att.id)
+          const deletePaths = toDelete.map((att) => att.storage_path).filter((att): att is string => Boolean(att))
+
+          const { error: delDbError } = await admin
+            .from("response_attachments")
+            .delete()
+            .in("id", deleteIds)
+
+          if (delDbError) {
+            console.error("[stage-report] failed to delete reconciled attachment records from database", {
+              responseId: input.responseId,
+              deleteIds,
+              error: delDbError.message,
+            })
+          } else if (deletePaths.length > 0) {
+            await admin.storage
+              .from("project-stage-evidence")
+              .remove(deletePaths)
+          }
+        }
+      }
+    }
+
+    await invalidateTranslationPdfs(input.responseId, input.projectId)
+
     const linkedSiteVisitId = siteVisitRequestId || existing?.site_visit_request_id
     if (linkedSiteVisitId && assignedVisitNumber) {
       await admin
@@ -818,6 +875,7 @@ export async function registerResponseAttachmentsAction(input: {
     if (response.project_stage_term_id && response.project_stage_id) {
       revalidatePath(`/projects/${input.projectId}/stages/${response.project_stage_id}/terms/${response.project_stage_term_id}/reports/${input.responseId}`)
     }
+    await invalidateTranslationPdfs(input.responseId, input.projectId)
     return { ok: true, data: { ids: (data ?? []).map((row: any) => row.id as string) } }
   } catch (error) {
     return actionError(error, "Could not save attachment metadata.")
@@ -867,6 +925,7 @@ export async function deleteResponseAttachmentAction(input: {
     if (response.project_stage_term_id && response.project_stage_id) {
       revalidatePath(`/projects/${input.projectId}/stages/${response.project_stage_id}/terms/${response.project_stage_term_id}/reports/${attachment.response_id}`)
     }
+    await invalidateTranslationPdfs(attachment.response_id, input.projectId)
     return { ok: true }
   } catch (error) {
     return actionError(error, "Could not delete the attachment.")

@@ -146,8 +146,7 @@ export async function GET(request: NextRequest) {
     }
 
     const primaryCol = PDF_COLUMNS[kind]
-    const primaryPath = translation[primaryCol]
-    const storagePath = primaryPath || translation.bilingual_pdf_url || translation.original_pdf_url
+    const storagePath = translation[primaryCol]
 
     if (!storagePath) {
       logServerDiagnosticEvent("PDF_DOWNLOAD_GET_NOT_FOUND", {
@@ -159,19 +158,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "The requested PDF has not been generated." }, { status: 404 })
     }
 
-    const usedFallback = storagePath !== primaryPath
-    let selectedArtifactKind: string = kind
-    if (usedFallback) {
-      if (storagePath === translation.bilingual_pdf_url) selectedArtifactKind = "bilingual"
-      else if (storagePath === translation.original_pdf_url) selectedArtifactKind = "original"
-      else if (storagePath === translation.arabic_pdf_url) selectedArtifactKind = "arabic"
-    }
+    const usedFallback = false
+    const selectedArtifactKind: string = kind
 
     logServerDiagnosticEvent("PDF_DOWNLOAD_ARTIFACT_SELECTED", {
       requestedKind: kind,
       selectedArtifactKind,
       usedFallback,
-      primaryPath: primaryPath || null,
+      primaryPath: storagePath,
       storagePath,
       responseId: translation.response_id,
       translationId: translation.id,
@@ -198,7 +192,7 @@ export async function GET(request: NextRequest) {
       translationId: translation.id,
     })
 
-    return NextResponse.redirect(signed.signedUrl, { status: 302, headers: { "Cache-Control": "private, max-age=300" } })
+    return NextResponse.redirect(signed.signedUrl, { status: 302, headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" } })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to download the stored PDF."
     const status = error instanceof AuthzError ? 403 : 400
