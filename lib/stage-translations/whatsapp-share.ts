@@ -1,8 +1,22 @@
-"use client"
+function formatVisitDate(dateStr?: string | null): string | null {
+  if (!dateStr || !dateStr.trim()) return null
+  const trimmed = dateStr.trim()
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    const [y, m, d] = trimmed.slice(0, 10).split("-").map(Number)
+    if (y && m && d) {
+      const date = new Date(y, m - 1, d)
+      if (!isNaN(date.getTime())) {
+        return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date)
+      }
+    }
+  }
+  return trimmed
+}
 
 export function buildShareMessage(options: {
   projectName: string
   projectCode?: string | null
+  visitDate?: string | null
   reportTitle?: string
   reportSubject?: string
   visitNumber?: number | string
@@ -28,11 +42,13 @@ export function buildShareMessage(options: {
 
   const subjectText = (options.reportSubject || options.reportTitle || "Inspection Report").trim()
   const projectCodeText = options.projectCode?.trim()
+  const visitDateText = formatVisitDate(options.visitDate)
 
   const messageLines = [
     "🏗️ *Bonyan Construction Report*",
     `*Project:* ${options.projectName}`,
     ...(projectCodeText ? [`*Project Code:* ${projectCodeText}`] : []),
+    ...(visitDateText ? [`*Visit Date:* ${visitDateText}`] : []),
     `*Report Subject:* ${subjectText}`,
     ...(options.supervisorName ? [`*Supervisor:* ${options.supervisorName}`] : []),
     "",
@@ -57,6 +73,7 @@ export function buildShareMessage(options: {
 export function buildWhatsAppShareUrl(options: {
   projectName: string
   projectCode?: string | null
+  visitDate?: string | null
   reportTitle?: string
   reportSubject?: string
   visitNumber?: number | string
