@@ -249,11 +249,86 @@ export function safePdfFilename(value: string) {
   return normalized || "inspection-report"
 }
 
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+]
+
+export function extractProjectCode(rawCode: string | null | undefined): string {
+  if (!rawCode) return ""
+  const str = String(rawCode).trim()
+  if (!str) return ""
+
+  const yearMatch = str.match(/\b(19\d{2}|20\d{2})\b/) || str.match(/\b\d{4}\b/)
+  const year = yearMatch ? yearMatch[0] : ""
+
+  const numbers = str.match(/\d+/g) || []
+
+  if (year && numbers.length > 0) {
+    const finalCode = [...numbers].reverse().find((n) => n !== year)
+    if (finalCode) {
+      return `${year}-${finalCode}`
+    } else {
+      return year
+    }
+  }
+
+  return str.replace(/[^\w-]/g, "").replace(/[\s_]+/g, "-").replace(/-{2,}/g, "-").replace(/^-+|-+$/g, "")
+}
+
+export function formatVisitDate(rawDate: string | null | undefined): string {
+  if (!rawDate) return "18-Sep-2026"
+
+  const str = String(rawDate).trim()
+
+  const isoMatch = str.match(/^(\d{4})[/-](\d{2})[/-](\d{2})/)
+  if (isoMatch) {
+    const year = isoMatch[1]
+    const monthIdx = parseInt(isoMatch[2], 10) - 1
+    const day = isoMatch[3]
+    if (monthIdx >= 0 && monthIdx < 12) {
+      return `${day}-${MONTH_NAMES[monthIdx]}-${year}`
+    }
+  }
+
+  try {
+    const d = new Date(str)
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, "0")
+      const month = MONTH_NAMES[d.getMonth()]
+      const year = d.getFullYear()
+      return `${day}-${month}-${year}`
+    }
+  } catch {}
+
+  return str || "18-Sep-2026"
+}
+
 export function formatReportPdfFilename(
-  projectName: string | null | undefined,
-  rawDate: string | null | undefined,
-  languageType: "English" | "Bilingual" | "Arabic",
+  projectCodeOrName: string | null | undefined,
+  projectNameOrDate?: string | null | undefined,
+  rawDateOrLanguage?: string | null | undefined,
+  languageType?: "English" | "Bilingual" | "Arabic",
 ): string {
+  let projectCode: string | null | undefined = ""
+  let projectName: string | null | undefined = ""
+  let rawDate: string | null | undefined = ""
+  let lang: "English" | "Bilingual" | "Arabic" = "English"
+
+  if (languageType !== undefined) {
+    projectCode = projectCodeOrName
+    projectName = projectNameOrDate
+    rawDate = rawDateOrLanguage
+    lang = languageType
+  } else {
+    projectCode = ""
+    projectName = projectCodeOrName
+    rawDate = projectNameOrDate
+    lang = (rawDateOrLanguage as "English" | "Bilingual" | "Arabic") || "English"
+  }
+
+  const codeSegment = extractProjectCode(projectCode)
+
   const cleanName = (projectName || "Project")
     .trim()
     .replace(/[^\w\s\u0600-\u06ff-]/g, "")
@@ -262,25 +337,13 @@ export function formatReportPdfFilename(
     .replace(/^-+|-+$/g, "")
 
   const safeProjectName = cleanName || "Project"
+  const visitDateFormatted = formatVisitDate(rawDate)
 
-  let dateFormatted = "2026-01-01"
-  try {
-    if (rawDate) {
-      const d = new Date(rawDate)
-      if (!isNaN(d.getTime())) {
-        const year = d.getFullYear()
-        const month = String(d.getMonth() + 1).padStart(2, "0")
-        const day = String(d.getDate()).padStart(2, "0")
-        dateFormatted = `${year}-${month}-${day}`
-      } else {
-        dateFormatted = rawDate.split("T")[0] || dateFormatted
-      }
-    }
-  } catch {
-    if (rawDate) dateFormatted = rawDate.split("T")[0] || dateFormatted
+  if (codeSegment) {
+    return `${codeSegment}-${safeProjectName}-${visitDateFormatted}-${lang}.pdf`
   }
 
-  return `${safeProjectName}-${dateFormatted}-${languageType}.pdf`
+  return `${safeProjectName}-${visitDateFormatted}-${lang}.pdf`
 }
 
 export function downloadPdfBlob(
@@ -6233,8 +6296,9 @@ export async function exportTranslationPdf({
   })
 
   try {
-    const projectName = data.project.name
-    const submissionDate = data.response.createdAt || data.response.updatedAt
+    const projectCode = data.project?.code
+    const projectName = data.project?.name
+    const submissionDate = data.response?.visitDate || data.response?.createdAt || data.response?.updatedAt
     const sourcePdf = getSourcePdfAttachment(data)
     const ccMetadata = ccRecipients.map(formatCcRecipientForPdf)
     let sourceDocument: ExtractedSourceDocument | null = null
@@ -6303,7 +6367,7 @@ export async function exportTranslationPdf({
       validateTemplateAssets(englishTemplate, sourceDocument)
       const blob = await buildLanguagePdfBlob(englishTemplate, { appendClosingBlock, tracker: imageTracker })
       validateImageCheckpoint()
-      const filename = formatReportPdfFilename(projectName, submissionDate, "English")
+      const filename = formatReportPdfFilename(projectCode, projectName, submissionDate, "English")
       logDiagnosticEvent(respId, "ORIGINAL_PDF_RENDER_SUCCESS", {
         filename,
         blobSize: blob.size,
@@ -6332,7 +6396,7 @@ export async function exportTranslationPdf({
       validateTemplateAssets(arabicTemplate, sourceDocument)
       const arabicBlob = await buildLanguagePdfBlob(arabicTemplate, { appendClosingBlock, tracker: imageTracker })
       validateImageCheckpoint()
-      const filename = formatReportPdfFilename(projectName, submissionDate, "Arabic")
+      const filename = formatReportPdfFilename(projectCode, projectName, submissionDate, "Arabic")
       return {
         blob: arabicBlob,
         filename,
@@ -6349,7 +6413,7 @@ export async function exportTranslationPdf({
       tracker: imageTracker,
     })
     validateImageCheckpoint()
-    const filename = formatReportPdfFilename(projectName, submissionDate, "Bilingual")
+    const filename = formatReportPdfFilename(projectCode, projectName, submissionDate, "Bilingual")
     logDiagnosticEvent(respId, "BILINGUAL_PDF_RENDER_SUCCESS", {
       filename,
       blobSize: bilingualBlob.size,
