@@ -175,6 +175,7 @@ let arabicBoldFontPromise: Promise<string> | null = null
 let latinFontPromise: Promise<string> | null = null
 
 async function loadFontBase64(url: string, kind: "arabic" | "arabic-bold" | "latin") {
+  if (!url) return ""
   const cache = kind === "arabic" ? arabicFontPromise : kind === "arabic-bold" ? arabicBoldFontPromise : latinFontPromise
   if (cache) return cache
 
@@ -212,7 +213,7 @@ async function installFonts(doc: JsPdfDocument) {
   if (!doc.existsFileInVFS?.(ARABIC_BOLD_FONT_FILENAME)) {
     doc.addFileToVFS(ARABIC_BOLD_FONT_FILENAME, arBoldBase64)
   }
-  if (!doc.existsFileInVFS?.(LATIN_FONT_FILENAME)) {
+  if (LATIN_FONT_URL && laBase64 && !doc.existsFileInVFS?.(LATIN_FONT_FILENAME)) {
     doc.addFileToVFS(LATIN_FONT_FILENAME, laBase64)
   }
 
@@ -225,7 +226,7 @@ async function installFonts(doc: JsPdfDocument) {
   if (!existingGretaStyles.includes("bold")) {
     doc.addFont(ARABIC_BOLD_FONT_FILENAME, ARABIC_FONT_FAMILY, "bold")
   }
-  if (!fontList?.[LATIN_FONT_FAMILY]) {
+  if (LATIN_FONT_URL && !fontList?.[LATIN_FONT_FAMILY]) {
     doc.addFont(LATIN_FONT_FILENAME, LATIN_FONT_FAMILY, "normal")
     doc.addFont(LATIN_FONT_FILENAME, LATIN_FONT_FAMILY, "bold")
   }
