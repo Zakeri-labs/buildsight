@@ -1393,7 +1393,7 @@ function setLanguage(doc: JsPdfDocument, rtl: boolean, fontSize = 10, bold = fal
 
   if (bold) {
     doc.setTextRenderingMode?.(2) // Fill then stroke for high-contrast bold rendering
-    doc.setLineWidth?.(rtl ? 0.12 : 0.04)
+    doc.setLineWidth?.(rtl ? 0.12 : 0.15)
   } else {
     doc.setTextRenderingMode?.(0) // Standard fill mode
   }
