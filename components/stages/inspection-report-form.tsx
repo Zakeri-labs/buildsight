@@ -3192,6 +3192,17 @@ function SimpleRichTextEditor({
     }
   }, [value])
 
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const selection = window.getSelection()
+      if (selection?.rangeCount && editorRef.current?.contains(selection.anchorNode)) {
+        savedRangeRef.current = selection.getRangeAt(0).cloneRange()
+      }
+    }
+    document.addEventListener("selectionchange", handleSelectionChange)
+    return () => document.removeEventListener("selectionchange", handleSelectionChange)
+  }, [])
+
   const saveSelection = () => {
     const selection = window.getSelection()
     if (selection?.rangeCount && editorRef.current?.contains(selection.anchorNode)) {
@@ -3201,7 +3212,14 @@ function SimpleRichTextEditor({
 
   const restoreSelection = () => {
     const selection = window.getSelection()
-    if (selection && savedRangeRef.current && savedRangeRef.current.startContainer.isConnected) {
+    if (!selection) return
+    if (selection.rangeCount > 0) {
+      const currentRange = selection.getRangeAt(0)
+      if (editorRef.current?.contains(currentRange.anchorNode) || editorRef.current?.contains(currentRange.commonAncestorContainer)) {
+        return
+      }
+    }
+    if (savedRangeRef.current && savedRangeRef.current.startContainer.isConnected) {
       selection.removeAllRanges()
       selection.addRange(savedRangeRef.current)
     } else {
@@ -3233,6 +3251,10 @@ function SimpleRichTextEditor({
           type="button"
           disabled={disabled}
           onMouseDown={(e) => {
+            e.preventDefault()
+            handleBold()
+          }}
+          onTouchStart={(e) => {
             e.preventDefault()
             handleBold()
           }}
@@ -3393,6 +3415,17 @@ function RichSectionEditor({
     onChange(html)
   }
 
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const selection = window.getSelection()
+      if (selection?.rangeCount && editorRef.current?.contains(selection.anchorNode)) {
+        savedRangeRef.current = selection.getRangeAt(0).cloneRange()
+      }
+    }
+    document.addEventListener("selectionchange", handleSelectionChange)
+    return () => document.removeEventListener("selectionchange", handleSelectionChange)
+  }, [])
+
   const saveSelection = () => {
     const selection = window.getSelection()
     if (selection?.rangeCount && editorRef.current?.contains(selection.anchorNode)) savedRangeRef.current = selection.getRangeAt(0).cloneRange()
@@ -3400,7 +3433,14 @@ function RichSectionEditor({
 
   const restore = () => {
     const selection = window.getSelection()
-    if (selection && savedRangeRef.current && savedRangeRef.current.startContainer.isConnected) {
+    if (!selection) return
+    if (selection.rangeCount > 0) {
+      const currentRange = selection.getRangeAt(0)
+      if (editorRef.current?.contains(currentRange.anchorNode) || editorRef.current?.contains(currentRange.commonAncestorContainer)) {
+        return
+      }
+    }
+    if (savedRangeRef.current && savedRangeRef.current.startContainer.isConnected) {
       selection.removeAllRanges()
       selection.addRange(savedRangeRef.current)
     } else {
@@ -3939,13 +3979,19 @@ function RichSectionEditor({
 }
 
 function EditorButton({ label, onClick, disabled, className, children }: { label: string; onClick: () => void; disabled?: boolean; className?: string; children: ReactNode }) {
+  const handleAction = (event: React.SyntheticEvent) => {
+    event.preventDefault()
+    onClick()
+  }
+
   return (
     <button
       type="button"
       title={label}
       aria-label={label}
       disabled={disabled}
-      onMouseDown={(event) => { event.preventDefault(); onClick() }}
+      onMouseDown={handleAction}
+      onTouchStart={handleAction}
       className={cn("inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-40 [&_svg]:size-4", className)}
     >
       {children}
