@@ -4027,29 +4027,39 @@ function translatedBlockForSource(input: {
   translatedBlocks: Element[]
   used: Set<Element>
 }) {
+  const index = input.sourceBlocks.indexOf(input.sourceBlock)
   const kind = structuralBlockKind(input.sourceBlock)
   const sourcePage = sourcePageKey(input.sourceBlock)
-  const sameKindSource = input.sourceBlocks.filter((block) => structuralBlockKind(block) === kind && sourcePageKey(block) === sourcePage)
+
+  // 1. Try exact positional block at index
+  const atIndex = input.translatedBlocks[index]
+  if (atIndex && !input.used.has(atIndex)) {
+    const atKind = structuralBlockKind(atIndex)
+    const atTag = atIndex.tagName.toLowerCase()
+    if (atKind === kind || atTag === input.sourceBlock.tagName.toLowerCase()) {
+      input.used.add(atIndex)
+      return atIndex
+    }
+  }
+
+  // 2. Try exact page & ordinal match if page region is specified
+  const sameKindSource = input.sourceBlocks.filter(
+    (block) => structuralBlockKind(block) === kind && sourcePageKey(block) === sourcePage,
+  )
   const pageOrdinal = sameKindSource.indexOf(input.sourceBlock)
-  const exactPage = input.translatedBlocks.filter((block) =>
-    structuralBlockKind(block) === kind
-    && sourcePageKey(block) === sourcePage
-    && !input.used.has(block),
-  )
-  const sameTag = input.translatedBlocks.filter((block) =>
-    block.tagName.toLowerCase() === input.sourceBlock.tagName.toLowerCase()
-    && !input.used.has(block),
-  )
-  const sameKind = input.translatedBlocks.filter((block) =>
-    structuralBlockKind(block) === kind
-    && !input.used.has(block),
+  const exactPage = input.translatedBlocks.filter(
+    (block) =>
+      structuralBlockKind(block) === kind &&
+      sourcePageKey(block) === sourcePage &&
+      !input.used.has(block),
   )
   const candidate = exactPage[pageOrdinal]
-    ?? exactPage[0]
-    ?? sameTag[0]
-    ?? sameKind[0]
-  if (candidate) input.used.add(candidate)
-  return candidate
+  if (candidate && !input.used.has(candidate)) {
+    input.used.add(candidate)
+    return candidate
+  }
+
+  return undefined
 }
 
 function blockTextWithoutNestedStructures(element: Element | undefined) {
