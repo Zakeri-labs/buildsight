@@ -3250,14 +3250,12 @@ function SimpleRichTextEditor({
         <button
           type="button"
           disabled={disabled}
-          onMouseDown={(e) => {
+          onPointerDown={(e) => {
+            if (e.button !== 0) return
             e.preventDefault()
             handleBold()
           }}
-          onTouchStart={(e) => {
-            e.preventDefault()
-            handleBold()
-          }}
+          onClick={(e) => e.preventDefault()}
           title="Bold"
           aria-label="Bold"
           className="flex h-7 px-2.5 items-center justify-center gap-1 rounded-md text-xs font-bold transition-colors hover:bg-accent text-foreground hover:text-accent-foreground border border-border/60 bg-background cursor-pointer disabled:opacity-50"
@@ -3979,7 +3977,8 @@ function RichSectionEditor({
 }
 
 function EditorButton({ label, onClick, disabled, className, children }: { label: string; onClick: () => void; disabled?: boolean; className?: string; children: ReactNode }) {
-  const handleAction = (event: React.SyntheticEvent) => {
+  const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
     event.preventDefault()
     onClick()
   }
@@ -3990,8 +3989,8 @@ function EditorButton({ label, onClick, disabled, className, children }: { label
       title={label}
       aria-label={label}
       disabled={disabled}
-      onMouseDown={handleAction}
-      onTouchStart={handleAction}
+      onPointerDown={handlePointerDown}
+      onClick={(event) => event.preventDefault()}
       className={cn("inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-40 [&_svg]:size-4", className)}
     >
       {children}
