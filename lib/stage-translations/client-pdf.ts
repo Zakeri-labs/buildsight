@@ -563,7 +563,10 @@ function htmlToBlocks(html: string): PdfBlock[] {
       }
       return
     }
-    if (tag === "p" || tag === "blockquote") {
+    const isBlockContainer = tag === "div" || tag === "section" || tag === "article"
+    const hasNestedBlocks = isBlockContainer && Boolean(node.querySelector("p, blockquote, ul, ol, table, h1, h2, h3, h4, h5, h6, div, section, article"))
+
+    if (tag === "p" || tag === "blockquote" || (isBlockContainer && !hasNestedBlocks)) {
       const text = normalizeText(nodeToFormattedText(node))
       if (text) blocks.push({ type: "paragraph", text })
       for (const image of Array.from(node.querySelectorAll(":scope > img"))) visit(image)
