@@ -5827,6 +5827,79 @@ function sectionDocumentBlocks(section: PdfSectionTemplate) {
   return flattenPdfBlocks([...reconstructed, ...other])
 }
 
+function renderBilingualTranslationNoticeBlock(flow: Flow) {
+  const doc = flow.doc
+  const padding = 3
+  const gap = 6
+  const colW = (flow.width - gap) / 2
+  const fontSize = 7.5
+  const lineHeight = 3.2
+
+  const engLabel = "Translation Notice:"
+  const engBody = "The Arabic version of this report has been generated using AI-assisted translation technology for reference purposes. In case of any discrepancy or interpretation difference, the English version shall be considered the official and prevailing version."
+
+  const arLabel = "إشعار الترجمة:"
+  const arBody = "تم إعداد النسخة العربية من هذا التقرير باستخدام تقنية الترجمة المدعومة بالذكاء الاصطناعي لأغراض المرجعية. وفي حال وجود أي اختلاف أو تعارض في التفسير، تُعتبر النسخة الإنجليزية هي النسخة الرسمية والمعتمدة."
+
+  setLanguage(doc, false, fontSize, false)
+  const engBodyLines = doc.splitTextToSize(engBody, colW - padding * 2)
+
+  setLanguage(doc, true, fontSize, false)
+  const arShapedBody = shapeArabicText(doc, arBody) as string
+  const arBodyLines = doc.splitTextToSize(arShapedBody, colW - padding * 2)
+
+  const maxLines = Math.max(engBodyLines.length, arBodyLines.length)
+  const contentH = padding * 2 + 4.5 + maxLines * lineHeight
+  const boxH = Math.max(18, contentH)
+
+  if (flow.y + boxH > flow.bottom) {
+    addBilingualContinuationPage(flow)
+  }
+
+  // Background card
+  doc.setFillColor(248, 250, 252)
+  doc.rect(flow.x, flow.y, flow.width, boxH, "F")
+  doc.setDrawColor(226, 232, 240)
+  doc.setLineWidth(0.2)
+  doc.rect(flow.x, flow.y, flow.width, boxH)
+
+  // Vertical center divider between EN and AR columns
+  const dividerX = flow.x + colW + gap / 2
+  doc.line(dividerX, flow.y, dividerX, flow.y + boxH)
+
+  // English side (Left Column)
+  let engY = flow.y + padding + 3.2
+  setLanguage(doc, false, fontSize, true)
+  doc.setTextColor(30, 41, 59)
+  doc.text(engLabel, flow.x + padding, engY)
+
+  engY += 3.8
+  setLanguage(doc, false, fontSize, false)
+  doc.setTextColor(100, 116, 139)
+  engBodyLines.forEach((line: string) => {
+    doc.text(line, flow.x + padding, engY)
+    engY += lineHeight
+  })
+
+  // Arabic side (Right Column)
+  let arY = flow.y + padding + 3.2
+  const arRightX = flow.x + flow.width - padding
+  setLanguage(doc, true, fontSize, true)
+  doc.setTextColor(30, 41, 59)
+  const shapedArLabel = shapeArabicText(doc, arLabel) as string
+  doc.text(shapedArLabel, arRightX, arY, { ...ARABIC_TEXT_OPTIONS, align: "right" })
+
+  arY += 3.8
+  setLanguage(doc, true, fontSize, false)
+  doc.setTextColor(100, 116, 139)
+  arBodyLines.forEach((line: string) => {
+    doc.text(line, arRightX, arY, { ...ARABIC_TEXT_OPTIONS, align: "right" })
+    arY += lineHeight
+  })
+
+  flow.y += boxH + 5
+}
+
 async function buildNativeBilingualPdfBlob(input: {
   data: StageTranslationPageData
   translation: StageTranslationRecord
@@ -5873,6 +5946,8 @@ async function buildNativeBilingualPdfBlob(input: {
   const arSections = arabicTemplate.sections
   const arSectionMap = new Map(arSections.map((s) => [s.key, s]))
 
+  let translationNoticeRendered = false
+
   for (const engSection of engSections) {
     const engTitleLower = engSection.title.toLowerCase()
     if (
@@ -5884,6 +5959,11 @@ async function buildNativeBilingualPdfBlob(input: {
       engTitleLower.includes("report details")
     ) {
       continue // Skip redundant top project info & report details table
+    }
+
+    if (!translationNoticeRendered && engSection.key === "attachments") {
+      renderBilingualTranslationNoticeBlock(flow)
+      translationNoticeRendered = true
     }
 
     const arSection = arSectionMap.get(engSection.key)
@@ -5931,6 +6011,11 @@ async function buildNativeBilingualPdfBlob(input: {
     }
 
     flow.y += 4
+  }
+
+  if (!translationNoticeRendered) {
+    renderBilingualTranslationNoticeBlock(flow)
+    translationNoticeRendered = true
   }
 
   if (appendClosingBlock) {
