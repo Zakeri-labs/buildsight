@@ -521,6 +521,19 @@ function htmlToBlocks(html: string): PdfBlock[] {
   if (!root) return []
   root.querySelectorAll("script,style,iframe,object,embed,form,input,button,textarea,select,meta,link,base").forEach((node) => node.remove())
   root.querySelectorAll("*").forEach((node) => {
+    const styleAttr = node.getAttribute("style")?.toLowerCase() || ""
+    if (/font-weight\s*:\s*(bold|[6-9]00)/i.test(styleAttr)) {
+      const tag = node.tagName.toLowerCase()
+      if (tag !== "p" && tag !== "div" && tag !== "section" && tag !== "article" && !/^h[1-6]$/.test(tag) && tag !== "blockquote") {
+        const strong = documentNode.createElement("strong")
+        while (node.firstChild) {
+          strong.appendChild(node.firstChild)
+        }
+        node.replaceWith(strong)
+      }
+    }
+  })
+  root.querySelectorAll("*").forEach((node) => {
     for (const attribute of Array.from(node.attributes)) {
       if (/^on/i.test(attribute.name) || ["class", "id", "style"].includes(attribute.name.toLowerCase())) {
         node.removeAttribute(attribute.name)
