@@ -565,8 +565,7 @@ function htmlToBlocks(html: string): PdfBlock[] {
     }
     if (tag === "p" || tag === "blockquote") {
       const text = normalizeText(nodeToFormattedText(node))
-      const isRedundantHeader = /^(?:Observations|Directives|Recommendations|الملاحظات|مشاهدات|التوجيهات|دستورالعمل‌ها)\s*[\/:]/i.test(text)
-      if (text && !isRedundantHeader) blocks.push({ type: "paragraph", text })
+      if (text) blocks.push({ type: "paragraph", text })
       for (const image of Array.from(node.querySelectorAll(":scope > img"))) visit(image)
       return
     }
@@ -5647,18 +5646,9 @@ async function renderBilingualImageGrid(
 }
 
 function pairedBlocksByEnglishStructure(englishBlocks: PdfBlock[], arabicBlocks: PdfBlock[]) {
-  const queues = new Map<PdfBlock["type"], PdfBlock[]>()
-  arabicBlocks.forEach((block) => {
-    const queue = queues.get(block.type) ?? []
-    queue.push(block)
-    queues.set(block.type, queue)
-  })
-  const indexes = new Map<PdfBlock["type"], number>()
-
-  return englishBlocks.map((english) => {
-    const index = indexes.get(english.type) ?? 0
-    const arabic = queues.get(english.type)?.[index]
-    indexes.set(english.type, index + 1)
+  return englishBlocks.map((english, index) => {
+    const candidate = arabicBlocks[index]
+    const arabic = candidate && candidate.type === english.type ? candidate : undefined
     return { english, arabic }
   })
 }
