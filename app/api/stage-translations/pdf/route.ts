@@ -40,6 +40,17 @@ function safeFileName(value: string) {
   return safe || "translated-report.pdf"
 }
 
+export function extractPdfDownloadFilename(storagePath: string | null | undefined, fallback: string): string {
+  if (!storagePath) return fallback
+  const base = storagePath.split("/").pop() || ""
+  if (!base) return fallback
+
+  const cleanPrefix = base.replace(/^(original|arabic|bilingual)-/i, "")
+  const cleanTimestamp = cleanPrefix.replace(/^\d{10,}-/, "")
+
+  return cleanTimestamp || fallback
+}
+
 async function loadTranslation(admin: ReturnType<typeof createAdminClient>, projectId: string, translationId: string) {
   const { data, error } = await admin
     .from("translation_documents")
@@ -171,7 +182,7 @@ export async function GET(request: NextRequest) {
       translationId: translation.id,
     })
 
-    const downloadName = storagePath.split("/").pop()?.replace(/^.*?-\d+-/, "") || `${kind}-report.pdf`
+    const downloadName = extractPdfDownloadFilename(storagePath, `${kind}-report.pdf`)
     const { data: signed, error: signedError } = await admin.storage.from(BUCKET).createSignedUrl(storagePath, 60 * 60 * 24 * 7, { download: downloadName })
     if (signedError || !signed?.signedUrl) {
       logServerDiagnosticEvent("PDF_DOWNLOAD_GET_FAILED", {

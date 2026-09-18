@@ -14,6 +14,17 @@ function getUuidRange(code: string) {
   return { minUuid: format(minHex), maxUuid: format(maxHex) }
 }
 
+function extractPdfDownloadFilename(storagePath: string | null | undefined, fallback: string): string {
+  if (!storagePath) return fallback
+  const base = storagePath.split("/").pop() || ""
+  if (!base) return fallback
+
+  const cleanPrefix = base.replace(/^(original|arabic|bilingual)-/i, "")
+  const cleanTimestamp = cleanPrefix.replace(/^\d{10,}-/, "")
+
+  return cleanTimestamp || fallback
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { code: string } | Promise<{ code: string }> },
@@ -74,7 +85,7 @@ export async function GET(
       return NextResponse.json({ error: "Report PDF has not been generated or is missing." }, { status: 404 })
     }
 
-    const downloadName = storagePath.split("/").pop()?.replace(/^.*?-\d+-/, "") || "bilingual-report.pdf"
+    const downloadName = extractPdfDownloadFilename(storagePath, "bilingual-report.pdf")
 
     // Create 7-day signed download URL (permanent short link resolves to fresh signed URL every request)
     const { data: signed, error: signedError } = await admin.storage
