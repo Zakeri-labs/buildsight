@@ -522,7 +522,11 @@ function htmlToBlocks(html: string): PdfBlock[] {
   root.querySelectorAll("script,style,iframe,object,embed,form,input,button,textarea,select,meta,link,base").forEach((node) => node.remove())
   root.querySelectorAll("*").forEach((node) => {
     const styleAttr = node.getAttribute("style")?.toLowerCase() || ""
-    if (/font-weight\s*:\s*(bold|[6-9]00)/i.test(styleAttr)) {
+    const classAttr = node.getAttribute("class")?.toLowerCase() || ""
+    const isBoldStyle = /font-weight\s*:\s*(bold|[6-9]00)/i.test(styleAttr)
+    const isBoldClass = /\b(font-bold|fw-bold|bold)\b/i.test(classAttr)
+
+    if (isBoldStyle || isBoldClass) {
       const tag = node.tagName.toLowerCase()
       if (tag !== "p" && tag !== "div" && tag !== "section" && tag !== "article" && !/^h[1-6]$/.test(tag) && tag !== "blockquote") {
         const strong = documentNode.createElement("strong")
