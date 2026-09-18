@@ -415,10 +415,6 @@ export async function ensureBilingualPdfStored(input: {
     existingPath: input.existingPath || null,
   })
 
-  if (input.existingPath) {
-    logDiagnosticEvent(input.responseId, "ENSURE_BILINGUAL_STORED_EXISTING", { existingPath: input.existingPath })
-    return { storagePath: input.existingPath }
-  }
   if (!input.projectId || !input.responseId) {
     logDiagnosticEvent(input.responseId, "ENSURE_BILINGUAL_FAILED", { reason: "missing_projectId_or_responseId" })
     return { storagePath: null }

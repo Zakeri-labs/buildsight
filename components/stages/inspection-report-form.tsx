@@ -1381,7 +1381,7 @@ export function InspectionReportForm({
                   lastSeenTrans = trans
                 }
                 const isCompletedStatus = trans?.status === "completed" || trans?.status === "approved"
-                if (trans && isCompletedStatus && trans.bilingualPdfPath && trans.translatedContent && !trans.isStale) {
+                if (trans && isCompletedStatus && trans.originalPdfPath && trans.bilingualPdfPath && trans.translatedContent && !trans.isStale) {
                   pdfGenSuccess = true
                   finalTransRecord = trans
                   break
@@ -1408,8 +1408,14 @@ export function InspectionReportForm({
           }
 
           // Step 1: "Preparing translation & PDFs"
-          // CRITICAL: Do NOT mark as done unless PDF readiness is confirmed (both translatedContent and bilingualPdfPath exist)
-          const isPdfReady = Boolean(pdfGenSuccess && finalTransRecord?.bilingualPdfPath && finalTransRecord?.translatedContent)
+          // CRITICAL: Do NOT mark as done unless PDF readiness is confirmed (both originalPdfPath, bilingualPdfPath, and translatedContent exist)
+          const isPdfReady = Boolean(
+            pdfGenSuccess &&
+              finalTransRecord?.originalPdfPath &&
+              finalTransRecord?.bilingualPdfPath &&
+              finalTransRecord?.translatedContent &&
+              !finalTransRecord?.isStale
+          )
 
           if (!isPdfReady) {
             // "Preparing translation & PDFs" failed - do NOT advance to "Confirming PDF availability"
@@ -1438,6 +1444,7 @@ export function InspectionReportForm({
               responseId: id,
               reason: realError || "pdf_not_generated_or_failed",
               hasTranslatedContent: Boolean(failureTrans?.translatedContent),
+              hasOriginalPdfPath: Boolean(failureTrans?.originalPdfPath),
               hasBilingualPdfPath: Boolean(failureTrans?.bilingualPdfPath),
               translationStatus: failureTrans?.status || null,
               isStale: failureTrans?.isStale ?? null,
@@ -1452,8 +1459,12 @@ export function InspectionReportForm({
               steps = updateStep(steps, stepIdx, "active")
             }
 
-            // Step 2: "Confirming PDF availability" - trust verified bilingualPdfPath returned by database/worker
-            let storageConfirmed = Boolean(pdfGenSuccess && finalTransRecord?.bilingualPdfPath)
+            // Step 2: "Confirming PDF availability" - trust verified originalPdfPath and bilingualPdfPath returned by database/worker
+            let storageConfirmed = Boolean(
+              pdfGenSuccess &&
+                finalTransRecord?.originalPdfPath &&
+                finalTransRecord?.bilingualPdfPath
+            )
 
             if (!storageConfirmed) {
               const retryDelays = [1000, 2000, 4000]
@@ -1470,7 +1481,7 @@ export function InspectionReportForm({
                   if (checkRes.ok) {
                     const checkPayload = await checkRes.json()
                     const trans = checkPayload?.data?.translation
-                    if (trans && trans.bilingualPdfPath) {
+                    if (trans && trans.originalPdfPath && trans.bilingualPdfPath && !trans.isStale) {
                       finalTransRecord = trans
                       storageConfirmed = true
                       pdfGenSuccess = true
