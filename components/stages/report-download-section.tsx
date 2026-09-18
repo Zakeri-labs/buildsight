@@ -276,6 +276,7 @@ export function ReportDownloadSection({
             projectId,
             translationId: translation.id,
             kind: "bilingual",
+            v: Date.now().toString(),
           })
           window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
           setTimeout(() => setDownloading(null), 2500)
@@ -288,6 +289,7 @@ export function ReportDownloadSection({
             projectId,
             translationId: translation.id,
             kind: "original",
+            v: Date.now().toString(),
           })
           window.location.assign(`/api/stage-translations/pdf?${params.toString()}`)
           setTimeout(() => setDownloading(null), 2500)

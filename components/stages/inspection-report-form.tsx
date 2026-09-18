@@ -2525,7 +2525,7 @@ export function InspectionReportForm({
                         } else {
                           const respId = submitResult?.responseId || responseId
                           const query = translation?.id ? `translationId=${translation.id}` : `responseId=${respId}`
-                          window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&${query}&kind=original`)
+                          window.location.assign(`/api/stage-translations/pdf?projectId=${project.id}&${query}&kind=original&v=${Date.now()}`)
                         }
                       } finally {
                         setActionBusy(null)
@@ -2583,7 +2583,7 @@ export function InspectionReportForm({
                             }).catch(() => null)
                           }
                           const query = translation?.id ? `translationId=${translation.id}` : `responseId=${respId}`
-                          const endpointPath = `/api/stage-translations/pdf?projectId=${project.id}&${query}&kind=bilingual`
+                          const endpointPath = `/api/stage-translations/pdf?projectId=${project.id}&${query}&kind=bilingual&v=${Date.now()}`
 
                           logDiagnosticEvent(respId, "BROWSER_DOWNLOAD_STORED_STARTED", {
                             clickId,

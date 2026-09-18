@@ -224,7 +224,7 @@ export function StageTranslationActions({
         setDownloading(null)
         return
       }
-      const params = new URLSearchParams({ projectId, translationId: translation.id, kind })
+      const params = new URLSearchParams({ projectId, translationId: translation.id, kind, v: Date.now().toString() })
       const endpointPath = `/api/stage-translations/pdf?${params.toString()}`
 
       logDiagnosticEvent(responseId, "BROWSER_DOWNLOAD_STORED_STARTED", {
@@ -244,7 +244,7 @@ export function StageTranslationActions({
       return
     }
     if (storedPath && kind !== "original") {
-      const params = new URLSearchParams({ projectId, translationId: translation.id, kind })
+      const params = new URLSearchParams({ projectId, translationId: translation.id, kind, v: Date.now().toString() })
       const endpointPath = `/api/stage-translations/pdf?${params.toString()}`
 
       logDiagnosticEvent(responseId, "BROWSER_DOWNLOAD_STORED_STARTED", {

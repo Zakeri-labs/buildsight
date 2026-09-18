@@ -192,7 +192,7 @@ export async function GET(request: NextRequest) {
       translationId: translation.id,
     })
 
-    return NextResponse.redirect(signed.signedUrl, { status: 302, headers: { "Cache-Control": "private, max-age=300" } })
+    return NextResponse.redirect(signed.signedUrl, { status: 302, headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0" } })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to download the stored PDF."
     const status = error instanceof AuthzError ? 403 : 400
