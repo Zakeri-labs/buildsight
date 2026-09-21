@@ -940,18 +940,31 @@ function isRetryableImageFetchError(status: number, errorMsg: string, isTimeout:
   return false
 }
 
-let imageFetchQueue: Promise<unknown> = Promise.resolve()
+const MAX_CONCURRENT_IMAGE_FETCHES = 3
+let activeImageFetchCount = 0
+const imageFetchQueue: (() => void)[] = []
 
-function runExclusiveImageFetch<T>(fn: () => Promise<T>): Promise<T> {
-  const next = imageFetchQueue.then(
-    () => fn(),
-    () => fn(),
-  )
-  imageFetchQueue = next.then(
-    () => {},
-    () => {},
-  )
-  return next
+function runBoundedImageFetch<T>(fn: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const execute = () => {
+      activeImageFetchCount++
+      fn()
+        .then(resolve, reject)
+        .finally(() => {
+          activeImageFetchCount--
+          if (imageFetchQueue.length > 0) {
+            const next = imageFetchQueue.shift()
+            next?.()
+          }
+        })
+    }
+
+    if (activeImageFetchCount < MAX_CONCURRENT_IMAGE_FETCHES) {
+      execute()
+    } else {
+      imageFetchQueue.push(execute)
+    }
+  })
 }
 
 interface FetchImageWithRetryResult {
@@ -964,7 +977,7 @@ async function fetchEvidenceImageWithRetry(
   src: string,
   meta?: PdfImageMeta,
 ): Promise<FetchImageWithRetryResult> {
-  return runExclusiveImageFetch(async () => {
+  return runBoundedImageFetch(async () => {
     const pdfKind = meta?.pdfKind || "original"
     const responseId = meta?.responseId || "unknown"
     const translationId = meta?.translationId || null
@@ -3314,6 +3327,24 @@ async function renderImageGrid(
     renderParagraph(flow, flow.rtl ? "لا توجد صور." : "No images recorded.")
     return
   }
+  const loadedImagesList = await Promise.all(
+    images.map((img, idx) => {
+      const imageKey = (img as any).id || `img_${idx + 1}`
+      const filename = (img as any).originalFilename || img.src.split("/").pop()?.split("?")[0] || `image_${idx + 1}.jpg`
+      return loadImage(img.src, {
+        pdfKind,
+        responseId,
+        imageKey,
+        filename,
+        attachmentId: (img as any).attachmentId || (img as any).id,
+        storagePath: (img as any).storagePath,
+        imageIndex: idx,
+        totalImages: images.length,
+        tracker,
+      })
+    })
+  )
+
   if (sourceVisuals) {
     for (let idx = 0; idx < images.length; idx += 1) {
       const image = images[idx]
@@ -3344,25 +3375,7 @@ async function renderImageGrid(
 
   for (let i = 0; i < images.length; i += 2) {
     const pair = images.slice(i, i + 2)
-    const loadedPair: (LoadedImage | null)[] = []
-    for (let idx = 0; idx < pair.length; idx += 1) {
-      const img = pair[idx]
-      const globalIdx = i + idx
-      const imageKey = (img as any).id || `img_${globalIdx + 1}`
-      const filename = (img as any).originalFilename || img.src.split("/").pop()?.split("?")[0] || `image_${globalIdx + 1}.jpg`
-      const loaded = await loadImage(img.src, {
-        pdfKind,
-        responseId,
-        imageKey,
-        filename,
-        attachmentId: (img as any).attachmentId || (img as any).id,
-        storagePath: (img as any).storagePath,
-        imageIndex: globalIdx,
-        totalImages: images.length,
-        tracker,
-      })
-      loadedPair.push(loaded)
-    }
+    const loadedPair = loadedImagesList.slice(i, i + 2)
 
     let rowH = 0
     const dimensions = loadedPair.map((img, idx) => {
@@ -5598,28 +5611,28 @@ async function renderBilingualImageGrid(
   // Centre the two-column block so left and right outer margins are equal.
   const gridOffset = (flow.width - (2 * colWidth + gap)) / 2
 
-  for (let i = 0; i < images.length; i += 2) {
-    const pair = images.slice(i, i + 2)
-    const arPair = arabicImages.slice(i, i + 2)
-    const loadedPair: (LoadedImage | null)[] = []
-    for (let idx = 0; idx < pair.length; idx += 1) {
-      const img = pair[idx]
-      const globalIdx = i + idx
-      const imageKey = (img as any).id || `img_${globalIdx + 1}`
-      const filename = (img as any).originalFilename || img.src.split("/").pop()?.split("?")[0] || `image_${globalIdx + 1}.jpg`
-      const loaded = await loadImage(img.src, {
+  const loadedImagesList = await Promise.all(
+    images.map((img, idx) => {
+      const imageKey = (img as any).id || `img_${idx + 1}`
+      const filename = (img as any).originalFilename || img.src.split("/").pop()?.split("?")[0] || `image_${idx + 1}.jpg`
+      return loadImage(img.src, {
         pdfKind: "bilingual",
         responseId,
         imageKey,
         filename,
         attachmentId: (img as any).attachmentId || (img as any).id,
         storagePath: (img as any).storagePath,
-        imageIndex: globalIdx,
+        imageIndex: idx,
         totalImages: images.length,
         tracker,
       })
-      loadedPair.push(loaded)
-    }
+    })
+  )
+
+  for (let i = 0; i < images.length; i += 2) {
+    const pair = images.slice(i, i + 2)
+    const arPair = arabicImages.slice(i, i + 2)
+    const loadedPair = loadedImagesList.slice(i, i + 2)
 
     let rowH = 0
     const dimensions = loadedPair.map((img, idx) => {
