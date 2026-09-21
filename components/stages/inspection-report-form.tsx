@@ -2596,21 +2596,36 @@ export function InspectionReportForm({
             <>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-base">
-                  <span className="flex size-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
-                    <CheckCircle2 className="size-4" />
+                  <span
+                    className={
+                      submitResult.noChanges
+                        ? "flex size-8 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400"
+                        : "flex size-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400"
+                    }
+                  >
+                    {submitResult.noChanges ? <AlertCircle className="size-4" /> : <CheckCircle2 className="size-4" />}
                   </span>
                   {submitResult.noChanges
                     ? (locale === "ar" ? "ملفات PDF الحالية لا تزال صالحة!" : "Existing PDFs Valid!")
                     : (locale === "ar" ? "تم إرسال التقرير وجاهز للتحميل!" : "Report & PDFs Ready!")}
                 </DialogTitle>
-                <DialogDescription className="text-xs">
-                  {submitResult.noChanges
-                    ? (locale === "ar"
-                        ? "ملفات PDF الحالية لا تزال صالحة. لم يتم اكتشاف أي تغييرات."
-                        : "Your existing PDFs are still valid. No changes were detected.")
-                    : (locale === "ar"
-                        ? "تم إرسال التقرير وإنشاء كافة ملفات PDF بنجاح. انقر أدناه للتحميل المباشر."
-                        : "Your report has been submitted and all PDF documents are ready for instant download.")}
+                <DialogDescription
+                  className={
+                    submitResult.noChanges
+                      ? "mt-2 flex items-center gap-2 rounded-md bg-amber-50 p-2.5 text-xs font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200/80 dark:border-amber-900/50"
+                      : "text-xs"
+                  }
+                >
+                  {submitResult.noChanges && <AlertCircle className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />}
+                  <span>
+                    {submitResult.noChanges
+                      ? (locale === "ar"
+                          ? "ملفات PDF الحالية لا تزال صالحة. لم يتم اكتشاف أي تغييرات."
+                          : "Your existing PDFs are still valid. No changes were detected.")
+                      : (locale === "ar"
+                          ? "تم إرسال التقرير وإنشاء كافة ملفات PDF بنجاح. انقر أدناه للتحميل المباشر."
+                          : "Your report has been submitted and all PDF documents are ready for instant download.")}
+                  </span>
                 </DialogDescription>
               </DialogHeader>
               <div className="mt-4 space-y-2">
