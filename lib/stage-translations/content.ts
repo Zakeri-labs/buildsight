@@ -271,6 +271,27 @@ export function parseTranslationContent(value: unknown): TranslationReportConten
 
 export const PREDEFINED_TEMPLATE_VERSION = 1
 
+export function normalizeSectionHtml(value: unknown): string {
+  if (typeof value !== "string") return ""
+  const trimmed = value.trim()
+  if (!trimmed) return ""
+
+  // Treat empty tag variations (<p></p>, <p><br></p>, <br>, &nbsp;, whitespace) as empty
+  const withoutTagsOrSpaces = trimmed
+    .replace(/<br\s*\/?>/gi, "")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .trim()
+
+  const hasMedia = /<img\b|<table\b|<iframe\b|<video\b/i.test(trimmed)
+
+  if (!withoutTagsOrSpaces && !hasMedia) {
+    return ""
+  }
+
+  return trimmed
+}
+
 export function isReportTextStale(
   current: TranslationReportContent | null | undefined,
   translatedOriginal: TranslationReportContent | null | undefined,
@@ -293,8 +314,8 @@ export function isReportTextStale(
     "rectificationAndSubsequentWork",
   ]
   for (const key of sectionKeys) {
-    const currSec = (current.sections?.[key] || "").trim()
-    const origSec = (translatedOriginal.sections?.[key] || "").trim()
+    const currSec = normalizeSectionHtml(current.sections?.[key])
+    const origSec = normalizeSectionHtml(translatedOriginal.sections?.[key])
     if (currSec !== origSec) return true
   }
 
@@ -306,7 +327,7 @@ export function isReportTextStale(
     const o = origChecklist[i]
     if (c.id !== o.id) return true
     if ((c.label || "").trim() !== (o.label || "").trim()) return true
-    if (c.checked !== o.checked) return true
+    if (Boolean(c.checked) !== Boolean(o.checked)) return true
     if ((c.result || "") !== (o.result || "")) return true
     if ((c.notes || "").trim() !== (o.notes || "").trim()) return true
   }
@@ -353,7 +374,7 @@ export function isReportContentStale(
     if (c.id !== o.id) return true
     if ((c.storagePath || "") !== (o.storagePath || "")) return true
     if ((c.originalFilename || "") !== (o.originalFilename || "")) return true
-    if (c.sortOrder !== o.sortOrder) return true
+    if ((c.sortOrder ?? 0) !== (o.sortOrder ?? 0)) return true
     if ((c.attachmentKind || "") !== (o.attachmentKind || "")) return true
   }
 

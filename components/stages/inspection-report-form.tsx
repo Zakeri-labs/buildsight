@@ -109,6 +109,21 @@ import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
 import { profileAvatarDisplayUrl } from "@/lib/profile-avatar"
 
+export function getDynamicPdfSubmissionTimeoutMs(evidenceImageCount: number): number {
+  const BASE_TIMEOUT_MS = 120_000
+  const PER_IMAGE_MS = 12_000
+  const MIN_TIMEOUT_MS = 180_000
+  const MAX_TIMEOUT_MS = 420_000
+
+  return Math.min(
+    MAX_TIMEOUT_MS,
+    Math.max(
+      MIN_TIMEOUT_MS,
+      BASE_TIMEOUT_MS + (evidenceImageCount * PER_IMAGE_MS),
+    ),
+  )
+}
+
 const SECTION_META: Array<{ key: ReportSectionKey; title: string; titleAr: string; description: string }> = [
   {
     key: "observation",
@@ -264,7 +279,8 @@ function checklistFromTemplate(reference: string | null): ChecklistItem[] {
 
 function extractSubmissionFailureReason(
   id: string | null | undefined,
-  finalTransRecord?: { errorMessage?: string | null } | null
+  finalTransRecord?: Record<string, any> | null,
+  locale: "en" | "ar" = "en",
 ): string | null {
   if (
     finalTransRecord?.errorMessage &&
@@ -275,57 +291,91 @@ function extractSubmissionFailureReason(
   }
 
   const events = readDiagnosticEvents(id)
-  if (!events.length) return null
-  const reversed = events.slice().reverse()
+  if (events.length) {
+    const reversed = events.slice().reverse()
 
-  const blockedImg = reversed.find((e) => e.name === "PDF_GENERATION_BLOCKED_IMAGE_FAILURE")
-  if (
-    blockedImg?.details?.failedImages &&
-    Array.isArray(blockedImg.details.failedImages) &&
-    blockedImg.details.failedImages.length > 0
-  ) {
-    const names = (blockedImg.details.failedImages as Array<{ filename?: string }>)
-      .map((f) => f?.filename || "image")
-      .filter(Boolean)
-      .join(", ")
-    const count = blockedImg.details.failedImages.length
-    return `PDF generation blocked: ${count} required image(s) failed to load (${names}).`
+    const blockedImg = reversed.find((e) => e.name === "PDF_GENERATION_BLOCKED_IMAGE_FAILURE")
+    if (
+      blockedImg?.details?.failedImages &&
+      Array.isArray(blockedImg.details.failedImages) &&
+      blockedImg.details.failedImages.length > 0
+    ) {
+      const names = (blockedImg.details.failedImages as Array<{ filename?: string }>)
+        .map((f) => f?.filename || "image")
+        .filter(Boolean)
+        .join(", ")
+      const count = blockedImg.details.failedImages.length
+      return `PDF generation blocked: ${count} required image(s) failed to load (${names}).`
+    }
+
+    const workerErr = reversed.find(
+      (e) =>
+        e.name === "WORKER_PDF_GENERATION_FAILED_RETRYING" ||
+        e.name === "WORKER_CYCLE_ERROR" ||
+        e.name === "PDF_GENERATION_FAILED",
+    )
+    if (
+      workerErr?.details?.error &&
+      typeof workerErr.details.error === "string" &&
+      workerErr.details.error.trim()
+    ) {
+      return workerErr.details.error.trim()
+    }
+
+    const exhausted = reversed.find((e) => e.name === "PDF_IMAGE_FETCH_EXHAUSTED")
+    if (exhausted?.details?.filename && typeof exhausted.details.filename === "string") {
+      return `PDF generation failed: required image '${exhausted.details.filename}' could not be loaded.`
+    }
+
+    const storageErr = reversed.find(
+      (e) =>
+        e.name === "BILINGUAL_PDF_UPLOAD_FAILED" ||
+        e.name === "ORIGINAL_PDF_UPLOAD_FAILED" ||
+        e.name === "BILINGUAL_PDF_PREPARE_FAILED" ||
+        e.name === "ORIGINAL_PDF_PREPARE_FAILED" ||
+        e.name === "ENSURE_BILINGUAL_FAILED" ||
+        e.name === "TRANSLATION_SAVE_FAILED",
+    )
+    if (
+      storageErr?.details?.error &&
+      typeof storageErr.details.error === "string" &&
+      storageErr.details.error.trim()
+    ) {
+      return storageErr.details.error.trim()
+    }
   }
 
-  const workerErr = reversed.find(
-    (e) =>
-      e.name === "WORKER_PDF_GENERATION_FAILED_RETRYING" ||
-      e.name === "WORKER_CYCLE_ERROR" ||
-      e.name === "PDF_GENERATION_FAILED"
-  )
-  if (
-    workerErr?.details?.error &&
-    typeof workerErr.details.error === "string" &&
-    workerErr.details.error.trim()
-  ) {
-    return workerErr.details.error.trim()
+  // PDF Timeout Detection based on translation state
+  const isAr = locale === "ar"
+  const hasTranslation = Boolean(finalTransRecord?.translatedContent)
+  const isCompletedStatus = finalTransRecord?.status === "completed" || finalTransRecord?.status === "approved"
+
+  if (hasTranslation) {
+    if (!finalTransRecord?.originalPdfPath) {
+      // Case 1: Original PDF generation timeout
+      return isAr
+        ? "اكتملت الترجمة، ولكن إنشاء ملف PDF الأصلي يستغرق وقتًا أطول من المتوقع. يرجى المحاولة مرة أخرى بعد قليل."
+        : "Translation completed, but generating the original PDF is taking longer than expected. Please try again shortly."
+    }
+
+    if (!finalTransRecord?.bilingualPdfPath) {
+      // Case 2: Bilingual PDF generation timeout
+      return isAr
+        ? "ملف PDF الأصلي جاهز، ولكن إنشاء ملف PDF ثنائي اللغة يستغرق وقتًا أطول من المتوقع. يرجى المحاولة مرة أخرى بعد قليل."
+        : "Original PDF is ready, but generating the bilingual PDF is taking longer than expected. Please try again shortly."
+    }
+
+    // Case 3: General PDF generation timeout
+    return isAr
+      ? "اكتملت ترجمة التقرير، ولكن لم يكتمل إنشاء ملفات PDF خلال الوقت المتوقع. يرجى المحاولة مرة أخرى بعد قليل."
+      : "Report translation completed, but PDF generation did not complete within the expected time. Please try again shortly."
   }
 
-  const exhausted = reversed.find((e) => e.name === "PDF_IMAGE_FETCH_EXHAUSTED")
-  if (exhausted?.details?.filename && typeof exhausted.details.filename === "string") {
-    return `PDF generation failed: required image '${exhausted.details.filename}' could not be loaded.`
-  }
-
-  const storageErr = reversed.find(
-    (e) =>
-      e.name === "BILINGUAL_PDF_UPLOAD_FAILED" ||
-      e.name === "ORIGINAL_PDF_UPLOAD_FAILED" ||
-      e.name === "BILINGUAL_PDF_PREPARE_FAILED" ||
-      e.name === "ORIGINAL_PDF_PREPARE_FAILED" ||
-      e.name === "ENSURE_BILINGUAL_FAILED" ||
-      e.name === "TRANSLATION_SAVE_FAILED"
-  )
-  if (
-    storageErr?.details?.error &&
-    typeof storageErr.details.error === "string" &&
-    storageErr.details.error.trim()
-  ) {
-    return storageErr.details.error.trim()
+  if (isCompletedStatus) {
+    // Case 3: General PDF generation timeout
+    return isAr
+      ? "اكتملت ترجمة التقرير، ولكن لم يكتمل إنشاء ملفات PDF خلال الوقت المتوقع. يرجى المحاولة مرة أخرى بعد قليل."
+      : "Report translation completed, but PDF generation did not complete within the expected time. Please try again shortly."
   }
 
   return null
@@ -674,7 +724,7 @@ export function InspectionReportForm({
     filename: string
     progress: number
   } | null>(null)
-  const [submitResult, setSubmitResult] = useState<{ responseId: string; stageId: string } | null>(null)
+  const [submitResult, setSubmitResult] = useState<{ responseId: string; stageId: string; noChanges?: boolean } | null>(null)
   const [readyPdfs, setReadyPdfs] = useState<{
     original?: { blob: Blob; filename: string }
     bilingual?: { blob: Blob; filename: string }
@@ -1344,6 +1394,40 @@ export function InspectionReportForm({
         })
 
         if (isDirectStageReport && isSubmitMode) {
+          if (result.data.unchanged || result.data.existingPdfsValid) {
+            steps = steps.map((s) => ({ ...s, status: "done" }))
+            setSubmitSteps(steps)
+            setSubmitResult({
+              responseId: id,
+              stageId: result.data.projectStageId,
+              noChanges: true,
+            })
+
+            const unchangedMsg =
+              locale === "ar"
+                ? "ملفات PDF الحالية لا تزال صالحة. لم يتم اكتشاف أي تغييرات."
+                : "Your existing PDFs are still valid. No changes were detected."
+
+            setSuccess(unchangedMsg)
+
+            logDiagnosticEvent(id, "SUBMIT_SHORTCUT_NO_CHANGES", {
+              projectId: project.id,
+              stageId: result.data.projectStageId,
+              responseId: id,
+            })
+
+            logDiagnosticEvent(id, "TOAST_LIFECYCLE", {
+              action: "SHOW_READY_MESSAGE",
+              condition: "NO_CHANGES_EXISTING_PDFS_VALID",
+              translationStatus: translation?.status || "completed",
+              isProcessing: false,
+              isFullyReady: true,
+              allGeneratedPdfsReady: true,
+            })
+
+            return
+          }
+
           setReadyPdfs(null)
           // Clear stale PDF paths from client state — the backend has already cleared
           // original_pdf_url / bilingual_pdf_url / arabic_pdf_url on the DB row.
@@ -1364,8 +1448,19 @@ export function InspectionReportForm({
           let pdfGenSuccess = false
           let finalTransRecord: any = null
           let lastSeenTrans: any = null
+
+          const evidenceImageCount = persistedAttachmentsRef.current.filter(
+            (att) => att.attachmentKind === "evidence_image" || att.attachmentKind === "inline_image",
+          ).length
+          const timeoutMs = getDynamicPdfSubmissionTimeoutMs(evidenceImageCount)
+
+          logDiagnosticEvent(id, "PDF_SUBMISSION_TIMEOUT_CONFIG", {
+            evidenceImageCount,
+            timeoutMs,
+          })
+
           const startTime = Date.now()
-          while (Date.now() - startTime < 180_000) {
+          while (Date.now() - startTime < timeoutMs) {
             await new Promise((resolve) => setTimeout(resolve, 1500))
             try {
               const params = new URLSearchParams({
@@ -1422,7 +1517,7 @@ export function InspectionReportForm({
             steps = updateStep(steps, stepIdx, "error")
 
             const failureTrans = finalTransRecord || lastSeenTrans
-            const realError = extractSubmissionFailureReason(id, failureTrans)
+            const realError = extractSubmissionFailureReason(id, failureTrans, locale)
             const fallbackMsg = locale === "ar"
               ? "تعذر إنشاء الترجمة وملفات PDF للتقرير. يرجى إعادة المحاولة."
               : "Preparing translation & PDFs failed. Please retry."
@@ -1529,7 +1624,7 @@ export function InspectionReportForm({
             } else {
               const activeErrIdx = stepIdx < steps.length ? stepIdx : steps.length - 1
               steps = updateStep(steps, activeErrIdx, "error")
-              const realError = extractSubmissionFailureReason(id, finalTransRecord || lastSeenTrans)
+              const realError = extractSubmissionFailureReason(id, finalTransRecord || lastSeenTrans, locale)
               const fallbackMsg = locale === "ar"
                 ? "تعذر التحقق من جاهزية ملف PDF للتقرير. يرجى إعادة المحاولة."
                 : "Report PDF availability confirmation failed. Please retry."
@@ -2501,15 +2596,36 @@ export function InspectionReportForm({
             <>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-base">
-                  <span className="flex size-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
-                    <CheckCircle2 className="size-4" />
+                  <span
+                    className={
+                      submitResult.noChanges
+                        ? "flex size-8 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400"
+                        : "flex size-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400"
+                    }
+                  >
+                    {submitResult.noChanges ? <AlertCircle className="size-4" /> : <CheckCircle2 className="size-4" />}
                   </span>
-                  {locale === "ar" ? "تم إرسال التقرير وجاهز للتحميل!" : "Report & PDFs Ready!"}
+                  {submitResult.noChanges
+                    ? (locale === "ar" ? "ملفات PDF الحالية لا تزال صالحة!" : "Existing PDFs Valid!")
+                    : (locale === "ar" ? "تم إرسال التقرير وجاهز للتحميل!" : "Report & PDFs Ready!")}
                 </DialogTitle>
-                <DialogDescription className="text-xs">
-                  {locale === "ar"
-                    ? "تم إرسال التقرير وإنشاء كافة ملفات PDF بنجاح. انقر أدناه للتحميل المباشر."
-                    : "Your report has been submitted and all PDF documents are ready for instant download."}
+                <DialogDescription
+                  className={
+                    submitResult.noChanges
+                      ? "mt-2 flex items-center gap-2 rounded-md bg-amber-50 p-2.5 text-xs font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200/80 dark:border-amber-900/50"
+                      : "text-xs"
+                  }
+                >
+                  {submitResult.noChanges && <AlertCircle className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />}
+                  <span>
+                    {submitResult.noChanges
+                      ? (locale === "ar"
+                          ? "ملفات PDF الحالية لا تزال صالحة. لم يتم اكتشاف أي تغييرات."
+                          : "Your existing PDFs are still valid. No changes were detected.")
+                      : (locale === "ar"
+                          ? "تم إرسال التقرير وإنشاء كافة ملفات PDF بنجاح. انقر أدناه للتحميل المباشر."
+                          : "Your report has been submitted and all PDF documents are ready for instant download.")}
+                  </span>
                 </DialogDescription>
               </DialogHeader>
               <div className="mt-4 space-y-2">

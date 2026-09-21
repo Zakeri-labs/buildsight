@@ -377,6 +377,7 @@ type PreparedStageTranslation = {
   status: "pending" | "completed" | "failed"
   shouldRun: boolean
   translatedContentReady: boolean
+  unchanged?: boolean
 }
 
 function validDateMs(value: unknown) {
@@ -467,6 +468,7 @@ export async function prepareStageTranslationGeneration(input: {
   const isStale = existingOriginal ? isReportContentStale(original, existingOriginal) : false
   const isTextStale = existingOriginal ? isReportTextStale(original, existingOriginal) : isStale
   const translationFresh = Boolean(existing.translated_content && generatedAt && !isTextStale)
+  const hasBothPdfs = Boolean(existing.original_pdf_url && existing.bilingual_pdf_url)
 
   if (status === "completed" && translationFresh && !isStale && !input.retry) {
     return {
@@ -474,6 +476,7 @@ export async function prepareStageTranslationGeneration(input: {
       status: "completed",
       shouldRun: false,
       translatedContentReady: true,
+      unchanged: hasBothPdfs,
     }
   }
 
