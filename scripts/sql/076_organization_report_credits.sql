@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS organization_subscriptions (
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   total_report_credits INTEGER NOT NULL DEFAULT 320,
   used_report_credits INTEGER NOT NULL DEFAULT 0,
+  start_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at TIMESTAMPTZ NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

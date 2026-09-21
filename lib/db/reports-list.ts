@@ -65,12 +65,14 @@ export async function getPaginatedReportsList({
   page = 1,
   pageSize = 200,
   dateRange = null,
+  creditUsage = false,
 }: {
   userId: string
   organizationId?: string
   page?: number
   pageSize?: number
   dateRange?: DashboardDateRange | null
+  creditUsage?: boolean
 }): Promise<PaginatedReportsResult> {
   const safePage = Math.max(1, Math.floor(page) || 1)
   const offset = (safePage - 1) * pageSize
@@ -102,6 +104,25 @@ export async function getPaginatedReportsList({
       }
     }
 
+    // Filter by report_credit_usage if creditUsage mode is active
+    let creditReportIds: string[] | null = null
+    if (creditUsage) {
+      let usageQuery = admin.from("report_credit_usage").select("report_id")
+      if (organizationId && isUuid(organizationId)) {
+        usageQuery = usageQuery.eq("organization_id", organizationId)
+      }
+      const { data: usageRows } = await usageQuery
+      creditReportIds = (usageRows ?? []).map((r: any) => r.report_id).filter(isUuid)
+      if (!creditReportIds.length) {
+        return {
+          items: [],
+          totalReports: 0,
+          currentPage: 1,
+          totalPages: 1,
+        }
+      }
+    }
+
     const validStatuses = ["submitted", "under_review", "approved", "rejected", "completed"]
 
     // Construct server-side date range condition matching visible Report date (submitted_at, fallback created_at)
@@ -119,6 +140,10 @@ export async function getPaginatedReportsList({
       .is("project_stage_term_id", null)
       .in("status", validStatuses)
 
+    if (creditReportIds) {
+      countQuery = countQuery.in("id", creditReportIds)
+    }
+
     if (dateOrClause) {
       countQuery = countQuery.or(dateOrClause)
     }
@@ -135,6 +160,10 @@ export async function getPaginatedReportsList({
       .in("project_id", projectIds)
       .is("project_stage_term_id", null)
       .in("status", validStatuses)
+
+    if (creditReportIds) {
+      dataQuery = dataQuery.in("id", creditReportIds)
+    }
 
     if (dateOrClause) {
       dataQuery = dataQuery.or(dateOrClause)

@@ -798,7 +798,7 @@ function createEmptyDashboard(): DashboardData {
     projects: [],
     tasks: [],
     scopeName: null,
-    reportCredits: { totalReportCredits: 300, usedReportCredits: 0, remainingReportCredits: 300, expiresAt: null },
+    reportCredits: { totalReportCredits: 300, usedReportCredits: 0, remainingReportCredits: 300, startAt: null, expiresAt: null },
   }
 }
 

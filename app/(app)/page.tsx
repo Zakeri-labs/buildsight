@@ -102,6 +102,7 @@ export default async function DashboardPage({
       tone: isLowCredit ? "amber" : "blue",
       icon: "credits",
       caption: `${credits.totalReportCredits} Total Credits • ${credits.usedReportCredits} Used`,
+      href: "/reports?creditUsage=true",
       spark: spark(credits.remainingReportCredits),
     },
     {

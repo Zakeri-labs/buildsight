@@ -1,4 +1,5 @@
-import { FolderOpen, TriangleAlert, ClipboardCheck, FileCheck2, ArrowUp, ArrowDown, Coins } from "lucide-react"
+import Link from "next/link"
+import { FolderOpen, TriangleAlert, ClipboardCheck, FileCheck2, ArrowUp, ArrowDown, Coins, ArrowRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export type KpiTone = "blue" | "red" | "amber" | "green"
@@ -10,6 +11,7 @@ export type KpiCardData = {
   tone: KpiTone
   icon: "projects" | "ncr" | "inspection" | "wir" | "credits"
   caption?: string
+  href?: string
   trend?: { direction: "up" | "down"; value: number; good: boolean }
   spark: number[]
 }
@@ -63,34 +65,47 @@ function KpiCard({ kpi }: { kpi: KpiCardData }) {
   const Icon = iconMap[kpi.icon]
   const TrendIcon = kpi.trend?.direction === "up" ? ArrowUp : ArrowDown
   return (
-    <div className="rounded-xl border border-border bg-card p-3.5 sm:p-4 transition-all">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg sm:size-10 sm:rounded-xl", toneTile[kpi.tone])}>
-            <Icon className="size-4 sm:size-5" />
-          </span>
-          <p className="truncate text-xs font-semibold text-foreground sm:text-sm">{kpi.label}</p>
+    <div className="flex flex-col justify-between rounded-xl border border-border bg-card p-3.5 sm:p-4 transition-all">
+      <div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg sm:size-10 sm:rounded-xl", toneTile[kpi.tone])}>
+              <Icon className="size-4 sm:size-5" />
+            </span>
+            <p className="truncate text-xs font-semibold text-foreground sm:text-sm">{kpi.label}</p>
+          </div>
+        </div>
+        <div className="mt-2.5 flex items-end justify-between gap-2 sm:mt-3">
+          <p className="text-2xl font-bold leading-none tracking-tight text-foreground sm:text-3xl">{kpi.value}</p>
+          <Sparkline data={kpi.spark} className={cn("mb-0.5 w-16 sm:w-20", toneSpark[kpi.tone])} />
+        </div>
+        <div className="mt-2 text-xs text-muted-foreground">
+          {kpi.caption && <span className="block truncate">{kpi.caption}</span>}
+          {kpi.trend && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 font-medium",
+                kpi.trend.good ? "text-emerald-600" : "text-red-600",
+              )}
+            >
+              <TrendIcon className="size-3.5" />
+              {kpi.trend.value}
+              <span className="font-normal text-muted-foreground">from last week</span>
+            </span>
+          )}
         </div>
       </div>
-      <div className="mt-2.5 flex items-end justify-between gap-2 sm:mt-3">
-        <p className="text-2xl font-bold leading-none tracking-tight text-foreground sm:text-3xl">{kpi.value}</p>
-        <Sparkline data={kpi.spark} className={cn("mb-0.5 w-16 sm:w-20", toneSpark[kpi.tone])} />
-      </div>
-      <div className="mt-2 text-xs text-muted-foreground">
-        {kpi.caption && <span className="block truncate">{kpi.caption}</span>}
-        {kpi.trend && (
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 font-medium",
-              kpi.trend.good ? "text-emerald-600" : "text-red-600",
-            )}
+      {kpi.href && (
+        <div className="mt-3 pt-2.5 border-t border-border/60">
+          <Link
+            href={kpi.href}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
           >
-            <TrendIcon className="size-3.5" />
-            {kpi.trend.value}
-            <span className="font-normal text-muted-foreground">from last week</span>
-          </span>
-        )}
-      </div>
+            <span>View Credit Usage</span>
+            <ArrowRight className="size-3.5" />
+          </Link>
+        </div>
+      )}
     </div>
   )
 }

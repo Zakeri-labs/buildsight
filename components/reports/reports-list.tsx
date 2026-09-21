@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter, usePathname } from "next/navigation"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import {
   FileText,
   ChevronLeft,
@@ -161,8 +161,12 @@ export function ReportsList({
     dateLabel = dateRange.label || "Custom Range"
   }
 
+  const searchParams = useSearchParams()
+  const isCreditUsage = searchParams?.get("creditUsage") === "true" || searchParams?.get("creditUsage") === "1"
+
   function handlePresetSelect(preset: "today" | "yesterday" | "thisMonth") {
     const params = new URLSearchParams()
+    if (isCreditUsage) params.set("creditUsage", "true")
     params.set("range", preset)
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }
@@ -184,6 +188,7 @@ export function ReportsList({
       return
     }
     const params = new URLSearchParams()
+    if (isCreditUsage) params.set("creditUsage", "true")
     params.set("range", "custom")
     params.set("from", from)
     params.set("to", to)

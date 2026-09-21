@@ -5,6 +5,7 @@ export type OrganizationReportCredits = {
   totalReportCredits: number
   usedReportCredits: number
   remainingReportCredits: number
+  startAt: string | null
   expiresAt: string | null
 }
 
@@ -23,6 +24,7 @@ export async function getOrganizationReportCredits(
       totalReportCredits: DEFAULT_TOTAL_CREDITS,
       usedReportCredits: 0,
       remainingReportCredits: DEFAULT_TOTAL_CREDITS,
+      startAt: null,
       expiresAt: null,
     }
   }
@@ -32,7 +34,7 @@ export async function getOrganizationReportCredits(
   try {
     const { data: sub, error } = await admin
       .from("organization_subscriptions")
-      .select("id, total_report_credits, used_report_credits, expires_at")
+      .select("id, total_report_credits, used_report_credits, start_at, expires_at")
       .eq("organization_id", organizationId)
       .maybeSingle()
 
@@ -42,6 +44,7 @@ export async function getOrganizationReportCredits(
         totalReportCredits: DEFAULT_TOTAL_CREDITS,
         usedReportCredits: 0,
         remainingReportCredits: DEFAULT_TOTAL_CREDITS,
+        startAt: null,
         expiresAt: null,
       }
     }
@@ -51,6 +54,7 @@ export async function getOrganizationReportCredits(
         totalReportCredits: DEFAULT_TOTAL_CREDITS,
         usedReportCredits: 0,
         remainingReportCredits: DEFAULT_TOTAL_CREDITS,
+        startAt: null,
         expiresAt: null,
       }
     }
@@ -63,6 +67,7 @@ export async function getOrganizationReportCredits(
       totalReportCredits: total,
       usedReportCredits: used,
       remainingReportCredits: remaining,
+      startAt: sub.start_at ?? null,
       expiresAt: sub.expires_at ?? null,
     }
   } catch (err) {
@@ -71,6 +76,7 @@ export async function getOrganizationReportCredits(
       totalReportCredits: DEFAULT_TOTAL_CREDITS,
       usedReportCredits: 0,
       remainingReportCredits: DEFAULT_TOTAL_CREDITS,
+      startAt: null,
       expiresAt: null,
     }
   }
