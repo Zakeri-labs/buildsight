@@ -724,7 +724,7 @@ export function InspectionReportForm({
     filename: string
     progress: number
   } | null>(null)
-  const [submitResult, setSubmitResult] = useState<{ responseId: string; stageId: string } | null>(null)
+  const [submitResult, setSubmitResult] = useState<{ responseId: string; stageId: string; noChanges?: boolean } | null>(null)
   const [readyPdfs, setReadyPdfs] = useState<{
     original?: { blob: Blob; filename: string }
     bilingual?: { blob: Blob; filename: string }
@@ -1394,6 +1394,40 @@ export function InspectionReportForm({
         })
 
         if (isDirectStageReport && isSubmitMode) {
+          if (result.data.unchanged || result.data.existingPdfsValid) {
+            steps = steps.map((s) => ({ ...s, status: "done" }))
+            setSubmitSteps(steps)
+            setSubmitResult({
+              responseId: id,
+              stageId: result.data.projectStageId,
+              noChanges: true,
+            })
+
+            const unchangedMsg =
+              locale === "ar"
+                ? "ملفات PDF الحالية لا تزال صالحة. لم يتم اكتشاف أي تغييرات."
+                : "Your existing PDFs are still valid. No changes were detected."
+
+            setSuccess(unchangedMsg)
+
+            logDiagnosticEvent(id, "SUBMIT_SHORTCUT_NO_CHANGES", {
+              projectId: project.id,
+              stageId: result.data.projectStageId,
+              responseId: id,
+            })
+
+            logDiagnosticEvent(id, "TOAST_LIFECYCLE", {
+              action: "SHOW_READY_MESSAGE",
+              condition: "NO_CHANGES_EXISTING_PDFS_VALID",
+              translationStatus: translation?.status || "completed",
+              isProcessing: false,
+              isFullyReady: true,
+              allGeneratedPdfsReady: true,
+            })
+
+            return
+          }
+
           setReadyPdfs(null)
           // Clear stale PDF paths from client state — the backend has already cleared
           // original_pdf_url / bilingual_pdf_url / arabic_pdf_url on the DB row.
@@ -2565,12 +2599,18 @@ export function InspectionReportForm({
                   <span className="flex size-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
                     <CheckCircle2 className="size-4" />
                   </span>
-                  {locale === "ar" ? "تم إرسال التقرير وجاهز للتحميل!" : "Report & PDFs Ready!"}
+                  {submitResult.noChanges
+                    ? (locale === "ar" ? "ملفات PDF الحالية لا تزال صالحة!" : "Existing PDFs Valid!")
+                    : (locale === "ar" ? "تم إرسال التقرير وجاهز للتحميل!" : "Report & PDFs Ready!")}
                 </DialogTitle>
                 <DialogDescription className="text-xs">
-                  {locale === "ar"
-                    ? "تم إرسال التقرير وإنشاء كافة ملفات PDF بنجاح. انقر أدناه للتحميل المباشر."
-                    : "Your report has been submitted and all PDF documents are ready for instant download."}
+                  {submitResult.noChanges
+                    ? (locale === "ar"
+                        ? "ملفات PDF الحالية لا تزال صالحة. لم يتم اكتشاف أي تغييرات."
+                        : "Your existing PDFs are still valid. No changes were detected.")
+                    : (locale === "ar"
+                        ? "تم إرسال التقرير وإنشاء كافة ملفات PDF بنجاح. انقر أدناه للتحميل المباشر."
+                        : "Your report has been submitted and all PDF documents are ready for instant download.")}
                 </DialogDescription>
               </DialogHeader>
               <div className="mt-4 space-y-2">

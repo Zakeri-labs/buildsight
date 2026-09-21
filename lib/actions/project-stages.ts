@@ -333,7 +333,16 @@ type SaveReportResponseInput = {
   activeAttachmentIds?: string[]
 }
 
-type SavedReportResponse = { responseId: string; projectStageId: string; reportNumber: string; visitNumber: number; visitDate: string | null; status: string }
+type SavedReportResponse = {
+  responseId: string
+  projectStageId: string
+  reportNumber: string
+  visitNumber: number
+  visitDate: string | null
+  status: string
+  unchanged?: boolean
+  existingPdfsValid?: boolean
+}
 
 async function assertLinkedSiteVisitCompletionAuthority(actorId: string, projectId: string) {
   const scope = await resolveCalendarProjectScope(actorId)
@@ -644,8 +653,6 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       }
     }
 
-    await invalidateTranslationPdfs(input.responseId, input.projectId)
-
     const linkedSiteVisitId = siteVisitRequestId || existing?.site_visit_request_id
     if (linkedSiteVisitId && assignedVisitNumber) {
       await admin
@@ -702,6 +709,7 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
     // immediately, then let Next.js keep the generation promise alive after
     // this action responds. Any translation failure remains isolated from the
     // already-persisted Stage Report.
+    let preparedUnchanged = false
     if (input.submit && directStage) {
       try {
         const prepared = await prepareStageTranslationGeneration({
@@ -710,6 +718,7 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
           responseId: input.responseId,
           actorId,
         })
+        preparedUnchanged = Boolean(prepared.unchanged)
         if (prepared.shouldRun) {
           after(async () => {
             try {
@@ -744,7 +753,19 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       }
     }
 
-    return { ok: true, data: { responseId: input.responseId, projectStageId, reportNumber, visitNumber: assignedVisitNumber, visitDate: rawVisitDate, status: nextStatus } }
+    return {
+      ok: true,
+      data: {
+        responseId: input.responseId,
+        projectStageId,
+        reportNumber,
+        visitNumber: assignedVisitNumber,
+        visitDate: rawVisitDate,
+        status: nextStatus,
+        unchanged: preparedUnchanged,
+        existingPdfsValid: preparedUnchanged,
+      },
+    }
   } catch (error) {
     return actionError(error, "Could not save the inspection report.")
   }

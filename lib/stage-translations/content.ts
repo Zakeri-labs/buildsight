@@ -327,7 +327,7 @@ export function isReportTextStale(
     const o = origChecklist[i]
     if (c.id !== o.id) return true
     if ((c.label || "").trim() !== (o.label || "").trim()) return true
-    if (c.checked !== o.checked) return true
+    if (Boolean(c.checked) !== Boolean(o.checked)) return true
     if ((c.result || "") !== (o.result || "")) return true
     if ((c.notes || "").trim() !== (o.notes || "").trim()) return true
   }
@@ -374,7 +374,7 @@ export function isReportContentStale(
     if (c.id !== o.id) return true
     if ((c.storagePath || "") !== (o.storagePath || "")) return true
     if ((c.originalFilename || "") !== (o.originalFilename || "")) return true
-    if (c.sortOrder !== o.sortOrder) return true
+    if ((c.sortOrder ?? 0) !== (o.sortOrder ?? 0)) return true
     if ((c.attachmentKind || "") !== (o.attachmentKind || "")) return true
   }
 
