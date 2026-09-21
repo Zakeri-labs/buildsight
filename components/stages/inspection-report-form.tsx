@@ -107,7 +107,20 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
-import { profileAvatarDisplayUrl } from "@/lib/profile-avatar"
+export function getDynamicPdfSubmissionTimeoutMs(evidenceImageCount: number): number {
+  const BASE_TIMEOUT_MS = 120_000
+  const PER_IMAGE_MS = 12_000
+  const MIN_TIMEOUT_MS = 180_000
+  const MAX_TIMEOUT_MS = 420_000
+
+  return Math.min(
+    MAX_TIMEOUT_MS,
+    Math.max(
+      MIN_TIMEOUT_MS,
+      BASE_TIMEOUT_MS + (evidenceImageCount * PER_IMAGE_MS),
+    ),
+  )
+}
 
 const SECTION_META: Array<{ key: ReportSectionKey; title: string; titleAr: string; description: string }> = [
   {
@@ -1364,8 +1377,19 @@ export function InspectionReportForm({
           let pdfGenSuccess = false
           let finalTransRecord: any = null
           let lastSeenTrans: any = null
+
+          const evidenceImageCount = persistedAttachmentsRef.current.filter(
+            (att) => att.attachmentKind === "evidence_image" || att.attachmentKind === "inline_image",
+          ).length
+          const timeoutMs = getDynamicPdfSubmissionTimeoutMs(evidenceImageCount)
+
+          logDiagnosticEvent(id, "PDF_SUBMISSION_TIMEOUT_CONFIG", {
+            evidenceImageCount,
+            timeoutMs,
+          })
+
           const startTime = Date.now()
-          while (Date.now() - startTime < 180_000) {
+          while (Date.now() - startTime < timeoutMs) {
             await new Promise((resolve) => setTimeout(resolve, 1500))
             try {
               const params = new URLSearchParams({
