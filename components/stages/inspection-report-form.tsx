@@ -277,7 +277,8 @@ function checklistFromTemplate(reference: string | null): ChecklistItem[] {
 
 function extractSubmissionFailureReason(
   id: string | null | undefined,
-  finalTransRecord?: { errorMessage?: string | null } | null
+  finalTransRecord?: Record<string, any> | null,
+  locale: "en" | "ar" = "en",
 ): string | null {
   if (
     finalTransRecord?.errorMessage &&
@@ -288,57 +289,91 @@ function extractSubmissionFailureReason(
   }
 
   const events = readDiagnosticEvents(id)
-  if (!events.length) return null
-  const reversed = events.slice().reverse()
+  if (events.length) {
+    const reversed = events.slice().reverse()
 
-  const blockedImg = reversed.find((e) => e.name === "PDF_GENERATION_BLOCKED_IMAGE_FAILURE")
-  if (
-    blockedImg?.details?.failedImages &&
-    Array.isArray(blockedImg.details.failedImages) &&
-    blockedImg.details.failedImages.length > 0
-  ) {
-    const names = (blockedImg.details.failedImages as Array<{ filename?: string }>)
-      .map((f) => f?.filename || "image")
-      .filter(Boolean)
-      .join(", ")
-    const count = blockedImg.details.failedImages.length
-    return `PDF generation blocked: ${count} required image(s) failed to load (${names}).`
+    const blockedImg = reversed.find((e) => e.name === "PDF_GENERATION_BLOCKED_IMAGE_FAILURE")
+    if (
+      blockedImg?.details?.failedImages &&
+      Array.isArray(blockedImg.details.failedImages) &&
+      blockedImg.details.failedImages.length > 0
+    ) {
+      const names = (blockedImg.details.failedImages as Array<{ filename?: string }>)
+        .map((f) => f?.filename || "image")
+        .filter(Boolean)
+        .join(", ")
+      const count = blockedImg.details.failedImages.length
+      return `PDF generation blocked: ${count} required image(s) failed to load (${names}).`
+    }
+
+    const workerErr = reversed.find(
+      (e) =>
+        e.name === "WORKER_PDF_GENERATION_FAILED_RETRYING" ||
+        e.name === "WORKER_CYCLE_ERROR" ||
+        e.name === "PDF_GENERATION_FAILED",
+    )
+    if (
+      workerErr?.details?.error &&
+      typeof workerErr.details.error === "string" &&
+      workerErr.details.error.trim()
+    ) {
+      return workerErr.details.error.trim()
+    }
+
+    const exhausted = reversed.find((e) => e.name === "PDF_IMAGE_FETCH_EXHAUSTED")
+    if (exhausted?.details?.filename && typeof exhausted.details.filename === "string") {
+      return `PDF generation failed: required image '${exhausted.details.filename}' could not be loaded.`
+    }
+
+    const storageErr = reversed.find(
+      (e) =>
+        e.name === "BILINGUAL_PDF_UPLOAD_FAILED" ||
+        e.name === "ORIGINAL_PDF_UPLOAD_FAILED" ||
+        e.name === "BILINGUAL_PDF_PREPARE_FAILED" ||
+        e.name === "ORIGINAL_PDF_PREPARE_FAILED" ||
+        e.name === "ENSURE_BILINGUAL_FAILED" ||
+        e.name === "TRANSLATION_SAVE_FAILED",
+    )
+    if (
+      storageErr?.details?.error &&
+      typeof storageErr.details.error === "string" &&
+      storageErr.details.error.trim()
+    ) {
+      return storageErr.details.error.trim()
+    }
   }
 
-  const workerErr = reversed.find(
-    (e) =>
-      e.name === "WORKER_PDF_GENERATION_FAILED_RETRYING" ||
-      e.name === "WORKER_CYCLE_ERROR" ||
-      e.name === "PDF_GENERATION_FAILED"
-  )
-  if (
-    workerErr?.details?.error &&
-    typeof workerErr.details.error === "string" &&
-    workerErr.details.error.trim()
-  ) {
-    return workerErr.details.error.trim()
+  // PDF Timeout Detection based on translation state
+  const isAr = locale === "ar"
+  const hasTranslation = Boolean(finalTransRecord?.translatedContent)
+  const isCompletedStatus = finalTransRecord?.status === "completed" || finalTransRecord?.status === "approved"
+
+  if (hasTranslation) {
+    if (!finalTransRecord?.originalPdfPath) {
+      // Case 1: Original PDF generation timeout
+      return isAr
+        ? "اكتملت الترجمة، ولكن إنشاء ملف PDF الأصلي يستغرق وقتًا أطول من المتوقع. يرجى المحاولة مرة أخرى بعد قليل."
+        : "Translation completed, but generating the original PDF is taking longer than expected. Please try again shortly."
+    }
+
+    if (!finalTransRecord?.bilingualPdfPath) {
+      // Case 2: Bilingual PDF generation timeout
+      return isAr
+        ? "ملف PDF الأصلي جاهز، ولكن إنشاء ملف PDF ثنائي اللغة يستغرق وقتًا أطول من المتوقع. يرجى المحاولة مرة أخرى بعد قليل."
+        : "Original PDF is ready, but generating the bilingual PDF is taking longer than expected. Please try again shortly."
+    }
+
+    // Case 3: General PDF generation timeout
+    return isAr
+      ? "اكتملت ترجمة التقرير، ولكن لم يكتمل إنشاء ملفات PDF خلال الوقت المتوقع. يرجى المحاولة مرة أخرى بعد قليل."
+      : "Report translation completed, but PDF generation did not complete within the expected time. Please try again shortly."
   }
 
-  const exhausted = reversed.find((e) => e.name === "PDF_IMAGE_FETCH_EXHAUSTED")
-  if (exhausted?.details?.filename && typeof exhausted.details.filename === "string") {
-    return `PDF generation failed: required image '${exhausted.details.filename}' could not be loaded.`
-  }
-
-  const storageErr = reversed.find(
-    (e) =>
-      e.name === "BILINGUAL_PDF_UPLOAD_FAILED" ||
-      e.name === "ORIGINAL_PDF_UPLOAD_FAILED" ||
-      e.name === "BILINGUAL_PDF_PREPARE_FAILED" ||
-      e.name === "ORIGINAL_PDF_PREPARE_FAILED" ||
-      e.name === "ENSURE_BILINGUAL_FAILED" ||
-      e.name === "TRANSLATION_SAVE_FAILED"
-  )
-  if (
-    storageErr?.details?.error &&
-    typeof storageErr.details.error === "string" &&
-    storageErr.details.error.trim()
-  ) {
-    return storageErr.details.error.trim()
+  if (isCompletedStatus) {
+    // Case 3: General PDF generation timeout
+    return isAr
+      ? "اكتملت ترجمة التقرير، ولكن لم يكتمل إنشاء ملفات PDF خلال الوقت المتوقع. يرجى المحاولة مرة أخرى بعد قليل."
+      : "Report translation completed, but PDF generation did not complete within the expected time. Please try again shortly."
   }
 
   return null
@@ -1446,7 +1481,7 @@ export function InspectionReportForm({
             steps = updateStep(steps, stepIdx, "error")
 
             const failureTrans = finalTransRecord || lastSeenTrans
-            const realError = extractSubmissionFailureReason(id, failureTrans)
+            const realError = extractSubmissionFailureReason(id, failureTrans, locale)
             const fallbackMsg = locale === "ar"
               ? "تعذر إنشاء الترجمة وملفات PDF للتقرير. يرجى إعادة المحاولة."
               : "Preparing translation & PDFs failed. Please retry."
@@ -1553,7 +1588,7 @@ export function InspectionReportForm({
             } else {
               const activeErrIdx = stepIdx < steps.length ? stepIdx : steps.length - 1
               steps = updateStep(steps, activeErrIdx, "error")
-              const realError = extractSubmissionFailureReason(id, finalTransRecord || lastSeenTrans)
+              const realError = extractSubmissionFailureReason(id, finalTransRecord || lastSeenTrans, locale)
               const fallbackMsg = locale === "ar"
                 ? "تعذر التحقق من جاهزية ملف PDF للتقرير. يرجى إعادة المحاولة."
                 : "Report PDF availability confirmation failed. Please retry."
