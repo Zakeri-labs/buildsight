@@ -107,6 +107,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
+import { profileAvatarDisplayUrl } from "@/lib/profile-avatar"
+
 export function getDynamicPdfSubmissionTimeoutMs(evidenceImageCount: number): number {
   const BASE_TIMEOUT_MS = 120_000
   const PER_IMAGE_MS = 12_000
