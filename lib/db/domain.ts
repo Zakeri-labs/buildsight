@@ -18,6 +18,7 @@ import {
 
 import { DEMO_STAGE_MANAGEMENT_DATA } from "@/lib/db/stages"
 import { getFallbackStageChecklist } from "@/lib/stages/execution"
+import { getOrganizationReportCredits, type OrganizationReportCredits } from "@/lib/db/report-credits"
 
 export type DomainProject = {
   id: string
@@ -781,6 +782,7 @@ export type DashboardData = {
   }[]
   tasks: TaskRow[]
   scopeName: string | null
+  reportCredits?: OrganizationReportCredits
 }
 
 function createEmptyDashboard(): DashboardData {
@@ -796,6 +798,7 @@ function createEmptyDashboard(): DashboardData {
     projects: [],
     tasks: [],
     scopeName: null,
+    reportCredits: { totalReportCredits: 300, usedReportCredits: 0, remainingReportCredits: 300, expiresAt: null },
   }
 }
 
@@ -1593,6 +1596,8 @@ export async function getDashboardData(
         })),
     ]
 
+    const reportCredits = await getOrganizationReportCredits(orgId, admin)
+
     return {
       kpis: {
         totalProjects: scoped.length,
@@ -1611,6 +1616,7 @@ export async function getDashboardData(
       projects: recentProjectsWithReports,
       tasks: taskRows,
       scopeName: selectedProjectId && scoped.length === 1 ? scoped[0].name : null,
+      reportCredits,
     }
   } catch (error) {
     console.error("getDashboardData error:", error)

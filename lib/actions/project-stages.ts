@@ -34,6 +34,7 @@ import {
   type SubtermResponseType,
   type TermResponseContent,
 } from "@/lib/stages/execution"
+import { consumeReportCreditForReport } from "@/lib/db/report-credits"
 
 export type StageActionResult<T = undefined> =
   | ({ ok: true } & (T extends undefined ? object : { data: T }))
@@ -552,7 +553,7 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
 
     const { data: proj } = await admin
       .from("projects")
-      .select("code")
+      .select("code, supervising_organization_id")
       .eq("id", input.projectId)
       .maybeSingle()
     const projCode = proj?.code?.trim() || "PROJ"
@@ -618,6 +619,10 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         if (insertError.code === "23505") return { ok: false, error: "A report with this identifier already exists." }
         throw insertError
       }
+    }
+
+    if (proj?.supervising_organization_id && (input.submit || !existing)) {
+      await consumeReportCreditForReport(input.responseId, proj.supervising_organization_id, admin)
     }
 
     if (Array.isArray(input.activeAttachmentIds)) {
