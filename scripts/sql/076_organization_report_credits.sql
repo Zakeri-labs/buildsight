@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS organization_subscriptions (
   CONSTRAINT organization_subscriptions_organization_id_key UNIQUE (organization_id)
 );
 
+ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS start_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
 CREATE TABLE IF NOT EXISTS report_credit_usage (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,

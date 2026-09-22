@@ -32,21 +32,29 @@ export async function getOrganizationReportCredits(
   const admin = client ?? createAdminClient()
 
   try {
-    const { data: sub, error } = await admin
+    let sub: any = null
+    const { data: primaryData, error: primaryError } = await admin
       .from("organization_subscriptions")
-      .select("id, total_report_credits, used_report_credits, start_at, expires_at")
+      .select("id, total_report_credits, used_report_credits, start_at, expires_at, created_at")
       .eq("organization_id", organizationId)
       .maybeSingle()
 
-    if (error) {
-      console.warn("getOrganizationReportCredits query error:", error.message)
-      return {
-        totalReportCredits: DEFAULT_TOTAL_CREDITS,
-        usedReportCredits: 0,
-        remainingReportCredits: DEFAULT_TOTAL_CREDITS,
-        startAt: null,
-        expiresAt: null,
+    if (primaryError && (primaryError.code === "42703" || primaryError.message?.includes("start_at"))) {
+      const { data: fallbackData, error: fallbackError } = await admin
+        .from("organization_subscriptions")
+        .select("id, total_report_credits, used_report_credits, expires_at, created_at")
+        .eq("organization_id", organizationId)
+        .maybeSingle()
+
+      if (fallbackError) {
+        console.warn("getOrganizationReportCredits fallback query error:", fallbackError.message)
+      } else {
+        sub = fallbackData
       }
+    } else if (primaryError) {
+      console.warn("getOrganizationReportCredits query error:", primaryError.message)
+    } else {
+      sub = primaryData
     }
 
     if (!sub) {
@@ -67,7 +75,7 @@ export async function getOrganizationReportCredits(
       totalReportCredits: total,
       usedReportCredits: used,
       remainingReportCredits: remaining,
-      startAt: sub.start_at ?? null,
+      startAt: sub.start_at ?? sub.created_at ?? null,
       expiresAt: sub.expires_at ?? null,
     }
   } catch (err) {
