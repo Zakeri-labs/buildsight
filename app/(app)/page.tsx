@@ -1,3 +1,4 @@
+import { AlertTriangle } from "lucide-react"
 import { redirect } from "next/navigation"
 import { DateRangePill } from "@/components/dashboard/date-range-pill"
 import { PortfolioKpis, type KpiCardData } from "@/components/dashboard/portfolio-kpis"
@@ -37,16 +38,13 @@ const emptyDashboard: DashboardData = {
   projects: [],
   tasks: [],
   scopeName: null,
+  reportCredits: { totalReportCredits: 300, usedReportCredits: 0, remainingReportCredits: 300, expiresAt: null },
 }
 
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    range?: string | string[]
-    from?: string | string[]
-    to?: string | string[]
-  }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const [session, query] = await Promise.all([requireOnboarded(), searchParams])
   const dateRange = resolveDashboardDateRange(query)
@@ -78,6 +76,24 @@ export default async function DashboardPage({
     ? await getFailedReportGenerations({ orgId, projectId })
     : []
 
+  const credits = data.reportCredits ?? {
+    totalReportCredits: 320,
+    usedReportCredits: 0,
+    remainingReportCredits: 320,
+    startAt: null,
+    expiresAt: null,
+  }
+
+  const isLowCredit = credits.remainingReportCredits < 100
+
+  const startDateLabel = credits.startAt
+    ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(credits.startAt))
+    : null
+
+  const creditsCaption = startDateLabel
+    ? `${credits.totalReportCredits} Total Credits • ${credits.usedReportCredits} Used • Started ${startDateLabel}`
+    : `${credits.totalReportCredits} Total Credits • ${credits.usedReportCredits} Used`
+
   const kpis: KpiCardData[] = [
     {
       key: "projects",
@@ -89,12 +105,14 @@ export default async function DashboardPage({
       spark: spark(data.kpis.totalProjects),
     },
     {
-      key: "inspections",
-      label: "Open Inspections",
-      value: data.kpis.openInspections,
-      tone: "amber",
-      icon: "inspection",
-      spark: spark(data.kpis.openInspections),
+      key: "credits",
+      label: "Report Credits",
+      value: credits.remainingReportCredits,
+      tone: isLowCredit ? "amber" : "blue",
+      icon: "credits",
+      caption: creditsCaption,
+      href: "/reports?creditUsage=true",
+      spark: spark(credits.remainingReportCredits),
     },
     {
       key: "wir",
@@ -117,6 +135,15 @@ export default async function DashboardPage({
           endDate={dateRange.endDate}
         />
       </div>
+
+      {isLowCredit && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300">
+          <AlertTriangle className="size-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="text-sm font-medium">
+            Your report credits are running low. You have {credits.remainingReportCredits} credits remaining.
+          </div>
+        </div>
+      )}
 
       <PortfolioKpis kpis={kpis} />
 
