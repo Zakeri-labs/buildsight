@@ -1,6 +1,4 @@
-import { redirect } from "next/navigation"
 import { requireOnboarded } from "@/lib/auth/session"
-import { resolveUserEffectiveRole } from "@/lib/auth/effective-role"
 import { resolveDashboardDateRange } from "@/lib/dashboard/date-range"
 import { getPaginatedReportsList } from "@/lib/db/reports-list"
 import { getOrganizationReportCredits } from "@/lib/db/report-credits"
@@ -22,10 +20,6 @@ export default async function ReportsPage({
   }>
 }) {
   const session = await requireOnboarded()
-  const roleRes = await resolveUserEffectiveRole(session.userId, session.email)
-  if (roleRes.role === "viewer") {
-    redirect("/projects")
-  }
 
   const rawParams = await searchParams
   const isCreditUsage = rawParams.creditUsage === "true" || rawParams.creditUsage === "1"
