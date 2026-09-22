@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useMemo, useState } from "react"
 import { ArrowRight, ChevronLeft, ChevronRight, ClipboardList, FilePlus2, Search } from "lucide-react"
+import { useCurrentUser } from "@/components/current-user-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -36,7 +37,7 @@ export function TermReportList({
   term,
   parentTerm,
   workflowActive,
-  canCreate,
+  canCreate: initialCanCreate,
 }: {
   project: { id: string; name: string }
   stage: { id: string; name: string }
@@ -52,6 +53,8 @@ export function TermReportList({
   workflowActive: boolean
   canCreate: boolean
 }) {
+  const currentUser = useCurrentUser()
+  const canCreate = initialCanCreate && currentUser.role !== "viewer"
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState<"all" | ResponseStatus>("all")
   const [page, setPage] = useState(1)

@@ -45,6 +45,7 @@ function cleanStageName(name: string) {
 export function StageReportList({ project, stage, workflowActive }: { project: { id: string; name: string }; stage: ProjectStageExecution; workflowActive: boolean }) {
   const currentUser = useCurrentUser()
   const isMember = currentUser.role === "org_member"
+  const canCreateReport = workflowActive && currentUser.role !== "viewer"
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState<"all" | ResponseStatus>("all")
   const [page, setPage] = useState(1)
@@ -84,7 +85,7 @@ export function StageReportList({ project, stage, workflowActive }: { project: {
               {stage.reportSummary.pendingReview} Pending Review
             </p>
           </div>
-          {workflowActive ? (
+          {canCreateReport ? (
             <Link
               href={`${baseHref}/reports/new`}
               className={cn(buttonVariants({ size: "sm" }), "h-8 shrink-0 gap-1 px-2.5 text-xs font-semibold")}
@@ -180,7 +181,7 @@ export function StageReportList({ project, stage, workflowActive }: { project: {
           <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-muted-foreground">
             {stage.reports.length ? "Try a different search or report status." : "No reports have been created for this stage."}
           </p>
-          {workflowActive && !stage.reports.length ? (
+          {canCreateReport && !stage.reports.length ? (
             <Link href={`${baseHref}/reports/new`} className={cn(buttonVariants({ size: "sm" }), "mt-4 h-8 gap-1 px-3 text-xs")}>
               <FilePlus2 className="size-3.5" />
               Start Report
@@ -203,7 +204,7 @@ export function StageReportList({ project, stage, workflowActive }: { project: {
             {stage.reportSummary.approved ? <span>· {stage.reportSummary.approved} Approved</span> : null}
           </div>
         </div>
-        {workflowActive ? <Link href={`${baseHref}/reports/new`} className={cn(buttonVariants(), "shrink-0")}><FilePlus2 className="size-4" />Add Report</Link> : null}
+        {canCreateReport ? <Link href={`${baseHref}/reports/new`} className={cn(buttonVariants(), "shrink-0")}><FilePlus2 className="size-4" />Add Report</Link> : null}
       </div>
 
       {!workflowActive ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">This stage is disabled for new work. Existing reports remain available.</div> : null}
