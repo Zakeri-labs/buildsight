@@ -77,13 +77,22 @@ export default async function DashboardPage({
     : []
 
   const credits = data.reportCredits ?? {
-    totalReportCredits: 300,
+    totalReportCredits: 320,
     usedReportCredits: 0,
-    remainingReportCredits: 300,
+    remainingReportCredits: 320,
+    startAt: null,
     expiresAt: null,
   }
 
   const isLowCredit = credits.remainingReportCredits < 100
+
+  const startDateLabel = credits.startAt
+    ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(credits.startAt))
+    : null
+
+  const creditsCaption = startDateLabel
+    ? `${credits.totalReportCredits} Total Credits • ${credits.usedReportCredits} Used • Started ${startDateLabel}`
+    : `${credits.totalReportCredits} Total Credits • ${credits.usedReportCredits} Used`
 
   const kpis: KpiCardData[] = [
     {
@@ -101,7 +110,7 @@ export default async function DashboardPage({
       value: credits.remainingReportCredits,
       tone: isLowCredit ? "amber" : "blue",
       icon: "credits",
-      caption: `${credits.totalReportCredits} Total Credits • ${credits.usedReportCredits} Used`,
+      caption: creditsCaption,
       href: "/reports?creditUsage=true",
       spark: spark(credits.remainingReportCredits),
     },

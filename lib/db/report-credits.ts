@@ -9,7 +9,7 @@ export type OrganizationReportCredits = {
   expiresAt: string | null
 }
 
-const DEFAULT_TOTAL_CREDITS = 300
+const DEFAULT_TOTAL_CREDITS = 320
 
 /**
  * Fetch subscription and report credit details for an organization.
