@@ -334,6 +334,24 @@ function extractProjectCodeYear(codeStr: string | null | undefined): string | nu
   return match ? match[1] : null
 }
 
+function parseProjectCodeForSort(codeStr: string | null | undefined) {
+  if (!codeStr || codeStr.trim() === "—") return { year: 0, seq: 0, raw: "" }
+  const trimmed = codeStr.trim()
+  const yearStr = extractProjectCodeYear(trimmed)
+  const year = yearStr ? parseInt(yearStr, 10) : 0
+  const numbers = trimmed.match(/\d+/g) || []
+  const seq = numbers.length > 0 ? parseInt(numbers[numbers.length - 1], 10) : 0
+  return { year, seq, raw: trimmed }
+}
+
+function compareProjectCodes(leftCode: string | null | undefined, rightCode: string | null | undefined) {
+  const left = parseProjectCodeForSort(leftCode)
+  const right = parseProjectCodeForSort(rightCode)
+  if (left.year !== right.year) return right.year - left.year
+  if (left.seq !== right.seq) return right.seq - left.seq
+  return (right.raw || "").localeCompare(left.raw || "")
+}
+
 export function ProjectsList({
   projects = mockProjects,
   createdProjectId,
@@ -433,6 +451,7 @@ export function ProjectsList({
       return direction === "asc" ? left.localeCompare(right) : right.localeCompare(left)
     }
 
+    if (sortBy === "default") rows.sort((left, right) => compareProjectCodes(left.code, right.code) || left.name.localeCompare(right.name))
     if (sortBy === "name-asc") rows.sort((left, right) => left.name.localeCompare(right.name))
     if (sortBy === "progress-desc") rows.sort((left, right) => right.progress - left.progress || left.name.localeCompare(right.name))
     if (sortBy === "date-desc") {

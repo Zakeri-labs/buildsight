@@ -362,7 +362,7 @@ export async function getOrgProjects(
       .from("projects")
       .select(projectColumns)
       .eq("supervising_organization_id", orgId)
-      .order("sort_order", { ascending: true })
+      .order("code", { ascending: false, nullsFirst: false })
       .order("name", { ascending: true })
     if (result.error) throw result.error
     data = result.data
@@ -388,7 +388,7 @@ export async function getOrgProjects(
           .select(projectColumns)
           .eq("supervising_organization_id", orgId)
           .in("id", projectIds)
-          .order("sort_order", { ascending: true })
+          .order("code", { ascending: false, nullsFirst: false })
           .order("name", { ascending: true })
         if (result.error) throw result.error
         data = result.data
@@ -441,7 +441,7 @@ export async function getOrgProjects(
       }
 
       const result = await query
-        .order("sort_order", { ascending: true })
+        .order("code", { ascending: false, nullsFirst: false })
         .order("name", { ascending: true })
 
       if (result.error) throw result.error
@@ -480,7 +480,7 @@ export async function getOrgProjects(
           .from("projects")
           .select(projectColumns)
           .in("id", projectIds)
-          .order("sort_order", { ascending: true })
+          .order("code", { ascending: false, nullsFirst: false })
           .order("name", { ascending: true })
         if (result.error) throw result.error
         data = result.data
