@@ -20,6 +20,7 @@ export default async function ReportsPage({
   }>
 }) {
   const session = await requireOnboarded()
+
   const rawParams = await searchParams
   const isCreditUsage = rawParams.creditUsage === "true" || rawParams.creditUsage === "1"
 

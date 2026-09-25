@@ -334,6 +334,44 @@ function extractProjectCodeYear(codeStr: string | null | undefined): string | nu
   return match ? match[1] : null
 }
 
+function parseProjectCodeForSort(codeStr: string | null | undefined) {
+  if (!codeStr || codeStr.trim() === "—") return { year: 0, seq: 0, raw: "" }
+  const trimmed = codeStr.trim()
+  const yearStr = extractProjectCodeYear(trimmed)
+  const year = yearStr ? parseInt(yearStr, 10) : 0
+  const numbers = trimmed.match(/\d+/g) || []
+  const seq = numbers.length > 0 ? parseInt(numbers[numbers.length - 1], 10) : 0
+  return { year, seq, raw: trimmed }
+}
+
+function compareProjectCodes(leftCode: string | null | undefined, rightCode: string | null | undefined) {
+  const left = parseProjectCodeForSort(leftCode)
+  const right = parseProjectCodeForSort(rightCode)
+  if (left.year !== right.year) return right.year - left.year
+  if (left.seq !== right.seq) return right.seq - left.seq
+  return (right.raw || "").localeCompare(left.raw || "")
+}
+
+const MONTHLY_SUPERVISION_TYPES = [
+  "monthly",
+  "monthly_2",
+  "monthly_3",
+  "monthly_4",
+  "monthly_4_times",
+  "monthly_6_times",
+]
+const LUMP_SUM_SUPERVISION_TYPES = ["lump_sum"]
+const VISIT_BASIC_SUPERVISION_TYPES = ["visit_basic", "visit_basis"]
+
+function matchesSupervisionType(supervisionType: string | null | undefined, filterValue: string): boolean {
+  if (!filterValue || filterValue === "all") return true
+  const st = (supervisionType || "").trim().toLowerCase()
+  if (filterValue === "monthly") return MONTHLY_SUPERVISION_TYPES.includes(st)
+  if (filterValue === "lump_sum") return LUMP_SUM_SUPERVISION_TYPES.includes(st)
+  if (filterValue === "visit_basic") return VISIT_BASIC_SUPERVISION_TYPES.includes(st)
+  return st === filterValue
+}
+
 export function ProjectsList({
   projects = mockProjects,
   createdProjectId,
@@ -355,6 +393,7 @@ export function ProjectsList({
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [selectedType, setSelectedType] = useState("all")
+  const [selectedSupervisionType, setSelectedSupervisionType] = useState("all")
   const [selectedSupervisor, setSelectedSupervisor] = useState("all")
   const [selectedAreaDistrict, setSelectedAreaDistrict] = useState("all")
   const [selectedProjectYear, setSelectedProjectYear] = useState("all")
@@ -393,9 +432,10 @@ export function ProjectsList({
       }
       if (selectedStatus !== "all" && p.status !== selectedStatus) return false
       if (selectedType !== "all" && p.projectType !== selectedType) return false
+      if (!matchesSupervisionType(p.supervisionType, selectedSupervisionType)) return false
       return true
     })
-  }, [projectRows, searchQuery, selectedStatus, selectedType])
+  }, [projectRows, searchQuery, selectedStatus, selectedType, selectedSupervisionType])
 
   const desktopFilteredProjects = useMemo(() => {
     return filteredProjects.filter((project) => {
@@ -433,6 +473,7 @@ export function ProjectsList({
       return direction === "asc" ? left.localeCompare(right) : right.localeCompare(left)
     }
 
+    if (sortBy === "default") rows.sort((left, right) => compareProjectCodes(left.code, right.code) || left.name.localeCompare(right.name))
     if (sortBy === "name-asc") rows.sort((left, right) => left.name.localeCompare(right.name))
     if (sortBy === "progress-desc") rows.sort((left, right) => right.progress - left.progress || left.name.localeCompare(right.name))
     if (sortBy === "date-desc") {
@@ -484,7 +525,7 @@ export function ProjectsList({
   ).sort((left, right) => left.localeCompare(right))
   const hasUnassignedSupervisor = projectRows.some((project) => !project.assignedSupervisorId)
   const hasUnspecifiedArea = projectRows.some((project) => !project.areaDistrict?.trim())
-  const activeFilterCount = [selectedStatus, selectedType, selectedSupervisor, selectedAreaDistrict, selectedProjectYear].filter((value) => value !== "all").length
+  const activeFilterCount = [selectedStatus, selectedType, selectedSupervisionType, selectedSupervisor, selectedAreaDistrict, selectedProjectYear].filter((value) => value !== "all").length
   const desktopActiveFilterCount = activeFilterCount
   const hasSearchOrFilters = Boolean(searchQuery.trim()) || activeFilterCount > 0 || sortBy !== "default"
   const desktopPageCount = Math.max(1, Math.ceil(desktopProjects.length / pageSize))
@@ -500,6 +541,7 @@ export function ProjectsList({
 
   const [draftStatus, setDraftStatus] = useState(selectedStatus)
   const [draftType, setDraftType] = useState(selectedType)
+  const [draftSupervisionType, setDraftSupervisionType] = useState(selectedSupervisionType)
   const [draftSupervisor, setDraftSupervisor] = useState(selectedSupervisor)
   const [draftAreaDistrict, setDraftAreaDistrict] = useState(selectedAreaDistrict)
   const [draftProjectYear, setDraftProjectYear] = useState(selectedProjectYear)
@@ -509,16 +551,18 @@ export function ProjectsList({
     if (filtersOpen) {
       setDraftStatus(selectedStatus)
       setDraftType(selectedType)
+      setDraftSupervisionType(selectedSupervisionType)
       setDraftSupervisor(selectedSupervisor)
       setDraftAreaDistrict(selectedAreaDistrict)
       setDraftProjectYear(selectedProjectYear)
       setDraftSortBy(sortBy)
     }
-  }, [filtersOpen, selectedStatus, selectedType, selectedSupervisor, selectedAreaDistrict, selectedProjectYear, sortBy])
+  }, [filtersOpen, selectedStatus, selectedType, selectedSupervisionType, selectedSupervisor, selectedAreaDistrict, selectedProjectYear, sortBy])
 
   function handleMobileClear() {
     setDraftStatus("all")
     setDraftType("all")
+    setDraftSupervisionType("all")
     setDraftSupervisor("all")
     setDraftAreaDistrict("all")
     setDraftProjectYear("all")
@@ -529,6 +573,7 @@ export function ProjectsList({
   function handleMobileApply() {
     setSelectedStatus(draftStatus)
     setSelectedType(draftType)
+    setSelectedSupervisionType(draftSupervisionType)
     setSelectedSupervisor(draftSupervisor)
     setSelectedAreaDistrict(draftAreaDistrict)
     setSelectedProjectYear(draftProjectYear)
@@ -553,12 +598,13 @@ export function ProjectsList({
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchQuery, selectedStatus, selectedType, selectedSupervisor, selectedAreaDistrict, selectedProjectYear, sortBy, pageSize])
+  }, [searchQuery, selectedStatus, selectedType, selectedSupervisionType, selectedSupervisor, selectedAreaDistrict, selectedProjectYear, sortBy, pageSize])
 
   function clearAllProjectListFilters() {
     setSearchQuery("")
     setSelectedStatus("all")
     setSelectedType("all")
+    setSelectedSupervisionType("all")
     setSelectedSupervisor("all")
     setSelectedAreaDistrict("all")
     setSelectedProjectYear("all")
@@ -760,6 +806,20 @@ export function ProjectsList({
                     ]}
                   />
                 </MobileFilterField>
+                <MobileFilterField label={locale === "ar" ? "نوع الإشراف" : "Supervision Type"}>
+                  <DropdownFilter
+                    label={locale === "ar" ? "نوع الإشراف" : "Supervision Type"}
+                    value={draftSupervisionType}
+                    onChange={setDraftSupervisionType}
+                    className="w-full"
+                    options={[
+                      { label: locale === "ar" ? "الكل" : "All", value: "all" },
+                      { label: locale === "ar" ? "شهري" : "Monthly", value: "monthly" },
+                      { label: locale === "ar" ? "مقطوعية" : "Lump Sum", value: "lump_sum" },
+                      { label: locale === "ar" ? "زيارة أساسية" : "Visit Basic", value: "visit_basic" },
+                    ]}
+                  />
+                </MobileFilterField>
                 <MobileFilterField label={locale === "ar" ? "المشرف" : "Supervisor"}>
                   <DropdownFilter
                     label={locale === "ar" ? "كل المشرفين" : "All Supervisors"}
@@ -939,6 +999,19 @@ export function ProjectsList({
           options={[
             { label: "All Types", value: "all" },
             ...typeOptions.map((type) => ({ label: type, value: type })),
+          ]}
+        />
+
+        {/* Dropdown: Supervision Type */}
+        <DropdownFilter
+          label={locale === "ar" ? "نوع الإشراف" : "Supervision Type"}
+          value={selectedSupervisionType}
+          onChange={setSelectedSupervisionType}
+          options={[
+            { label: locale === "ar" ? "الكل" : "All", value: "all" },
+            { label: locale === "ar" ? "شهري" : "Monthly", value: "monthly" },
+            { label: locale === "ar" ? "مقطوعية" : "Lump Sum", value: "lump_sum" },
+            { label: locale === "ar" ? "زيارة أساسية" : "Visit Basic", value: "visit_basic" },
           ]}
         />
 

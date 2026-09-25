@@ -12,6 +12,7 @@ import {
   enqueueStageTranslationJob,
   processStageTranslationJob,
 } from "@/lib/stage-translations/client-auto-generation"
+import { useCurrentUser } from "@/components/current-user-provider"
 
 function formatRelativeTime(isoString: string | null | undefined): string {
   if (!isoString) return "—"
@@ -109,6 +110,8 @@ export function FailedReportGenerationsCard({
   orgId: string | null
   projectId?: string | null
 }) {
+  const currentUser = useCurrentUser()
+  const isViewer = currentUser?.role === "viewer"
   const [items, setItems] = useState<FailedReportGenerationItem[]>(initialData)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set())
@@ -293,26 +296,28 @@ export function FailedReportGenerationsCard({
                               <Download className="size-3.5 shrink-0" />
                               <span>EN / AR</span>
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleRetry(item)}
-                              disabled={isRetrying}
-                              title="Retry PDF generation"
-                              className="h-8 gap-1 px-2.5 text-xs font-semibold"
-                            >
-                              {isRetrying ? (
-                                <>
-                                  <Loader2 className="size-3.5 animate-spin shrink-0" />
-                                  <span>Generating...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <RefreshCw className="size-3.5 shrink-0" />
-                                  <span>Retry</span>
-                                </>
-                              )}
-                            </Button>
+                            {!isViewer && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleRetry(item)}
+                                disabled={isRetrying}
+                                title="Retry PDF generation"
+                                className="h-8 gap-1 px-2.5 text-xs font-semibold"
+                              >
+                                {isRetrying ? (
+                                  <>
+                                    <Loader2 className="size-3.5 animate-spin shrink-0" />
+                                    <span>Generating...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <RefreshCw className="size-3.5 shrink-0" />
+                                    <span>Retry</span>
+                                  </>
+                                )}
+                              </Button>
+                            )}
                           </div>
                           {errorMsg ? (
                             <span className="text-[11px] text-red-600 dark:text-red-400 max-w-[240px] truncate" title={errorMsg}>

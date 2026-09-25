@@ -1,6 +1,7 @@
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { InspectionReportForm } from "@/components/stages/inspection-report-form"
 import { requireOnboarded } from "@/lib/auth/session"
+import { resolveUserEffectiveRole } from "@/lib/auth/effective-role"
 import { loadNextProjectVisitNumber, loadProjectStage, loadSiteVisitReportContext } from "@/lib/db/project-stages"
 import { loadProjectParticipantsOnly } from "@/lib/report-cc/server"
 import { resolveCalendarProjectScope } from "@/lib/calendar/server"
@@ -16,6 +17,8 @@ export default async function NewStageReportPage({
   searchParams: Promise<{ siteVisitRequestId?: string | string[] }>
 }) {
   const [{ projectId, stageId }, query, session] = await Promise.all([params, searchParams, requireOnboarded()])
+  const roleRes = await resolveUserEffectiveRole(session.userId, session.email)
+  if (roleRes.role === "viewer") redirect(`/projects/${projectId}`)
   const rawSiteVisitRequestId = Array.isArray(query.siteVisitRequestId) ? query.siteVisitRequestId[0] : query.siteVisitRequestId
   const hasSiteVisitRequestId = typeof rawSiteVisitRequestId === "string" && rawSiteVisitRequestId.trim().length > 0
   const siteVisitRequestId = hasSiteVisitRequestId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawSiteVisitRequestId!)

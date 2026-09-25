@@ -621,7 +621,8 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       }
     }
 
-    if (proj?.supervising_organization_id && (input.submit || !existing)) {
+    const isCreditExemptTestProject = proj?.code?.trim().endsWith("100000") ?? false
+    if (proj?.supervising_organization_id && (input.submit || !existing) && !isCreditExemptTestProject) {
       await consumeReportCreditForReport(input.responseId, proj.supervising_organization_id, admin)
     }
 

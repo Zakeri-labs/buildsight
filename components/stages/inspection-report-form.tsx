@@ -63,6 +63,7 @@ import { StageTranslationActions } from "@/components/stages/stage-translation-a
 import { optimizeEvidenceImageFile } from "@/lib/stages/optimize-evidence-image"
 import { CcRecipientsField } from "@/components/reports/cc-recipients-field"
 import { ReportDownloadSection } from "@/components/stages/report-download-section"
+import { useCurrentUser } from "@/components/current-user-provider"
 import { formatDiagnosticLogAsText, logDiagnosticEvent, readDiagnosticEvents } from "@/lib/stage-translations/debug-timeline"
 import type { ProjectStageAttachment, ProjectStageApproval, ProjectStagePerson, ProjectStageTranslationSummary } from "@/lib/db/project-stages"
 import { partitionReportCcRecipients, type ProjectCcCandidate, type ReportCcRecipient, type ReportCcSelection } from "@/lib/report-cc/types"
@@ -622,6 +623,8 @@ export function InspectionReportForm({
   historicalCompletedItemIds?: string[]
 }) {
   const router = useRouter()
+  const currentUser = useCurrentUser()
+  const isViewer = currentUser?.role === "viewer"
   const reportDefinition = stageReportConfig ?? legacyTerm
   if (!reportDefinition) throw new Error("Report configuration is missing.")
   const isDirectStageReport = Boolean(stageReportConfig)
@@ -2996,38 +2999,40 @@ export function InspectionReportForm({
                     </p>
 
                     {/* Diagnostic Debug Log Sharing */}
-                    <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-red-200/80 pt-2.5 dark:border-red-900/60">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-7 gap-1.5 rounded-lg border-red-300/80 bg-white px-2.5 text-[11px] font-semibold text-red-800 shadow-2xs hover:bg-red-50 dark:border-red-800 dark:bg-red-900/40 dark:text-red-200 dark:hover:bg-red-900/60"
-                        onClick={handleCopyDebugLog}
-                      >
-                        {copiedDebugLog ? <Check className="size-3 text-emerald-600 dark:text-emerald-400" /> : <Copy className="size-3" />}
-                        <span>{copiedDebugLog ? (locale === "ar" ? "تم النسخ!" : "Copied!") : (locale === "ar" ? "نسخ سجل التشخيص" : "Copy Debug Log")}</span>
-                      </Button>
+                    {!isViewer && (
+                      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-red-200/80 pt-2.5 dark:border-red-900/60">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1.5 rounded-lg border-red-300/80 bg-white px-2.5 text-[11px] font-semibold text-red-800 shadow-2xs hover:bg-red-50 dark:border-red-800 dark:bg-red-900/40 dark:text-red-200 dark:hover:bg-red-900/60"
+                          onClick={handleCopyDebugLog}
+                        >
+                          {copiedDebugLog ? <Check className="size-3 text-emerald-600 dark:text-emerald-400" /> : <Copy className="size-3" />}
+                          <span>{copiedDebugLog ? (locale === "ar" ? "تم النسخ!" : "Copied!") : (locale === "ar" ? "نسخ سجل التشخيص" : "Copy Debug Log")}</span>
+                        </Button>
 
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={actionBusy === "share"}
-                        className="h-7 gap-1.5 rounded-lg border-emerald-400/80 bg-white px-2.5 text-[11px] font-semibold text-emerald-700 shadow-2xs hover:bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
-                        onClick={() => void handleSendLogViaWhatsApp()}
-                      >
-                        {actionBusy === "share" ? (
-                          <Loader2 className="size-3 animate-spin text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <Share2 className="size-3 text-emerald-600 dark:text-emerald-400" />
-                        )}
-                        <span>
-                          {actionBusy === "share"
-                            ? (locale === "ar" ? "إعداد سجل التشخيص..." : "Preparing diagnostic log...")
-                            : (locale === "ar" ? "إرسال السجل عبر واتساب" : "Send Log via WhatsApp")}
-                        </span>
-                      </Button>
-                    </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={actionBusy === "share"}
+                          className="h-7 gap-1.5 rounded-lg border-emerald-400/80 bg-white px-2.5 text-[11px] font-semibold text-emerald-700 shadow-2xs hover:bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+                          onClick={() => void handleSendLogViaWhatsApp()}
+                        >
+                          {actionBusy === "share" ? (
+                            <Loader2 className="size-3 animate-spin text-emerald-600 dark:text-emerald-400" />
+                          ) : (
+                            <Share2 className="size-3 text-emerald-600 dark:text-emerald-400" />
+                          )}
+                          <span>
+                            {actionBusy === "share"
+                              ? (locale === "ar" ? "إعداد سجل التشخيص..." : "Preparing diagnostic log...")
+                              : (locale === "ar" ? "إرسال السجل عبر واتساب" : "Send Log via WhatsApp")}
+                          </span>
+                        </Button>
+                      </div>
+                    )}
 
                     <div className="mt-3 flex items-center justify-end">
                       <Button

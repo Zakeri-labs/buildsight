@@ -197,6 +197,7 @@ export function AppSidebar({
 
   const isMember = homeHref === "/memberhomepage"
   const currentUser = useCurrentUser()
+  const isViewer = currentUser?.role === "viewer"
   const canAccessSupervisorPerformance =
     !isMember && (currentUser.role === "org_admin" || currentUser.role === "org_manager")
 
@@ -241,7 +242,7 @@ export function AppSidebar({
         : "/calendar",
       icon: CalendarDays,
     },
-    ...(contextProjectId ? [{ label: t.nav.aiSummary, href: "/ai-summary", icon: Sparkles }] : []),
+    ...(contextProjectId && !isViewer ? [{ label: t.nav.aiSummary, href: "/ai-summary", icon: Sparkles }] : []),
   ]
 
   const adminItems = [

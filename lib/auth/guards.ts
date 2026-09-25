@@ -76,6 +76,10 @@ export async function assertProjectStageReportAccess(projectId: string): Promise
   const access = await resolveProjectReadAccessForUser(userId, projectId)
   if (!access) throw new AuthzError("You do not have access to this project")
 
+  if (access.supervisingOrganizationRole === "viewer") {
+    throw new AuthzError("Viewers cannot create or edit reports")
+  }
+
   if (access.supervisingOrganizationRole === "org_member") {
     const isSupervisor = await isUserProjectSupervisor(userId, projectId)
     if (!isSupervisor) throw new AuthzError("Only an assigned Project Supervisor can create Stage Reports")

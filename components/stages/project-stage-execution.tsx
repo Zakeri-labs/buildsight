@@ -11,6 +11,7 @@ import {
   FileText,
   Plus,
 } from "lucide-react"
+import { useCurrentUser } from "@/components/current-user-provider"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -50,6 +51,8 @@ function formatDate(value: string, locale: "en" | "ar") {
 
 export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutionData }) {
   const { locale } = useI18n()
+  const currentUser = useCurrentUser()
+  const isViewer = currentUser.role === "viewer"
   const language: "en" | "ar" = locale === "ar" ? "ar" : "en"
   const copy = COPY[language]
   const [openStages, setOpenStages] = useState<Set<string>>(() => new Set(data.stages.slice(0, 2).map((stage) => stage.id)))
@@ -112,8 +115,7 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
             <span className="truncate">{data.project.name}</span>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{copy.title}</h1>
-            {data.canManage ? <ManageProjectStagesButton projectId={data.project.id} stages={data.availableStages} /> : null}
+            <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">{copy.title}</h1>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">{copy.subtitle}</p>
         </div>
@@ -181,14 +183,16 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
                           {stageCheckedCheckboxes} / {stageTotalCheckboxes} ({stageCheckboxPercentage}%)
                         </span>
                       )}
-                      <Link
-                        href={`/projects/${data.project.id}/stages/${stage.id}/reports/new`}
-                        className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5 px-3 text-xs font-medium shrink-0")}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Plus className="size-3.5" />
-                        {copy.addReport}
-                      </Link>
+                      {!isViewer ? (
+                        <Link
+                          href={`/projects/${data.project.id}/stages/${stage.id}/reports/new`}
+                          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 gap-1.5 px-3 text-xs font-medium shrink-0")}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Plus className="size-3.5" />
+                          {copy.addReport}
+                        </Link>
+                      ) : null}
                     </div>
                   </div>
                 </CardHeader>

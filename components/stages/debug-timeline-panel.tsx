@@ -10,8 +10,10 @@ import {
   readDiagnosticEvents,
   type DiagnosticEvent,
 } from "@/lib/stage-translations/debug-timeline"
+import { useCurrentUser } from "@/components/current-user-provider"
 
 export function DebugTimelinePanel({ responseId }: { responseId: string | null | undefined }) {
+  const currentUser = useCurrentUser()
   const [events, setEvents] = useState<DiagnosticEvent[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -31,7 +33,7 @@ export function DebugTimelinePanel({ responseId }: { responseId: string | null |
     return () => window.removeEventListener(DEBUG_TIMELINE_EVENT, handleUpdate)
   }, [responseId])
 
-  if (!responseId) return null
+  if (!responseId || currentUser?.role === "viewer") return null
 
   const handleCopy = async () => {
     try {

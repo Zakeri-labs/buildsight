@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import ExcelJS from "exceljs"
 import { requireOnboarded } from "@/lib/auth/session"
+import { resolveUserEffectiveRole } from "@/lib/auth/effective-role"
 import { resolveDashboardDateRange } from "@/lib/dashboard/date-range"
 import { getAllReportsForExcelExport } from "@/lib/db/reports-list"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -42,6 +43,10 @@ function formatStatus(status: string): string {
 export async function GET(request: NextRequest) {
   try {
     const session = await requireOnboarded()
+    const roleRes = await resolveUserEffectiveRole(session.userId, session.email)
+    if (roleRes.role === "viewer") {
+      return NextResponse.json({ error: "Viewers cannot export report data" }, { status: 403 })
+    }
 
     const searchParams = request.nextUrl.searchParams
     const range = searchParams.get("range") || undefined

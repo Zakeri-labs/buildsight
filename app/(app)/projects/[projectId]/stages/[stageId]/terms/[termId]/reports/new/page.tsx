@@ -1,12 +1,15 @@
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { InspectionReportForm } from "@/components/stages/inspection-report-form"
 import { requireOnboarded } from "@/lib/auth/session"
+import { resolveUserEffectiveRole } from "@/lib/auth/effective-role"
 import { loadNextProjectVisitNumber, loadProjectStageTerm } from "@/lib/db/project-stages"
 import { loadProjectParticipantsOnly } from "@/lib/report-cc/server"
 import { getHistoricalCompletedChecklistIds } from "@/lib/stages/execution"
 
 export default async function NewTermReportPage({ params }: { params: Promise<{ projectId: string; stageId: string; termId: string }> }) {
   const [{ projectId, stageId, termId }, session] = await Promise.all([params, requireOnboarded()])
+  const roleRes = await resolveUserEffectiveRole(session.userId, session.email)
+  if (roleRes.role === "viewer") redirect(`/projects/${projectId}`)
   const data = await loadProjectStageTerm(projectId, termId, session.userId)
   if (!data || data.stage.id !== stageId) notFound()
   const workflowActive = data.stage.status !== "disabled"

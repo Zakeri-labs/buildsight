@@ -11,6 +11,7 @@ import { buildShareMessage, buildWhatsAppShareUrl } from "@/lib/stage-translatio
 import { cn } from "@/lib/utils"
 import { logDiagnosticEvent } from "@/lib/stage-translations/debug-timeline"
 import { DebugTimelinePanel } from "@/components/stages/debug-timeline-panel"
+import { useCurrentUser } from "@/components/current-user-provider"
 
 export function ReportDownloadSection({
   projectId,
@@ -45,6 +46,9 @@ export function ReportDownloadSection({
   locale: "en" | "ar"
   variant?: "card" | "sticky"
 }) {
+  const currentUser = useCurrentUser()
+  const isViewer = currentUser?.role === "viewer"
+
   const [translation, setTranslation] = useState<ProjectStageTranslationSummary | null>(
     initialTranslation ?? null,
   )
@@ -471,17 +475,19 @@ export function ReportDownloadSection({
                   {downloading === "original" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
                   <span>English PDF</span>
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={retryBusy}
-                  onClick={handleRetry}
-                  className="h-8 gap-1.5 rounded-lg text-xs font-semibold"
-                >
-                  {retryBusy ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCw className="size-3.5" />}
-                  <span>{locale === "ar" ? "إعادة المحاولة" : "Retry"}</span>
-                </Button>
+                {!isViewer && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={retryBusy}
+                    onClick={handleRetry}
+                    className="h-8 gap-1.5 rounded-lg text-xs font-semibold"
+                  >
+                    {retryBusy ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCw className="size-3.5" />}
+                    <span>{locale === "ar" ? "إعادة المحاولة" : "Retry"}</span>
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
@@ -542,16 +548,18 @@ export function ReportDownloadSection({
                 )}
                 <span>Bilingual PDF</span>
               </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                title={locale === "ar" ? "إعادة توليد الترجمة" : "Regenerate Translation"}
-                onClick={handleRetry}
-                className="h-9 size-9 text-muted-foreground hover:text-foreground"
-              >
-                <RotateCw className="size-3.5" />
-              </Button>
+              {!isViewer && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  title={locale === "ar" ? "إعادة توليد الترجمة" : "Regenerate Translation"}
+                  onClick={handleRetry}
+                  className="h-9 size-9 text-muted-foreground hover:text-foreground"
+                >
+                  <RotateCw className="size-3.5" />
+                </Button>
+              )}
             </>
           )}
         </div>
