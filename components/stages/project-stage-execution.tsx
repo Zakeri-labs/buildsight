@@ -116,6 +116,9 @@ export function ProjectStageExecutionView({ data }: { data: ProjectStageExecutio
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">{copy.title}</h1>
+            {data.canManage ? (
+              <ManageProjectStagesButton projectId={data.project.id} stages={data.availableStages} />
+            ) : null}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">{copy.subtitle}</p>
         </div>

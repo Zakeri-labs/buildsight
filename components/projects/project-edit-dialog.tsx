@@ -495,7 +495,7 @@ export function ProjectEditDialog({
           setProjectStages(stagesRes.data)
           const lastPreCompleted = [...stagesRes.data].reverse().find((s) => s.isPreCompleted || s.status === "completed")
           if (lastPreCompleted) {
-            setCompletedUpToStageId(lastPreCompleted.templateStageId || lastPreCompleted.id)
+            setCompletedUpToStageId(lastPreCompleted.id)
           } else {
             setCompletedUpToStageId("none")
           }
@@ -1449,18 +1449,12 @@ export function ProjectEditDialog({
                         disabled={pending || loadingStages}
                       >
                         <SelectTrigger className="h-10 w-full">
-                          <SelectValue placeholder={copy.completedUpToStagePlaceholder}>
-                            {(val) => {
-                              if (!val || val === "none") return copy.noneCompletedStage
-                              const found = projectStages.find((s) => s.id === String(val) || s.templateStageId === String(val))
-                              return found ? found.name : copy.noneCompletedStage
-                            }}
-                          </SelectValue>
+                          <SelectValue placeholder={copy.completedUpToStagePlaceholder} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">{copy.noneCompletedStage}</SelectItem>
                           {projectStages.map((stage) => (
-                            <SelectItem key={stage.id} value={stage.templateStageId || stage.id}>
+                            <SelectItem key={stage.id} value={stage.id}>
                               {stage.name}
                             </SelectItem>
                           ))}
@@ -1604,7 +1598,7 @@ export function ProjectEditDialog({
                   <Label htmlFor="edit-owner-count">{copy.ownerCount}</Label>
                   <Select value={String(owners.length)} onValueChange={(val) => setOwnerCount(Number(val ?? 1))} disabled={pending}>
                     <SelectTrigger id="edit-owner-count" className="h-10 w-full">
-                      <SelectValue>{(val) => String(val ?? owners.length)}</SelectValue>
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {Array.from({ length: MAX_OWNERS }, (_, i) => i + 1).map((cnt) => (
