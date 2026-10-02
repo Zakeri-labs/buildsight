@@ -373,6 +373,13 @@ function matchesSupervisionType(supervisionType: string | null | undefined, filt
   return st === filterValue
 }
 
+function matchesSelectedSupervisor(project: ProjectRow, selectedSupervisor: string): boolean {
+  if (!selectedSupervisor || selectedSupervisor === "all") return true
+  if (selectedSupervisor === "__unassigned__") return !project.assignedSupervisorId
+  const supervisorName = project.assignedSupervisorId ? (project.supervisorName?.trim() || "Assigned Supervisor") : ""
+  return supervisorName.toLocaleLowerCase() === selectedSupervisor.toLocaleLowerCase()
+}
+
 export function ProjectsList({
   projects = mockProjects,
   createdProjectId,
@@ -440,15 +447,9 @@ export function ProjectsList({
 
   const desktopFilteredProjects = useMemo(() => {
     return filteredProjects.filter((project) => {
-      const supervisorName = project.assignedSupervisorId ? (project.supervisorName?.trim() || "Assigned Supervisor") : ""
       const areaDistrict = project.areaDistrict?.trim() || ""
 
-      if (selectedSupervisor === "__unassigned__" && project.assignedSupervisorId) return false
-      if (
-        selectedSupervisor !== "all" &&
-        selectedSupervisor !== "__unassigned__" &&
-        supervisorName.toLocaleLowerCase() !== selectedSupervisor.toLocaleLowerCase()
-      ) return false
+      if (!matchesSelectedSupervisor(project, selectedSupervisor)) return false
       if (selectedAreaDistrict === "__unspecified__" && areaDistrict) return false
       if (
         selectedAreaDistrict !== "all" &&
@@ -495,10 +496,15 @@ export function ProjectsList({
 
   const mobileProjects = desktopProjects
 
-  const totalProjects = projectRows.length
-  const activeProjects = projectRows.filter((project) => project.status === "active").length
-  const stoppedProjects = projectRows.filter((project) => project.status === "stopped").length
-  const monthlyProjects = projectRows.filter((project) => project.supervisionType && MONTHLY_SUPERVISION_TYPES.includes(project.supervisionType.trim().toLowerCase())).length
+  const kpiProjects = useMemo(() => {
+    if (selectedSupervisor === "all") return projectRows
+    return projectRows.filter((project) => matchesSelectedSupervisor(project, selectedSupervisor))
+  }, [projectRows, selectedSupervisor])
+
+  const totalProjects = kpiProjects.length
+  const activeProjects = kpiProjects.filter((project) => project.status === "active").length
+  const stoppedProjects = kpiProjects.filter((project) => project.status === "stopped").length
+  const monthlyProjects = kpiProjects.filter((project) => project.supervisionType && MONTHLY_SUPERVISION_TYPES.includes(project.supervisionType.trim().toLowerCase())).length
   const typeOptions = Array.from(new Set(projectRows.map((project) => project.projectType).filter((type) => type !== "—")))
   const projectYearOptions = useMemo(() => {
     const yearSet = new Set<string>()
