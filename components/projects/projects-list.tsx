@@ -12,6 +12,7 @@ import {
   PieChart,
   PauseCircle,
   CheckCircle2,
+  Calendar,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -497,7 +498,7 @@ export function ProjectsList({
   const totalProjects = projectRows.length
   const activeProjects = projectRows.filter((project) => project.status === "active").length
   const stoppedProjects = projectRows.filter((project) => project.status === "stopped").length
-  const completedProjects = projectRows.filter((project) => project.status === "completed").length
+  const monthlyProjects = projectRows.filter((project) => project.supervisionType && MONTHLY_SUPERVISION_TYPES.includes(project.supervisionType.trim().toLowerCase())).length
   const typeOptions = Array.from(new Set(projectRows.map((project) => project.projectType).filter((type) => type !== "—")))
   const projectYearOptions = useMemo(() => {
     const yearSet = new Set<string>()
@@ -676,7 +677,7 @@ export function ProjectsList({
             <MobileProjectMetric label={locale === "ar" ? "الإجمالي" : "Total"} value={totalProjects} tone="blue" />
             <MobileProjectMetric label={locale === "ar" ? "نشط" : "Active"} value={activeProjects} tone="green" />
             <MobileProjectMetric label={locale === "ar" ? "متوقف" : "Stopped"} value={stoppedProjects} tone="red" />
-            <MobileProjectMetric label={locale === "ar" ? "مكتمل" : "Completed"} value={completedProjects} tone="violet" />
+            <MobileProjectMetric label={locale === "ar" ? "شهري" : "Monthly"} value={monthlyProjects} tone="violet" />
           </div>
 
           <div className="flex items-center gap-2">
@@ -923,16 +924,16 @@ export function ProjectsList({
           </div>
         </div>
 
-        {/* Card 4: Completed */}
+        {/* Card 4: Monthly Projects */}
         <div className="flex items-center gap-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
           <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400">
-            <CheckCircle2 className="size-6" />
+            <Calendar className="size-6" />
           </div>
           <div className="flex flex-col">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              {locale === "ar" ? "المكتملة" : "Completed"}
+              {locale === "ar" ? "المشاريع الشهرية" : "Monthly Projects"}
             </span>
-            <span className="text-2xl font-extrabold text-purple-600 dark:text-purple-400">{completedProjects}</span>
+            <span className="text-2xl font-extrabold text-purple-600 dark:text-purple-400">{monthlyProjects}</span>
           </div>
         </div>
       </div>
