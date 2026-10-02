@@ -2,13 +2,16 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useRef, useState } from "react"
 
-import { AlertTriangle, CalendarPlus, CheckCircle2, Clock3, FilePlus2, FileText, MapPinned, MessageSquare } from "lucide-react"
+import { AlertTriangle, CalendarPlus, CheckCircle2, Clock3, FilePlus2, FileText, Loader2, MapPinned, MessageSquare } from "lucide-react"
 
 import { ClientVisitRequestWorkflow } from "@/components/calendar/client-visit-request-workflow"
 import { MemberVisitCompliance } from "@/components/member-homepage/member-visit-compliance"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { updateSiteVisitStatusAction } from "@/lib/actions/site-visits"
 import { currentCalendarMonthKey } from "@/lib/calendar/date"
 import type { CalendarClientRequestViewModel, CalendarDataViewModel } from "@/lib/calendar/types"
 import type { MemberHomepageData, MemberHomepageRequest, MemberHomepageVisit } from "@/lib/member-homepage/types"
@@ -128,15 +131,76 @@ function RequestRow({
   )
 }
 
-function VisitRow({ visit }: { visit: MemberHomepageVisit }) {
+function VisitRow({
+  visit,
+  onCompleteRequest,
+}: {
+  visit: MemberHomepageVisit
+  onCompleteRequest?: (visit: MemberHomepageVisit) => void
+}) {
   const scheduledTime = formatTime(visit.scheduledTime)
   const isCompleted = visit.status === "completed"
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const startPosRef = useRef<{ x: number; y: number } | null>(null)
+
+  function cancelLongPress() {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    startPosRef.current = null
+  }
+
+  function handleStart(clientX: number, clientY: number, target: HTMLElement) {
+    if (isCompleted || !onCompleteRequest) return
+    if (target.closest("a, button, [role='button']")) return
+    if (timerRef.current) return
+
+    startPosRef.current = { x: clientX, y: clientY }
+    timerRef.current = setTimeout(() => {
+      if (typeof window !== "undefined" && "vibrate" in navigator) {
+        try {
+          navigator.vibrate?.(40)
+        } catch {
+          // Ignore vibration errors
+        }
+      }
+      onCompleteRequest(visit)
+      cancelLongPress()
+    }, 700)
+  }
+
+  function handleMove(clientX: number, clientY: number) {
+    if (!startPosRef.current || !timerRef.current) return
+    const dx = Math.abs(clientX - startPosRef.current.x)
+    const dy = Math.abs(clientY - startPosRef.current.y)
+    if (dx > 8 || dy > 8) {
+      cancelLongPress()
+    }
+  }
 
   return (
     <Card
       size="sm"
+      onPointerDown={(e) => handleStart(e.clientX, e.clientY, e.target as HTMLElement)}
+      onPointerMove={(e) => handleMove(e.clientX, e.clientY)}
+      onPointerUp={cancelLongPress}
+      onPointerLeave={cancelLongPress}
+      onPointerCancel={cancelLongPress}
+      onTouchStart={(e) => {
+        if (e.touches.length === 1) {
+          handleStart(e.touches[0].clientX, e.touches[0].clientY, e.target as HTMLElement)
+        }
+      }}
+      onTouchMove={(e) => {
+        if (e.touches.length === 1) {
+          handleMove(e.touches[0].clientX, e.touches[0].clientY)
+        }
+      }}
+      onTouchEnd={cancelLongPress}
+      onTouchCancel={cancelLongPress}
       className={cn(
-        "overflow-hidden py-0 border border-border shadow-2xs transition-all",
+        "overflow-hidden py-0 border border-border shadow-2xs transition-all select-none",
         isCompleted && "bg-muted/30 border-green-200/80 dark:border-green-900/50",
       )}
     >
@@ -281,6 +345,31 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
   const [requestDialogOpen, setRequestDialogOpen] = useState(false)
   const [loadingRequestId, setLoadingRequestId] = useState<string | null>(null)
   const [requestActionError, setRequestActionError] = useState<string | null>(null)
+  const [completeTargetVisit, setCompleteTargetVisit] = useState<MemberHomepageVisit | null>(null)
+  const [completingVisit, setCompletingVisit] = useState(false)
+  const [completeVisitError, setCompleteVisitError] = useState<string | null>(null)
+
+  async function handleConfirmCompleteVisit() {
+    if (!completeTargetVisit || completingVisit) return
+    setCompletingVisit(true)
+    setCompleteVisitError(null)
+    try {
+      const result = await updateSiteVisitStatusAction({
+        requestId: completeTargetVisit.id,
+        status: "completed",
+      })
+      if (!result.ok) {
+        setCompleteVisitError(result.error || "Unable to mark site visit as completed.")
+        return
+      }
+      setCompleteTargetVisit(null)
+      router.refresh()
+    } catch (error) {
+      setCompleteVisitError(error instanceof Error ? error.message : "Unable to mark site visit as completed.")
+    } finally {
+      setCompletingVisit(false)
+    }
+  }
 
   async function openRequestWorkflow(requestId: string) {
     if (loadingRequestId) return
@@ -403,10 +492,73 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
             <span className="text-xs tabular-nums text-muted-foreground">{data.visits.length}</span>
           </div>
           <div className="space-y-1.5 sm:space-y-2">
-            {data.visits.map((visit) => <VisitRow key={visit.id} visit={visit} />)}
+            {data.visits.map((visit) => (
+              <VisitRow
+                key={visit.id}
+                visit={visit}
+                onCompleteRequest={setCompleteTargetVisit}
+              />
+            ))}
           </div>
         </section>
       ) : null}
+
+      <Dialog
+        open={Boolean(completeTargetVisit)}
+        onOpenChange={(open) => {
+          if (!open && !completingVisit) {
+            setCompleteTargetVisit(null)
+            setCompleteVisitError(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mark Visit as Completed?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to mark this visit for{" "}
+              <span className="font-semibold text-foreground">
+                {completeTargetVisit?.projectName}
+              </span>{" "}
+              as completed?
+            </DialogDescription>
+          </DialogHeader>
+
+          {completeVisitError ? (
+            <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs leading-5 text-destructive">
+              {completeVisitError}
+            </p>
+          ) : null}
+
+          <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={completingVisit}
+              onClick={() => {
+                setCompleteTargetVisit(null)
+                setCompleteVisitError(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={completingVisit}
+              onClick={handleConfirmCompleteVisit}
+            >
+              {completingVisit ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  Marking as Completed...
+                </>
+              ) : (
+                "Mark as Completed"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ClientVisitRequestWorkflow
         request={selectedRequest}
