@@ -18,6 +18,15 @@ export const REQUIRED_VISITS_BY_SUPERVISION_TYPE: Record<SupervisionComplianceTy
   monthly_4: 4,
 }
 
+export const MONTHLY_SUPERVISION_TYPES = new Set([
+  "monthly",
+  "monthly_2",
+  "monthly_3",
+  "monthly_4",
+  "monthly_4_times",
+  "monthly_6_times",
+])
+
 export function normalizeComplianceSupervisionType(
   value: string | null | undefined,
 ): SupervisionComplianceType | null {
@@ -439,6 +448,11 @@ export function calculateSupervisorPerformance(input: {
 
       const projRows = projectsBySupervisor.get(supervisorId) ?? []
       const activeProjectsCount = projRows.length
+      const monthlyProjectsCount = projRows.filter(
+        (project) =>
+          project.supervisionType &&
+          MONTHLY_SUPERVISION_TYPES.has(project.supervisionType.trim().toLowerCase())
+      ).length
       const compProjects = projRows.filter((p) => p.isComplianceEligible)
       const complianceProjectsCount = compProjects.length
 
@@ -463,6 +477,7 @@ export function calculateSupervisorPerformance(input: {
         supervisorEmail,
         supervisorAvatarUrl,
         activeProjectsCount,
+        monthlyProjectsCount,
         complianceProjectsCount,
         completedVisits: totalSubmittedReports,
         requiredVisits,

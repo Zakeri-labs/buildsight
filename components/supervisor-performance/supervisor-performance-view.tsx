@@ -504,6 +504,19 @@ export function SupervisorPerformanceView({
                         <TableHead className="text-center">Active Projects</TableHead>
                         <TableHead className="text-center">
                           <div className="inline-flex items-center gap-1">
+                            <span>Monthly Projects</span>
+                            <Tooltip>
+                              <TooltipTrigger render={<span className="cursor-help text-muted-foreground" />}>
+                                <Info className="h-3.5 w-3.5" />
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs text-xs">
+                                Active projects assigned to this supervisor under Monthly supervision.
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center">
+                          <div className="inline-flex items-center gap-1">
                             <span>Tracked Projects</span>
                             <Tooltip>
                               <TooltipTrigger render={<span className="cursor-help text-muted-foreground" />}>
@@ -578,6 +591,16 @@ export function SupervisorPerformanceView({
 
                             <TableCell className="text-center font-medium">
                               {supervisor.activeProjectsCount}
+                            </TableCell>
+
+                            <TableCell className="text-center font-medium">
+                              {supervisor.monthlyProjectsCount > 0 ? (
+                                <Badge variant="secondary" className="font-normal">
+                                  {supervisor.monthlyProjectsCount}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground">0</span>
+                              )}
                             </TableCell>
 
                             <TableCell className="text-center font-medium">

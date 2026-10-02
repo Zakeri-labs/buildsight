@@ -26,6 +26,7 @@ export type SupervisorPerformanceMetrics = {
   supervisorEmail: string | null
   supervisorAvatarUrl: string | null
   activeProjectsCount: number
+  monthlyProjectsCount: number
   complianceProjectsCount: number
   completedVisits: number
   requiredVisits: number
