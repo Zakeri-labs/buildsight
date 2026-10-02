@@ -7,12 +7,34 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  FileSpreadsheet,
+  Loader2,
+  AlertCircle,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
+import {
   addCalendarDays,
   generateCalendarWeeks,
+  generateWeeklyWindow,
+  getFridayForDateKey,
   getSaturdayForDateKey,
 } from "@/lib/supervisor-performance/compliance-engine"
 import type { SupervisorVisitComplianceDashboardData } from "@/lib/supervisor-performance/types"
@@ -53,6 +75,23 @@ function formatStartWeekLabel(saturdayDateKey: string): string {
   return `${monthName} ${day}, ${year}`
 }
 
+function formatWeekOptionLabel(week: { startDate: string; endDate: string }): string {
+  const [sYear, sMonth, sDay] = week.startDate.split("-").map(Number)
+  const [eYear, eMonth, eDay] = week.endDate.split("-").map(Number)
+  const sDate = new Date(Date.UTC(sYear, sMonth - 1, sDay))
+  const eDate = new Date(Date.UTC(eYear, eMonth - 1, eDay))
+  const sMonthName = sDate.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
+  const eMonthName = eDate.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
+
+  if (sYear !== eYear) {
+    return `${sMonthName} ${sDay}, ${sYear} – ${eMonthName} ${eDay}, ${eYear}`
+  }
+  if (sMonthName === eMonthName) {
+    return `${sMonthName} ${sDay} – ${eDay}, ${sYear}`
+  }
+  return `${sMonthName} ${sDay} – ${eMonthName} ${eDay}, ${sYear}`
+}
+
 export function SupervisorVisitComplianceDashboard({
   data,
   className,
@@ -81,6 +120,15 @@ export function SupervisorVisitComplianceDashboard({
       referenceDate,
     })
   }, [anchorSaturday, referenceDate])
+
+  // Full window of available calendar weeks for modal range selection
+  const availableWeeks = useMemo(() => {
+    return generateWeeklyWindow({
+      referenceDate,
+      pastWeeks: 12,
+      futureWeeks: 16,
+    })
+  }, [referenceDate])
 
   const visibleRangeLabel = useMemo(() => {
     if (visibleWeeks.length === 0) return ""
@@ -197,8 +245,25 @@ export function SupervisorVisitComplianceDashboard({
 
   const [isExporting, setIsExporting] = useState(false)
 
-  const handleExportCompliance = async () => {
-    if (isExporting) return
+  // Export Modal state
+  const [exportModalOpen, setExportModalOpen] = useState(false)
+  const [exportFromWeek, setExportFromWeek] = useState<string>("")
+  const [exportToWeek, setExportToWeek] = useState<string>("")
+
+  const handleOpenExportModal = () => {
+    if (visibleWeeks.length > 0) {
+      setExportFromWeek(visibleWeeks[0].startDate)
+      setExportToWeek(visibleWeeks[visibleWeeks.length - 1].startDate)
+    }
+    setExportModalOpen(true)
+  }
+
+  const isInvalidRange = Boolean(
+    exportFromWeek && exportToWeek && exportFromWeek > exportToWeek,
+  )
+
+  const handleExecuteExport = async () => {
+    if (isExporting || isInvalidRange || !exportFromWeek || !exportToWeek) return
     setIsExporting(true)
     try {
       const params = new URLSearchParams()
@@ -217,6 +282,12 @@ export function SupervisorVisitComplianceDashboard({
       if (filters.showIssuesOnly) {
         params.set("showIssuesOnly", "true")
       }
+
+      const startWeekSaturday = exportFromWeek
+      const endWeekFriday = getFridayForDateKey(exportToWeek)
+
+      params.set("startWeekSaturday", startWeekSaturday)
+      params.set("endWeekFriday", endWeekFriday)
       if (anchorSaturday) {
         params.set("anchorSaturday", anchorSaturday)
       }
@@ -237,6 +308,7 @@ export function SupervisorVisitComplianceDashboard({
       a.click()
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
+      setExportModalOpen(false)
     } catch (err) {
       console.error("Error exporting compliance excel:", err)
     } finally {
@@ -300,7 +372,7 @@ export function SupervisorVisitComplianceDashboard({
           onResetToCurrentWeek={handleResetToCurrentWeek}
           isCurrentAnchorWeek={isCurrentAnchorWeek}
           visibleRangeLabel={visibleRangeLabel}
-          onExport={handleExportCompliance}
+          onExport={handleOpenExportModal}
           isExporting={isExporting}
         />
 
@@ -314,6 +386,111 @@ export function SupervisorVisitComplianceDashboard({
           onNextWeek={handleNextWeek}
         />
       </CardContent>
+
+      {/* Export Week-Range Modal */}
+      <Dialog open={exportModalOpen} onOpenChange={setExportModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              <span>Export Compliance Report</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Select the week range (Saturday → Friday) to include in the Excel export. All current matrix filters will apply.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-3">
+            {/* From Week Select */}
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="export-from-week" className="text-xs font-semibold text-foreground">
+                From Week
+              </Label>
+              <Select
+                value={exportFromWeek}
+                onValueChange={(val) => setExportFromWeek(val as string)}
+              >
+                <SelectTrigger id="export-from-week" className="h-9 text-xs">
+                  <SelectValue placeholder="Select From Week" />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  <SelectGroup>
+                    {availableWeeks.map((w) => (
+                      <SelectItem key={w.startDate} value={w.startDate}>
+                        {formatWeekOptionLabel(w)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* To Week Select */}
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="export-to-week" className="text-xs font-semibold text-foreground">
+                To Week
+              </Label>
+              <Select
+                value={exportToWeek}
+                onValueChange={(val) => setExportToWeek(val as string)}
+              >
+                <SelectTrigger id="export-to-week" className="h-9 text-xs">
+                  <SelectValue placeholder="Select To Week" />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  <SelectGroup>
+                    {availableWeeks.map((w) => (
+                      <SelectItem key={w.startDate} value={w.startDate}>
+                        {formatWeekOptionLabel(w)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Validation Warning */}
+          {isInvalidRange && (
+            <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive font-medium">
+              <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+              <span>From Week must be on or before To Week.</span>
+            </div>
+          )}
+
+          <DialogFooter className="mt-2 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isExporting}
+              onClick={() => setExportModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={isExporting || isInvalidRange || !exportFromWeek || !exportToWeek}
+              onClick={handleExecuteExport}
+              className="gap-1.5 bg-emerald-600 font-medium text-white hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800"
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Preparing Excel...</span>
+                </>
+              ) : (
+                <>
+                  <FileSpreadsheet className="h-3.5 w-3.5" />
+                  <span>Export Excel Report</span>
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }
+

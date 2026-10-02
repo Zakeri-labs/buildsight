@@ -5,6 +5,7 @@ import { loadSupervisorVisitComplianceData } from "@/lib/supervisor-performance/
 import {
   addCalendarDays,
   generateCalendarWeeks,
+  getFridayForDateKey,
   getSaturdayForDateKey,
 } from "@/lib/supervisor-performance/compliance-engine"
 import { PROJECT_STATUS_OPTIONS } from "@/lib/projects/project-status"
@@ -93,35 +94,72 @@ export async function GET(request: NextRequest) {
     const selectedStatus = (searchParams.get("selectedStatus") || "active").trim()
     const showIssuesOnly = searchParams.get("showIssuesOnly") === "true"
     const rawAnchorSaturday = searchParams.get("anchorSaturday")?.trim() || ""
+    const rawStartWeekSaturday = searchParams.get("startWeekSaturday")?.trim() || ""
+    const rawEndWeekFriday = searchParams.get("endWeekFriday")?.trim() || ""
 
-    // 1. Load normalized compliance data from server engine
-    const data = await loadSupervisorVisitComplianceData({
+    const hasCustomRange =
+      /^\d{4}-\d{2}-\d{2}$/.test(rawStartWeekSaturday) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(rawEndWeekFriday)
+
+    let reqOptions: {
+      organizationId: string
+      rangeStart?: string
+      rangeEnd?: string
+      pastWeeks?: number
+      futureWeeks?: number
+    } = {
       organizationId: supervisingOrg.id,
       pastWeeks: 12,
       futureWeeks: 16,
-    })
+    }
+
+    if (hasCustomRange) {
+      const sSat = getSaturdayForDateKey(rawStartWeekSaturday)
+      const eFri = getFridayForDateKey(rawEndWeekFriday)
+      reqOptions = {
+        organizationId: supervisingOrg.id,
+        rangeStart: sSat <= eFri ? sSat : eFri,
+        rangeEnd: sSat <= eFri ? eFri : sSat,
+      }
+    }
+
+    // 1. Load normalized compliance data from server engine
+    const data = await loadSupervisorVisitComplianceData(reqOptions)
 
     const { projects, supervisors, referenceDate } = data
 
-    // 2. Resolve anchor week and 8 visible weeks (exact same logic as Grid)
-    let anchorSaturday: string
-    try {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(rawAnchorSaturday)) {
-        anchorSaturday = getSaturdayForDateKey(rawAnchorSaturday)
-      } else {
-        anchorSaturday = getSaturdayForDateKey(referenceDate)
+    // 2. Resolve visible weeks for export
+    let visibleWeeks: ComplianceCalendarWeek[]
+    if (hasCustomRange) {
+      const sSat = getSaturdayForDateKey(rawStartWeekSaturday)
+      const eFri = getFridayForDateKey(rawEndWeekFriday)
+      const rangeStart = sSat <= eFri ? sSat : eFri
+      const rangeEnd = sSat <= eFri ? eFri : sSat
+      visibleWeeks = generateCalendarWeeks({
+        rangeStart,
+        rangeEnd,
+        referenceDate,
+      })
+    } else {
+      let anchorSaturday: string
+      try {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(rawAnchorSaturday)) {
+          anchorSaturday = getSaturdayForDateKey(rawAnchorSaturday)
+        } else {
+          anchorSaturday = getSaturdayForDateKey(referenceDate)
+        }
+      } catch {
+        anchorSaturday = referenceDate.slice(0, 10)
       }
-    } catch {
-      anchorSaturday = referenceDate.slice(0, 10)
-    }
 
-    const startSaturday = addCalendarDays(anchorSaturday, -42)
-    const endFriday = addCalendarDays(startSaturday, 8 * 7 - 1)
-    const visibleWeeks = generateCalendarWeeks({
-      rangeStart: startSaturday,
-      rangeEnd: endFriday,
-      referenceDate,
-    })
+      const startSaturday = addCalendarDays(anchorSaturday, -42)
+      const endFriday = addCalendarDays(startSaturday, 8 * 7 - 1)
+      visibleWeeks = generateCalendarWeeks({
+        rangeStart: startSaturday,
+        rangeEnd: endFriday,
+        referenceDate,
+      })
+    }
 
     const visibleTimelineLabel =
       visibleWeeks.length > 0
