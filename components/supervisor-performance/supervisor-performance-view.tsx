@@ -23,6 +23,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import {
   Tooltip,
   TooltipContent,
@@ -564,18 +565,15 @@ export function SupervisorPerformanceView({
                           <TableRow key={supervisor.supervisorId}>
                             <TableCell>
                               <div className="flex items-center gap-3">
-                                {supervisor.supervisorAvatarUrl ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={supervisor.supervisorAvatarUrl}
+                                <Avatar className="h-8 w-8">
+                                  <AvatarImage
+                                    src={supervisor.supervisorAvatarUrl ?? undefined}
                                     alt={supervisor.supervisorName}
-                                    className="h-8 w-8 rounded-full object-cover ring-1 ring-border"
                                   />
-                                ) : (
-                                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                                  <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
                                     {initials}
-                                  </div>
-                                )}
+                                  </AvatarFallback>
+                                </Avatar>
                                 <div className="flex flex-col">
                                   <span className="font-medium text-foreground">
                                     {supervisor.supervisorName}

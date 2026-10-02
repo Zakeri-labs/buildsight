@@ -2,6 +2,7 @@
 
 import { Building2, User, Users, Check, AlertTriangle, Clock } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import type {
   ComplianceCalendarWeek,
@@ -94,18 +95,15 @@ export function ComplianceProjectRow({
                   const initials = getInitials(sup.name)
                   return (
                     <div key={sup.id} className="flex items-center gap-2">
-                      {sup.avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={sup.avatarUrl}
+                      <Avatar className="h-5 w-5">
+                        <AvatarImage
+                          src={sup.avatarUrl ?? undefined}
                           alt={sup.name}
-                          className="h-5 w-5 rounded-full object-cover ring-1 ring-border"
                         />
-                      ) : (
-                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary">
+                        <AvatarFallback className="bg-primary/10 text-[9px] font-bold text-primary">
                           {initials}
-                        </div>
-                      )}
+                        </AvatarFallback>
+                      </Avatar>
                       <span
                         className="text-xs text-foreground line-clamp-1"
                         title={`${sup.name}${sup.isPrimary ? " (Primary)" : ""}`}
