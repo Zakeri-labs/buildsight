@@ -141,6 +141,7 @@ export function buildOriginalTranslationContent(input: {
   reportTitle: string
   subject: string | null
   reportType: string
+  visitDate?: string | null
   responseContent: TermResponseContent
   approvals: Array<{ id: string; reviewerName: string; decision: string; comments: string | null; decidedAt: string }>
   attachments?: Array<{ id: string; storagePath: string; originalFilename: string; sortOrder?: number; attachmentKind?: string }>
@@ -152,6 +153,7 @@ export function buildOriginalTranslationContent(input: {
     reportTitle: input.reportTitle,
     subject: input.subject ?? "",
     reportType: reportTypeLabel(input.reportType, "en"),
+    visitDate: input.visitDate ?? "",
     sections: {
       feedback: sanitizeReportHtml(input.responseContent.feedback),
       observation: sanitizeReportHtml(input.responseContent.observation),
@@ -251,6 +253,7 @@ export function parseTranslationContent(value: unknown): TranslationReportConten
     reportTitle: stringValue(row.reportTitle, 2_000),
     subject: stringValue(row.subject, 4_000),
     reportType: stringValue(row.reportType, 1_000),
+    visitDate: stringValue(row.visitDate, 100),
     sections: {
       ...EMPTY_SECTIONS,
       feedback: sanitizeReportHtml(sectionRow.feedback),
@@ -364,6 +367,10 @@ export function isReportContentStale(
 ): boolean {
   if (!current || !translatedOriginal) return false
   if (isReportTextStale(current, translatedOriginal)) return true
+
+  const currentVisitDate = current.visitDate ?? ""
+  const originalVisitDate = translatedOriginal.visitDate ?? ""
+  if (currentVisitDate !== originalVisitDate) return true
 
   const currAttachments = current.attachments || []
   const origAttachments = translatedOriginal.attachments || []

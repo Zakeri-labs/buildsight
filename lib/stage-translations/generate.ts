@@ -353,6 +353,7 @@ function normalizeTranslation(
     reportTitle: parsed.reportTitle.trim() || original.reportTitle,
     subject: parsed.subject.trim(),
     reportType: parsed.reportType.trim() || original.reportType,
+    visitDate: original.visitDate ?? "",
     sections,
     checklist,
     approvals,
@@ -477,6 +478,29 @@ export async function prepareStageTranslationGeneration(input: {
       shouldRun: false,
       translatedContentReady: true,
       unchanged: hasBothPdfs,
+    }
+  }
+
+  if (status === "completed" && translationFresh && isStale && !input.retry) {
+    const { error: updateError } = await admin
+      .from("translation_documents")
+      .update({
+        original_content: original,
+        original_pdf_url: null,
+        arabic_pdf_url: null,
+        bilingual_pdf_url: null,
+        updated_at: now,
+      })
+      .eq("id", existing.id)
+
+    if (updateError) throw updateError
+
+    return {
+      translationId: existing.id,
+      status: "completed",
+      shouldRun: false,
+      translatedContentReady: true,
+      unchanged: false,
     }
   }
 
