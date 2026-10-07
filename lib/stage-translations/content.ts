@@ -142,6 +142,13 @@ export function buildOriginalTranslationContent(input: {
   subject: string | null
   reportType: string
   visitDate?: string | null
+  visitNumber?: number | string | null
+  creatorName?: string | null
+  projectName?: string | null
+  projectCode?: string | null
+  projectLocation?: string | null
+  projectPhase?: string | null
+  projectPlotNo?: string | null
   responseContent: TermResponseContent
   approvals: Array<{ id: string; reviewerName: string; decision: string; comments: string | null; decidedAt: string }>
   attachments?: Array<{ id: string; storagePath: string; originalFilename: string; sortOrder?: number; attachmentKind?: string }>
@@ -154,6 +161,13 @@ export function buildOriginalTranslationContent(input: {
     subject: input.subject ?? "",
     reportType: reportTypeLabel(input.reportType, "en"),
     visitDate: input.visitDate ?? "",
+    visitNumber: input.visitNumber != null ? String(input.visitNumber) : "",
+    creatorName: input.creatorName ?? "",
+    projectName: input.projectName ?? "",
+    projectCode: input.projectCode ?? "",
+    projectLocation: input.projectLocation ?? "",
+    projectPhase: input.projectPhase ?? "",
+    projectPlotNo: input.projectPlotNo ?? "",
     sections: {
       feedback: sanitizeReportHtml(input.responseContent.feedback),
       observation: sanitizeReportHtml(input.responseContent.observation),
@@ -254,6 +268,13 @@ export function parseTranslationContent(value: unknown): TranslationReportConten
     subject: stringValue(row.subject, 4_000),
     reportType: stringValue(row.reportType, 1_000),
     visitDate: stringValue(row.visitDate, 100),
+    visitNumber: stringValue(row.visitNumber, 100),
+    creatorName: stringValue(row.creatorName, 500),
+    projectName: stringValue(row.projectName, 2_000),
+    projectCode: stringValue(row.projectCode, 500),
+    projectLocation: stringValue(row.projectLocation, 2_000),
+    projectPhase: stringValue(row.projectPhase, 500),
+    projectPlotNo: stringValue(row.projectPlotNo, 500),
     sections: {
       ...EMPTY_SECTIONS,
       feedback: sanitizeReportHtml(sectionRow.feedback),
@@ -371,6 +392,47 @@ export function isReportContentStale(
   const currentVisitDate = current.visitDate ?? ""
   const originalVisitDate = translatedOriginal.visitDate ?? ""
   if (currentVisitDate !== originalVisitDate) return true
+
+  const currentVisitNumber = current.visitNumber != null ? String(current.visitNumber) : ""
+  const originalVisitNumber = translatedOriginal.visitNumber != null ? String(translatedOriginal.visitNumber) : ""
+  if (currentVisitNumber !== originalVisitNumber) return true
+
+  const currentCreatorName = current.creatorName ?? ""
+  const originalCreatorName = translatedOriginal.creatorName ?? ""
+  if (currentCreatorName !== originalCreatorName) return true
+
+  const currentProjectName = current.projectName ?? ""
+  const originalProjectName = translatedOriginal.projectName ?? ""
+  if (currentProjectName !== originalProjectName) return true
+
+  const currentProjectCode = current.projectCode ?? ""
+  const originalProjectCode = translatedOriginal.projectCode ?? ""
+  if (currentProjectCode !== originalProjectCode) return true
+
+  const currentProjectLocation = current.projectLocation ?? ""
+  const originalProjectLocation = translatedOriginal.projectLocation ?? ""
+  if (currentProjectLocation !== originalProjectLocation) return true
+
+  const currentProjectPhase = current.projectPhase ?? ""
+  const originalProjectPhase = translatedOriginal.projectPhase ?? ""
+  if (currentProjectPhase !== originalProjectPhase) return true
+
+  const currentProjectPlotNo = current.projectPlotNo ?? ""
+  const originalProjectPlotNo = translatedOriginal.projectPlotNo ?? ""
+  if (currentProjectPlotNo !== originalProjectPlotNo) return true
+
+  const currApprovals = current.approvals || []
+  const origApprovals = translatedOriginal.approvals || []
+  if (currApprovals.length !== origApprovals.length) return true
+  for (let i = 0; i < currApprovals.length; i++) {
+    const c = currApprovals[i]
+    const o = origApprovals[i]
+    if (c.id !== o.id) return true
+    if ((c.reviewerName || "").trim() !== (o.reviewerName || "").trim()) return true
+    if ((c.decision || "").trim() !== (o.decision || "").trim()) return true
+    if ((c.comments || "").trim() !== (o.comments || "").trim()) return true
+    if ((c.decidedAt || "").trim() !== (o.decidedAt || "").trim()) return true
+  }
 
   const currAttachments = current.attachments || []
   const origAttachments = translatedOriginal.attachments || []

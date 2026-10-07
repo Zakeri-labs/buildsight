@@ -63,6 +63,13 @@ export type TranslationReportContent = {
   subject: string
   reportType: string
   visitDate?: string
+  visitNumber?: number | string
+  creatorName?: string
+  projectName?: string
+  projectCode?: string
+  projectLocation?: string
+  projectPhase?: string
+  projectPlotNo?: string
   sections: Record<TranslationSectionKey, string>
   checklist: TranslationChecklistItem[]
   approvals: TranslationApprovalItem[]
