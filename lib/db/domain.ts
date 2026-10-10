@@ -262,80 +262,87 @@ export async function hydrateProjectProgressAndImages(
   const calculatedProgress = new Map<string, number>()
   for (const projectId of projectIds) {
     const pDbStages = (activeStageRows ?? []).filter((stage: any) => stage.project_id === projectId)
-    const dbStagesByName = new Map<string, any>()
-    for (const st of pDbStages) {
-      const cleanName = st.name.replace(/^\d+[\.\s\-]+/, "").trim().toLowerCase()
-      dbStagesByName.set(cleanName, st)
-    }
-
-    const templateStages = DEMO_STAGE_MANAGEMENT_DATA?.stages ?? []
     let projectTotalCheckboxes = 0
     let projectCheckedCheckboxes = 0
 
-    for (const tmplStage of templateStages) {
-      const cleanName = tmplStage.name.replace(/^\d+[\.\s\-]+/, "").trim().toLowerCase()
-      const dbStage = dbStagesByName.get(cleanName)
+    if (pDbStages.length > 0) {
+      // Primary Data Source: Calculate progress from actual database stages
+      for (const dbStage of pDbStages) {
+        let reportChecklistTotal = 0
+        let stageChecked = 0
 
-      let reportChecklistTotal = 0
-      let stageChecked = 0
-
-      // Check DB responses if dbStage exists
-      if (dbStage) {
         const counts = stageCountsMap.get(dbStage.id)
         if (counts) {
           reportChecklistTotal = counts.total
           stageChecked = counts.checked
         }
-      }
 
-      // Check template stage reports if no DB responses found for this stage
-      const tmplReports = (tmplStage as any).reports
-      if (reportChecklistTotal === 0 && tmplReports && Array.isArray(tmplReports)) {
-        for (const report of tmplReports) {
-          const checklist = report.content?.checklist ?? []
-          for (const item of checklist) {
-            reportChecklistTotal++
-            if (item.checked || item.result === "pass") {
-              stageChecked++
+        let stageTermsCount = 0
+        const stageTerms = termsByStage.get(dbStage.id) ?? []
+        if (stageTerms.length > 0) {
+          const childrenByParent = new Map<string, any[]>()
+          for (const term of stageTerms) {
+            if (!term.parent_term_id) continue
+            const children = childrenByParent.get(term.parent_term_id) ?? []
+            children.push(term)
+            childrenByParent.set(term.parent_term_id, children)
+          }
+          for (const term of stageTerms.filter((row: any) => !row.parent_term_id)) {
+            const children = childrenByParent.get(term.id) ?? []
+            stageTermsCount += children.length ? children.length : 1
+          }
+        }
+
+        const fallbackCount = getFallbackStageChecklist(dbStage.name).length
+        const stageTotal = Math.max(reportChecklistTotal, stageTermsCount, fallbackCount)
+
+        if (dbStage.is_pre_completed) {
+          const effectiveStageTotal = stageTotal > 0 ? stageTotal : 1
+          projectTotalCheckboxes += effectiveStageTotal
+          projectCheckedCheckboxes += effectiveStageTotal
+        } else {
+          projectTotalCheckboxes += stageTotal
+          projectCheckedCheckboxes += stageChecked
+        }
+      }
+    } else {
+      // Fallback Data Source: Calculate from demo template stages if project has no DB stages
+      const templateStages = DEMO_STAGE_MANAGEMENT_DATA?.stages ?? []
+
+      for (const tmplStage of templateStages) {
+        let reportChecklistTotal = 0
+        let stageChecked = 0
+
+        const tmplReports = (tmplStage as any).reports
+        if (tmplReports && Array.isArray(tmplReports)) {
+          for (const report of tmplReports) {
+            const checklist = report.content?.checklist ?? []
+            for (const item of checklist) {
+              reportChecklistTotal++
+              if (item.checked || item.result === "pass") {
+                stageChecked++
+              }
             }
           }
         }
-      }
 
-      let stageTermsCount = 0
-      if (dbStage) {
-        const stageTerms = termsByStage.get(dbStage.id) ?? []
-        const childrenByParent = new Map<string, any[]>()
-        for (const term of stageTerms) {
-          if (!term.parent_term_id) continue
-          const children = childrenByParent.get(term.parent_term_id) ?? []
-          children.push(term)
-          childrenByParent.set(term.parent_term_id, children)
-        }
-        for (const term of stageTerms.filter((row: any) => !row.parent_term_id)) {
-          const children = childrenByParent.get(term.id) ?? []
-          stageTermsCount += children.length ? children.length : 1
-        }
-      }
-
-      if (stageTermsCount === 0 && tmplStage.terms) {
-        for (const term of tmplStage.terms) {
-          if (term.subterms && term.subterms.length > 0) {
-            stageTermsCount += term.subterms.filter((s: any) => s.active !== false && s.isActive !== false).length
-          } else if ((term as any).active !== false && (term as any).isActive !== false) {
-            stageTermsCount += 1
+        let stageTermsCount = 0
+        if (tmplStage.terms) {
+          for (const term of tmplStage.terms) {
+            if (term.subterms && term.subterms.length > 0) {
+              stageTermsCount += term.subterms.filter((s: any) => s.active !== false && s.isActive !== false).length
+            } else if ((term as any).active !== false && (term as any).isActive !== false) {
+              stageTermsCount += 1
+            }
           }
         }
-      }
 
-      const fallbackCount = getFallbackStageChecklist(tmplStage.name).length
-      const stageTotal = Math.max(reportChecklistTotal, stageTermsCount, fallbackCount)
-      if (dbStage?.is_pre_completed) {
-        stageChecked = stageTotal > 0 ? stageTotal : 1
-      }
+        const fallbackCount = getFallbackStageChecklist(tmplStage.name).length
+        const stageTotal = Math.max(reportChecklistTotal, stageTermsCount, fallbackCount)
 
-      projectTotalCheckboxes += stageTotal > 0 ? stageTotal : (dbStage?.is_pre_completed ? 1 : 0)
-      projectCheckedCheckboxes += stageChecked
+        projectTotalCheckboxes += stageTotal
+        projectCheckedCheckboxes += stageChecked
+      }
     }
 
     const calculatedPct = projectTotalCheckboxes > 0 ? Math.round((projectCheckedCheckboxes / projectTotalCheckboxes) * 100) : 0
