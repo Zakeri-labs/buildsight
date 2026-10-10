@@ -173,6 +173,14 @@ export type TaskRow = {
   ccAddedBy?: string
 }
 
+function chunkArray<T>(items: T[], chunkSize: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < items.length; i += chunkSize) {
+    chunks.push(items.slice(i, i + chunkSize))
+  }
+  return chunks
+}
+
 /** All projects for the supervising org, ordered for display. */
 export async function hydrateProjectProgressAndImages(
   admin: ReturnType<typeof createAdminClient>,
@@ -186,32 +194,63 @@ export async function hydrateProjectProgressAndImages(
     }
   }
 
-  let activeStageRowsResult: { data: any[] | null; error: any } = projectIds.length
-    ? await admin.from("project_stages").select("id, project_id, name, status, is_pre_completed").in("project_id", projectIds).neq("status", "disabled")
-    : { data: [] as any[], error: null }
-  if (activeStageRowsResult.error) {
-    activeStageRowsResult = projectIds.length
-      ? await admin.from("project_stages").select("id, project_id, name, status").in("project_id", projectIds).neq("status", "disabled")
-      : { data: [] as any[], error: null }
-  }
-  const activeStageRows = activeStageRowsResult.data ?? []
+  // Chunk projectIds in batches of 20 to avoid PostgREST 1000-row payload limit and URI Too Long errors
+  const projectChunks = chunkArray(projectIds, 20)
 
-  const { data: imageRows } = projectIds.length
-    ? await admin.from("project_images").select("project_id, storage_path").in("project_id", projectIds).eq("order_index", 0)
-    : { data: [] as any[] }
-  const activeStageIds = (activeStageRows ?? []).map((stage: any) => stage.id as string)
-  const [progressTermResult, checklistCountsRpcResult] = activeStageIds.length && projectIds.length
-    ? await Promise.all([
-        admin
-          .from("project_stage_terms")
-          .select("id, project_stage_id, parent_term_id, is_required, status, is_active")
-          .in("project_stage_id", activeStageIds)
-          .eq("is_active", true),
-        admin.rpc("get_project_stage_checklist_counts", { target_project_ids: projectIds }),
-      ])
-    : [{ data: [] }, { data: null, error: true }]
+  const activeStageResults = await Promise.all(
+    projectChunks.map(async (chunk) => {
+      let res = await admin
+        .from("project_stages")
+        .select("id, project_id, name, status, is_pre_completed")
+        .in("project_id", chunk)
+        .neq("status", "disabled")
+      if (res.error) {
+        res = await admin
+          .from("project_stages")
+          .select("id, project_id, name, status")
+          .in("project_id", chunk)
+          .neq("status", "disabled")
+      }
+      return res
+    }),
+  )
+  const activeStageRows = activeStageResults.flatMap((res) => res.data ?? [])
 
-  const progressTermRows = progressTermResult.data ?? []
+  const imageResults = await Promise.all(
+    projectChunks.map((chunk) =>
+      admin.from("project_images").select("project_id, storage_path").in("project_id", chunk).eq("order_index", 0),
+    ),
+  )
+  const imageRows = imageResults.flatMap((res) => res.data ?? [])
+
+  const activeStageIds = activeStageRows.map((stage: any) => stage.id as string)
+  const stageIdChunks = chunkArray(activeStageIds, 50)
+
+  const [termResults, rpcResults] = await Promise.all([
+    stageIdChunks.length
+      ? Promise.all(
+          stageIdChunks.map((chunk) =>
+            admin
+              .from("project_stage_terms")
+              .select("id, project_stage_id, parent_term_id, is_required, status, is_active")
+              .in("project_stage_id", chunk)
+              .eq("is_active", true),
+          ),
+        )
+      : Promise.resolve([]),
+    projectChunks.length
+      ? Promise.all(
+          projectChunks.map((chunk) =>
+            admin.rpc("get_project_stage_checklist_counts", { target_project_ids: chunk }),
+          ),
+        )
+      : Promise.resolve([]),
+  ])
+
+  const progressTermRows = termResults.flatMap((res) => res.data ?? [])
+  const rpcDataRows = rpcResults.flatMap((res) => (Array.isArray(res.data) ? res.data : []))
+  const rpcHasError = rpcResults.some((res) => Boolean(res.error))
+
   const imageByProject = new Map(
     (imageRows ?? []).map((image: any) => [image.project_id as string, image.storage_path as string]),
   )
@@ -224,8 +263,8 @@ export async function hydrateProjectProgressAndImages(
 
   const stageCountsMap = new Map<string, { total: number; checked: number }>()
 
-  if (!checklistCountsRpcResult.error && Array.isArray(checklistCountsRpcResult.data)) {
-    for (const row of checklistCountsRpcResult.data as any[]) {
+  if (!rpcHasError && rpcDataRows.length > 0) {
+    for (const row of rpcDataRows as any[]) {
       if (row?.project_stage_id) {
         stageCountsMap.set(row.project_stage_id, {
           total: Number(row.report_checklist_total ?? 0),
@@ -234,13 +273,16 @@ export async function hydrateProjectProgressAndImages(
       }
     }
   } else {
-    // Safety Fallback: Query term_responses if RPC is unavailable
-    const { data: responseRows } = projectIds.length
-      ? await admin
+    // Safety Fallback: Query term_responses in chunks if RPC is unavailable
+    const responseResults = await Promise.all(
+      projectChunks.map((chunk) =>
+        admin
           .from("term_responses")
           .select("id, project_id, project_stage_id, response_content")
-          .in("project_id", projectIds)
-      : { data: [] as any[] }
+          .in("project_id", chunk),
+      ),
+    )
+    const responseRows = responseResults.flatMap((res) => res.data ?? [])
 
     for (const resp of responseRows ?? []) {
       if (!resp.project_stage_id) continue
