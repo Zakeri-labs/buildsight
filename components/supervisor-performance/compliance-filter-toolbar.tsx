@@ -14,6 +14,7 @@ import {
   Clock,
   FileSpreadsheet,
   Loader2,
+  ArrowUpDown,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -33,6 +34,11 @@ import type {
   ProjectComplianceTimelineRow,
   SupervisionComplianceType,
 } from "@/lib/supervisor-performance/types"
+import {
+  COMPLIANCE_SORT_OPTIONS,
+  type ComplianceSortOption,
+  getSortOptionLabel,
+} from "@/lib/supervisor-performance/compliance-sorting"
 
 export type ComplianceFilterState = {
   searchQuery: string
@@ -57,6 +63,8 @@ export type ComplianceFilterToolbarProps = {
   onResetFilters: () => void
   totalProjectsCount: number
   filteredProjectsCount: number
+  selectedSort?: ComplianceSortOption
+  onSortChange?: (sort: ComplianceSortOption) => void
   anchorWeekSaturday?: string
   anchorWeekSunday?: string
   onAnchorWeekChange?: (saturday: string) => void
@@ -83,6 +91,8 @@ export function ComplianceFilterToolbar({
   onResetFilters,
   totalProjectsCount,
   filteredProjectsCount,
+  selectedSort,
+  onSortChange,
   anchorWeekSaturday,
   anchorWeekSunday,
   onAnchorWeekChange,
@@ -257,6 +267,34 @@ export function ComplianceFilterToolbar({
             </SelectContent>
           </Select>
         </div>
+
+        {/* 5. Sort By Filter */}
+        {selectedSort && onSortChange && (
+          <div className="w-[185px] sm:w-[210px]">
+            <Select
+              value={selectedSort}
+              onValueChange={(val) => onSortChange(val as ComplianceSortOption)}
+            >
+              <SelectTrigger size="sm" className="h-8 text-xs">
+                <div className="flex items-center gap-1.5 truncate">
+                  <ArrowUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <SelectValue placeholder="Sort By">
+                    {getSortOptionLabel(selectedSort)}
+                  </SelectValue>
+                </div>
+              </SelectTrigger>
+              <SelectContent className="max-h-64">
+                <SelectGroup>
+                  {COMPLIANCE_SORT_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {/* 6. Quick Action: Show Issues Only */}
         <Button

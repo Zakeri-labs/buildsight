@@ -40,6 +40,10 @@ import {
 import type { SupervisorVisitComplianceDashboardData } from "@/lib/supervisor-performance/types"
 import { ComplianceFilterToolbar, type ComplianceFilterState } from "./compliance-filter-toolbar"
 import { ComplianceMatrix } from "./compliance-matrix"
+import {
+  sortComplianceProjects,
+  type ComplianceSortOption,
+} from "@/lib/supervisor-performance/compliance-sorting"
 
 export type SupervisorVisitComplianceDashboardProps = {
   data: SupervisorVisitComplianceDashboardData
@@ -98,6 +102,7 @@ export function SupervisorVisitComplianceDashboard({
 }: SupervisorVisitComplianceDashboardProps) {
   const { projects, supervisors, referenceDate } = data
   const [filters, setFilters] = useState<ComplianceFilterState>(initialFilters)
+  const [selectedSort, setSelectedSort] = useState<ComplianceSortOption>("project_code_desc")
 
   // Default Anchor Week: Saturday of the current reference date week
   const defaultAnchorSaturday = useMemo(() => {
@@ -164,6 +169,7 @@ export function SupervisorVisitComplianceDashboard({
 
   const handleResetFilters = () => {
     setFilters(initialFilters)
+    setSelectedSort("project_code_desc")
   }
 
   // Filter projects purely client-side
@@ -236,12 +242,18 @@ export function SupervisorVisitComplianceDashboard({
     })
   }, [projects, filters])
 
+  // Sort filtered projects client-side
+  const sortedProjects = useMemo(() => {
+    return sortComplianceProjects(filteredProjects, selectedSort)
+  }, [filteredProjects, selectedSort])
+
   const isFiltered =
     filters.searchQuery.trim() !== "" ||
     filters.selectedSupervisor !== "all" ||
     filters.selectedFrequency !== "all" ||
     filters.selectedStatus !== "all" ||
-    filters.showIssuesOnly
+    filters.showIssuesOnly ||
+    selectedSort !== "project_code_desc"
 
   const [isExporting, setIsExporting] = useState(false)
 
@@ -367,6 +379,8 @@ export function SupervisorVisitComplianceDashboard({
           onResetFilters={handleResetFilters}
           totalProjectsCount={projects.length}
           filteredProjectsCount={filteredProjects.length}
+          selectedSort={selectedSort}
+          onSortChange={setSelectedSort}
           anchorWeekSaturday={anchorSaturday}
           onAnchorWeekChange={handleSelectAnchorDate}
           onResetToCurrentWeek={handleResetToCurrentWeek}
@@ -379,7 +393,7 @@ export function SupervisorVisitComplianceDashboard({
         {/* Matrix Table (with circular Previous / Next week navigation buttons on table headers) */}
         <ComplianceMatrix
           weeks={visibleWeeks}
-          projects={filteredProjects}
+          projects={sortedProjects}
           isFiltered={isFiltered}
           onResetFilters={handleResetFilters}
           onPrevWeek={handlePrevWeek}
