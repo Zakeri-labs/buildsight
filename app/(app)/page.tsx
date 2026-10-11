@@ -18,6 +18,7 @@ import { getProjectSupervisorCandidates } from "@/lib/projects/supervisor-candid
 
 import { FailedReportGenerationsCard } from "@/components/dashboard/failed-report-generations-card"
 import { getFailedReportGenerations } from "@/lib/dashboard/failed-report-generations-server"
+import { CriticalCreditsModal } from "@/components/dashboard/critical-credits-modal"
 
 // Deterministic upward sparkline that lands on `value`.
 function spark(value: number): number[] {
@@ -84,7 +85,10 @@ export default async function DashboardPage({
     expiresAt: null,
   }
 
-  const isLowCredit = credits.remainingReportCredits < 100
+  const isOrgAdmin = Boolean(hasAdminRole)
+  const showLowCreditBanner = isOrgAdmin && credits.remainingReportCredits < 50
+  const showCriticalCreditPopup = isOrgAdmin && credits.remainingReportCredits <= 10
+  const isLowCredit = credits.remainingReportCredits < 50
 
   const startDateLabel = credits.startAt
     ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(credits.startAt))
@@ -126,6 +130,10 @@ export default async function DashboardPage({
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-6">
+      {showCriticalCreditPopup && (
+        <CriticalCreditsModal remainingCredits={credits.remainingReportCredits} />
+      )}
+
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold tracking-tight text-muted-foreground sm:text-base">Portfolio Overview</h2>
         <DateRangePill
@@ -136,11 +144,11 @@ export default async function DashboardPage({
         />
       </div>
 
-      {isLowCredit && (
+      {showLowCreditBanner && (
         <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300">
           <AlertTriangle className="size-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <div className="text-sm font-medium">
-            Your report credits are running low. You have {credits.remainingReportCredits} credits remaining.
+            Warning: You only have {credits.remainingReportCredits} Report Credits remaining. Please recharge before your credits run out.
           </div>
         </div>
       )}

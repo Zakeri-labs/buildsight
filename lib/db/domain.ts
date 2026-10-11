@@ -199,7 +199,7 @@ export async function hydrateProjectProgressAndImages(
 
   const activeStageResults = await Promise.all(
     projectChunks.map(async (chunk) => {
-      let res = await admin
+      let res: { data: any[] | null; error: any } = await admin
         .from("project_stages")
         .select("id, project_id, name, status, is_pre_completed")
         .in("project_id", chunk)
