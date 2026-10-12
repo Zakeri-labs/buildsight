@@ -135,6 +135,7 @@ export type LanguagePdfTemplate = {
   projectPlotNo: string
   stageName: string
   termName: string
+  reportTitle?: string
   reportNumber: string
   visitNumber: string
   visitDate?: string | null
@@ -722,6 +723,7 @@ export function buildLanguagePdfTemplate(input: {
     projectPlotNo: optionalProjectPdfValue(data.project.plotNo),
     stageName: (content.stageName || data.stage.name).replace(/^\d+[\.\s\-]+/, "").trim(),
     termName: content.termName || data.term.name,
+    reportTitle: (content.reportTitle || data.response.reportTitle || "").trim() || undefined,
     reportNumber: data.response.reportNumber,
     visitNumber: String(data.response.visitNumber),
     visitDate: data.response.visitDate || data.response.createdAt,

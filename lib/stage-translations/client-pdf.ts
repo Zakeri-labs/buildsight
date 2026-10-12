@@ -1834,7 +1834,7 @@ function drawFirstPageHeader(
 
   // ── TITLE BLOCK (below the 3-column header) ───────────────────────────────
   const visitFormatted = String(template.visitNumber || 1).padStart(3, "0")
-  let cleanTitle = (template.termName || template.title || template.stageName || "Report")
+  let cleanTitle = (template.reportTitle || template.termName || template.title || template.stageName || "Report")
     .replace(/^\d+[\.\s\-]+/, "")
     .trim()
 
