@@ -6,6 +6,8 @@ import { loadNextProjectVisitNumber, loadProjectStage, loadSiteVisitReportContex
 import { loadProjectParticipantsOnly } from "@/lib/report-cc/server"
 import { resolveCalendarProjectScope } from "@/lib/calendar/server"
 import { getHistoricalCompletedChecklistIds } from "@/lib/stages/execution"
+import { checkReportCreationCreditAvailability } from "@/lib/db/report-credits"
+import { ReportCreationBlocked } from "@/components/reports/report-creation-blocked"
 
 export const maxDuration = 300
 
@@ -27,6 +29,20 @@ export default async function NewStageReportPage({
   if (hasSiteVisitRequestId && !siteVisitRequestId) notFound()
   const data = await loadProjectStage(projectId, stageId, session.userId)
   if (!data || data.stage.status === "disabled") notFound()
+
+  const creditCheck = await checkReportCreationCreditAvailability(
+    session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id ?? null,
+    data.project.code,
+  )
+  if (!creditCheck.allowed) {
+    return (
+      <ReportCreationBlocked
+        remainingReportCredits={creditCheck.remainingReportCredits}
+        backHref={`/projects/${projectId}`}
+        backLabel="Back to Project"
+      />
+    )
+  }
 
   const reportScope = siteVisitRequestId ? await resolveCalendarProjectScope(session.userId) : []
   if (siteVisitRequestId && !reportScope.some((project) => project.id === projectId)) notFound()

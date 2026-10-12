@@ -5,6 +5,8 @@ import { resolveUserEffectiveRole } from "@/lib/auth/effective-role"
 import { loadNextProjectVisitNumber, loadProjectStageTerm } from "@/lib/db/project-stages"
 import { loadProjectParticipantsOnly } from "@/lib/report-cc/server"
 import { getHistoricalCompletedChecklistIds } from "@/lib/stages/execution"
+import { checkReportCreationCreditAvailability } from "@/lib/db/report-credits"
+import { ReportCreationBlocked } from "@/components/reports/report-creation-blocked"
 
 export default async function NewTermReportPage({ params }: { params: Promise<{ projectId: string; stageId: string; termId: string }> }) {
   const [{ projectId, stageId, termId }, session] = await Promise.all([params, requireOnboarded()])
@@ -14,6 +16,20 @@ export default async function NewTermReportPage({ params }: { params: Promise<{ 
   if (!data || data.stage.id !== stageId) notFound()
   const workflowActive = data.stage.status !== "disabled"
   if (!workflowActive) notFound()
+
+  const creditCheck = await checkReportCreationCreditAvailability(
+    session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id ?? null,
+    data.project.code,
+  )
+  if (!creditCheck.allowed) {
+    return (
+      <ReportCreationBlocked
+        remainingReportCredits={creditCheck.remainingReportCredits}
+        backHref={`/projects/${projectId}`}
+        backLabel="Back to Project"
+      />
+    )
+  }
   const [ccCandidates, nextVisitNumber] = await Promise.all([loadProjectParticipantsOnly(projectId), loadNextProjectVisitNumber(projectId)])
   const stageSubterms = data.stage.terms.flatMap((t) => [t, ...t.subterms])
   const currentUserPerson = {

@@ -69,7 +69,7 @@ export async function getOrganizationReportCredits(
 
     const total = sub.total_report_credits ?? DEFAULT_TOTAL_CREDITS
     const used = sub.used_report_credits ?? 0
-    const remaining = Math.max(0, total - used)
+    const remaining = total - used
 
     return {
       totalReportCredits: total,
@@ -197,5 +197,50 @@ export async function consumeReportCreditForReport(
   } catch (err) {
     console.error("consumeReportCreditForReport error:", err)
     return { ok: false, alreadyConsumed: false }
+  }
+}
+
+/**
+ * Test projects (code ending with 100000) are exempt from credit limits and consumption.
+ */
+export function isProjectCreditExempt(projectCode: string | null | undefined): boolean {
+  return projectCode?.trim().endsWith("100000") ?? false
+}
+
+export type ReportCreationCreditCheckResult = {
+  allowed: boolean
+  remainingReportCredits: number
+  isExempt: boolean
+  error?: string
+}
+
+/**
+ * Checks whether report creation is permitted based on remainingReportCredits.
+ * Blocks creation when remainingReportCredits <= -10, unless the project is credit-exempt.
+ */
+export async function checkReportCreationCreditAvailability(
+  organizationId: string | null,
+  projectCode?: string | null,
+  client?: ReturnType<typeof createAdminClient>,
+): Promise<ReportCreationCreditCheckResult> {
+  const isExempt = isProjectCreditExempt(projectCode)
+  if (isExempt) {
+    return { allowed: true, remainingReportCredits: DEFAULT_TOTAL_CREDITS, isExempt: true }
+  }
+
+  const credits = await getOrganizationReportCredits(organizationId, client)
+  if (credits.remainingReportCredits <= -10) {
+    return {
+      allowed: false,
+      remainingReportCredits: credits.remainingReportCredits,
+      isExempt: false,
+      error: "Report creation is unavailable because your organization has exhausted its Report Credits.",
+    }
+  }
+
+  return {
+    allowed: true,
+    remainingReportCredits: credits.remainingReportCredits,
+    isExempt: false,
   }
 }

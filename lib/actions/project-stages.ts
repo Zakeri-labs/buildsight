@@ -34,7 +34,10 @@ import {
   type SubtermResponseType,
   type TermResponseContent,
 } from "@/lib/stages/execution"
-import { consumeReportCreditForReport } from "@/lib/db/report-credits"
+import {
+  consumeReportCreditForReport,
+  checkReportCreationCreditAvailability,
+} from "@/lib/db/report-credits"
 
 export type StageActionResult<T = undefined> =
   | ({ ok: true } & (T extends undefined ? object : { data: T }))
@@ -557,6 +560,21 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       .eq("id", input.projectId)
       .maybeSingle()
     const projCode = proj?.code?.trim() || "PROJ"
+
+    // Enforce credit limits for new reports (existing report edits are always permitted)
+    if (!existing) {
+      const creditCheck = await checkReportCreationCreditAvailability(
+        proj?.supervising_organization_id ?? null,
+        proj?.code,
+        admin,
+      )
+      if (!creditCheck.allowed) {
+        return {
+          ok: false,
+          error: creditCheck.error || "Report creation is unavailable because your organization has exhausted its Report Credits.",
+        }
+      }
+    }
 
     const existingVisitNo = Number.isInteger(Number(existing?.visit_number)) && Number(existing?.visit_number) > 0
       ? Number(existing!.visit_number)
