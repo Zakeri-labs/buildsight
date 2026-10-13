@@ -46,8 +46,16 @@ function fileIcon(item: Pick<InitialDocumentListItem, "fileName" | "mimeType">):
   return FileText
 }
 
+function isPdfItem(item: InitialDocumentListItem) {
+  return item.mimeType === "application/pdf" || item.fileName.toLowerCase().endsWith(".pdf")
+}
+
+function isImageItem(item: InitialDocumentListItem) {
+  return item.mimeType.startsWith("image/")
+}
+
 function canPreview(item: InitialDocumentListItem) {
-  return item.mimeType === "application/pdf" || item.mimeType.startsWith("image/")
+  return isPdfItem(item) || isImageItem(item)
 }
 
 function getDisplayCategory(item: Pick<InitialDocumentListItem, "category" | "uploadCategory">, isArabic: boolean) {
@@ -263,7 +271,28 @@ export function InitialDocumentsList({
                         </div>
                       </div>
                       <div className={cn("mt-2.5 flex justify-end gap-1.5 border-t pt-2.5", compactMobile && "mt-2 gap-1 pt-2")}>
-                        {canPreview(item) ? <button type="button" onClick={() => setPreview(item)} title={copy.preview} aria-label={`${copy.preview} ${item.fileName}`} className="inline-flex size-9 items-center justify-center rounded-lg border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><Eye className="size-4" /></button> : null}
+                        {isPdfItem(item) ? (
+                          <a
+                            href={`/api/initial-documents?id=${encodeURIComponent(item.id)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={copy.preview}
+                            aria-label={`${copy.preview} ${item.fileName}`}
+                            className="inline-flex size-9 items-center justify-center rounded-lg border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                          >
+                            <Eye className="size-4" />
+                          </a>
+                        ) : isImageItem(item) ? (
+                          <button
+                            type="button"
+                            onClick={() => setPreview(item)}
+                            title={copy.preview}
+                            aria-label={`${copy.preview} ${item.fileName}`}
+                            className="inline-flex size-9 items-center justify-center rounded-lg border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                          >
+                            <Eye className="size-4" />
+                          </button>
+                        ) : null}
                         <a href={`/api/initial-documents?id=${encodeURIComponent(item.id)}&download=1`} title={copy.download} aria-label={`${copy.download} ${item.fileName}`} className="inline-flex size-9 items-center justify-center rounded-lg border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><Download className="size-4" /></a>
                       </div>
                     </article>
@@ -289,7 +318,7 @@ export function InitialDocumentsList({
           </DialogHeader>
           {preview ? (
             <div className="min-h-0 overflow-hidden rounded-xl border bg-muted/20">
-              {preview.mimeType.startsWith("image/") ? (
+              {isImageItem(preview) ? (
                 <img src={`/api/initial-documents?id=${encodeURIComponent(preview.id)}`} alt={preview.fileName} className="size-full object-contain" />
               ) : (
                 <iframe title={preview.fileName} src={`/api/initial-documents?id=${encodeURIComponent(preview.id)}`} className="size-full bg-white" />
