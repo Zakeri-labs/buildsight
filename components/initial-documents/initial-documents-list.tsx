@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, type ChangeEvent, type ComponentType } from "react"
+import { useEffect, useMemo, useState, type ChangeEvent, type ComponentType } from "react"
 import {
   Download,
   Eye,
@@ -58,6 +58,13 @@ function canPreview(item: InitialDocumentListItem) {
   return isPdfItem(item) || isImageItem(item)
 }
 
+function buildAndroidPdfIntentUri(documentId: string, origin: string, host: string, protocol: string) {
+  const scheme = protocol.replace(":", "") || "https"
+  const pathAndQuery = `/api/initial-documents?id=${encodeURIComponent(documentId)}`
+  const fallbackUrl = `${origin}/initial-documents/open-pdf?id=${encodeURIComponent(documentId)}`
+  return `intent://${host}${pathAndQuery}#Intent;scheme=${scheme};type=application/pdf;action=android.intent.action.VIEW;S.browser_fallback_url=${encodeURIComponent(fallbackUrl)};end`
+}
+
 function getDisplayCategory(item: Pick<InitialDocumentListItem, "category" | "uploadCategory">, isArabic: boolean) {
   const uploadCategory = getInitialDocumentUploadCategory(item.uploadCategory)
   if (uploadCategory) {
@@ -88,6 +95,59 @@ export function InitialDocumentsList({
   const [category, setCategory] = useState("all")
   const [sort, setSort] = useState<SortValue>("newest")
   const [preview, setPreview] = useState<InitialDocumentListItem | null>(null)
+  const [isAndroid, setIsAndroid] = useState(false)
+  const [clientOrigin, setClientOrigin] = useState("")
+  const [clientHost, setClientHost] = useState("")
+  const [clientProtocol, setClientProtocol] = useState("")
+
+  useEffect(() => {
+    setIsAndroid(typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent))
+    if (typeof window !== "undefined") {
+      setClientOrigin(window.location.origin)
+      setClientHost(window.location.host)
+      setClientProtocol(window.location.protocol)
+    }
+  }, [])
+
+  const handleMobilePdfClick = async (e: React.MouseEvent<HTMLAnchorElement>, item: InitialDocumentListItem) => {
+    const isAndroidClient = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent)
+
+    if (isAndroidClient) {
+      if (!isAndroid || !clientOrigin) {
+        e.preventDefault()
+        const origin = window.location.origin
+        const host = window.location.host
+        const protocol = window.location.protocol
+        const intentUri = buildAndroidPdfIntentUri(item.id, origin, host, protocol)
+        window.location.href = intentUri
+      }
+      return
+    }
+
+    // iOS and other non-Android mobile platforms
+    e.preventDefault()
+    const origin = typeof window !== "undefined" ? window.location.origin : ""
+    const pdfUrl = `${origin}/api/initial-documents?id=${encodeURIComponent(item.id)}`
+    const fallbackUrl = `/initial-documents/open-pdf?id=${encodeURIComponent(item.id)}`
+
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({
+          title: item.fileName,
+          url: pdfUrl,
+        })
+        return
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return
+        }
+      }
+    }
+
+    if (typeof window !== "undefined") {
+      window.location.href = fallbackUrl
+    }
+  }
 
   const copy = isArabic ? {
     title: "المستندات",
@@ -273,9 +333,12 @@ export function InitialDocumentsList({
                       <div className={cn("mt-2.5 flex justify-end gap-1.5 border-t pt-2.5", compactMobile && "mt-2 gap-1 pt-2")}>
                         {isPdfItem(item) ? (
                           <a
-                            href={`/api/initial-documents?id=${encodeURIComponent(item.id)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            href={
+                              isAndroid && clientOrigin
+                                ? buildAndroidPdfIntentUri(item.id, clientOrigin, clientHost, clientProtocol)
+                                : `/initial-documents/open-pdf?id=${encodeURIComponent(item.id)}`
+                            }
+                            onClick={(e) => void handleMobilePdfClick(e, item)}
                             title={copy.preview}
                             aria-label={`${copy.preview} ${item.fileName}`}
                             className="inline-flex size-9 items-center justify-center rounded-lg border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
