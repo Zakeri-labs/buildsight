@@ -2,11 +2,11 @@ import { notFound } from "next/navigation"
 import { requireOnboarded } from "@/lib/auth/session"
 import { resolveProjectReadAccessForUser } from "@/lib/auth/project-access"
 import { createClient } from "@/lib/supabase/server"
-import { OpenPdfFallbackCard } from "@/components/initial-documents/open-pdf-fallback-card"
+import { OpenPdfView } from "@/components/initial-documents/open-pdf-view"
 
 export const dynamic = "force-dynamic"
 
-export default async function OpenPdfFallbackPage({
+export default async function OpenPdfPage({
   searchParams,
 }: {
   searchParams: Promise<{ id?: string }>
@@ -41,7 +41,7 @@ export default async function OpenPdfFallbackPage({
 
   return (
     <div className="flex min-h-[65vh] flex-col items-center justify-center px-4 py-8">
-      <OpenPdfFallbackCard
+      <OpenPdfView
         documentId={document.id}
         fileName={fileName}
         fileSize={fileSize}
