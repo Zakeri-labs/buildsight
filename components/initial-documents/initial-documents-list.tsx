@@ -277,16 +277,14 @@ export function InitialDocumentsList({
                       <div className={cn("mt-2.5 flex justify-end gap-1.5 border-t pt-2.5", compactMobile && "mt-2 gap-1 pt-2")}>
                         {isPdfItem(item) ? (
                           <>
-                            <a
-                              href={`/api/initial-documents?id=${encodeURIComponent(item.id)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <Link
+                              href={`/initial-documents/view?id=${encodeURIComponent(item.id)}`}
                               title={copy.preview}
                               aria-label={`${copy.preview} ${item.fileName}`}
                               className="inline-flex size-9 items-center justify-center rounded-lg border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                             >
                               <Eye className="size-4" />
-                            </a>
+                            </Link>
                             <Link
                               href={`/initial-documents/open-pdf?id=${encodeURIComponent(item.id)}`}
                               title={copy.openWithApp}
