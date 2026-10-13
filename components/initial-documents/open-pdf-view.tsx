@@ -82,7 +82,7 @@ export function OpenPdfView({
     }
   }, [documentId, fileName])
 
-  const handleOpenWithApp = async () => {
+  const handleSharePdf = async () => {
     if (!preparedFile) return
     setShareError(null)
 
@@ -98,8 +98,8 @@ export function OpenPdfView({
       }
       setShareError(
         isArabic
-          ? "تعذر فتح هذا الملف باستخدام تطبيق آخر."
-          : "Unable to open this PDF with another app."
+          ? "تعذر مشاركة هذا الملف."
+          : "Unable to share this PDF."
       )
     }
   }
@@ -122,12 +122,12 @@ export function OpenPdfView({
         {status === "unsupported" ? (
           <>
             <h1 className="mt-4 text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-              {isArabic ? "يتعذر الفتح باستخدام تطبيق" : "Unable to Open with App"}
+              {isArabic ? "يتعذر مشاركة ملف PDF" : "Unable to Share PDF"}
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
               {isArabic
-                ? "لا يدعم هذا المتصفح إرسال ملف PDF مباشرة إلى تطبيق آخر."
-                : "This browser cannot send the PDF directly to another app."}
+                ? "لا يدعم هذا المتصفح مشاركة هذا الملف مع تطبيق آخر."
+                : "This browser cannot share this PDF with another app."}
             </p>
           </>
         ) : status === "error" ? (
@@ -144,7 +144,7 @@ export function OpenPdfView({
         ) : (
           <>
             <h1 className="mt-4 text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-              {isArabic ? "فتح ملف PDF" : "Open PDF"}
+              {isArabic ? "مشاركة ملف PDF" : "Share PDF"}
             </h1>
             {status === "loading" ? (
               <p className="mt-2 inline-flex items-center gap-2 text-sm text-muted-foreground">
@@ -181,11 +181,11 @@ export function OpenPdfView({
             <Button
               type="button"
               size="lg"
-              onClick={handleOpenWithApp}
+              onClick={handleSharePdf}
               className="w-full gap-2 rounded-xl font-medium"
             >
               <Share2 className="size-4" />
-              {isArabic ? "الفتح عبر تطبيق" : "Open with App"}
+              {isArabic ? "مشاركة ملف PDF" : "Share PDF"}
             </Button>
           ) : status === "loading" ? (
             <Button

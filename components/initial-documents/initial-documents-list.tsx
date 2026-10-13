@@ -108,7 +108,7 @@ export function InitialDocumentsList({
     size: "الحجم",
     actions: "الإجراءات",
     preview: "معاينة",
-    openWithApp: "الفتح عبر تطبيق",
+    sharePdf: "مشاركة ملف PDF",
     download: "تنزيل",
     globalEmpty: "لا توجد مستندات مشاريع متاحة.",
     scopedEmpty: "لم يتم رفع مستندات أولية لهذا المشروع.",
@@ -132,7 +132,7 @@ export function InitialDocumentsList({
     size: "Size",
     actions: "Actions",
     preview: "Preview",
-    openWithApp: "Open with App",
+    sharePdf: "Share PDF",
     download: "Download",
     globalEmpty: "No project documents are available.",
     scopedEmpty: "No initial documents were uploaded for this project.",
@@ -287,8 +287,8 @@ export function InitialDocumentsList({
                             </Link>
                             <Link
                               href={`/initial-documents/open-pdf?id=${encodeURIComponent(item.id)}`}
-                              title={copy.openWithApp}
-                              aria-label={`${copy.openWithApp} ${item.fileName}`}
+                              title={copy.sharePdf}
+                              aria-label={`${copy.sharePdf} ${item.fileName}`}
                               className="inline-flex size-9 items-center justify-center rounded-lg border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                             >
                               <Share2 className="size-4" />
