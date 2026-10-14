@@ -66,8 +66,6 @@ import type { ProjectSupervisorCandidate } from "@/lib/projects/supervisor-candi
 import {
   deleteProject,
   getProjectDeletionImpact,
-  getProjectProgressAction,
-  getProjectsProgressBatchAction,
   type ProjectDeletionImpact,
 } from "@/lib/actions/projects"
 import {
@@ -120,29 +118,6 @@ const PROJECT_TABLE_COLUMN_WIDTHS = [
   "8%",
   "3.5%",
 ] as const
-
-const SESSION_CACHE_KEY = "buildsight_projects_progress_cache"
-
-function getSessionProgressCache(): Record<string, number> {
-  if (typeof window === "undefined") return {}
-  try {
-    const raw = sessionStorage.getItem(SESSION_CACHE_KEY)
-    return raw ? JSON.parse(raw) : {}
-  } catch {
-    return {}
-  }
-}
-
-function saveSessionProgressCache(newEntries: Record<string, number>) {
-  if (typeof window === "undefined") return
-  try {
-    const existing = getSessionProgressCache()
-    const updated = { ...existing, ...newEntries }
-    sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify(updated))
-  } catch {
-    // Ignore storage quota errors
-  }
-}
 
 export interface ProjectRow {
   id: string
@@ -464,86 +439,8 @@ export function ProjectsList({
     return () => window.clearTimeout(timeout)
   }, [notice])
 
-  const [progressCache, setProgressCache] = useState<Record<string, number>>({})
-  const progressCacheRef = useRef<Record<string, number>>(progressCache)
-  progressCacheRef.current = progressCache
-
-  const inFlightRef = useRef<Set<string>>(new Set())
-  const queueRef = useRef<Set<string>>(new Set())
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    const cached = getSessionProgressCache()
-    if (Object.keys(cached).length > 0) {
-      setProgressCache((prev) => ({ ...cached, ...prev }))
-    }
-  }, [])
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    }
-  }, [])
-
-  const flushQueue = useCallback(async () => {
-    const currentQueue = Array.from(queueRef.current)
-    queueRef.current.clear()
-
-    const idsToFetch = currentQueue.filter((id) => !inFlightRef.current.has(id))
-    if (idsToFetch.length === 0) return
-
-    for (const id of idsToFetch) {
-      inFlightRef.current.add(id)
-    }
-
-    try {
-      const res = await getProjectsProgressBatchAction(idsToFetch)
-      if (res.ok) {
-        setProgressCache((prev) => {
-          const next = { ...prev, ...res.data }
-          saveSessionProgressCache(res.data)
-          return next
-        })
-      }
-    } catch (error) {
-      console.error("Failed to load progress batch:", error)
-    } finally {
-      for (const id of idsToFetch) {
-        inFlightRef.current.delete(id)
-      }
-    }
-  }, [])
-
-  const requestProgress = useCallback(
-    (projectIds: string | string[]) => {
-      const ids = Array.isArray(projectIds) ? projectIds : [projectIds]
-      let hasNew = false
-      for (const id of ids) {
-        if (progressCacheRef.current[id] === undefined && !inFlightRef.current.has(id)) {
-          queueRef.current.add(id)
-          hasNew = true
-        }
-      }
-      if (hasNew) {
-        if (timerRef.current) clearTimeout(timerRef.current)
-        timerRef.current = setTimeout(flushQueue, 30)
-      }
-    },
-    [flushQueue],
-  )
-
-  const projectsWithProgress = useMemo(() => {
-    return projectRows.map((p) => {
-      const cached = progressCache[p.id]
-      if (cached !== undefined) {
-        return { ...p, progress: cached }
-      }
-      return p
-    })
-  }, [projectRows, progressCache])
-
   const filteredProjects = useMemo(() => {
-    return projectsWithProgress.filter((p) => {
+    return projectRows.filter((p) => {
       if (
         searchQuery &&
         !p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -557,7 +454,7 @@ export function ProjectsList({
       if (!matchesSupervisionType(p.supervisionType, selectedSupervisionType)) return false
       return true
     })
-  }, [projectsWithProgress, searchQuery, selectedStatus, selectedType, selectedSupervisionType])
+  }, [projectRows, searchQuery, selectedStatus, selectedType, selectedSupervisionType])
 
   const desktopFilteredProjects = useMemo(() => {
     return filteredProjects.filter((project) => {
@@ -659,14 +556,6 @@ export function ProjectsList({
   const desktopPageStart = (safeCurrentPage - 1) * pageSize
   const paginatedDesktopProjects = desktopProjects.slice(desktopPageStart, desktopPageStart + pageSize)
 
-  useEffect(() => {
-    const visibleIds = paginatedDesktopProjects
-      .filter((p) => p.progress === null && progressCacheRef.current[p.id] === undefined)
-      .map((p) => p.id)
-    if (visibleIds.length > 0) {
-      requestProgress(visibleIds)
-    }
-  }, [paginatedDesktopProjects, requestProgress])
   const desktopPageWindowStart = Math.max(1, Math.min(safeCurrentPage - 2, Math.max(1, desktopPageCount - 4)))
   const desktopPageNumbers = Array.from(
     { length: Math.min(5, desktopPageCount - desktopPageWindowStart + 1) },
@@ -900,7 +789,6 @@ export function ProjectsList({
                   row={row}
                   locale={locale}
                   canDeleteProjects={canDeleteProjects}
-                  onRequestProgress={requestProgress}
                   onLocation={() => setLocationTarget(row)}
                   onEdit={() => setEditTarget(row)}
                   onDelete={() => openDeleteDialog(row)}
@@ -1675,7 +1563,6 @@ function MobileProjectCard({
   row,
   locale,
   canDeleteProjects,
-  onRequestProgress,
   onLocation,
   onEdit,
   onDelete,
@@ -1683,37 +1570,10 @@ function MobileProjectCard({
   row: ProjectRow
   locale: string
   canDeleteProjects: boolean
-  onRequestProgress?: (projectId: string) => void
   onLocation?: () => void
   onEdit: () => void
   onDelete: () => void
 }) {
-  const cardRef = useRef<HTMLElement | null>(null)
-
-  useEffect(() => {
-    if (row.progress !== null || !onRequestProgress || !cardRef.current) return
-    const element = cardRef.current
-
-    if (typeof IntersectionObserver === "undefined") {
-      onRequestProgress(row.id)
-      return
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries
-        if (entry?.isIntersecting) {
-          onRequestProgress(row.id)
-          observer.disconnect()
-        }
-      },
-      { rootMargin: "150px" },
-    )
-
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [row.id, row.progress, onRequestProgress])
-
   const supervision = row.supervisionType?.trim()
     ? supervisionTypeLabel(row.supervisionType, row.supervisionTypeOther)
     : locale === "ar" ? "غير محدد" : "Not set"
@@ -1721,7 +1581,7 @@ function MobileProjectCard({
   const formattedName = capitalizeWords(row.name)
 
   return (
-    <article ref={cardRef} className="relative min-w-0 overflow-hidden rounded-xl border border-border/80 bg-card p-3 shadow-2xs transition-colors hover:border-primary/40">
+    <article className="relative min-w-0 overflow-hidden rounded-xl border border-border/80 bg-card p-3 shadow-2xs transition-colors hover:border-primary/40">
       <div className="flex items-center gap-3">
         {/* Left: Building icon / Image container */}
         <Link

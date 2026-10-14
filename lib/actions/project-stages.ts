@@ -38,6 +38,7 @@ import {
   consumeReportCreditForReport,
   checkReportCreationCreditAvailability,
 } from "@/lib/db/report-credits"
+import { recalculateAndPersistProjectProgress } from "@/lib/db/domain"
 
 export type StageActionResult<T = undefined> =
   | ({ ok: true } & (T extends undefined ? object : { data: T }))
@@ -777,6 +778,8 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       }
     }
 
+    await recalculateAndPersistProjectProgress(input.projectId, admin)
+
     return {
       ok: true,
       data: {
@@ -1025,6 +1028,7 @@ export async function decideTermResponseAction(input: {
       target_comments: comments,
     })
     if (decisionError) throw decisionError
+    await recalculateAndPersistProjectProgress(input.projectId, admin)
     await audit({
       actorId: reviewerId,
       action: `stage_report.${input.decision}`,
@@ -1416,6 +1420,7 @@ export async function saveProjectStageSelectionAction(
         selectedTemplateSubtermIds: requestedSubtermIds,
       },
     })
+    await recalculateAndPersistProjectProgress(input.projectId, admin)
     revalidateProjectStageViews(input.projectId)
     return { ok: true }
   } catch (error) {
@@ -1458,6 +1463,7 @@ export async function createProjectStageAction(input: {
       .single()
 
     if (error) throw error
+    await recalculateAndPersistProjectProgress(input.projectId, admin)
 
     await audit({
       actorId,

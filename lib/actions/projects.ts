@@ -5,7 +5,7 @@ import { cookies } from "next/headers"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { assertOrgAdmin, assertProjectAdmin, assertProjectReadAccess, audit, AuthzError, getUserIdOrThrow } from "@/lib/auth/guards"
 import { isProjectUuid, isUserProjectSupervisor, resolveProjectReadAccessForUser } from "@/lib/auth/project-access"
-import { hydrateProjectProgressAndImages } from "@/lib/db/domain"
+import { hydrateProjectProgressAndImages, recalculateAndPersistProjectProgress } from "@/lib/db/domain"
 import { createInvitation, type InvitationActionData } from "@/lib/actions/invitations"
 import { createOrganization } from "@/lib/actions/organizations"
 import type { ProjectAccessRole, ProjectOrgRole } from "@/lib/db/types"
@@ -667,6 +667,10 @@ export async function updateProject(input: {
           }
         }
       }
+    }
+
+    if (input.completedUpToStageId !== undefined) {
+      await recalculateAndPersistProjectProgress(input.projectId, admin)
     }
 
     await audit({
@@ -1529,6 +1533,8 @@ export async function createProject(input: {
       }
     }
 
+    await recalculateAndPersistProjectProgress(created.id, admin)
+
     const cookieStore = await cookies()
     cookieStore.set(SELECTED_PROJECT_COOKIE, created.id, {
       path: "/",
@@ -2015,67 +2021,6 @@ export async function fetchProjectSupervisorCandidatesAction(
   } catch (error) {
     if (error instanceof AuthzError) return { ok: false, error: error.message }
     return { ok: false, error: error instanceof Error ? error.message : "Failed to load supervisor candidates." }
-  }
-}
-
-export async function getProjectProgressAction(
-  projectId: string,
-): Promise<{ ok: true; data: { projectId: string; progressActual: number } } | { ok: false; error: string }> {
-  try {
-    if (!isProjectUuid(projectId)) {
-      return { ok: false, error: "Invalid project ID." }
-    }
-    await assertProjectReadAccess(projectId)
-    const admin = createAdminClient()
-    const { calculatedProgress } = await hydrateProjectProgressAndImages(admin, [{ id: projectId }])
-    return {
-      ok: true,
-      data: {
-        projectId,
-        progressActual: calculatedProgress.get(projectId) ?? 0,
-      },
-    }
-  } catch (error) {
-    if (error instanceof AuthzError) return { ok: false, error: error.message }
-    return { ok: false, error: error instanceof Error ? error.message : "Failed to calculate project progress." }
-  }
-}
-
-export async function getProjectsProgressBatchAction(
-  projectIds: string[],
-): Promise<{ ok: true; data: Record<string, number> } | { ok: false; error: string }> {
-  try {
-    const userId = await getUserIdOrThrow()
-    if (!Array.isArray(projectIds) || projectIds.length === 0) {
-      return { ok: true, data: {} }
-    }
-    const uniqueIds = Array.from(new Set(projectIds.filter(isProjectUuid))).slice(0, 50)
-    if (uniqueIds.length === 0) {
-      return { ok: true, data: {} }
-    }
-
-    const accessResults = await Promise.all(
-      uniqueIds.map((id) => resolveProjectReadAccessForUser(userId, id)),
-    )
-    const authorizedIds = uniqueIds.filter((_, idx) => Boolean(accessResults[idx]))
-    if (authorizedIds.length === 0) {
-      return { ok: true, data: {} }
-    }
-
-    const admin = createAdminClient()
-    const { calculatedProgress } = await hydrateProjectProgressAndImages(
-      admin,
-      authorizedIds.map((id) => ({ id })),
-    )
-
-    const data: Record<string, number> = {}
-    for (const id of authorizedIds) {
-      data[id] = calculatedProgress.get(id) ?? 0
-    }
-    return { ok: true, data }
-  } catch (error) {
-    if (error instanceof AuthzError) return { ok: false, error: error.message }
-    return { ok: false, error: error instanceof Error ? error.message : "Failed to calculate project progress." }
   }
 }
 

@@ -55,7 +55,7 @@ export default async function ProjectsPage({
   const params = await searchParams
   const primaryMembership = session.memberships[0]
   const organizationId = session.supervisingOrg?.id ?? primaryMembership?.organization?.id
-  const projects = organizationId ? await getOrgProjects(organizationId, session.userId, { skipProgress: true }) : []
+  const projects = organizationId ? await getOrgProjects(organizationId, session.userId) : []
   const canCreateProjects = session.supervisingOrg
     ? await canAdministerOrganization(session.supervisingOrg.id)
     : false
@@ -99,7 +99,7 @@ export default async function ProjectsPage({
     description: project.description ?? "",
     status: normalizeProjectStatus(project.status),
     startDate: displayDate(project.startDate),
-    progress: null,
+    progress: Math.min(100, Math.max(0, Math.round(project.progressActual))),
     imageUrl: projectImageDisplayUrl(project.image, project.id) ?? "",
     latitude: project.latitude,
     longitude: project.longitude,

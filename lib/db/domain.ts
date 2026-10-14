@@ -181,17 +181,12 @@ function chunkArray<T>(items: T[], chunkSize: number): T[][] {
   return chunks
 }
 
-/** All projects for the supervising org, ordered for display. */
-export async function hydrateProjectProgressAndImages(
+export async function calculateProjectsProgress(
   admin: ReturnType<typeof createAdminClient>,
-  projectRows: any[],
-): Promise<{ calculatedProgress: Map<string, number>; imageByProject: Map<string, string> }> {
-  const projectIds = projectRows.map((project: any) => project.id)
+  projectIds: string[],
+): Promise<Map<string, number>> {
   if (!projectIds.length) {
-    return {
-      calculatedProgress: new Map<string, number>(),
-      imageByProject: new Map<string, string>(),
-    }
+    return new Map<string, number>()
   }
 
   // Chunk projectIds in batches of 20 to avoid PostgREST 1000-row payload limit and URI Too Long errors
@@ -215,13 +210,6 @@ export async function hydrateProjectProgressAndImages(
     }),
   )
   const activeStageRows = activeStageResults.flatMap((res) => res.data ?? [])
-
-  const imageResults = await Promise.all(
-    projectChunks.map((chunk) =>
-      admin.from("project_images").select("project_id, storage_path").in("project_id", chunk).eq("order_index", 0),
-    ),
-  )
-  const imageRows = imageResults.flatMap((res) => res.data ?? [])
 
   const activeStageIds = activeStageRows.map((stage: any) => stage.id as string)
   const stageIdChunks = chunkArray(activeStageIds, 50)
@@ -251,9 +239,6 @@ export async function hydrateProjectProgressAndImages(
   const rpcDataRows = rpcResults.flatMap((res) => (Array.isArray(res.data) ? res.data : []))
   const rpcHasError = rpcResults.some((res) => Boolean(res.error))
 
-  const imageByProject = new Map(
-    (imageRows ?? []).map((image: any) => [image.project_id as string, image.storage_path as string]),
-  )
   const termsByStage = new Map<string, any[]>()
   for (const term of progressTermRows ?? []) {
     const rows = termsByStage.get((term as any).project_stage_id) ?? []
@@ -391,7 +376,76 @@ export async function hydrateProjectProgressAndImages(
     calculatedProgress.set(projectId, calculatedPct)
   }
 
+  return calculatedProgress
+}
+
+export async function hydrateProjectImages(
+  admin: ReturnType<typeof createAdminClient>,
+  projectIds: string[],
+): Promise<Map<string, string>> {
+  if (!projectIds.length) {
+    return new Map<string, string>()
+  }
+  const projectChunks = chunkArray(projectIds, 20)
+  const imageResults = await Promise.all(
+    projectChunks.map((chunk) =>
+      admin.from("project_images").select("project_id, storage_path").in("project_id", chunk).eq("order_index", 0),
+    ),
+  )
+  const imageRows = imageResults.flatMap((res) => res.data ?? [])
+  return new Map(
+    (imageRows ?? []).map((image: any) => [image.project_id as string, image.storage_path as string]),
+  )
+}
+
+/** All projects for the supervising org, ordered for display. */
+export async function hydrateProjectProgressAndImages(
+  admin: ReturnType<typeof createAdminClient>,
+  projectRows: any[],
+): Promise<{ calculatedProgress: Map<string, number>; imageByProject: Map<string, string> }> {
+  const projectIds = projectRows.map((project: any) => project.id).filter(Boolean)
+  if (!projectIds.length) {
+    return {
+      calculatedProgress: new Map<string, number>(),
+      imageByProject: new Map<string, string>(),
+    }
+  }
+
+  const [calculatedProgress, imageByProject] = await Promise.all([
+    calculateProjectsProgress(admin, projectIds),
+    hydrateProjectImages(admin, projectIds),
+  ])
+
   return { calculatedProgress, imageByProject }
+}
+
+export async function recalculateAndPersistProjectProgress(
+  projectId: string,
+  adminClient?: ReturnType<typeof createAdminClient>,
+): Promise<number | null> {
+  if (!projectId || !isProjectUuid(projectId)) {
+    return null
+  }
+  try {
+    const admin = adminClient ?? createAdminClient()
+    const progressMap = await calculateProjectsProgress(admin, [projectId])
+    const progress = progressMap.get(projectId) ?? 0
+
+    const { error } = await admin
+      .from("projects")
+      .update({ progress_actual: progress })
+      .eq("id", projectId)
+
+    if (error) {
+      console.error(`[recalculateAndPersistProjectProgress] Failed to update progress_actual for project ${projectId}:`, error)
+      return null
+    }
+
+    return progress
+  } catch (err) {
+    console.error(`[recalculateAndPersistProjectProgress] Unexpected error updating project ${projectId}:`, err)
+    return null
+  }
 }
 
 export async function getOrgProjects(
@@ -538,58 +592,10 @@ export async function getOrgProjects(
   }
 
   const projectRows = data ?? []
-  if (options?.skipProgress) {
-    const legacyImageCounts = new Map<string, number>()
-    for (const project of projectRows as any[]) {
-      const legacyImage = project.image?.trim()
-      if (legacyImage) legacyImageCounts.set(legacyImage, (legacyImageCounts.get(legacyImage) ?? 0) + 1)
-    }
-
-    return projectRows.map((p: any) => ({
-      id: p.id,
-      name: p.name,
-      code: p.code,
-      location: p.location,
-      latitude: p.latitude,
-      longitude: p.longitude,
-      status: p.status,
-      supervisingOrganizationId:
-        typeof p.supervising_organization_id === "string" ? p.supervising_organization_id : null,
-      assignedSupervisorId: typeof p.assigned_supervisor_id === "string" ? p.assigned_supervisor_id : null,
-      projectType: p.project_type,
-      supervisionType: p.supervision_type,
-      supervisionTypeOther: p.supervision_type_other,
-      plotNo: p.plot_no,
-      phase: p.phase ?? null,
-      supervisionStartDate: p.supervision_start_date,
-      priority: p.priority,
-      includedStructureVisits: p.included_structure_visits,
-      includedFinishingVisits: p.included_finishing_visits,
-      structureSupervisionFee: p.structure_supervision_fee == null ? null : Number(p.structure_supervision_fee),
-      finishingSupervisionFee: p.finishing_supervision_fee == null ? null : Number(p.finishing_supervision_fee),
-      receivedAmount: p.received_amount == null ? null : Number(p.received_amount),
-      outstandingAmount: p.outstanding_amount == null ? null : Number(p.outstanding_amount),
-      nextPaymentAmount: p.next_payment_amount == null ? null : Number(p.next_payment_amount),
-      nextPaymentDueDate: p.next_payment_due_date,
-      invoiceReferencePaymentNote: p.invoice_reference_payment_note,
-      initialRemarks: p.initial_remarks,
-      region: p.region,
-      description: p.description,
-      image: p.image?.trim() && legacyImageCounts.get(p.image.trim()) === 1 ? p.image : null,
-      ourRole: p.our_role,
-      contractor: p.contractor,
-      consultant: p.consultant,
-      client: p.client,
-      startDate: p.start_date,
-      targetHandover: p.target_handover,
-      contractValue: p.contract_value,
-      progressPlanned: p.progress_planned ?? 0,
-      progressActual: 0,
-      progressDelay: p.progress_delay ?? 0,
-    }))
-  }
-
-  const { calculatedProgress, imageByProject } = await hydrateProjectProgressAndImages(admin, projectRows)
+  const imageByProject = await hydrateProjectImages(
+    admin,
+    projectRows.map((p: any) => p.id).filter(Boolean),
+  )
   const legacyImageCounts = new Map<string, number>()
   for (const project of projectRows as any[]) {
     const legacyImage = project.image?.trim()
@@ -637,7 +643,7 @@ export async function getOrgProjects(
     targetHandover: p.target_handover,
     contractValue: p.contract_value,
     progressPlanned: p.progress_planned ?? 0,
-    progressActual: calculatedProgress.get(p.id) ?? 0,
+    progressActual: Number(p.progress_actual ?? 0),
     progressDelay: p.progress_delay ?? 0,
   }))
   } catch (error) {
