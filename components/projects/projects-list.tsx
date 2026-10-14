@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react"
 import {
   Search,
   Plus,
@@ -66,6 +66,8 @@ import type { ProjectSupervisorCandidate } from "@/lib/projects/supervisor-candi
 import {
   deleteProject,
   getProjectDeletionImpact,
+  getProjectProgressAction,
+  getProjectsProgressBatchAction,
   type ProjectDeletionImpact,
 } from "@/lib/actions/projects"
 import {
@@ -77,7 +79,18 @@ import {
 } from "@/lib/projects/project-status"
 
 export type ProjectStatus = ProjectStatusValue
-export type ProjectType = "Residential" | "Commercial" | "Hospitality" | "Infrastructure" | "Industrial"
+export type ProjectType =
+  | "Residential"
+  | "Residents"
+  | "Commercial"
+  | "Hospitality"
+  | "Infrastructure"
+  | "Industrial"
+  | "Other"
+  | "Mixed Use"
+  | "Healthcare"
+  | "Education"
+  | (string & {})
 
 export type ProjectReportSchedule = {
   latestReport: {
@@ -108,6 +121,29 @@ const PROJECT_TABLE_COLUMN_WIDTHS = [
   "3.5%",
 ] as const
 
+const SESSION_CACHE_KEY = "buildsight_projects_progress_cache"
+
+function getSessionProgressCache(): Record<string, number> {
+  if (typeof window === "undefined") return {}
+  try {
+    const raw = sessionStorage.getItem(SESSION_CACHE_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveSessionProgressCache(newEntries: Record<string, number>) {
+  if (typeof window === "undefined") return
+  try {
+    const existing = getSessionProgressCache()
+    const updated = { ...existing, ...newEntries }
+    sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify(updated))
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
 export interface ProjectRow {
   id: string
   code: string
@@ -124,7 +160,7 @@ export interface ProjectRow {
   description?: string
   status: ProjectStatus
   startDate: string
-  progress: number
+  progress: number | null
   imageUrl: string
   latitude?: number | null
   longitude?: number | null
@@ -156,7 +192,7 @@ function formatDueCalendarDate(value: string | null) {
   }).format(new Date(Date.UTC(year, month - 1, day, 12)))
 }
 
-function renderDueStatus(compliance: ProjectReportSchedule["compliance"]) {
+function renderDueStatus(compliance: ProjectReportSchedule["compliance"] | undefined) {
   if (!compliance) {
     return <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
   }
@@ -428,8 +464,86 @@ export function ProjectsList({
     return () => window.clearTimeout(timeout)
   }, [notice])
 
+  const [progressCache, setProgressCache] = useState<Record<string, number>>({})
+  const progressCacheRef = useRef<Record<string, number>>(progressCache)
+  progressCacheRef.current = progressCache
+
+  const inFlightRef = useRef<Set<string>>(new Set())
+  const queueRef = useRef<Set<string>>(new Set())
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    const cached = getSessionProgressCache()
+    if (Object.keys(cached).length > 0) {
+      setProgressCache((prev) => ({ ...cached, ...prev }))
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [])
+
+  const flushQueue = useCallback(async () => {
+    const currentQueue = Array.from(queueRef.current)
+    queueRef.current.clear()
+
+    const idsToFetch = currentQueue.filter((id) => !inFlightRef.current.has(id))
+    if (idsToFetch.length === 0) return
+
+    for (const id of idsToFetch) {
+      inFlightRef.current.add(id)
+    }
+
+    try {
+      const res = await getProjectsProgressBatchAction(idsToFetch)
+      if (res.ok) {
+        setProgressCache((prev) => {
+          const next = { ...prev, ...res.data }
+          saveSessionProgressCache(res.data)
+          return next
+        })
+      }
+    } catch (error) {
+      console.error("Failed to load progress batch:", error)
+    } finally {
+      for (const id of idsToFetch) {
+        inFlightRef.current.delete(id)
+      }
+    }
+  }, [])
+
+  const requestProgress = useCallback(
+    (projectIds: string | string[]) => {
+      const ids = Array.isArray(projectIds) ? projectIds : [projectIds]
+      let hasNew = false
+      for (const id of ids) {
+        if (progressCacheRef.current[id] === undefined && !inFlightRef.current.has(id)) {
+          queueRef.current.add(id)
+          hasNew = true
+        }
+      }
+      if (hasNew) {
+        if (timerRef.current) clearTimeout(timerRef.current)
+        timerRef.current = setTimeout(flushQueue, 30)
+      }
+    },
+    [flushQueue],
+  )
+
+  const projectsWithProgress = useMemo(() => {
+    return projectRows.map((p) => {
+      const cached = progressCache[p.id]
+      if (cached !== undefined) {
+        return { ...p, progress: cached }
+      }
+      return p
+    })
+  }, [projectRows, progressCache])
+
   const filteredProjects = useMemo(() => {
-    return projectRows.filter((p) => {
+    return projectsWithProgress.filter((p) => {
       if (
         searchQuery &&
         !p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -443,7 +557,7 @@ export function ProjectsList({
       if (!matchesSupervisionType(p.supervisionType, selectedSupervisionType)) return false
       return true
     })
-  }, [projectRows, searchQuery, selectedStatus, selectedType, selectedSupervisionType])
+  }, [projectsWithProgress, searchQuery, selectedStatus, selectedType, selectedSupervisionType])
 
   const desktopFilteredProjects = useMemo(() => {
     return filteredProjects.filter((project) => {
@@ -477,7 +591,12 @@ export function ProjectsList({
 
     if (sortBy === "default") rows.sort((left, right) => compareProjectCodes(left.code, right.code) || left.name.localeCompare(right.name))
     if (sortBy === "name-asc") rows.sort((left, right) => left.name.localeCompare(right.name))
-    if (sortBy === "progress-desc") rows.sort((left, right) => right.progress - left.progress || left.name.localeCompare(right.name))
+    if (sortBy === "progress-desc") {
+      rows.sort(
+        (left, right) =>
+          (right.progress ?? -1) - (left.progress ?? -1) || left.name.localeCompare(right.name),
+      )
+    }
     if (sortBy === "date-desc") {
       rows.sort((left, right) => {
         const leftTime = Date.parse(left.startDate)
@@ -539,6 +658,15 @@ export function ProjectsList({
   const safeCurrentPage = Math.min(currentPage, desktopPageCount)
   const desktopPageStart = (safeCurrentPage - 1) * pageSize
   const paginatedDesktopProjects = desktopProjects.slice(desktopPageStart, desktopPageStart + pageSize)
+
+  useEffect(() => {
+    const visibleIds = paginatedDesktopProjects
+      .filter((p) => p.progress === null && progressCacheRef.current[p.id] === undefined)
+      .map((p) => p.id)
+    if (visibleIds.length > 0) {
+      requestProgress(visibleIds)
+    }
+  }, [paginatedDesktopProjects, requestProgress])
   const desktopPageWindowStart = Math.max(1, Math.min(safeCurrentPage - 2, Math.max(1, desktopPageCount - 4)))
   const desktopPageNumbers = Array.from(
     { length: Math.min(5, desktopPageCount - desktopPageWindowStart + 1) },
@@ -772,6 +900,7 @@ export function ProjectsList({
                   row={row}
                   locale={locale}
                   canDeleteProjects={canDeleteProjects}
+                  onRequestProgress={requestProgress}
                   onLocation={() => setLocationTarget(row)}
                   onEdit={() => setEditTarget(row)}
                   onDelete={() => openDeleteDialog(row)}
@@ -1247,17 +1376,21 @@ export function ProjectsList({
 
                   {/* Progress bar */}
                   <td className="min-w-0 overflow-hidden px-2.5 py-4 align-middle">
-                    <div className="flex min-w-0 flex-col gap-1.5">
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                        {row.progress}%
-                      </span>
-                      <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800">
-                        <div
-                          className="h-1.5 rounded-full bg-blue-600 transition-all duration-300"
-                          style={{ width: `${row.progress}%` }}
-                        />
+                    {row.progress == null ? (
+                      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">—</span>
+                    ) : (
+                      <div className="flex min-w-0 flex-col gap-1.5">
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                          {row.progress}%
+                        </span>
+                        <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800">
+                          <div
+                            className="h-1.5 rounded-full bg-blue-600 transition-all duration-300"
+                            style={{ width: `${row.progress}%` }}
+                          />
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </td>
 
                   {/* Actions */}
@@ -1542,16 +1675,45 @@ function MobileProjectCard({
   row,
   locale,
   canDeleteProjects,
+  onRequestProgress,
+  onLocation,
   onEdit,
   onDelete,
 }: {
   row: ProjectRow
   locale: string
   canDeleteProjects: boolean
+  onRequestProgress?: (projectId: string) => void
   onLocation?: () => void
   onEdit: () => void
   onDelete: () => void
 }) {
+  const cardRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (row.progress !== null || !onRequestProgress || !cardRef.current) return
+    const element = cardRef.current
+
+    if (typeof IntersectionObserver === "undefined") {
+      onRequestProgress(row.id)
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries
+        if (entry?.isIntersecting) {
+          onRequestProgress(row.id)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: "150px" },
+    )
+
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [row.id, row.progress, onRequestProgress])
+
   const supervision = row.supervisionType?.trim()
     ? supervisionTypeLabel(row.supervisionType, row.supervisionTypeOther)
     : locale === "ar" ? "غير محدد" : "Not set"
@@ -1559,7 +1721,7 @@ function MobileProjectCard({
   const formattedName = capitalizeWords(row.name)
 
   return (
-    <article className="relative min-w-0 overflow-hidden rounded-xl border border-border/80 bg-card p-3 shadow-2xs transition-colors hover:border-primary/40">
+    <article ref={cardRef} className="relative min-w-0 overflow-hidden rounded-xl border border-border/80 bg-card p-3 shadow-2xs transition-colors hover:border-primary/40">
       <div className="flex items-center gap-3">
         {/* Left: Building icon / Image container */}
         <Link
@@ -1597,12 +1759,12 @@ function MobileProjectCard({
 
           <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px] font-medium text-muted-foreground">
             <span className="truncate">
-              {row.ownerClient !== "—" ? row.ownerClient : (supervision !== "Not set" && supervision !== "غير محدد" ? supervision : `${row.progress}% ${locale === "ar" ? "إنجاز" : "Progress"}`)}
+              {row.ownerClient !== "—" ? row.ownerClient : (supervision !== "Not set" && supervision !== "غير محدد" ? supervision : (row.progress == null ? "—" : `${row.progress}% ${locale === "ar" ? "إنجاز" : "Progress"}`))}
             </span>
 
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-[10px] font-semibold text-primary">
-                {row.progress}%
+                {row.progress == null ? "—" : `${row.progress}%`}
               </span>
               <Link
                 href={`/projects/${encodeURIComponent(row.id)}/stages`}
