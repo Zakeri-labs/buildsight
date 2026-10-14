@@ -39,7 +39,7 @@ const emptyDashboard: DashboardData = {
   projects: [],
   tasks: [],
   scopeName: null,
-  reportCredits: { totalReportCredits: 300, usedReportCredits: 0, remainingReportCredits: 300, expiresAt: null },
+  reportCredits: { totalReportCredits: 300, usedReportCredits: 0, remainingReportCredits: 300, startAt: null, expiresAt: null },
 }
 
 export default async function DashboardPage({
@@ -87,7 +87,7 @@ export default async function DashboardPage({
 
   const isOrgAdmin = Boolean(hasAdminRole)
   const showLowCreditBanner = isOrgAdmin && credits.remainingReportCredits < 50
-  const showCriticalCreditPopup = isOrgAdmin && credits.remainingReportCredits <= 10
+  const showCriticalCreditPopup = isOrgAdmin && credits.remainingReportCredits <= 30
   const isLowCredit = credits.remainingReportCredits < 50
 
   const startDateLabel = credits.startAt

@@ -30,7 +30,7 @@ export function CriticalCreditsModal({ remainingCredits }: CriticalCreditsModalP
             </DialogTitle>
           </div>
           <DialogDescription className="pt-2 text-sm text-muted-foreground">
-            You only have {remainingCredits} Report Credits remaining. Please recharge your Report Credits soon to avoid interruption.
+            Your organization has {remainingCredits} Report Credits remaining. When your credits reach zero, members will no longer be able to create new reports. Please recharge before your credits are exhausted.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter showCloseButton={false}>
