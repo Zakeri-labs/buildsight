@@ -7,7 +7,7 @@ export type ReviewSubmissionItem = {
   projectName: string
   stageId: string
   stageName: string
-  termId: string
+  termId: string | null
   parentTermName: string
   subtermName: string | null
   submittedById: string | null

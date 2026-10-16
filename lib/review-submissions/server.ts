@@ -14,16 +14,19 @@ async function processReviewResponses(
   admin: ReturnType<typeof createAdminClient>,
 ): Promise<ReviewSubmissionFeed> {
   const termIds = Array.from(new Set(responses.map((r: any) => r.project_stage_term_id as string).filter(Boolean)))
-  if (!termIds.length) return { canReview: true, items: [] }
 
-  const { data: termRows, error: termError } = await admin
-    .from("project_stage_terms")
-    .select("id, report_name, parent_term_id, project_stage_id")
-    .in("id", termIds)
+  const { data: termRows, error: termError } = termIds.length
+    ? await admin
+        .from("project_stage_terms")
+        .select("id, report_name, parent_term_id, project_stage_id")
+        .in("id", termIds)
+    : { data: [] as any[], error: null }
   if (termError) throw termError
 
   const parentIds = Array.from(new Set((termRows ?? []).map((term: any) => term.parent_term_id as string | null).filter(Boolean))) as string[]
-  const stageIds = Array.from(new Set((termRows ?? []).map((term: any) => term.project_stage_id as string)))
+  const stageIdsFromTerms = (termRows ?? []).map((term: any) => term.project_stage_id as string)
+  const stageIdsFromResponses = responses.map((r: any) => r.project_stage_id as string).filter(Boolean)
+  const stageIds = Array.from(new Set([...stageIdsFromTerms, ...stageIdsFromResponses]))
 
   let parentRows: any[] = []
   let stageRows: any[] = []
@@ -54,31 +57,62 @@ async function processReviewResponses(
 
   const items: ReviewSubmissionItem[] = []
   for (const response of responses) {
-    const term = termById.get(response.project_stage_term_id)
-    if (!term) continue
-    const stage = stageById.get(term.project_stage_id)
-    if (!stage || stage.project_id !== response.project_id) continue
     const submittedAt = response.submitted_at || response.updated_at
     const submitterId = (response.updated_by || response.created_by || null) as string | null
-    const parent = term.parent_term_id ? parentById.get(term.parent_term_id) : null
-    items.push({
-      id: response.id,
-      notificationKey: `${response.id}:${submittedAt}`,
-      projectId: response.project_id,
-      projectName: projectById.get(response.project_id) ?? "Unknown project",
-      stageId: stage.id,
-      stageName: stage.name,
-      termId: term.id,
-      parentTermName: parent?.report_name ?? term.report_name,
-      subtermName: parent ? term.report_name : null,
-      submittedById: submitterId,
-      submittedBy: displayPerson(submitterId ? profileById.get(submitterId) : null),
-      submittedAt,
-      status: response.status as ReviewSubmissionStatus,
-      reportNumber: response.report_number ?? null,
-      reportTitle: response.report_title || term.report_name,
-      href: `/projects/${response.project_id}/stages/${stage.id}/terms/${term.id}/reports/${response.id}`,
-    })
+    const projectName = projectById.get(response.project_id) ?? "Unknown project"
+
+    if (response.project_stage_term_id) {
+      // Legacy Term Report
+      const term = termById.get(response.project_stage_term_id)
+      if (!term) continue
+      const stage = stageById.get(term.project_stage_id)
+      if (!stage || stage.project_id !== response.project_id) continue
+      const parent = term.parent_term_id ? parentById.get(term.parent_term_id) : null
+
+      items.push({
+        id: response.id,
+        notificationKey: `${response.id}:${submittedAt}`,
+        projectId: response.project_id,
+        projectName,
+        stageId: stage.id,
+        stageName: stage.name,
+        termId: term.id,
+        parentTermName: parent?.report_name ?? term.report_name,
+        subtermName: parent ? term.report_name : null,
+        submittedById: submitterId,
+        submittedBy: displayPerson(submitterId ? profileById.get(submitterId) : null),
+        submittedAt,
+        status: response.status as ReviewSubmissionStatus,
+        reportNumber: response.report_number ?? null,
+        reportTitle: response.report_title || term.report_name,
+        href: `/projects/${response.project_id}/stages/${stage.id}/terms/${term.id}/reports/${response.id}`,
+      })
+    } else if (response.project_stage_id) {
+      // Direct Stage Report
+      const stage = stageById.get(response.project_stage_id)
+      if (!stage || stage.project_id !== response.project_id) continue
+
+      const reportTitle = response.report_title?.trim() || stage.name
+
+      items.push({
+        id: response.id,
+        notificationKey: `${response.id}:${submittedAt}`,
+        projectId: response.project_id,
+        projectName,
+        stageId: stage.id,
+        stageName: stage.name,
+        termId: null,
+        parentTermName: reportTitle,
+        subtermName: null,
+        submittedById: submitterId,
+        submittedBy: displayPerson(submitterId ? profileById.get(submitterId) : null),
+        submittedAt,
+        status: response.status as ReviewSubmissionStatus,
+        reportNumber: response.report_number ?? null,
+        reportTitle,
+        href: `/projects/${response.project_id}/stages/${stage.id}/reports/${response.id}`,
+      })
+    }
   }
 
   items.sort((a, b) => +new Date(b.submittedAt) - +new Date(a.submittedAt))
@@ -156,7 +190,7 @@ export async function getReviewSubmissionFeed(input: {
 
     const { data: responses, error: responseError } = await admin
       .from("term_responses")
-      .select("id, project_id, project_stage_term_id, report_number, report_title, status, submitted_at, updated_at, created_by, updated_by")
+      .select("id, project_id, project_stage_id, project_stage_term_id, report_number, report_title, status, submitted_at, updated_at, created_by, updated_by")
       .in("project_id", reviewableProjectIds)
       .in("status", ["submitted", "under_review"])
 
@@ -167,7 +201,7 @@ export async function getReviewSubmissionFeed(input: {
       if ((responseError as any).code === "42703" || errMsg.includes("column") || errMsg.includes("does not exist")) {
         const { data: fallback, error: fallbackError } = await admin
           .from("term_responses")
-          .select("id, project_id, project_stage_term_id, status, updated_at, created_by, updated_by")
+          .select("id, project_id, project_stage_id, project_stage_term_id, status, updated_at, created_by, updated_by")
           .in("project_id", reviewableProjectIds)
           .in("status", ["submitted", "under_review"])
         if (fallbackError) throw fallbackError
