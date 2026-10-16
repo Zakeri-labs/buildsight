@@ -19,7 +19,7 @@ import {
 } from "@/lib/review-submissions/client"
 import type { AppNotificationFeed, AppNotificationItem } from "@/lib/notifications/types"
 
-const POLL_INTERVAL_MS = 15_000
+const POLL_INTERVAL_MS = 60_000
 const MAX_STORED_KEYS = 500
 
 function createdLabel(value: string) {
@@ -41,6 +41,7 @@ export function ReviewNotificationCenter({
   const [enabled, setEnabled] = useState(false)
   const feedRef = useRef(feed)
   const initializedRef = useRef(false)
+  const inFlightRef = useRef(false)
   const seenStorageKey = useMemo(() => `buildsight:notifications-seen:${userId}`, [userId])
 
   useEffect(() => {
@@ -97,20 +98,21 @@ export function ReviewNotificationCenter({
   )
 
   const refresh = useCallback(async () => {
+    if (inFlightRef.current) return
+    inFlightRef.current = true
     try {
       const response = await fetch("/api/review-notifications", { cache: "no-store" })
       if (!response.ok) return
       const nextFeed = (await response.json()) as AppNotificationFeed
-      const previousSignature = feedRef.current.items.map((item) => `${item.notificationKey}:${item.status}`).join("|")
-      const nextSignature = nextFeed.items.map((item) => `${item.notificationKey}:${item.status}`).join("|")
       setFeed(nextFeed)
       feedRef.current = nextFeed
       showNewBrowserNotifications(nextFeed.items)
-      if (previousSignature !== nextSignature) router.refresh()
     } catch {
       // Preserve the last reliable in-app state when polling fails.
+    } finally {
+      inFlightRef.current = false
     }
-  }, [router, showNewBrowserNotifications])
+  }, [showNewBrowserNotifications])
 
   useEffect(() => {
     setFeed(initialFeed)
@@ -133,10 +135,49 @@ export function ReviewNotificationCenter({
     return () => window.removeEventListener(REVIEW_NOTIFICATION_PREFERENCE_EVENT, syncPreference)
   }, [seedCurrentItems])
 
+  const refreshRef = useRef(refresh)
   useEffect(() => {
-    const timer = window.setInterval(() => void refresh(), POLL_INTERVAL_MS)
-    return () => window.clearInterval(timer)
+    refreshRef.current = refresh
   }, [refresh])
+
+  useEffect(() => {
+    let timerId: number | null = null
+
+    const stopTimer = () => {
+      if (timerId !== null) {
+        window.clearInterval(timerId)
+        timerId = null
+      }
+    }
+
+    const startTimer = () => {
+      stopTimer()
+      timerId = window.setInterval(() => {
+        void refreshRef.current()
+      }, POLL_INTERVAL_MS)
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshRef.current()
+        startTimer()
+      } else {
+        stopTimer()
+      }
+    }
+
+    if (document.visibilityState === "visible") {
+      void refreshRef.current()
+      startTimer()
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+
+    return () => {
+      stopTimer()
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [])
 
   async function enableNotifications() {
     const result = await enableBrowserReviewNotifications()
