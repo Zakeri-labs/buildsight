@@ -104,25 +104,6 @@ export async function getPaginatedReportsList({
       }
     }
 
-    // Filter by report_credit_usage if creditUsage mode is active
-    let creditReportIds: string[] | null = null
-    if (creditUsage) {
-      let usageQuery = admin.from("report_credit_usage").select("report_id")
-      if (organizationId && isUuid(organizationId)) {
-        usageQuery = usageQuery.eq("organization_id", organizationId)
-      }
-      const { data: usageRows } = await usageQuery
-      creditReportIds = (usageRows ?? []).map((r: any) => r.report_id).filter(isUuid)
-      if (!creditReportIds.length) {
-        return {
-          items: [],
-          totalReports: 0,
-          currentPage: 1,
-          totalPages: 1,
-        }
-      }
-    }
-
     const validStatuses = ["submitted", "under_review", "approved", "rejected", "completed"]
 
     // Construct server-side date range condition matching visible Report date (submitted_at, fallback created_at)
@@ -135,13 +116,16 @@ export async function getPaginatedReportsList({
     // 2. Count total reports matching project, status AND date range
     let countQuery = admin
       .from("term_responses")
-      .select("id", { count: "exact", head: true })
+      .select(
+        creditUsage ? "id, report_credit_usage!inner(organization_id)" : "id",
+        { count: "exact", head: true },
+      )
       .in("project_id", projectIds)
       .is("project_stage_term_id", null)
       .in("status", validStatuses)
 
-    if (creditReportIds) {
-      countQuery = countQuery.in("id", creditReportIds)
+    if (creditUsage && organizationId && isUuid(organizationId)) {
+      countQuery = countQuery.eq("report_credit_usage.organization_id", organizationId)
     }
 
     if (dateOrClause) {
@@ -156,13 +140,17 @@ export async function getPaginatedReportsList({
     // 3. Fetch paginated reports list with server-side date range filter
     let dataQuery = admin
       .from("term_responses")
-      .select("id, project_id, project_stage_id, report_number, report_title, subject, visit_number, visit_date, status, created_by, created_at, submitted_at, completed_at")
+      .select(
+        creditUsage
+          ? "id, project_id, project_stage_id, report_number, report_title, subject, visit_number, visit_date, status, created_by, created_at, submitted_at, completed_at, report_credit_usage!inner(organization_id)"
+          : "id, project_id, project_stage_id, report_number, report_title, subject, visit_number, visit_date, status, created_by, created_at, submitted_at, completed_at",
+      )
       .in("project_id", projectIds)
       .is("project_stage_term_id", null)
       .in("status", validStatuses)
 
-    if (creditReportIds) {
-      dataQuery = dataQuery.in("id", creditReportIds)
+    if (creditUsage && organizationId && isUuid(organizationId)) {
+      dataQuery = dataQuery.eq("report_credit_usage.organization_id", organizationId)
     }
 
     if (dateOrClause) {
