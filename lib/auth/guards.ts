@@ -1,7 +1,7 @@
 import "server-only"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { isUserProjectSupervisor, resolveProjectReadAccessForUser } from "@/lib/auth/project-access"
+import { getVerifiedAuthUser } from "@/lib/auth/request-auth"
 
 export const PROJECT_REVIEW_ACCESS_ROLES = ["project_admin", "project_manager", "reviewer", "approver"] as const
 export const ORGANIZATION_REVIEW_ROLES = ["org_admin", "org_manager"] as const
@@ -15,10 +15,7 @@ export class AuthzError extends Error {
 
 /** Returns the authenticated user id or throws. */
 export async function getUserIdOrThrow(): Promise<string> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getVerifiedAuthUser()
   if (!user) throw new AuthzError("Not authenticated")
   return user.id
 }

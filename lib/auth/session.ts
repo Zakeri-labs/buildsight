@@ -3,6 +3,7 @@ import { cache } from "react"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { resolveUserEffectiveRole } from "@/lib/auth/effective-role"
+import { getVerifiedAuthUser } from "@/lib/auth/request-auth"
 import type { Organization, OrganizationRole, Profile } from "@/lib/db/types"
 
 export type OrgMembership = {
@@ -32,11 +33,10 @@ export const getSession = cache(async (): Promise<SessionContext | null> => {
   }
 
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const user = await getVerifiedAuthUser()
     if (!user) return null
+
+    const supabase = await createClient()
 
     const [{ data: profile }, { data: memberRows }] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),

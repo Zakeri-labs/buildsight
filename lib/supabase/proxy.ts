@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 import { resolveDefaultLandingDestination } from "@/lib/auth/default-landing"
 import { ALL_PROJECTS_SCOPE_VALUE, SELECTED_PROJECT_COOKIE } from "@/lib/project-scope-constants"
+import { INTERNAL_AUTH_HEADERS, signAuthPayload } from "@/lib/auth/internal-tokens"
 
 const PUBLIC_PATHS = ["/auth", "/invite", "/_next", "/favicon", "/api/health", "/d", "/r", "/api/stage-translations/pdf"]
 
@@ -52,6 +53,23 @@ export async function updateSession(request: NextRequest) {
       return preserveResponseCookies(supabaseResponse, NextResponse.redirect(loginUrl))
     }
 
+    // Strip any client-supplied internal auth headers to guarantee trusted boundary
+    const requestHeaders = new Headers(request.headers)
+    requestHeaders.delete(INTERNAL_AUTH_HEADERS.USER_ID)
+    requestHeaders.delete(INTERNAL_AUTH_HEADERS.USER_EMAIL)
+    requestHeaders.delete(INTERNAL_AUTH_HEADERS.TS)
+    requestHeaders.delete(INTERNAL_AUTH_HEADERS.SIG)
+
+    if (user) {
+      const ts = Date.now().toString()
+      const email = user.email ?? ""
+      const sig = await signAuthPayload(user.id, email, ts)
+      requestHeaders.set(INTERNAL_AUTH_HEADERS.USER_ID, user.id)
+      requestHeaders.set(INTERNAL_AUTH_HEADERS.USER_EMAIL, email)
+      requestHeaders.set(INTERNAL_AUTH_HEADERS.TS, ts)
+      requestHeaders.set(INTERNAL_AUTH_HEADERS.SIG, sig)
+    }
+
     // Apply the role-based rule only to the default application root. Explicit
     // invitation, confirmation, and protected deep-link destinations never pass
     // through this branch, so their trusted `next` path remains authoritative.
@@ -67,7 +85,7 @@ export async function updateSession(request: NextRequest) {
 
       if (landing.mode === "admin") {
         request.cookies.set(SELECTED_PROJECT_COOKIE, ALL_PROJECTS_SCOPE_VALUE)
-        const response = NextResponse.next({ request })
+        const response = NextResponse.next({ request: { headers: requestHeaders } })
         response.cookies.set(SELECTED_PROJECT_COOKIE, ALL_PROJECTS_SCOPE_VALUE, {
           path: "/",
           maxAge: 60 * 60 * 24 * 365,
@@ -77,7 +95,8 @@ export async function updateSession(request: NextRequest) {
       }
     }
 
-    return supabaseResponse
+    const response = NextResponse.next({ request: { headers: requestHeaders } })
+    return preserveResponseCookies(supabaseResponse, response)
   } catch (error) {
     console.error("Middleware updateSession error:", error)
     return supabaseResponse
