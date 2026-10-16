@@ -42,14 +42,11 @@ export default async function ReportsPage({
     }
   }
 
-  const page = Math.max(1, parseInt(resolvedParams.page || "1", 10) || 1)
   const dateRange = resolveDashboardDateRange(resolvedParams)
 
   const data = await getPaginatedReportsList({
     userId: session.userId,
     organizationId,
-    page,
-    pageSize: 200,
     dateRange,
     creditUsage: isCreditUsage,
   })

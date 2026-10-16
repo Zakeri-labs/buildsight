@@ -62,20 +62,20 @@ export type PaginatedReportsResult = {
 export async function getPaginatedReportsList({
   userId,
   organizationId,
-  page = 1,
-  pageSize = 200,
+  page,
+  pageSize,
   dateRange = null,
   creditUsage = false,
 }: {
   userId: string
   organizationId?: string
   page?: number
-  pageSize?: number
+  pageSize?: number | null
   dateRange?: DashboardDateRange | null
   creditUsage?: boolean
 }): Promise<PaginatedReportsResult> {
-  const safePage = Math.max(1, Math.floor(page) || 1)
-  const offset = (safePage - 1) * pageSize
+  const safePage = Math.max(1, Math.floor(page || 1) || 1)
+  const offset = pageSize && pageSize > 0 ? (safePage - 1) * pageSize : 0
 
   try {
     const admin = createAdminClient()
@@ -91,7 +91,7 @@ export async function getPaginatedReportsList({
       const { data: userProjects } = await admin
         .from("projects")
         .select("id")
-        .limit(200)
+        .limit(500)
       projectIds = (userProjects ?? []).map((p: any) => p.id).filter(isUuid)
     }
 
@@ -135,9 +135,9 @@ export async function getPaginatedReportsList({
     const { count: totalCount } = await countQuery
 
     const totalReports = totalCount ?? 0
-    const totalPages = Math.max(1, Math.ceil(totalReports / pageSize))
+    const totalPages = pageSize && pageSize > 0 ? Math.max(1, Math.ceil(totalReports / pageSize)) : 1
 
-    // 3. Fetch paginated reports list with server-side date range filter
+    // 3. Fetch reports list with server-side date range filter
     let dataQuery = admin
       .from("term_responses")
       .select(
@@ -157,10 +157,15 @@ export async function getPaginatedReportsList({
       dataQuery = dataQuery.or(dateOrClause)
     }
 
-    const { data: responses, error: responseErr } = await dataQuery
+    let query = dataQuery
       .order("submitted_at", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
-      .range(offset, offset + pageSize - 1)
+
+    if (pageSize && pageSize > 0) {
+      query = query.range(offset, offset + pageSize - 1)
+    }
+
+    const { data: responses, error: responseErr } = await query
 
     if (responseErr || !responses || !responses.length) {
       return {
@@ -171,21 +176,53 @@ export async function getPaginatedReportsList({
       }
     }
 
-    // 5. Hydrate related names (Projects, Project Stages, Profiles)
-    const respProjectIds = Array.from(new Set(responses.map((r: any) => r.project_id).filter(isUuid)))
-    const respStageIds = Array.from(new Set(responses.map((r: any) => r.project_stage_id).filter(isUuid)))
-    const respUserIds = Array.from(new Set(responses.map((r: any) => r.created_by).filter(isUuid)))
+    // If no pageSize was specified and PostgREST max_rows truncated the result, fetch remaining pages in chunks
+    let allResponses = responses
+    if ((!pageSize || pageSize <= 0) && totalReports > responses.length) {
+      let currentOffset = responses.length
+      while (currentOffset < totalReports) {
+        const batchSize = 1000
+        const { data: nextBatch, error: nextBatchErr } = await dataQuery
+          .order("submitted_at", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false })
+          .range(currentOffset, currentOffset + batchSize - 1)
 
-    const [{ data: projectRows }, { data: stageRows }, { data: profileRows }] = await Promise.all([
-      respProjectIds.length
-        ? admin.from("projects").select("id, name, code").in("id", respProjectIds)
-        : Promise.resolve({ data: [] as any[] }),
-      respStageIds.length
-        ? admin.from("project_stages").select("id, name").in("id", respStageIds)
-        : Promise.resolve({ data: [] as any[] }),
-      respUserIds.length
-        ? admin.from("profiles").select("id, full_name, email").in("id", respUserIds)
-        : Promise.resolve({ data: [] as any[] }),
+        if (nextBatchErr || !nextBatch || !nextBatch.length) break
+        allResponses = allResponses.concat(nextBatch)
+        currentOffset += nextBatch.length
+      }
+    }
+
+    // 5. Hydrate related names (Projects, Project Stages, Profiles)
+    const respProjectIds = Array.from(new Set(allResponses.map((r: any) => r.project_id).filter(isUuid)))
+    const respStageIds = Array.from(new Set(allResponses.map((r: any) => r.project_stage_id).filter(isUuid)))
+    const respUserIds = Array.from(new Set(allResponses.map((r: any) => r.created_by).filter(isUuid)))
+
+    async function fetchInChunks<T>(
+      ids: string[],
+      chunkSize: number,
+      fetchFn: (chunk: string[]) => PromiseLike<{ data: T[] | null; error?: any }>
+    ): Promise<T[]> {
+      if (!ids.length) return []
+      const results: T[] = []
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const chunk = ids.slice(i, i + chunkSize)
+        const { data } = await fetchFn(chunk)
+        if (data) results.push(...(data as T[]))
+      }
+      return results
+    }
+
+    const [projectRows, stageRows, profileRows] = await Promise.all([
+      fetchInChunks(respProjectIds, 100, (chunk) =>
+        admin.from("projects").select("id, name, code").in("id", chunk),
+      ),
+      fetchInChunks(respStageIds, 100, (chunk) =>
+        admin.from("project_stages").select("id, name").in("id", chunk),
+      ),
+      fetchInChunks(respUserIds, 100, (chunk) =>
+        admin.from("profiles").select("id, full_name, email").in("id", chunk),
+      ),
     ])
 
     const projectById = new Map<string, { name: string; code: string | null }>(
@@ -209,7 +246,7 @@ export async function getPaginatedReportsList({
     )
 
     // 6. Map into ListReportItem rows
-    const items: ListReportItem[] = responses.map((r: any): ListReportItem => {
+    const items: ListReportItem[] = allResponses.map((r: any): ListReportItem => {
       const proj = projectById.get(r.project_id) ?? { name: "Project", code: null }
       const stageName = stageById.get(r.project_stage_id) ?? "Stage"
       const author = profileById.get(r.created_by) ?? { name: "Supervisor", initials: "SV" }
