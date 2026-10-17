@@ -15,6 +15,7 @@ import { getInitialDocumentsForScope } from "@/lib/initial-documents/server"
 import { toProjectRecord } from "@/lib/projects/project-record"
 import { isProjectTypeValue } from "@/lib/projects/project-options"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { resolveUserEffectiveRole } from "@/lib/auth/effective-role"
 
 type ProjectDocumentRow = {
   id: string
@@ -181,7 +182,7 @@ export default async function ProjectDetailPage({
   const project = projects.find((item) => item.id === projectId)
   if (!project) return notFound()
 
-  const [counts, letters, initialDocumentsResult, siteVisitReports, participants, canManageImages, isSupervisor] = await Promise.all([
+  const [counts, letters, initialDocumentsResult, siteVisitReports, participants, canManageImages, isSupervisor, roleResolution] = await Promise.all([
     getProjectInspectionAndNcrCounts(project.id),
     getProjectDocuments(project.id, session.userId, session.email),
     getInitialDocumentsForScope({
@@ -193,8 +194,10 @@ export default async function ProjectDetailPage({
     getProjectParticipants(project.id),
     canAdministerProject(project.id),
     isUserProjectSupervisor(session.userId, project.id),
+    resolveUserEffectiveRole(session.userId, session.email),
   ])
   const canEditLocation = canManageImages || isSupervisor
+  const canDeleteDocument = roleResolution.role === "admin" && canManageImages
   const projectRecord = toProjectRecord(project, counts)
 
   return (
@@ -238,6 +241,7 @@ export default async function ProjectDetailPage({
       canManageImages={canManageImages}
       canEditProject={canManageImages}
       canEditLocation={canEditLocation}
+      canDeleteDocument={canDeleteDocument}
     />
   )
 }

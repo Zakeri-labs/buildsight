@@ -197,6 +197,7 @@ export function ProjectDetail({
   canManageImages = false,
   canEditProject = false,
   canEditLocation = false,
+  canDeleteDocument = false,
 }: {
   project: ProjectRecord
   editProject: ProjectEditData
@@ -210,6 +211,7 @@ export function ProjectDetail({
   canManageImages?: boolean
   canEditProject?: boolean
   canEditLocation?: boolean
+  canDeleteDocument?: boolean
 }) {
   const { t, locale } = useI18n()
   const currentUser = useCurrentUser()
@@ -857,7 +859,12 @@ export function ProjectDetail({
         </CardContent>
       </Card>
       <ProjectSiteVisitReports projectId={currentProject.id} reports={siteVisitReports} memberMobile={isMember} />
-      <ProjectDocuments projectId={currentProject.id} documents={letters ?? projectDocuments(currentProject)} memberMobile={isMember} />
+      <ProjectDocuments
+        projectId={currentProject.id}
+        documents={letters ?? projectDocuments(currentProject)}
+        memberMobile={isMember}
+        canDeleteDocument={canDeleteDocument}
+      />
 
       {editOpen ? (
         <ProjectEditDialog

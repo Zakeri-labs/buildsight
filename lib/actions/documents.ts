@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache"
 import { getSelectedProjectId } from "@/lib/project-scope"
 import { requireOnboarded } from "@/lib/auth/session"
+import { resolveUserEffectiveRole } from "@/lib/auth/effective-role"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { isDocumentTypeValue, type DocumentTypeValue } from "@/lib/documents/document-types"
 import {
   getDocumentDetailsTemplate,
@@ -583,3 +585,176 @@ function revalidateDocumentPaths(documentId: string, projectId: string) {
   revalidatePath(`/documents/${documentId}/edit`)
   revalidatePath(`/projects/${projectId}`)
 }
+
+export async function deleteProjectDocumentAction(input: {
+  documentId: string
+  projectId: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    // 1. Mandatory server-side authentication
+    const session = await requireOnboarded()
+    const userId = session.userId
+
+    if (!input || !isUuid(input.documentId) || !isUuid(input.projectId)) {
+      return { ok: false, error: "Invalid document or project parameters." }
+    }
+
+    const documentId = input.documentId.trim()
+    const projectId = input.projectId.trim()
+
+    // 2. Resolve user effective role - must be canonical admin
+    const roleResolution = await resolveUserEffectiveRole(session.userId, session.email)
+    if (roleResolution.role !== "admin") {
+      return { ok: false, error: "Only administrators are authorized to delete project documents." }
+    }
+
+    const admin = createAdminClient()
+
+    // 3. Verify project exists and get supervising organization
+    const { data: project, error: projectError } = await admin
+      .from("projects")
+      .select("id, supervising_organization_id")
+      .eq("id", projectId)
+      .maybeSingle()
+
+    if (projectError || !project) {
+      return { ok: false, error: "Project not found or you do not have permission to access it." }
+    }
+
+    // 4. Strict check for canonical admin role on this project:
+    // User must be org_admin of the project's supervising organization OR project_admin on this project.
+    // Managers (org_manager, project_manager), members, and viewers are explicitly denied.
+    const { data: orgMembership } = await admin
+      .from("organization_memberships")
+      .select("role")
+      .eq("organization_id", project.supervising_organization_id)
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .maybeSingle()
+
+    const isOrgAdmin = orgMembership?.role === "org_admin"
+
+    const { data: projectMembership } = await admin
+      .from("project_user_memberships")
+      .select("access_role")
+      .eq("project_id", projectId)
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .maybeSingle()
+
+    const isProjectAdmin = projectMembership?.access_role === "project_admin"
+
+    if (!isOrgAdmin && !isProjectAdmin) {
+      return { ok: false, error: "You must be an administrator to delete project documents." }
+    }
+
+    // 5. Validate document existence and relationship to this project
+    const { data: document, error: docError } = await admin
+      .from("documents")
+      .select("id, project_id, title, original_filename, file_storage_path")
+      .eq("id", documentId)
+      .eq("project_id", projectId)
+      .maybeSingle()
+
+    if (docError || !document) {
+      return { ok: false, error: "Document not found in this project." }
+    }
+
+    // 6. Collect all associated storage files safely
+    const storageFilesToDelete: string[] = []
+
+    if (document.file_storage_path) {
+      // Check if any other document record references this file
+      const { data: otherDoc } = await admin
+        .from("documents")
+        .select("id")
+        .eq("file_storage_path", document.file_storage_path)
+        .neq("id", document.id)
+        .limit(1)
+
+      if (!otherDoc || otherDoc.length === 0) {
+        storageFilesToDelete.push(document.file_storage_path)
+      }
+    }
+
+    // Check associated attachments for storage files
+    const { data: attachments } = await admin
+      .from("document_attachments")
+      .select("id, storage_path")
+      .eq("document_id", document.id)
+
+    if (attachments && attachments.length > 0) {
+      for (const att of attachments) {
+        if (att.storage_path) {
+          const { data: otherAtt } = await admin
+            .from("document_attachments")
+            .select("id")
+            .eq("storage_path", att.storage_path)
+            .neq("id", att.id)
+            .limit(1)
+
+          if (!otherAtt || otherAtt.length === 0) {
+            storageFilesToDelete.push(att.storage_path)
+          }
+        }
+      }
+    }
+
+    // 7. Remove storage files if any (with safe error handling)
+    if (storageFilesToDelete.length > 0) {
+      const { error: storageError } = await admin.storage
+        .from("document-images")
+        .remove(storageFilesToDelete)
+
+      if (storageError) {
+        console.error("[deleteProjectDocumentAction] Storage delete failed:", storageError)
+        return {
+          ok: false,
+          error: "Failed to remove document file from storage. Deletion was aborted to prevent data inconsistency.",
+        }
+      }
+    }
+
+    // 8. Delete document record (cascades to document_attachments in DB)
+    const { error: dbDeleteError } = await admin
+      .from("documents")
+      .delete()
+      .eq("id", document.id)
+      .eq("project_id", projectId)
+
+    if (dbDeleteError) {
+      console.error("[deleteProjectDocumentAction] Database delete failed:", dbDeleteError)
+      return { ok: false, error: "Failed to delete document from database: " + dbDeleteError.message }
+    }
+
+    // 9. Audit log entry
+    try {
+      await admin.from("audit_logs").insert({
+        actor_id: userId,
+        action: "document.deleted",
+        entity_type: "document",
+        entity_id: document.id,
+        project_id: projectId,
+        metadata: {
+          title: document.title,
+          original_filename: document.original_filename,
+          deleted_storage_files: storageFilesToDelete,
+        },
+      })
+    } catch (auditErr) {
+      console.warn("[deleteProjectDocumentAction] Audit log failed (non-fatal):", auditErr)
+    }
+
+    // 10. Revalidate paths
+    revalidateDocumentPaths(document.id, projectId)
+
+    return { ok: true }
+  } catch (error) {
+    console.error("[deleteProjectDocumentAction] Unexpected error:", error)
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "An unexpected error occurred while deleting the document.",
+    }
+  }
+}
+
