@@ -128,6 +128,10 @@ export async function getPaginatedReportsList({
       countQuery = countQuery.eq("report_credit_usage.organization_id", organizationId)
     }
 
+    if (!creditUsage) {
+      countQuery = countQuery.is("deleted_at", null)
+    }
+
     if (dateOrClause) {
       countQuery = countQuery.or(dateOrClause)
     }
@@ -151,6 +155,10 @@ export async function getPaginatedReportsList({
 
     if (creditUsage && organizationId && isUuid(organizationId)) {
       dataQuery = dataQuery.eq("report_credit_usage.organization_id", organizationId)
+    }
+
+    if (!creditUsage) {
+      dataQuery = dataQuery.is("deleted_at", null)
     }
 
     if (dateOrClause) {
@@ -349,6 +357,7 @@ export async function getAllReportsForExcelExport({
       .in("project_id", projectIds)
       .is("project_stage_term_id", null)
       .in("status", validStatuses)
+      .is("deleted_at", null)
 
     if (dateOrClause) {
       dataQuery = dataQuery.or(dateOrClause)

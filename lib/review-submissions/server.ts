@@ -221,6 +221,7 @@ export async function getReviewSubmissionFeed(input: {
       .select("id, project_id, project_stage_id, project_stage_term_id, report_number, report_title, status, submitted_at, updated_at, created_by, updated_by")
       .in("project_id", reviewableProjectIds)
       .in("status", ["submitted", "under_review"])
+      .is("deleted_at", null)
       .order("updated_at", { ascending: false })
       .limit(effectiveLimit)
 
@@ -234,6 +235,7 @@ export async function getReviewSubmissionFeed(input: {
           .select("id, project_id, project_stage_id, project_stage_term_id, status, updated_at, created_by, updated_by")
           .in("project_id", reviewableProjectIds)
           .in("status", ["submitted", "under_review"])
+          .is("deleted_at", null)
           .order("updated_at", { ascending: false })
           .limit(effectiveLimit)
         if (fallbackError) throw fallbackError

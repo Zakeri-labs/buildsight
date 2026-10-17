@@ -74,6 +74,7 @@ async function getProjectSiteVisitReports(projectId: string): Promise<ProjectSit
     .select("id, project_stage_id, report_title, report_number, visit_number, created_at, created_by")
     .eq("project_id", projectId)
     .is("project_stage_term_id", null)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(5)
   if (reportsError) throw reportsError
@@ -242,6 +243,7 @@ export default async function ProjectDetailPage({
       canEditProject={canManageImages}
       canEditLocation={canEditLocation}
       canDeleteDocument={canDeleteDocument}
+      canDeleteReport={canDeleteDocument}
     />
   )
 }

@@ -264,7 +264,8 @@ export async function calculateProjectsProgress(
         admin
           .from("term_responses")
           .select("id, project_id, project_stage_id, response_content")
-          .in("project_id", chunk),
+          .in("project_id", chunk)
+          .is("deleted_at", null),
       ),
     )
     const responseRows = responseResults.flatMap((res) => res.data ?? [])
@@ -964,7 +965,7 @@ export async function getDashboardData(
         : Promise.resolve(emptyReportCcFeed),
       fetchScopedRows(
         "term_responses",
-        "id, project_id, project_stage_id, project_stage_term_id, site_visit_request_id, visit_number, report_title, status, responsible_user_id, submitted_at, updated_at, created_at",
+        "id, project_id, project_stage_id, project_stage_term_id, site_visit_request_id, visit_number, report_title, status, responsible_user_id, submitted_at, updated_at, created_at, deleted_at",
         ids,
       ),
       ids.length
@@ -1471,6 +1472,7 @@ export async function getDashboardData(
         const validReportId = asUuid(response.id)
         return (
           Boolean(validProjectId && validStageId && validReportId) &&
+          !response.deleted_at &&
           !response.project_stage_term_id &&
           Boolean(response.submitted_at) &&
           submittedStageReportStatuses.has(String(response.status ?? ""))
@@ -1508,7 +1510,7 @@ export async function getDashboardData(
     }
 
     const candidateProjects = scoped.map((p) => {
-      const pStageReports = (termResponses ?? []).filter((r: any) => r.project_id === p.id)
+      const pStageReports = (termResponses ?? []).filter((r: any) => r.project_id === p.id && !r.deleted_at)
       const pStageReportsCount = pStageReports.length
       let latestReportAt = 0
       for (const r of pStageReports) {

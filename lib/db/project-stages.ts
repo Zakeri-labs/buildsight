@@ -303,6 +303,7 @@ export async function loadProjectStageExecution(
         .from("term_responses")
         .select("id, project_stage_id, project_stage_term_id, report_number, visit_number, visit_date, report_type, subject, report_title, response_content, status, responsible_user_id, approval_required, response_type, template_reference, instructions, created_by, created_at, updated_at, submitted_at, completed_at")
         .in("project_stage_id", stageIds)
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
     : { data: [], error: null }
   if (responseError) throw responseError
@@ -832,6 +833,7 @@ export async function loadSiteVisitReportContext(projectId: string, siteVisitReq
     .from("term_responses")
     .select("id, project_stage_id, visit_number, status")
     .eq("site_visit_request_id", siteVisitRequestId)
+    .is("deleted_at", null)
     .maybeSingle()
   if (linkedReportError) throw linkedReportError
 

@@ -45,12 +45,14 @@ export async function getSupervisorMyReports(userId: string): Promise<MyReportIt
           .from("term_responses")
           .select("id, project_id, project_stage_id, report_number, report_title, subject, visit_number, status, created_by, created_at, submitted_at, completed_at")
           .in("project_id", projectIds)
+          .is("deleted_at", null)
           .order("created_at", { ascending: false })
           .limit(100)
       : await admin
           .from("term_responses")
           .select("id, project_id, project_stage_id, report_number, report_title, subject, visit_number, status, created_by, created_at, submitted_at, completed_at")
           .eq("created_by", userId)
+          .is("deleted_at", null)
           .order("created_at", { ascending: false })
           .limit(100)
 
