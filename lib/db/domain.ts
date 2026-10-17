@@ -701,11 +701,13 @@ function nameMap(projects: DomainProject[]) {
   return new Map(projects.map((p) => [p.id, p.name]))
 }
 
-async function fetchScopedRows(table: string, columns: string, ids: string[]) {
+async function fetchScopedRows(table: string, columns: string, ids: string[], limit?: number) {
   const projectIds = validUuidList(ids)
   if (projectIds.length === 0) return [] as any[]
   const admin = createAdminClient()
-  const { data, error } = await admin.from(table).select(columns).in("project_id", projectIds)
+  let query = admin.from(table).select(columns).in("project_id", projectIds)
+  if (limit) query = query.limit(limit)
+  const { data, error } = await query
   if (error) throw error
   return data ?? []
 }
@@ -933,15 +935,32 @@ export async function getDashboardData(
       fetchScopedRows("rfis", "project_id, status", ids),
       fetchScopedRows("documents", "id, project_id, document_type", ids),
       fetchScopedRows("variation_orders", "project_id", ids),
-      fetchScopedRows("tasks", "id, project_id, action, type, reference, due_label, due_tone, sort_order", ids),
+      fetchScopedRows("tasks", "id, project_id, action, type, reference, due_label, due_tone, sort_order", ids, 10),
       canLoadProjectFeeds
-        ? getReviewSubmissionFeed({ userId: validUserId, organizationId: validOrgId, projectId: selectedProjectId })
+        ? getReviewSubmissionFeed({
+            userId: validUserId,
+            organizationId: validOrgId,
+            projectId: selectedProjectId,
+            userRole: includeVisitCompliance ? "org_admin" : null,
+            projectIds: ids,
+            limit: 10,
+          })
         : Promise.resolve(emptyReviewFeed),
       canLoadProjectFeeds
-        ? getSiteVisitTaskFeed({ userId: validUserId, projectId: selectedProjectId })
+        ? getSiteVisitTaskFeed({
+            userId: validUserId,
+            projectId: selectedProjectId,
+            userRole: includeVisitCompliance ? "org_admin" : null,
+            limit: 10,
+          })
         : Promise.resolve(emptySiteVisitFeed),
       canLoadProjectFeeds
-        ? getReportCcNotificationFeed({ userId: validUserId, projectId: selectedProjectId })
+        ? getReportCcNotificationFeed({
+            userId: validUserId,
+            projectId: selectedProjectId,
+            projectIds: ids,
+            limit: 10,
+          })
         : Promise.resolve(emptyReportCcFeed),
       fetchScopedRows(
         "term_responses",
@@ -1633,7 +1652,7 @@ export async function getDashboardData(
       ccAddedBy: item.addedByName,
     }))
 
-    const taskRows: TaskRow[] = [
+    const allEligibleTasks: TaskRow[] = [
       ...reportCcTasks,
       ...siteVisitTasks,
       ...reviewTasks,
@@ -1650,6 +1669,18 @@ export async function getDashboardData(
           projectName: names.get(t.project_id) ?? "Unknown",
         })),
     ]
+
+    // Sort all tasks deterministically by timestamp descending, with ID tie-breaker
+    allEligibleTasks.sort((a, b) => {
+      const timeA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0
+      const timeB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0
+      if (timeB !== timeA) {
+        return timeB - timeA
+      }
+      return b.id.localeCompare(a.id)
+    })
+
+    const dashboardTasks = allEligibleTasks.slice(0, 10)
 
     const reportCredits = await getOrganizationReportCredits(orgId, admin)
 
@@ -1669,7 +1700,7 @@ export async function getDashboardData(
       visitCompliance,
       recentSupervisorReports,
       projects: recentProjectsWithReports,
-      tasks: taskRows,
+      tasks: dashboardTasks,
       scopeName: selectedProjectId && scoped.length === 1 ? scoped[0].name : null,
       reportCredits,
     }

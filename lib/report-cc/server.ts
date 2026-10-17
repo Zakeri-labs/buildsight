@@ -311,6 +311,8 @@ async function accessibleProjectIdsForUser(userId: string, candidateProjectIds?:
 export async function getReportCcNotificationFeed(input: {
   userId: string
   projectId: string | null
+  projectIds?: string[]
+  limit?: number
 }): Promise<{ canNotify: boolean; items: ReportCcNotificationItem[] }> {
   const validUserId = asUuid(input.userId)
   if (!validUserId) return { canNotify: false, items: [] }
@@ -318,6 +320,7 @@ export async function getReportCcNotificationFeed(input: {
   const requestedProjectId = input.projectId === null ? null : asUuid(input.projectId)
   if (input.projectId !== null && !requestedProjectId) return { canNotify: false, items: [] }
 
+  const effectiveLimit = Math.max(1, Math.min(input.limit ?? 50, 100))
   const admin = createAdminClient()
 
   // Check whether the user has relevant recipient records before calculating full project access
@@ -327,10 +330,12 @@ export async function getReportCcNotificationFeed(input: {
     .eq("recipient_type", "internal")
     .eq("user_id", validUserId)
     .order("created_at", { ascending: false })
-    .limit(50)
+    .limit(effectiveLimit)
 
   if (requestedProjectId) {
     recipientQuery = recipientQuery.eq("project_id", requestedProjectId)
+  } else if (input.projectIds?.length) {
+    recipientQuery = recipientQuery.in("project_id", input.projectIds)
   }
 
   const { data: rawRecipientRows, error: recipientError } = await recipientQuery
@@ -344,10 +349,13 @@ export async function getReportCcNotificationFeed(input: {
   const candidateProjectIds = validUuidList(rawRecipientRows.map((row: any) => row.project_id))
   if (!candidateProjectIds.length) return { canNotify: true, items: [] }
 
-  const allowedProjectIds = await accessibleProjectIdsForUser(validUserId, candidateProjectIds)
-  const allowedSet = new Set(allowedProjectIds)
-  const recipientRows = rawRecipientRows.filter((row: any) => allowedSet.has(row.project_id))
-  if (!recipientRows.length) return { canNotify: true, items: [] }
+  let recipientRows = rawRecipientRows
+  if (!input.projectIds?.length) {
+    const allowedProjectIds = await accessibleProjectIdsForUser(validUserId, candidateProjectIds)
+    const allowedSet = new Set(allowedProjectIds)
+    recipientRows = rawRecipientRows.filter((row: any) => allowedSet.has(row.project_id))
+    if (!recipientRows.length) return { canNotify: true, items: [] }
+  }
 
   const responseIds = validUuidList(recipientRows.map((row: any) => row.response_id))
   if (!responseIds.length) return { canNotify: true, items: [] }

@@ -327,16 +327,19 @@ export async function getSiteVisitTaskFeed({
   userId,
   projectId,
   userRole,
+  limit,
 }: {
   userId: string
   projectId: string | null
   userRole?: string | null
+  limit?: number
 }): Promise<{ canManage: boolean; items: SiteVisitTaskItem[] }> {
   // A Viewer cannot manage site visits under existing business rules.
   if (userRole === "viewer") {
     return { canManage: false, items: [] }
   }
 
+  const effectiveLimit = Math.max(1, Math.min(limit ?? 50, 100))
   const admin = createAdminClient()
   const access = await getSiteVisitProjectAccess(userId)
   let projectIds = Array.from(access.values()).filter((project) => project.canManage).map((project) => project.id)
@@ -349,7 +352,7 @@ export async function getSiteVisitTaskFeed({
     .in("project_id", projectIds)
     .eq("status", "pending")
     .order("created_at", { ascending: false })
-    .limit(50)
+    .limit(effectiveLimit)
   if (error) {
     if (isMissingSiteVisitSchema(error)) return { canManage: true, items: [] }
     throw error

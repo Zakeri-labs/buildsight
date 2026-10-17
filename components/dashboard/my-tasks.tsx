@@ -157,7 +157,7 @@ export function MyTasks({ tasks }: { tasks: TaskRow[] }) {
     <div className="flex h-full min-h-0 flex-col rounded-xl border border-border bg-card p-5">
       <h2 className="text-base font-semibold text-foreground">My Tasks</h2>
 
-      <ul className="mt-4 flex min-h-0 flex-1 flex-col divide-y divide-border overflow-y-auto">
+      <ul className="mt-4 flex min-h-0 flex-1 flex-col divide-y divide-border overflow-y-auto max-h-[285px] overflow-x-hidden overscroll-contain pr-1 touch-pan-y">
         {tasks.length === 0 && <li className="py-3 text-sm text-muted-foreground">No tasks for this scope.</li>}
         {tasks.map((task) => (
           <li key={task.id}>{task.type === "Review" ? <ReviewTask task={task} /> : task.type === "Site Visit" ? <SiteVisitTask task={task} /> : task.type === "CC" ? <CcTask task={task} /> : <StandardTask task={task} />}</li>
@@ -165,8 +165,8 @@ export function MyTasks({ tasks }: { tasks: TaskRow[] }) {
       </ul>
 
       <Link
-        href="/calendar"
-        className="mt-4 flex items-center justify-between border-t border-border pt-4 text-sm font-medium text-primary hover:underline"
+        href="/my-tasks"
+        className="mt-auto shrink-0 flex items-center justify-between border-t border-border pt-4 text-sm font-medium text-primary hover:underline"
       >
         View all tasks
         <ChevronRight className="size-4 flip-rtl" />
@@ -174,3 +174,5 @@ export function MyTasks({ tasks }: { tasks: TaskRow[] }) {
     </div>
   )
 }
+
+export { ReviewTask, SiteVisitTask, CcTask, StandardTask, typeBadge, dueTone, dateTime }

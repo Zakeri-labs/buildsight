@@ -124,9 +124,12 @@ export async function getReviewSubmissionFeed(input: {
   organizationId: string
   projectId: string | null
   userRole?: string | null
+  projectIds?: string[]
+  limit?: number
 }): Promise<ReviewSubmissionFeed> {
   try {
     const admin = createAdminClient()
+    const effectiveLimit = Math.max(1, Math.min(input.limit ?? 50, 100))
 
     let isOrgReviewer = input.userRole
       ? (ORGANIZATION_REVIEW_ROLES as readonly string[]).includes(input.userRole)
@@ -150,7 +153,13 @@ export async function getReviewSubmissionFeed(input: {
 
     let reviewableProjectIds: string[] = []
 
-    if (isOrgReviewer) {
+    if (input.projectIds?.length && (isOrgReviewer || !isViewer)) {
+      if (input.projectId) {
+        reviewableProjectIds = input.projectIds.includes(input.projectId) ? [input.projectId] : []
+      } else {
+        reviewableProjectIds = input.projectIds
+      }
+    } else if (isOrgReviewer) {
       let projectQuery = admin
         .from("projects")
         .select("id, name")
@@ -213,7 +222,7 @@ export async function getReviewSubmissionFeed(input: {
       .in("project_id", reviewableProjectIds)
       .in("status", ["submitted", "under_review"])
       .order("updated_at", { ascending: false })
-      .limit(50)
+      .limit(effectiveLimit)
 
     if (responseError) {
       // PostgreSQL error 42703 = column does not exist
@@ -226,7 +235,7 @@ export async function getReviewSubmissionFeed(input: {
           .in("project_id", reviewableProjectIds)
           .in("status", ["submitted", "under_review"])
           .order("updated_at", { ascending: false })
-          .limit(50)
+          .limit(effectiveLimit)
         if (fallbackError) throw fallbackError
         if (!fallback?.length) return { canReview: true, items: [] }
 
