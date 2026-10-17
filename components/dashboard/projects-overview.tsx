@@ -114,7 +114,7 @@ export function ProjectsOverview({
         <h2 className="text-base font-semibold text-foreground">Projects Overview</h2>
 
         {/* Mobile Card View (sm:hidden) */}
-        <div className="mt-3 space-y-2.5 sm:hidden">
+        <div className="mt-3 max-h-[365px] space-y-2.5 overflow-y-auto overscroll-contain pr-1 touch-pan-y sm:hidden">
           {projects.length === 0 ? (
             <div className="py-6 text-center text-sm text-muted-foreground">
               No projects yet.
@@ -185,7 +185,7 @@ export function ProjectsOverview({
         </div>
 
         {/* Desktop Table View (hidden sm:block) */}
-        <div className="mt-4 hidden flex-1 overflow-x-auto sm:block">
+        <div className="mt-4 hidden max-h-[365px] flex-1 overflow-auto overscroll-contain pr-1 sm:block">
           <table className="w-full min-w-[640px] table-fixed border-collapse text-sm">
             <colgroup>
               <col className="w-[20%]" />
@@ -198,17 +198,17 @@ export function ProjectsOverview({
               <col className="w-[17%]" />
               <col className="w-[5%]" />
             </colgroup>
-            <thead>
+            <thead className="sticky top-0 z-10 bg-card">
               <tr className="text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <th className="pb-3 pe-3 font-medium">Project Name</th>
-                <th className="pb-3 pe-3 font-medium">Owner / Client</th>
-                <th className="pb-3 pe-3 font-medium">Supervisor</th>
-                <th className="pb-3 pe-3 font-medium">Role</th>
-                <th className="pb-3 pe-3 text-center font-medium">Inspections</th>
-                <th className="pb-3 pe-3 text-center font-medium">RFIs</th>
-                <th className="pb-3 pe-3 text-center font-medium">VOs</th>
-                <th className="pb-3 pe-3 font-medium">Progress</th>
-                <th className="pb-3 text-end font-medium">Actions</th>
+                <th className="border-b border-border bg-card pb-3 pe-3 font-medium">Project Name</th>
+                <th className="border-b border-border bg-card pb-3 pe-3 font-medium">Owner / Client</th>
+                <th className="border-b border-border bg-card pb-3 pe-3 font-medium">Supervisor</th>
+                <th className="border-b border-border bg-card pb-3 pe-3 font-medium">Role</th>
+                <th className="border-b border-border bg-card pb-3 pe-3 text-center font-medium">Inspections</th>
+                <th className="border-b border-border bg-card pb-3 pe-3 text-center font-medium">RFIs</th>
+                <th className="border-b border-border bg-card pb-3 pe-3 text-center font-medium">VOs</th>
+                <th className="border-b border-border bg-card pb-3 pe-3 font-medium">Progress</th>
+                <th className="border-b border-border bg-card pb-3 text-end font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -287,7 +287,7 @@ export function ProjectsOverview({
 
         <Link
           href={selectedProjectId ? `/projects/${selectedProjectId}` : "/projects"}
-          className="mt-4 flex items-center justify-between border-t border-border pt-4 text-sm font-medium text-primary hover:underline"
+          className="mt-auto shrink-0 pt-4 flex items-center justify-between border-t border-border text-sm font-medium text-primary hover:underline"
         >
           {selectedProjectId ? "View project overview" : "View all projects"}
           <ChevronRight className="size-4 flip-rtl" />

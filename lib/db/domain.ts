@@ -1531,14 +1531,14 @@ export async function getDashboardData(
       }
     })
 
-    const top5Candidates = candidateProjects
+    const topCandidates = candidateProjects
       .filter((item) => item.inspectionsCount > 0 || item.latestReportAt > 0)
-      .sort((a, b) => b.latestReportAt - a.latestReportAt)
-      .slice(0, 5)
+      .sort((a, b) => (b.latestReportAt - a.latestReportAt) || (b.inspectionsCount - a.inspectionsCount) || a.project.id.localeCompare(b.project.id))
+      .slice(0, 12)
 
-    const top5ProjectRows = top5Candidates.map((item) => item.project)
-    const { calculatedProgress: top5ProgressMap, imageByProject: top5ImageMap } =
-      await hydrateProjectProgressAndImages(admin, top5ProjectRows)
+    const topProjectRows = topCandidates.map((item) => item.project)
+    const { calculatedProgress: topProgressMap, imageByProject: topImageMap } =
+      await hydrateProjectProgressAndImages(admin, topProjectRows)
 
     const legacyImageCounts = new Map<string, number>()
     for (const project of scoped as any[]) {
@@ -1546,7 +1546,7 @@ export async function getDashboardData(
       if (legacyImage) legacyImageCounts.set(legacyImage, (legacyImageCounts.get(legacyImage) ?? 0) + 1)
     }
 
-    const recentProjectsWithReports = top5Candidates.map(({ project: p, inspectionsCount: pInsps, latestReportAt }) => {
+    const recentProjectsWithReports = topCandidates.map(({ project: p, inspectionsCount: pInsps, latestReportAt }) => {
       const pVos = vos.filter((r) => r.project_id === p.id).length
       const pRfis = rfis.filter((r) => r.project_id === p.id).length
       const supervisor = p.assignedSupervisorId
@@ -1560,7 +1560,7 @@ export async function getDashboardData(
         id: p.id,
         name: p.name,
         image:
-          top5ImageMap.get(p.id) ??
+          topImageMap.get(p.id) ??
           (p.image?.trim() && legacyImageCounts.get(p.image.trim()) === 1 ? p.image : null),
         ownerClient: firstOwnerByProject.get(p.id) ?? null,
         supervisor,
@@ -1568,7 +1568,7 @@ export async function getDashboardData(
         inspections: pInsps,
         rfis: pRfis,
         vos: pVos,
-        progress: top5ProgressMap.get(p.id) ?? 0,
+        progress: topProgressMap.get(p.id) ?? 0,
         canEdit,
         latestReportAt,
         edit: canEdit
