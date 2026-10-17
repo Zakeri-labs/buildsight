@@ -1497,7 +1497,7 @@ export async function getDashboardData(
         const bySubmission = +new Date(b.submittedAt) - +new Date(a.submittedAt)
         return bySubmission || a.id.localeCompare(b.id)
       })
-      .slice(0, 4)
+      .slice(0, 10)
 
     const firstOwnerByProject = new Map<string, string>()
     for (const owner of projectOwners ?? []) {
@@ -1534,7 +1534,7 @@ export async function getDashboardData(
     const topCandidates = candidateProjects
       .filter((item) => item.inspectionsCount > 0 || item.latestReportAt > 0)
       .sort((a, b) => (b.latestReportAt - a.latestReportAt) || (b.inspectionsCount - a.inspectionsCount) || a.project.id.localeCompare(b.project.id))
-      .slice(0, 12)
+      .slice(0, 10)
 
     const topProjectRows = topCandidates.map((item) => item.project)
     const { calculatedProgress: topProgressMap, imageByProject: topImageMap } =

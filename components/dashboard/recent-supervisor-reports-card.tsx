@@ -31,13 +31,13 @@ export function RecentSupervisorReportsCard({
     <div className="flex h-full min-h-0 flex-col rounded-xl border border-border bg-card p-5">
       <h2 className="text-base font-semibold text-foreground">Recent Supervisor Reports</h2>
 
-      <div className="mt-3 flex min-h-0 flex-1 flex-col justify-start overflow-y-auto">
+      <div className="mt-3 min-h-0 flex-1 overflow-y-auto max-h-[235px] overflow-x-hidden overscroll-contain pr-1 touch-pan-y">
         {reports.length ? (
           <ul className="divide-y divide-border/70">
             {reports.map((report) => {
               const submitted = formatSubmission(report.submittedAt)
               return (
-                <li key={report.id} className="py-2 first:pt-0 last:pb-0">
+                <li key={report.id} className="py-2.5 first:pt-0 last:pb-0">
                   <div className="flex min-w-0 items-baseline gap-3">
                     <Link
                       href={report.href}
@@ -70,7 +70,7 @@ export function RecentSupervisorReportsCard({
 
       <Link
         href="/reports"
-        className="mt-3 flex items-center justify-between border-t border-border pt-4 text-sm font-medium text-primary hover:underline"
+        className="mt-auto shrink-0 pt-4 flex items-center justify-between border-t border-border text-sm font-medium text-primary hover:underline"
       >
         View all reports
         <ChevronRight className="size-4 flip-rtl" />
