@@ -91,11 +91,12 @@ export async function getPaginatedReportsList({
       const { data: userProjects } = await admin
         .from("projects")
         .select("id")
+        .is("deleted_at", null)
         .limit(500)
       projectIds = (userProjects ?? []).map((p: any) => p.id).filter(isUuid)
     }
 
-    if (!projectIds.length) {
+    if (!creditUsage && !projectIds.length) {
       return {
         items: [],
         totalReports: 0,
@@ -120,16 +121,15 @@ export async function getPaginatedReportsList({
         creditUsage ? "id, report_credit_usage!inner(organization_id)" : "id",
         { count: "exact", head: true },
       )
-      .in("project_id", projectIds)
       .is("project_stage_term_id", null)
       .in("status", validStatuses)
 
-    if (creditUsage && organizationId && isUuid(organizationId)) {
-      countQuery = countQuery.eq("report_credit_usage.organization_id", organizationId)
-    }
-
-    if (!creditUsage) {
-      countQuery = countQuery.is("deleted_at", null)
+    if (creditUsage) {
+      if (organizationId && isUuid(organizationId)) {
+        countQuery = countQuery.eq("report_credit_usage.organization_id", organizationId)
+      }
+    } else {
+      countQuery = countQuery.in("project_id", projectIds).is("deleted_at", null)
     }
 
     if (dateOrClause) {
@@ -149,16 +149,15 @@ export async function getPaginatedReportsList({
           ? "id, project_id, project_stage_id, report_number, report_title, subject, visit_number, visit_date, status, created_by, created_at, submitted_at, completed_at, report_credit_usage!inner(organization_id)"
           : "id, project_id, project_stage_id, report_number, report_title, subject, visit_number, visit_date, status, created_by, created_at, submitted_at, completed_at",
       )
-      .in("project_id", projectIds)
       .is("project_stage_term_id", null)
       .in("status", validStatuses)
 
-    if (creditUsage && organizationId && isUuid(organizationId)) {
-      dataQuery = dataQuery.eq("report_credit_usage.organization_id", organizationId)
-    }
-
-    if (!creditUsage) {
-      dataQuery = dataQuery.is("deleted_at", null)
+    if (creditUsage) {
+      if (organizationId && isUuid(organizationId)) {
+        dataQuery = dataQuery.eq("report_credit_usage.organization_id", organizationId)
+      }
+    } else {
+      dataQuery = dataQuery.in("project_id", projectIds).is("deleted_at", null)
     }
 
     if (dateOrClause) {
@@ -333,6 +332,7 @@ export async function getAllReportsForExcelExport({
       const { data: userProjects } = await admin
         .from("projects")
         .select("id")
+        .is("deleted_at", null)
         .limit(500)
       projectIds = (userProjects ?? []).map((p: any) => p.id).filter(isUuid)
     }

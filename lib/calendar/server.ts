@@ -231,13 +231,13 @@ export async function resolveCalendarProjectScope(userId: string): Promise<Calen
 
   const [organizationProjectsResult, explicitAdminProjectsResult, viewerOwnerProjectsResult] = await Promise.all([
     adminOrganizationIds.length
-      ? admin.from("projects").select(projectColumns).in("supervising_organization_id", adminOrganizationIds)
+      ? admin.from("projects").select(projectColumns).in("supervising_organization_id", adminOrganizationIds).is("deleted_at", null)
       : Promise.resolve({ data: [] as any[], error: null }),
     explicitProjectAdminIds.length
-      ? admin.from("projects").select(projectColumns).in("id", explicitProjectAdminIds)
+      ? admin.from("projects").select(projectColumns).in("id", explicitProjectAdminIds).is("deleted_at", null)
       : Promise.resolve({ data: [] as any[], error: null }),
     viewerOwnedProjectIds.length && viewerOrganizationIds.length
-      ? admin.from("projects").select(projectColumns).in("id", viewerOwnedProjectIds).in("supervising_organization_id", viewerOrganizationIds)
+      ? admin.from("projects").select(projectColumns).in("id", viewerOwnedProjectIds).in("supervising_organization_id", viewerOrganizationIds).is("deleted_at", null)
       : Promise.resolve({ data: [] as any[], error: null }),
   ])
 

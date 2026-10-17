@@ -1464,8 +1464,8 @@ export function ProjectsList({
             </DialogTitle>
             <DialogDescription className="text-pretty">
               {locale === "ar"
-                ? `هل أنت متأكد من رغبتك في حذف مشروع ${deleteTarget?.name ?? ""}؟ لا يمكن التراجع عن هذا الإجراء.`
-                : `Are you sure you want to delete ${deleteTarget?.name ?? "this project"}? This action cannot be undone.`}
+                ? `هل أنت متأكد من رغبتك في حذف مشروع ${deleteTarget?.name ?? ""}؟ سيتم إخفاء المشروع وإزالة تقاريره من الواجهات التشغيلية مع الاحتفاظ الكامل بسجل التقارير والأرصدة والاشتراك.`
+                : `Are you sure you want to delete ${deleteTarget?.name ?? "this project"}? The project and its reports will be removed from operational views while preserving report history and subscription credits.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -1478,7 +1478,7 @@ export function ProjectsList({
             ) : deletionImpact ? (
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  {locale === "ar" ? "البيانات التي سيتم حذفها" : "Related records to be deleted"}
+                  {locale === "ar" ? "البيانات المرتبطة بالمشروع" : "Associated project records"}
                 </p>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs text-slate-700 dark:text-slate-300">
                   <ImpactRow label={locale === "ar" ? "المراحل" : "Stages"} value={deletionImpact.stages} />

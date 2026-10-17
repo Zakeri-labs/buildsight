@@ -269,7 +269,7 @@ export async function deleteProject(input: {
     const admin = createAdminClient()
     const { data: project, error: projectError } = await admin
       .from("projects")
-      .select("id, name, supervising_organization_id")
+      .select("id, name, supervising_organization_id, deleted_at")
       .eq("id", input.projectId)
       .maybeSingle()
     if (projectError) throw projectError
@@ -277,6 +277,17 @@ export async function deleteProject(input: {
 
     const actorId = await assertOrgAdmin(project.supervising_organization_id)
     const impact = await getProjectDeletionImpactWithAdmin(admin, input.projectId)
+
+    if (project.deleted_at) {
+      // Idempotent retry: project is already soft-deleted
+      return {
+        ok: true,
+        data: {
+          impact,
+          storageCleanupIncomplete: false,
+        },
+      }
+    }
 
     await audit({
       actorId,
@@ -291,16 +302,41 @@ export async function deleteProject(input: {
       },
     })
 
-    const { data: deleted, error: deleteError } = await admin
+    const now = new Date().toISOString()
+
+    // 1. Soft-delete all term_responses (site visit reports, inspection reports) for this project
+    const { error: reportsSoftDeleteError } = await admin
+      .from("term_responses")
+      .update({
+        deleted_at: now,
+        deleted_by: actorId,
+        updated_at: now,
+      })
+      .eq("project_id", input.projectId)
+      .is("deleted_at", null)
+    if (reportsSoftDeleteError) throw reportsSoftDeleteError
+
+    // 2. Soft-delete the project itself
+    const { data: updatedProject, error: projectUpdateError } = await admin
       .from("projects")
-      .delete()
+      .update({
+        deleted_at: now,
+        deleted_by: actorId,
+        status: "inactive",
+        updated_at: now,
+      })
       .eq("id", input.projectId)
+      .is("deleted_at", null)
       .select("id")
       .maybeSingle()
-    if (deleteError) throw deleteError
-    if (!deleted) return { ok: false, error: "Project not found or already deleted." }
+    if (projectUpdateError) throw projectUpdateError
+    if (!updatedProject) {
+      return { ok: true, data: { impact, storageCleanupIncomplete: false } }
+    }
 
-    const failedBuckets = await removeProjectStorageObjects(admin, input.projectId)
+    // 3. Storage files:
+    // We intentionally do NOT delete project-stage-evidence or project-stage-translations
+    // storage objects, preserving historical report PDFs and evidence for subscription/audit.
 
     const cookieStore = await cookies()
     if (cookieStore.get(SELECTED_PROJECT_COOKIE)?.value === input.projectId) {
@@ -313,6 +349,7 @@ export async function deleteProject(input: {
 
     revalidatePath("/", "layout")
     revalidatePath("/projects")
+    revalidatePath("/reports")
     revalidatePath("/documents")
     revalidatePath("/initial-documents")
     revalidatePath("/users")
@@ -321,7 +358,7 @@ export async function deleteProject(input: {
       ok: true,
       data: {
         impact,
-        storageCleanupIncomplete: failedBuckets.length > 0,
+        storageCleanupIncomplete: false,
       },
     }
   } catch (err) {

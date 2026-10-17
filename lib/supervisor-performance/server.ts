@@ -75,6 +75,7 @@ export async function loadSupervisorPerformanceData(
       "id, name, code, status, supervision_type, assigned_supervisor_id, supervising_organization_id, start_date, supervision_start_date",
     )
     .eq("supervising_organization_id", organizationId)
+    .is("deleted_at", null)
 
   if (projectsErr) throw projectsErr
 
@@ -225,6 +226,7 @@ export async function loadSupervisorVisitComplianceData(
       "id, name, code, status, supervision_type, assigned_supervisor_id, supervising_organization_id, start_date, supervision_start_date",
     )
     .eq("supervising_organization_id", organizationId)
+    .is("deleted_at", null)
 
   if (projectsErr) throw projectsErr
 

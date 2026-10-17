@@ -60,6 +60,8 @@ export type DomainProject = {
   progressPlanned: number
   progressActual: number
   progressDelay: number
+  deletedAt?: string | null
+  deletedBy?: string | null
 }
 
 export type NcrRow = {
@@ -466,6 +468,7 @@ export async function getOrgProjects(
       .from("projects")
       .select(projectColumns)
       .eq("supervising_organization_id", orgId)
+      .is("deleted_at", null)
       .order("code", { ascending: false, nullsFirst: false })
       .order("name", { ascending: true })
     if (result.error) throw result.error
@@ -492,6 +495,7 @@ export async function getOrgProjects(
           .select(projectColumns)
           .eq("supervising_organization_id", orgId)
           .in("id", projectIds)
+          .is("deleted_at", null)
           .order("code", { ascending: false, nullsFirst: false })
           .order("name", { ascending: true })
         if (result.error) throw result.error
@@ -518,7 +522,8 @@ export async function getOrgProjects(
           .from("projects")
           .select("id")
           .eq("assigned_user_id", userId)
-          .eq("supervising_organization_id", orgId),
+          .eq("supervising_organization_id", orgId)
+          .is("deleted_at", null),
       ])
 
       if (participantResult.error) throw participantResult.error
@@ -537,6 +542,7 @@ export async function getOrgProjects(
         .from("projects")
         .select(projectColumns)
         .eq("supervising_organization_id", orgId)
+        .is("deleted_at", null)
 
       if (memberProjectIds.length > 0) {
         query = query.or(`assigned_supervisor_id.eq.${userId},id.in.(${memberProjectIds.join(",")})`)
@@ -566,7 +572,7 @@ export async function getOrgProjects(
           ? admin.from("project_organization_memberships").select("project_id").in("organization_id", organizationIds).eq("status", "active")
           : Promise.resolve({ data: [] as any[], error: null }),
         organizationIds.length
-          ? admin.from("projects").select("id").in("supervising_organization_id", organizationIds)
+          ? admin.from("projects").select("id").in("supervising_organization_id", organizationIds).is("deleted_at", null)
           : Promise.resolve({ data: [] as any[], error: null }),
       ])
       if (projectOrgResult.error) throw projectOrgResult.error
@@ -584,6 +590,7 @@ export async function getOrgProjects(
           .from("projects")
           .select(projectColumns)
           .in("id", projectIds)
+          .is("deleted_at", null)
           .order("code", { ascending: false, nullsFirst: false })
           .order("name", { ascending: true })
         if (result.error) throw result.error
