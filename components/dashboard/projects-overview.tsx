@@ -19,8 +19,8 @@ export type ProjectOverviewRow = {
   supervisor: string | null
   role: string
   inspections: number
-  rfis: number
-  vos: number
+  rfis?: number
+  vos?: number
   progress: number
   canEdit: boolean
   edit: {
@@ -114,7 +114,7 @@ export function ProjectsOverview({
         <h2 className="text-base font-semibold text-foreground">Projects Overview</h2>
 
         {/* Mobile Card View (sm:hidden) */}
-        <div className="mt-3 max-h-[365px] space-y-2.5 overflow-y-auto overscroll-contain pr-1 touch-pan-y sm:hidden">
+        <div className="mt-3 max-h-[460px] space-y-2.5 overflow-y-auto overscroll-contain pr-1 touch-pan-y sm:hidden">
           {projects.length === 0 ? (
             <div className="py-6 text-center text-sm text-muted-foreground">
               No projects yet.
@@ -169,8 +169,6 @@ export function ProjectsOverview({
                 <div className="flex items-center justify-between gap-2 text-xs pt-1">
                   <div className="flex items-center gap-2.5 text-[11px]">
                     <span className="font-semibold text-blue-600">{p.inspections} Insp</span>
-                    <span className="font-semibold text-emerald-600">{p.rfis} RFI</span>
-                    <span className="font-semibold text-amber-600">{p.vos} VO</span>
                   </div>
                   <div className="flex items-center gap-1.5 w-24">
                     <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
@@ -185,18 +183,16 @@ export function ProjectsOverview({
         </div>
 
         {/* Desktop Table View (hidden sm:block) */}
-        <div className="mt-4 hidden max-h-[365px] flex-1 overflow-auto overscroll-contain pr-1 sm:block">
-          <table className="w-full min-w-[640px] table-fixed border-collapse text-sm">
+        <div className="mt-4 hidden min-h-0 flex-1 overflow-auto overscroll-contain pr-1 sm:block">
+          <table className="w-full min-w-[560px] table-fixed border-collapse text-sm">
             <colgroup>
-              <col className="w-[20%]" />
-              <col className="w-[14%]" />
-              <col className="w-[14%]" />
+              <col className="w-[25%]" />
+              <col className="w-[18%]" />
+              <col className="w-[18%]" />
+              <col className="w-[11%]" />
               <col className="w-[10%]" />
-              <col className="w-[8%]" />
+              <col className="w-[12%]" />
               <col className="w-[6%]" />
-              <col className="w-[6%]" />
-              <col className="w-[17%]" />
-              <col className="w-[5%]" />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-card">
               <tr className="text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -205,8 +201,6 @@ export function ProjectsOverview({
                 <th className="border-b border-border bg-card pb-3 pe-3 font-medium">Supervisor</th>
                 <th className="border-b border-border bg-card pb-3 pe-3 font-medium">Role</th>
                 <th className="border-b border-border bg-card pb-3 pe-3 text-center font-medium">Inspections</th>
-                <th className="border-b border-border bg-card pb-3 pe-3 text-center font-medium">RFIs</th>
-                <th className="border-b border-border bg-card pb-3 pe-3 text-center font-medium">VOs</th>
                 <th className="border-b border-border bg-card pb-3 pe-3 font-medium">Progress</th>
                 <th className="border-b border-border bg-card pb-3 text-end font-medium">Actions</th>
               </tr>
@@ -214,7 +208,7 @@ export function ProjectsOverview({
             <tbody>
               {projects.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="py-6 text-center text-sm text-muted-foreground">
+                  <td colSpan={7} className="py-6 text-center text-sm text-muted-foreground">
                     No projects yet.
                   </td>
                 </tr>
@@ -251,8 +245,6 @@ export function ProjectsOverview({
                     </span>
                   </td>
                   <td className="py-3 pe-3 text-center font-semibold text-blue-600">{p.inspections}</td>
-                  <td className="py-3 pe-3 text-center font-semibold text-emerald-600">{p.rfis}</td>
-                  <td className="py-3 pe-3 text-center font-semibold text-amber-600">{p.vos}</td>
                   <td className="py-3 pe-3">
                     <div className="flex items-center gap-2">
                       <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
