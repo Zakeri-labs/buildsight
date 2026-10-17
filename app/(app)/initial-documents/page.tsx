@@ -1,5 +1,6 @@
 import { InitialDocumentsList } from "@/components/initial-documents/initial-documents-list"
 import { requireOnboarded } from "@/lib/auth/session"
+import { resolveUserEffectiveRole } from "@/lib/auth/effective-role"
 import { getInitialDocumentsForScope } from "@/lib/initial-documents/server"
 import { getSelectedProjectId } from "@/lib/project-scope"
 import { createClient } from "@/lib/supabase/server"
@@ -34,12 +35,17 @@ export default async function InitialDocumentsPage({ searchParams }: { searchPar
     }
   }
 
-  const result = await getInitialDocumentsForScope({
-    projectId: effectiveProjectId,
-    currentUserId: session.userId,
-    currentUserEmail: session.email,
-    supabase,
-  })
+  const [result, roleResolution] = await Promise.all([
+    getInitialDocumentsForScope({
+      projectId: effectiveProjectId,
+      currentUserId: session.userId,
+      currentUserEmail: session.email,
+      supabase,
+    }),
+    resolveUserEffectiveRole(session.userId, session.email),
+  ])
+
+  const canDeleteDocument = roleResolution.role === "admin"
 
   return (
     <InitialDocumentsList
@@ -47,6 +53,7 @@ export default async function InitialDocumentsPage({ searchParams }: { searchPar
       selectedProjectId={effectiveProjectId}
       selectedProjectName={selectedProjectName}
       errorMessage={result.errorMessage}
+      canDeleteDocument={canDeleteDocument}
     />
   )
 }

@@ -855,6 +855,7 @@ export function ProjectDetail({
             selectedProjectName={currentProject.name}
             errorMessage={initialDocumentsError}
             compactMobile={isMember}
+            canDeleteDocument={canDeleteDocument}
           />
         </CardContent>
       </Card>

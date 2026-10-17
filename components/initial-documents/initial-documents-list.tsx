@@ -1,7 +1,8 @@
 "use client"
 
-import { useMemo, useState, type ChangeEvent, type ComponentType } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentType } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   Download,
   Eye,
@@ -10,11 +11,14 @@ import {
   FileSpreadsheet,
   FileText,
   FolderOpen,
+  Loader2,
   Presentation,
   Search,
   Share2,
+  Trash2,
 } from "lucide-react"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
@@ -28,10 +32,14 @@ import { useI18n } from "@/lib/i18n"
 import { ProjectOverviewTableColumns, projectOverviewTableCellClass } from "@/components/projects/project-overview-table-columns"
 import { AddProjectDocumentModal } from "@/components/initial-documents/add-project-document-modal"
 import { cn } from "@/lib/utils"
+import { useCurrentUser } from "@/components/current-user-provider"
+import { deleteInitialDocumentAction } from "@/lib/actions/initial-documents"
 
 export type { InitialDocumentListItem } from "@/lib/initial-documents/types"
 
 type SortValue = "newest" | "oldest" | "file_name" | "project_name" | "file_size"
+
+const HOLD_DURATION_MS = 400
 
 function formatDate(value: string, locale: string) {
   const date = new Date(value)
@@ -60,7 +68,6 @@ function canPreview(item: InitialDocumentListItem) {
   return isPdfItem(item) || isImageItem(item)
 }
 
-
 function getDisplayCategory(item: Pick<InitialDocumentListItem, "category" | "uploadCategory">, isArabic: boolean) {
   const uploadCategory = getInitialDocumentUploadCategory(item.uploadCategory)
   if (uploadCategory) {
@@ -70,6 +77,193 @@ function getDisplayCategory(item: Pick<InitialDocumentListItem, "category" | "up
   return { value: `category:${category.value}`, label: isArabic ? category.labelAr : category.label }
 }
 
+function HoldToDeleteInitialDocumentButton({
+  fileName,
+  onHoldComplete,
+  compact = false,
+}: {
+  fileName: string
+  onHoldComplete: () => void
+  compact?: boolean
+}) {
+  const [progress, setProgress] = useState(0)
+  const [isHolding, setIsHolding] = useState(false)
+  const animFrameRef = useRef<number | null>(null)
+  const startTimeRef = useRef<number | null>(null)
+  const completedRef = useRef(false)
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
+
+  const resetHold = useCallback(() => {
+    if (animFrameRef.current !== null) {
+      cancelAnimationFrame(animFrameRef.current)
+      animFrameRef.current = null
+    }
+    startTimeRef.current = null
+    setIsHolding(false)
+    setProgress(0)
+    completedRef.current = false
+  }, [])
+
+  const startHold = useCallback(() => {
+    if (animFrameRef.current !== null) {
+      cancelAnimationFrame(animFrameRef.current)
+    }
+    completedRef.current = false
+    setIsHolding(true)
+    setProgress(0)
+    const startTime = performance.now()
+    startTimeRef.current = startTime
+
+    const step = (now: number) => {
+      const elapsed = now - startTime
+      const currentProgress = Math.min(Math.max(elapsed / HOLD_DURATION_MS, 0), 1)
+      setProgress(currentProgress)
+
+      if (elapsed >= HOLD_DURATION_MS) {
+        completedRef.current = true
+        setIsHolding(false)
+        setProgress(1)
+        animFrameRef.current = null
+        onHoldComplete()
+      } else {
+        animFrameRef.current = requestAnimationFrame(step)
+      }
+    }
+
+    animFrameRef.current = requestAnimationFrame(step)
+  }, [onHoldComplete])
+
+  useEffect(() => {
+    const handleBlur = () => resetHold()
+    const handleVisibilityChange = () => {
+      if (window.document.hidden) resetHold()
+    }
+
+    window.addEventListener("blur", handleBlur)
+    window.document.addEventListener("visibilitychange", handleVisibilityChange)
+
+    return () => {
+      resetHold()
+      window.removeEventListener("blur", handleBlur)
+      window.document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [resetHold])
+
+  const radius = 8
+  const circumference = 2 * Math.PI * radius
+  const strokeDashoffset = circumference * (1 - progress)
+
+  return (
+    <button
+      type="button"
+      className={cn(
+        "relative inline-flex shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors select-none",
+        compact ? "size-9 border" : "size-8",
+        "hover:bg-destructive/10 hover:text-destructive focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-destructive",
+        isHolding && "bg-destructive/15 text-destructive font-medium",
+      )}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return
+        e.preventDefault()
+        startHold()
+      }}
+      onPointerUp={() => {
+        if (!completedRef.current) {
+          resetHold()
+        }
+      }}
+      onPointerLeave={() => {
+        if (!completedRef.current) {
+          resetHold()
+        }
+      }}
+      onPointerCancel={() => {
+        resetHold()
+      }}
+      onTouchStart={(e) => {
+        const touch = e.touches[0]
+        if (touch) {
+          touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
+        }
+      }}
+      onTouchMove={(e) => {
+        const touch = e.touches[0]
+        if (touch && touchStartPosRef.current) {
+          const dx = Math.abs(touch.clientX - touchStartPosRef.current.x)
+          const dy = Math.abs(touch.clientY - touchStartPosRef.current.y)
+          if (dx > 6 || dy > 6) {
+            resetHold()
+          }
+        }
+      }}
+      onTouchEnd={() => {
+        touchStartPosRef.current = null
+        if (!completedRef.current) {
+          resetHold()
+        }
+      }}
+      onTouchCancel={() => {
+        touchStartPosRef.current = null
+        resetHold()
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          if (!e.repeat && !isHolding) {
+            startHold()
+          }
+        }
+      }}
+      onKeyUp={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          if (!completedRef.current) {
+            resetHold()
+          }
+        }
+      }}
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      }}
+      aria-label={`Delete ${fileName} (press and hold for 400 ms)`}
+      title="Press and hold for 400 ms"
+    >
+      <svg
+        className={cn(
+          "absolute inset-0 size-full -rotate-90 pointer-events-none transition-opacity duration-150 p-1",
+          isHolding || progress > 0 ? "opacity-100" : "opacity-0",
+        )}
+        viewBox="0 0 20 20"
+        aria-hidden="true"
+      >
+        <circle
+          cx="10"
+          cy="10"
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          className="text-destructive/25"
+        />
+        <circle
+          cx="10"
+          cy="10"
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          className="text-destructive"
+        />
+      </svg>
+      <Trash2 className={cn("size-4 text-inherit transition-transform duration-100", isHolding && "scale-90")} />
+    </button>
+  )
+}
+
 export function InitialDocumentsList({
   documents,
   selectedProjectId,
@@ -77,6 +271,7 @@ export function InitialDocumentsList({
   errorMessage,
   embedded = false,
   compactMobile = false,
+  canDeleteDocument = false,
 }: {
   documents: InitialDocumentListItem[]
   selectedProjectId: string | null
@@ -84,7 +279,56 @@ export function InitialDocumentsList({
   errorMessage?: string | null
   embedded?: boolean
   compactMobile?: boolean
+  canDeleteDocument?: boolean
 }) {
+  const router = useRouter()
+  const currentUser = useCurrentUser()
+  const isActualAdmin = Boolean(canDeleteDocument || currentUser?.role === "org_admin")
+
+  const [items, setItems] = useState<InitialDocumentListItem[]>(documents)
+  useEffect(() => {
+    setItems(documents)
+  }, [documents])
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [documentToDelete, setDocumentToDelete] = useState<InitialDocumentListItem | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const handleHoldComplete = useCallback((item: InitialDocumentListItem) => {
+    setDocumentToDelete(item)
+    setDeleteError(null)
+    setDeleteDialogOpen(true)
+  }, [])
+
+  const handleConfirmDelete = async () => {
+    if (!documentToDelete || isDeleting) return
+    setIsDeleting(true)
+    setDeleteError(null)
+
+    try {
+      const res = await deleteInitialDocumentAction(
+        documentToDelete.id,
+        documentToDelete.projectId,
+      )
+
+      if (!res.ok) {
+        setDeleteError(res.error || "Failed to delete document.")
+        setIsDeleting(false)
+        return
+      }
+
+      setItems((prev) => prev.filter((d) => d.id !== documentToDelete.id))
+      setDeleteDialogOpen(false)
+      setDocumentToDelete(null)
+      setIsDeleting(false)
+      router.refresh()
+    } catch (err) {
+      setIsDeleting(false)
+      setDeleteError(err instanceof Error ? err.message : "An unexpected error occurred while deleting the document.")
+    }
+  }
+
   const { locale } = useI18n()
   const isArabic = locale === "ar"
   const [search, setSearch] = useState("")
@@ -143,16 +387,16 @@ export function InitialDocumentsList({
 
   const categoryOptions = useMemo(() => {
     const options = new Map<string, { value: string; label: string }>()
-    for (const item of documents) {
+    for (const item of items) {
       const definition = getDisplayCategory(item, isArabic)
       options.set(definition.value, definition)
     }
     return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, locale))
-  }, [documents, isArabic, locale])
+  }, [items, isArabic, locale])
 
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase(locale)
-    const result = documents.filter((item) => {
+    const result = items.filter((item) => {
       if (category !== "all" && getDisplayCategory(item, isArabic).value !== category) return false
       if (!query) return true
       return item.fileName.toLocaleLowerCase(locale).includes(query) || item.projectName.toLocaleLowerCase(locale).includes(query)
@@ -164,11 +408,11 @@ export function InitialDocumentsList({
       if (sort === "file_size") return b.fileSize - a.fileSize
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     })
-  }, [category, documents, isArabic, locale, search, sort])
+  }, [category, items, isArabic, locale, search, sort])
 
-  const drawingCount = documents.filter((item) => ["drawing", "three_d_perspective"].includes(item.uploadCategory ?? "") || (!item.uploadCategory && item.category === "approved_drawings")).length
-  const contractCount = documents.filter((item) => ["supervision_agreement", "contract_agreement"].includes(item.uploadCategory ?? "") || (!item.uploadCategory && ["contract", "consultant_agreement", "contractor_agreement"].includes(item.category))).length
-  const otherCount = documents.filter((item) => item.uploadCategory === "additional_documents" || (!item.uploadCategory && item.category === "other")).length
+  const drawingCount = items.filter((item) => ["drawing", "three_d_perspective"].includes(item.uploadCategory ?? "") || (!item.uploadCategory && item.category === "approved_drawings")).length
+  const contractCount = items.filter((item) => ["supervision_agreement", "contract_agreement"].includes(item.uploadCategory ?? "") || (!item.uploadCategory && ["contract", "consultant_agreement", "contractor_agreement"].includes(item.category))).length
+  const otherCount = items.filter((item) => item.uploadCategory === "additional_documents" || (!item.uploadCategory && item.category === "other")).length
 
   return (
     <div className={cn("flex flex-col", embedded ? "gap-0" : "gap-5")}>
@@ -181,7 +425,7 @@ export function InitialDocumentsList({
           {!embedded ? (
             <>
           <div className="-mx-1 flex flex-nowrap gap-2 overflow-x-auto px-1 pb-1 text-xs text-muted-foreground md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
-            <span className="shrink-0 rounded-full border bg-card px-3 py-1.5 font-medium">{documents.length} {copy.total}</span>
+            <span className="shrink-0 rounded-full border bg-card px-3 py-1.5 font-medium">{items.length} {copy.total}</span>
             <span className="shrink-0 rounded-full border bg-card px-3 py-1.5">{drawingCount} {isArabic ? "مخططات" : "Drawings"}</span>
             <span className="shrink-0 rounded-full border bg-card px-3 py-1.5">{contractCount} {isArabic ? "عقود" : "Contracts"}</span>
             <span className="shrink-0 rounded-full border bg-card px-3 py-1.5">{otherCount} {isArabic ? "أخرى" : "Other"}</span>
@@ -243,7 +487,18 @@ export function InitialDocumentsList({
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {filtered.map((item) => <DocumentRow key={item.id} item={item} showProject={!selectedProjectId} locale={locale} copy={copy} onPreview={() => setPreview(item)} />)}
+                      {filtered.map((item) => (
+                        <DocumentRow
+                          key={item.id}
+                          item={item}
+                          showProject={!selectedProjectId}
+                          locale={locale}
+                          copy={copy}
+                          onPreview={() => setPreview(item)}
+                          canDelete={isActualAdmin}
+                          onHoldComplete={() => handleHoldComplete(item)}
+                        />
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -305,7 +560,21 @@ export function InitialDocumentsList({
                             <Eye className="size-4" />
                           </button>
                         ) : null}
-                        <a href={`/api/initial-documents?id=${encodeURIComponent(item.id)}&download=1`} title={copy.download} aria-label={`${copy.download} ${item.fileName}`} className="inline-flex size-9 items-center justify-center rounded-lg border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><Download className="size-4" /></a>
+                        <a
+                          href={`/api/initial-documents?id=${encodeURIComponent(item.id)}&download=1`}
+                          title={copy.download}
+                          aria-label={`${copy.download} ${item.fileName}`}
+                          className="inline-flex size-9 items-center justify-center rounded-lg border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        >
+                          <Download className="size-4" />
+                        </a>
+                        {isActualAdmin ? (
+                          <HoldToDeleteInitialDocumentButton
+                            fileName={item.fileName}
+                            onHoldComplete={() => handleHoldComplete(item)}
+                            compact={compactMobile}
+                          />
+                        ) : null}
                       </div>
                     </article>
                   )
@@ -339,16 +608,90 @@ export function InitialDocumentsList({
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={deleteDialogOpen}
+        onOpenChange={(open: boolean) => {
+          if (!isDeleting) {
+            setDeleteDialogOpen(open)
+            if (!open) {
+              setDocumentToDelete(null)
+              setDeleteError(null)
+            }
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete this document?</DialogTitle>
+            <DialogDescription className="text-pretty break-words">
+              Are you sure you want to permanently delete{" "}
+              <span className="font-semibold text-foreground break-all inline-block max-w-full">
+                &ldquo;{documentToDelete?.fileName}&rdquo;
+              </span>{" "}
+              from this project? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteError ? (
+            <div className="rounded-lg bg-destructive/10 p-3 text-xs font-medium text-destructive">
+              {deleteError}
+            </div>
+          ) : null}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (!isDeleting) {
+                  setDeleteDialogOpen(false)
+                  setDocumentToDelete(null)
+                  setDeleteError(null)
+                }
+              }}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete Document"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
 
-function DocumentRow({ item, showProject, locale, copy, onPreview }: {
+function DocumentRow({
+  item,
+  showProject,
+  locale,
+  copy,
+  onPreview,
+  canDelete = false,
+  onHoldComplete,
+}: {
   item: InitialDocumentListItem
   showProject: boolean
   locale: string
   copy: Record<string, string>
   onPreview: () => void
+  canDelete?: boolean
+  onHoldComplete: () => void
 }) {
   const Icon = fileIcon(item)
   const isArabic = locale === "ar"
@@ -370,6 +713,12 @@ function DocumentRow({ item, showProject, locale, copy, onPreview }: {
         <div className="inline-flex items-center gap-1">
           {canPreview(item) ? <button type="button" onClick={onPreview} title={copy.preview} aria-label={`${copy.preview} ${item.fileName}`} className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"><Eye className="size-4" /></button> : null}
           <a href={`/api/initial-documents?id=${encodeURIComponent(item.id)}&download=1`} title={copy.download} aria-label={`${copy.download} ${item.fileName}`} className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"><Download className="size-4" /></a>
+          {canDelete ? (
+            <HoldToDeleteInitialDocumentButton
+              fileName={item.fileName}
+              onHoldComplete={onHoldComplete}
+            />
+          ) : null}
         </div>
       </td>
     </tr>

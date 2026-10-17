@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { requireOnboarded } from "@/lib/auth/session"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { resolveUserEffectiveRole } from "@/lib/auth/effective-role"
 import { resolveProjectReadAccessForUser } from "@/lib/auth/project-access"
 import {
   INITIAL_DOCUMENTS_BUCKET,
@@ -164,20 +165,121 @@ export async function deleteInitialDocumentAction(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const session = await requireOnboarded()
+    const userId = session.userId
+
     if (!UUID_PATTERN.test(id) || !UUID_PATTERN.test(projectId)) {
       return { ok: false, error: "Invalid document parameters." }
     }
-    const supabase = await createClient()
-    const { error } = await supabase
+
+    // 1. Resolve user effective role - must be canonical admin
+    const roleResolution = await resolveUserEffectiveRole(session.userId, session.email)
+    if (roleResolution.role !== "admin") {
+      return { ok: false, error: "Only administrators are authorized to delete project documents." }
+    }
+
+    const admin = createAdminClient()
+
+    // 2. Verify project exists and get supervising organization
+    const { data: project, error: projectError } = await admin
+      .from("projects")
+      .select("id, supervising_organization_id")
+      .eq("id", projectId)
+      .maybeSingle()
+
+    if (projectError || !project) {
+      return { ok: false, error: "Project not found or you do not have permission to access it." }
+    }
+
+    // 3. Strict check for canonical admin role on this project:
+    // User must be org_admin of the project's supervising organization OR project_admin on this project.
+    // Managers (org_manager, project_manager), members, and viewers are explicitly denied.
+    const { data: orgMembership } = await admin
+      .from("organization_memberships")
+      .select("role")
+      .eq("organization_id", project.supervising_organization_id)
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .maybeSingle()
+
+    const isOrgAdmin = orgMembership?.role === "org_admin"
+
+    const { data: projectMembership } = await admin
+      .from("project_user_memberships")
+      .select("access_role")
+      .eq("project_id", projectId)
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .maybeSingle()
+
+    const isProjectAdmin = projectMembership?.access_role === "project_admin"
+
+    if (!isOrgAdmin && !isProjectAdmin) {
+      return { ok: false, error: "You must be an administrator to delete project documents." }
+    }
+
+    // 4. Validate document exists and belongs to this project
+    const { data: document, error: docError } = await admin
+      .from("initial_docs")
+      .select("id, project_id, file_name, file_path, storage_bucket")
+      .eq("id", id)
+      .eq("project_id", projectId)
+      .maybeSingle()
+
+    if (docError || !document) {
+      return { ok: false, error: "Document not found in this project." }
+    }
+
+    // 5. Remove storage file if not referenced by another record
+    if (document.file_path) {
+      const { data: otherDoc } = await admin
+        .from("initial_docs")
+        .select("id")
+        .eq("file_path", document.file_path)
+        .neq("id", document.id)
+        .limit(1)
+
+      if (!otherDoc || otherDoc.length === 0) {
+        const bucket = document.storage_bucket || INITIAL_DOCUMENTS_BUCKET
+        const { error: storageError } = await admin.storage
+          .from(bucket)
+          .remove([document.file_path])
+
+        if (storageError) {
+          console.error("[deleteInitialDocumentAction] Storage delete failed:", storageError)
+          return {
+            ok: false,
+            error: "Failed to remove document file from storage. Deletion was aborted to prevent data inconsistency.",
+          }
+        }
+      }
+    }
+
+    // 6. Delete document record from database
+    const { error: dbError } = await admin
       .from("initial_docs")
       .delete()
       .eq("id", id)
       .eq("project_id", projectId)
 
-    if (error) {
-      console.error("[deleteInitialDocumentAction] Database error:", error, { id, projectId })
-      return { ok: false, error: error.message || "Failed to delete document record." }
+    if (dbError) {
+      console.error("[deleteInitialDocumentAction] Database error:", dbError, { id, projectId })
+      return { ok: false, error: dbError.message || "Failed to delete document record." }
     }
+
+    // 7. Audit log
+    try {
+      await admin.from("audit_logs").insert({
+        actor_id: userId,
+        action: "initial_doc.deleted",
+        entity_type: "initial_doc",
+        entity_id: id,
+        project_id: projectId,
+        metadata: { file_name: document.file_name, file_path: document.file_path },
+      })
+    } catch (auditErr) {
+      console.warn("[deleteInitialDocumentAction] Audit log failed (non-fatal):", auditErr)
+    }
+
     revalidatePath("/initial-documents")
     revalidatePath(`/projects/${projectId}`)
     return { ok: true }
