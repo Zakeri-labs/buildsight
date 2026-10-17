@@ -91,9 +91,10 @@ function HoldToDeleteInitialDocumentButton({
   const animFrameRef = useRef<number | null>(null)
   const startTimeRef = useRef<number | null>(null)
   const completedRef = useRef(false)
+  const pointerIdRef = useRef<number | null>(null)
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
 
-  const resetHold = useCallback(() => {
+  const cancelHold = useCallback(() => {
     if (animFrameRef.current !== null) {
       cancelAnimationFrame(animFrameRef.current)
       animFrameRef.current = null
@@ -101,7 +102,6 @@ function HoldToDeleteInitialDocumentButton({
     startTimeRef.current = null
     setIsHolding(false)
     setProgress(0)
-    completedRef.current = false
   }, [])
 
   const startHold = useCallback(() => {
@@ -122,7 +122,7 @@ function HoldToDeleteInitialDocumentButton({
       if (elapsed >= HOLD_DURATION_MS) {
         completedRef.current = true
         setIsHolding(false)
-        setProgress(1)
+        setProgress(0)
         animFrameRef.current = null
         onHoldComplete()
       } else {
@@ -134,20 +134,26 @@ function HoldToDeleteInitialDocumentButton({
   }, [onHoldComplete])
 
   useEffect(() => {
-    const handleBlur = () => resetHold()
+    const handleBlur = () => {
+      if (!completedRef.current) {
+        cancelHold()
+      }
+    }
     const handleVisibilityChange = () => {
-      if (window.document.hidden) resetHold()
+      if (window.document.hidden && !completedRef.current) {
+        cancelHold()
+      }
     }
 
     window.addEventListener("blur", handleBlur)
     window.document.addEventListener("visibilitychange", handleVisibilityChange)
 
     return () => {
-      resetHold()
+      cancelHold()
       window.removeEventListener("blur", handleBlur)
       window.document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
-  }, [resetHold])
+  }, [cancelHold])
 
   const radius = 8
   const circumference = 2 * Math.PI * radius
@@ -165,20 +171,45 @@ function HoldToDeleteInitialDocumentButton({
       onPointerDown={(e) => {
         if (e.button !== 0) return
         e.preventDefault()
+        e.stopPropagation()
+        pointerIdRef.current = e.pointerId
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId)
+        } catch {}
         startHold()
       }}
-      onPointerUp={() => {
+      onPointerUp={(e) => {
+        try {
+          if (pointerIdRef.current !== null && e.currentTarget.hasPointerCapture(pointerIdRef.current)) {
+            e.currentTarget.releasePointerCapture(pointerIdRef.current)
+          }
+        } catch {}
+        pointerIdRef.current = null
+        e.preventDefault()
+        e.stopPropagation()
         if (!completedRef.current) {
-          resetHold()
+          cancelHold()
+        } else {
+          completedRef.current = false
         }
       }}
       onPointerLeave={() => {
-        if (!completedRef.current) {
-          resetHold()
+        if (!completedRef.current && pointerIdRef.current === null) {
+          cancelHold()
         }
       }}
-      onPointerCancel={() => {
-        resetHold()
+      onPointerCancel={(e) => {
+        try {
+          if (pointerIdRef.current !== null && e.currentTarget.hasPointerCapture(pointerIdRef.current)) {
+            e.currentTarget.releasePointerCapture(pointerIdRef.current)
+          }
+        } catch {}
+        pointerIdRef.current = null
+        if (!completedRef.current) {
+          cancelHold()
+        } else {
+          completedRef.current = false
+        }
       }}
       onTouchStart={(e) => {
         const touch = e.touches[0]
@@ -188,27 +219,35 @@ function HoldToDeleteInitialDocumentButton({
       }}
       onTouchMove={(e) => {
         const touch = e.touches[0]
-        if (touch && touchStartPosRef.current) {
+        if (touch && touchStartPosRef.current && !completedRef.current) {
           const dx = Math.abs(touch.clientX - touchStartPosRef.current.x)
           const dy = Math.abs(touch.clientY - touchStartPosRef.current.y)
           if (dx > 6 || dy > 6) {
-            resetHold()
+            cancelHold()
           }
         }
       }}
-      onTouchEnd={() => {
+      onTouchEnd={(e) => {
         touchStartPosRef.current = null
+        e.stopPropagation()
         if (!completedRef.current) {
-          resetHold()
+          cancelHold()
+        } else {
+          completedRef.current = false
         }
       }}
       onTouchCancel={() => {
         touchStartPosRef.current = null
-        resetHold()
+        if (!completedRef.current) {
+          cancelHold()
+        } else {
+          completedRef.current = false
+        }
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault()
+          e.stopPropagation()
           if (!e.repeat && !isHolding) {
             startHold()
           }
@@ -217,8 +256,11 @@ function HoldToDeleteInitialDocumentButton({
       onKeyUp={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault()
+          e.stopPropagation()
           if (!completedRef.current) {
-            resetHold()
+            cancelHold()
+          } else {
+            completedRef.current = false
           }
         }
       }}
@@ -611,8 +653,13 @@ export function InitialDocumentsList({
 
       <Dialog
         open={deleteDialogOpen}
-        onOpenChange={(open: boolean) => {
+        disablePointerDismissal={true}
+        onOpenChange={(open: boolean, eventDetails?: { reason?: string }) => {
           if (!isDeleting) {
+            const reason = eventDetails?.reason
+            if (!open && (reason === "outside-press" || reason === "outsidePress" || reason === "focus-out" || reason === "focusOut")) {
+              return
+            }
             setDeleteDialogOpen(open)
             if (!open) {
               setDocumentToDelete(null)
