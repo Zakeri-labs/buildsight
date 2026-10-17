@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { ChevronRight, MoreHorizontal } from "lucide-react"
+import { ChevronRight, MoreVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ProjectImageDisplay } from "@/components/projects/project-image-display"
 import { ProjectEditDialog, type ProjectEditData } from "@/components/projects/project-edit-dialog"
@@ -149,7 +149,7 @@ export function ProjectsOverview({
                         onClick={() => p.edit && setEditTarget(p)}
                         className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                       >
-                        <MoreHorizontal className="size-3.5" />
+                        <MoreVertical className="size-3.5" />
                       </button>
                     ) : null}
                   </div>
@@ -184,15 +184,15 @@ export function ProjectsOverview({
 
         {/* Desktop Table View (hidden sm:block) */}
         <div className="mt-4 hidden min-h-0 flex-1 overflow-auto overscroll-contain pr-1 sm:block">
-          <table className="w-full min-w-[560px] table-fixed border-collapse text-sm">
+          <table className="w-full min-w-[600px] table-fixed border-collapse text-sm">
             <colgroup>
-              <col className="w-[25%]" />
-              <col className="w-[18%]" />
-              <col className="w-[18%]" />
+              <col className="w-[23%]" />
+              <col className="w-[17%]" />
+              <col className="w-[17%]" />
               <col className="w-[11%]" />
-              <col className="w-[10%]" />
+              <col className="w-[11%]" />
               <col className="w-[12%]" />
-              <col className="w-[6%]" />
+              <col className="w-[9%]" />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-card">
               <tr className="text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -200,9 +200,9 @@ export function ProjectsOverview({
                 <th className="border-b border-border bg-card pb-3 pe-3 font-medium">Owner / Client</th>
                 <th className="border-b border-border bg-card pb-3 pe-3 font-medium">Supervisor</th>
                 <th className="border-b border-border bg-card pb-3 pe-3 font-medium">Role</th>
-                <th className="border-b border-border bg-card pb-3 pe-3 text-center font-medium">Inspections</th>
-                <th className="border-b border-border bg-card pb-3 pe-3 font-medium">Progress</th>
-                <th className="border-b border-border bg-card pb-3 text-end font-medium">Actions</th>
+                <th className="border-b border-border bg-card pb-3 px-1 text-center font-medium">Inspections</th>
+                <th className="border-b border-border bg-card pb-3 px-2 font-medium">Progress</th>
+                <th className="border-b border-border bg-card pb-3 pe-3 text-end font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -244,16 +244,16 @@ export function ProjectsOverview({
                       {p.role}
                     </span>
                   </td>
-                  <td className="py-3 pe-3 text-center font-semibold text-blue-600">{p.inspections}</td>
-                  <td className="py-3 pe-3">
-                    <div className="flex items-center gap-2">
-                      <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                  <td className="py-3 px-1 text-center font-semibold text-blue-600">{p.inspections}</td>
+                  <td className="py-3 px-2">
+                    <div className="flex flex-col gap-1 w-full max-w-[90px]">
+                      <span className="text-xs font-semibold tabular-nums text-foreground">{p.progress}%</span>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                         <div className="h-full rounded-full bg-emerald-500" style={{ width: `${p.progress}%` }} />
                       </div>
-                      <span className="w-9 shrink-0 text-xs font-medium text-muted-foreground">{p.progress}%</span>
                     </div>
                   </td>
-                  <td className="py-3 text-end">
+                  <td className="py-3 pe-3 text-end">
                     <button
                       type="button"
                       aria-label={p.canEdit ? `Edit ${p.name}` : `Actions for ${p.name}`}
@@ -268,7 +268,7 @@ export function ProjectsOverview({
                         p.canEdit ? "hover:bg-muted hover:text-foreground" : "cursor-not-allowed opacity-50",
                       )}
                     >
-                      <MoreHorizontal className="size-4" />
+                      <MoreVertical className="size-4" />
                     </button>
                   </td>
                 </tr>
