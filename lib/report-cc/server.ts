@@ -240,15 +240,29 @@ export async function loadReportCcRecipients(
   return loadReportCcRecipientsInternal(projectId, responseId, context)
 }
 
-async function accessibleProjectIdsForUser(userId: string) {
+async function accessibleProjectIdsForUser(userId: string, candidateProjectIds?: string[]) {
   const validUserId = asUuid(userId)
   if (!validUserId) return []
 
   const admin = createAdminClient()
+  let projectMembershipQuery = admin
+    .from("project_user_memberships")
+    .select("project_id")
+    .eq("user_id", validUserId)
+    .eq("status", "active")
+  if (candidateProjectIds?.length) {
+    projectMembershipQuery = projectMembershipQuery.in("project_id", candidateProjectIds)
+  }
+
+  let ownerQuery = admin.from("project_owners").select("project_id").eq("viewer_user_id", validUserId)
+  if (candidateProjectIds?.length) {
+    ownerQuery = ownerQuery.in("project_id", candidateProjectIds)
+  }
+
   const [{ data: projectMemberships, error: projectMembershipError }, { data: orgMemberships, error: orgMembershipError }, { data: ownerRows, error: ownerError }] = await Promise.all([
-    admin.from("project_user_memberships").select("project_id").eq("user_id", validUserId).eq("status", "active"),
+    projectMembershipQuery,
     admin.from("organization_memberships").select("organization_id, role").eq("user_id", validUserId).eq("status", "active"),
-    admin.from("project_owners").select("project_id").eq("viewer_user_id", validUserId),
+    ownerQuery,
   ])
   if (projectMembershipError) throw projectMembershipError
   if (orgMembershipError) throw orgMembershipError
@@ -266,8 +280,14 @@ async function accessibleProjectIdsForUser(userId: string) {
   )
   const viewerOwnedIds = new Set(validUuidList((ownerRows ?? []).map((row: any) => row.project_id)))
 
-  const { data: orgProjects, error: orgProjectsError } = nonViewerOrgIds.length
-    ? await admin.from("projects").select("id").in("supervising_organization_id", nonViewerOrgIds)
+  let orgProjectsQuery = nonViewerOrgIds.length
+    ? admin.from("projects").select("id").in("supervising_organization_id", nonViewerOrgIds)
+    : null
+  if (orgProjectsQuery && candidateProjectIds?.length) {
+    orgProjectsQuery = orgProjectsQuery.in("id", candidateProjectIds)
+  }
+  const { data: orgProjects, error: orgProjectsError } = orgProjectsQuery
+    ? await orgProjectsQuery
     : { data: [] as any[], error: null }
   if (orgProjectsError) throw orgProjectsError
 
@@ -299,23 +319,35 @@ export async function getReportCcNotificationFeed(input: {
   if (input.projectId !== null && !requestedProjectId) return { canNotify: false, items: [] }
 
   const admin = createAdminClient()
-  let projectIds = await accessibleProjectIdsForUser(validUserId)
-  if (requestedProjectId) projectIds = projectIds.filter((id) => id === requestedProjectId)
-  if (!projectIds.length) return { canNotify: false, items: [] }
 
-  const { data: recipientRows, error: recipientError } = await admin
+  // Check whether the user has relevant recipient records before calculating full project access
+  let recipientQuery = admin
     .from("report_cc_recipients")
     .select("id, project_id, response_id, recipient_context, added_by, created_at")
     .eq("recipient_type", "internal")
     .eq("user_id", validUserId)
-    .in("project_id", projectIds)
     .order("created_at", { ascending: false })
     .limit(50)
+
+  if (requestedProjectId) {
+    recipientQuery = recipientQuery.eq("project_id", requestedProjectId)
+  }
+
+  const { data: rawRecipientRows, error: recipientError } = await recipientQuery
   if (recipientError) {
     if (recipientError.code === "42P01") return { canNotify: false, items: [] }
     throw recipientError
   }
-  if (!recipientRows?.length) return { canNotify: true, items: [] }
+  if (!rawRecipientRows?.length) return { canNotify: true, items: [] }
+
+  // Resolve access only for the referenced candidate projects
+  const candidateProjectIds = validUuidList(rawRecipientRows.map((row: any) => row.project_id))
+  if (!candidateProjectIds.length) return { canNotify: true, items: [] }
+
+  const allowedProjectIds = await accessibleProjectIdsForUser(validUserId, candidateProjectIds)
+  const allowedSet = new Set(allowedProjectIds)
+  const recipientRows = rawRecipientRows.filter((row: any) => allowedSet.has(row.project_id))
+  if (!recipientRows.length) return { canNotify: true, items: [] }
 
   const responseIds = validUuidList(recipientRows.map((row: any) => row.response_id))
   if (!responseIds.length) return { canNotify: true, items: [] }
@@ -339,9 +371,10 @@ export async function getReportCcNotificationFeed(input: {
     ...(responses ?? []).map((row: any) => row.project_stage_id),
   ])
   const actorIds = validUuidList(recipientRows.map((row: any) => row.added_by))
+  const referencedProjectIds = validUuidList(recipientRows.map((row: any) => row.project_id))
   const [{ data: stages, error: stageError }, { data: projects, error: projectError }, { data: actors, error: actorError }] = await Promise.all([
     stageIds.length ? admin.from("project_stages").select("id, name").in("id", stageIds) : Promise.resolve({ data: [] as any[], error: null }),
-    admin.from("projects").select("id, name").in("id", projectIds),
+    referencedProjectIds.length ? admin.from("projects").select("id, name").in("id", referencedProjectIds) : Promise.resolve({ data: [] as any[], error: null }),
     actorIds.length ? admin.from("profiles").select("id, full_name, email").in("id", actorIds) : Promise.resolve({ data: [] as any[], error: null }),
   ])
   if (stageError) throw stageError

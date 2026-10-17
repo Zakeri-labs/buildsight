@@ -35,10 +35,12 @@ export default async function AppGroupLayout({
     getSiteVisitProjectAccess(session.userId),
     getActiveSystemAnnouncement(),
   ])
+  const userRole = session.memberships.find((m) => m.organization?.id === orgId)?.role ?? primary?.role ?? null
   const notificationFeed = await getAppNotificationFeed({
     userId: session.userId,
     organizationId: orgId,
     projectId: selectedProjectId,
+    userRole,
   })
 
   const effectiveRes = await resolveUserEffectiveRole(session.userId, session.email)

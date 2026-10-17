@@ -36,17 +36,19 @@ export async function getAppNotificationFeed({
   userId,
   organizationId,
   projectId,
+  userRole,
 }: {
   userId: string
   organizationId: string | null
   projectId: string | null
+  userRole?: string | null
 }): Promise<AppNotificationFeed> {
   const admin = createAdminClient()
   const [reviewResult, siteVisitResult, reportCcResult, readResult] = await Promise.allSettled([
     organizationId
-      ? getReviewSubmissionFeed({ userId, organizationId, projectId })
+      ? getReviewSubmissionFeed({ userId, organizationId, projectId, userRole })
       : Promise.resolve({ canReview: false, items: [] }),
-    getSiteVisitTaskFeed({ userId, projectId }),
+    getSiteVisitTaskFeed({ userId, projectId, userRole }),
     getReportCcNotificationFeed({ userId, projectId }),
     admin.from("user_read_notifications").select("notification_key").eq("user_id", userId),
   ])
@@ -119,6 +121,7 @@ export async function getAppNotificationFeed({
   const items = [...reportCcItems, ...reviewItems, ...siteVisitItems]
     .filter((item) => !readKeys.has(item.notificationKey))
     .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
+    .slice(0, 50)
 
   return { canNotify: reportCcFeed.canNotify || reviewFeed.canReview || siteVisitFeed.canManage, items }
 }

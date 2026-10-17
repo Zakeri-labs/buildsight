@@ -1,4 +1,5 @@
 import "server-only"
+import { cache } from "react"
 
 import { AuthzError, getUserIdOrThrow } from "@/lib/auth/guards"
 import { isUserProjectSupervisor } from "@/lib/auth/project-access"
@@ -57,7 +58,9 @@ export async function getAssignedSiteVisitSupervisorProjectIds(userId: string): 
   return new Set(ids)
 }
 
-export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVisitAccessMap> {
+export const getSiteVisitProjectAccess = cache(async function getSiteVisitProjectAccess(
+  userId: string,
+): Promise<SiteVisitAccessMap> {
   if (!UUID_PATTERN.test(userId)) return new Map()
 
   try {
@@ -133,12 +136,25 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
 
   if (!candidateProjectIds.size) return new Map()
 
-  const { data: projectRows, error: projectsError } = await admin
-    .from("projects")
-    .select("id, name, code, supervising_organization_id, assigned_supervisor_id")
-    .in("id", Array.from(candidateProjectIds))
-    .order("name", { ascending: true })
-  if (projectsError) throw projectsError
+  const supervisingProjects = (supervisingProjectsResult.data ?? []) as any[]
+  const existingProjectMap = new Map<string, any>(
+    supervisingProjects.map((project: any) => [project.id as string, project]),
+  )
+  const missingProjectIds = Array.from(candidateProjectIds).filter((id) => !existingProjectMap.has(id))
+
+  let additionalProjectRows: any[] = []
+  if (missingProjectIds.length > 0) {
+    const { data: additionalProjects, error: additionalProjectsError } = await admin
+      .from("projects")
+      .select("id, name, code, supervising_organization_id, assigned_supervisor_id")
+      .in("id", missingProjectIds)
+    if (additionalProjectsError) throw additionalProjectsError
+    additionalProjectRows = additionalProjects ?? []
+  }
+
+  const projectRows = [...supervisingProjects, ...additionalProjectRows].sort((a, b) =>
+    (a.name || "").localeCompare(b.name || ""),
+  )
 
   const orgRoleById = new Map<string, string>(
     organizationMemberships.map((membership: any) => [membership.organization_id as string, membership.role as string]),
@@ -243,7 +259,7 @@ export async function getSiteVisitProjectAccess(userId: string): Promise<SiteVis
     console.error("getSiteVisitProjectAccess error:", error)
     return new Map()
   }
-}
+})
 
 export async function assertSiteVisitRequester(projectId: string): Promise<string> {
   const userId = await getUserIdOrThrow()

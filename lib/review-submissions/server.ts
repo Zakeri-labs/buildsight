@@ -123,67 +123,86 @@ export async function getReviewSubmissionFeed(input: {
   userId: string
   organizationId: string
   projectId: string | null
+  userRole?: string | null
 }): Promise<ReviewSubmissionFeed> {
   try {
     const admin = createAdminClient()
-    let projectQuery = admin
-      .from("projects")
-      .select("id, name")
-      .eq("supervising_organization_id", input.organizationId)
 
-    if (input.projectId) projectQuery = projectQuery.eq("id", input.projectId)
-    const { data: scopedProjects, error: projectsError } = await projectQuery
-    if (projectsError) throw projectsError
+    let isOrgReviewer = input.userRole
+      ? (ORGANIZATION_REVIEW_ROLES as readonly string[]).includes(input.userRole)
+      : false
+    let isViewer = input.userRole === "viewer"
 
-    const projects = scopedProjects ?? []
-    const candidateProjectIds = projects.map((p: any) => p.id as string)
-    if (!candidateProjectIds.length) return { canReview: false, items: [] }
+    if (input.userRole === undefined || input.userRole === null) {
+      const { data: orgMembership, error: orgError } = await admin
+        .from("organization_memberships")
+        .select("role")
+        .eq("organization_id", input.organizationId)
+        .eq("user_id", input.userId)
+        .eq("status", "active")
+        .maybeSingle()
+      if (orgError) throw orgError
+      isOrgReviewer = orgMembership?.role
+        ? (ORGANIZATION_REVIEW_ROLES as readonly string[]).includes(orgMembership.role)
+        : false
+      isViewer = orgMembership?.role === "viewer"
+    }
 
-    const { data: orgMembership, error: orgError } = await admin
-      .from("organization_memberships")
-      .select("id")
-      .eq("organization_id", input.organizationId)
-      .eq("user_id", input.userId)
-      .eq("status", "active")
-      .in("role", [...ORGANIZATION_REVIEW_ROLES])
-      .limit(1)
-      .maybeSingle()
-    if (orgError) throw orgError
+    let reviewableProjectIds: string[] = []
 
-    let reviewableProjectIds = candidateProjectIds
-    if (!orgMembership) {
-      const [{ data: memberships, error: membershipError }, { data: viewerMembership, error: viewerMembershipError }] = await Promise.all([
-        admin
-          .from("project_user_memberships")
-          .select("project_id")
-          .eq("user_id", input.userId)
-          .eq("status", "active")
-          .in("access_role", [...PROJECT_REVIEW_ACCESS_ROLES])
-          .in("project_id", candidateProjectIds),
-        admin
-          .from("organization_memberships")
-          .select("id")
-          .eq("organization_id", input.organizationId)
-          .eq("user_id", input.userId)
-          .eq("role", "viewer")
-          .eq("status", "active")
-          .limit(1)
-          .maybeSingle(),
-      ])
+    if (isOrgReviewer) {
+      let projectQuery = admin
+        .from("projects")
+        .select("id, name")
+        .eq("supervising_organization_id", input.organizationId)
+
+      if (input.projectId) projectQuery = projectQuery.eq("id", input.projectId)
+      const { data: scopedProjects, error: projectsError } = await projectQuery
+      if (projectsError) throw projectsError
+      reviewableProjectIds = (scopedProjects ?? []).map((p: any) => p.id as string)
+    } else {
+      let membershipQuery = admin
+        .from("project_user_memberships")
+        .select("project_id")
+        .eq("user_id", input.userId)
+        .eq("status", "active")
+        .in("access_role", [...PROJECT_REVIEW_ACCESS_ROLES])
+
+      if (input.projectId) {
+        membershipQuery = membershipQuery.eq("project_id", input.projectId)
+      }
+
+      const { data: memberships, error: membershipError } = await membershipQuery
       if (membershipError) throw membershipError
-      if (viewerMembershipError) throw viewerMembershipError
-      reviewableProjectIds = Array.from(new Set((memberships ?? []).map((m: any) => m.project_id as string)))
 
-      if (viewerMembership) {
+      let candidateIds = Array.from(new Set((memberships ?? []).map((m: any) => m.project_id as string)))
+      if (!candidateIds.length) {
+        return { canReview: false, items: [] }
+      }
+
+      if (isViewer) {
         const { data: ownerRows, error: ownerError } = await admin
           .from("project_owners")
           .select("project_id")
           .eq("viewer_user_id", input.userId)
-          .in("project_id", reviewableProjectIds)
+          .in("project_id", candidateIds)
         if (ownerError) throw ownerError
         const ownerProjectIds = new Set((ownerRows ?? []).map((row: any) => row.project_id as string))
-        reviewableProjectIds = reviewableProjectIds.filter((projectId) => ownerProjectIds.has(projectId))
+        candidateIds = candidateIds.filter((projectId) => ownerProjectIds.has(projectId))
       }
+
+      if (!candidateIds.length) {
+        return { canReview: false, items: [] }
+      }
+
+      const { data: validProjects, error: validProjectsError } = await admin
+        .from("projects")
+        .select("id, name")
+        .in("id", candidateIds)
+        .eq("supervising_organization_id", input.organizationId)
+      if (validProjectsError) throw validProjectsError
+
+      reviewableProjectIds = (validProjects ?? []).map((p: any) => p.id as string)
     }
 
     if (!reviewableProjectIds.length) return { canReview: false, items: [] }
@@ -193,6 +212,8 @@ export async function getReviewSubmissionFeed(input: {
       .select("id, project_id, project_stage_id, project_stage_term_id, report_number, report_title, status, submitted_at, updated_at, created_by, updated_by")
       .in("project_id", reviewableProjectIds)
       .in("status", ["submitted", "under_review"])
+      .order("updated_at", { ascending: false })
+      .limit(50)
 
     if (responseError) {
       // PostgreSQL error 42703 = column does not exist
@@ -204,16 +225,32 @@ export async function getReviewSubmissionFeed(input: {
           .select("id, project_id, project_stage_id, project_stage_term_id, status, updated_at, created_by, updated_by")
           .in("project_id", reviewableProjectIds)
           .in("status", ["submitted", "under_review"])
+          .order("updated_at", { ascending: false })
+          .limit(50)
         if (fallbackError) throw fallbackError
         if (!fallback?.length) return { canReview: true, items: [] }
+
+        const activeFallbackProjectIds = Array.from(new Set(fallback.map((r: any) => r.project_id as string)))
+        const { data: activeProjects, error: activeProjectsError } = activeFallbackProjectIds.length
+          ? await admin.from("projects").select("id, name").in("id", activeFallbackProjectIds)
+          : { data: [] as any[], error: null }
+        if (activeProjectsError) throw activeProjectsError
+
         const patched = (fallback as any[]).map((r) => ({ ...r, report_number: null, report_title: null, submitted_at: null }))
-        return processReviewResponses(patched, projects, admin)
+        return processReviewResponses(patched, activeProjects ?? [], admin)
       }
       throw responseError
     }
 
     if (!responses?.length) return { canReview: true, items: [] }
-    return processReviewResponses(responses as any[], projects, admin)
+
+    const activeProjectIds = Array.from(new Set(responses.map((r: any) => r.project_id as string)))
+    const { data: activeProjects, error: activeProjectsError } = activeProjectIds.length
+      ? await admin.from("projects").select("id, name").in("id", activeProjectIds)
+      : { data: [] as any[], error: null }
+    if (activeProjectsError) throw activeProjectsError
+
+    return processReviewResponses(responses as any[], activeProjects ?? [], admin)
   } catch (error) {
     const errInfo =
       error instanceof Error

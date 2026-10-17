@@ -9,7 +9,8 @@ export async function GET() {
   try {
     const [session, projectId] = await Promise.all([requireOnboarded(), getSelectedProjectId()])
     const organizationId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id ?? null
-    const feed = await getAppNotificationFeed({ userId: session.userId, organizationId, projectId })
+    const userRole = session.memberships.find((m) => m.organization?.id === organizationId)?.role ?? session.memberships[0]?.role ?? null
+    const feed = await getAppNotificationFeed({ userId: session.userId, organizationId, projectId, userRole })
     return NextResponse.json(feed, { headers: { "Cache-Control": "no-store" } })
   } catch {
     return NextResponse.json({ canNotify: false, items: [] }, { status: 403, headers: { "Cache-Control": "no-store" } })
