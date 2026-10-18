@@ -187,13 +187,13 @@ export function DayDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[min(82vh,640px)] gap-3 overflow-hidden p-0 sm:max-w-xl">
-        <DialogHeader className="gap-1 border-b px-4 pb-3 pt-4 pr-12 sm:px-5 sm:pb-4 sm:pt-5 sm:pr-12">
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] w-full flex-col gap-0 overflow-hidden p-0 sm:max-h-[min(calc(100dvh-3.5rem),42rem)] sm:max-w-xl">
+        <DialogHeader className="shrink-0 gap-1 border-b px-4 pb-3 pt-4 pr-12 sm:px-5 sm:pb-4 sm:pt-5 sm:pr-12">
           <DialogTitle className="text-base font-semibold sm:text-lg">{dateLabel}</DialogTitle>
           <DialogDescription className="text-xs sm:text-sm">{totalLabel}</DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 overflow-y-auto px-3 pb-3 sm:px-4 sm:pb-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4 sm:py-4">
           <div className="space-y-2">
             {sortedEvents.map((event) => (
               <DayEventRow
