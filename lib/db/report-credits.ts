@@ -216,7 +216,7 @@ export type ReportCreationCreditCheckResult = {
 
 /**
  * Checks whether report creation is permitted based on remainingReportCredits.
- * Blocks creation when remainingReportCredits <= -10, unless the project is credit-exempt.
+ * Blocks creation when remainingReportCredits <= -30, unless the project is credit-exempt.
  */
 export async function checkReportCreationCreditAvailability(
   organizationId: string | null,
@@ -229,7 +229,7 @@ export async function checkReportCreationCreditAvailability(
   }
 
   const credits = await getOrganizationReportCredits(organizationId, client)
-  if (credits.remainingReportCredits <= -10) {
+  if (credits.remainingReportCredits <= -30) {
     return {
       allowed: false,
       remainingReportCredits: credits.remainingReportCredits,
