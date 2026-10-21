@@ -38,7 +38,7 @@ export async function getDesignGalleryAdmin(): Promise<DesignGalleryAdminContext
 }
 
 const DESIGN_COLUMNS =
-  "id, organization_id, category_id, slug, code, title_ar, title_en, summary_ar, summary_en, description_ar, description_en, floors_ar, floors_en, built_area_sqm, bedrooms, service_ar, service_en, is_bookable, status, sort_order, published_at, updated_at, design_images(id, storage_path, alt_ar, alt_en, order_index)"
+  "id, organization_id, category_id, slug, code, title_ar, title_en, summary_ar, summary_en, description_ar, description_en, floors_ar, floors_en, built_area_sqm, bedrooms, service_ar, service_en, is_bookable, status, sort_order, published_at, updated_at, design_images(id, storage_path, alt_ar, alt_en, order_index, created_at)"
 
 function toNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null
@@ -73,7 +73,7 @@ export function mapDesign(row: any): Design {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const images: DesignImage[] = ((row.design_images ?? []) as any[])
     .slice()
-    .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
+    .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0) || String(a.created_at ?? a.id).localeCompare(String(b.created_at ?? b.id)))
     .flatMap((image) => {
       const url = designImagePublicUrl(image.storage_path, supabaseUrl)
       return url

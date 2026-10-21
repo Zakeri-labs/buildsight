@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest"
 import {
+  cleanText,
   normalizeDesignCode,
   normalizeWhatsappPhone,
   slugify,
@@ -155,5 +156,59 @@ describe("validateSiteInput", () => {
 
   test("an empty phone is allowed", () => {
     expect(validateSiteInput({ whatsappPhone: "" })).toMatchObject({ ok: true, value: { whatsappPhone: null } })
+  })
+})
+
+describe("input from real keyboards", () => {
+  test("invisible characters are removed; a title made only of them is empty", () => {
+    expect(cleanText("\u200f٥٢٠\u200e ")).toBe("٥٢٠")
+    expect(cleanText("فيلا\u202e عصرية")).toBe("فيلا عصرية")
+    expect(cleanText("line one\nline two")).toBe("line one\nline two")
+    expect(validateDesignInput({ ...valid, titleAr: "\u200b\u200f" }, [CATEGORY])).toEqual({
+      ok: false,
+      errors: { titleAr: "required" },
+    })
+  })
+
+  test("a unit typed after the area is accepted", () => {
+    for (const area of ["520 م²", "520m2", "520 m²", "٥٢٠ متر", "520 sqm", "\u200f٥٢٠\u200f"]) {
+      expect(validateDesignInput({ ...valid, builtAreaSqm: area }, [CATEGORY]), area).toMatchObject({
+        ok: true,
+        value: { builtAreaSqm: 520 },
+      })
+    }
+  })
+
+  test("a comma is accepted only as a thousands separator", () => {
+    expect(validateDesignInput({ ...valid, builtAreaSqm: "1,200" }, [CATEGORY])).toMatchObject({ ok: true, value: { builtAreaSqm: 1200 } })
+    expect(validateDesignInput({ ...valid, builtAreaSqm: "1,5" }, [CATEGORY])).toEqual({ ok: false, errors: { builtAreaSqm: "invalidNumber" } })
+    expect(validateDesignInput({ ...valid, builtAreaSqm: "12,00" }, [CATEGORY])).toEqual({ ok: false, errors: { builtAreaSqm: "invalidNumber" } })
+  })
+
+  test("an area that rounds to zero at 2 decimals is out of range, not a database error", () => {
+    expect(validateDesignInput({ ...valid, builtAreaSqm: "0.004" }, [CATEGORY])).toEqual({ ok: false, errors: { builtAreaSqm: "outOfRange" } })
+    expect(validateDesignInput({ ...valid, builtAreaSqm: "0.005" }, [CATEGORY])).toMatchObject({ ok: true, value: { builtAreaSqm: 0.01 } })
+  })
+
+  test("order must be 0 to 100000 whether it arrives as text or as a number", () => {
+    for (const sortOrder of [-5, "-5", -3_000_000_000, 100_001]) {
+      expect(validateDesignInput({ ...valid, sortOrder }, [CATEGORY]).ok, String(sortOrder)).toBe(false)
+    }
+    expect(validateDesignInput({ ...valid, sortOrder: 7 }, [CATEGORY])).toMatchObject({ ok: true, value: { sortOrder: 7 } })
+  })
+
+  test("codes accept en dashes and Arabic digits", () => {
+    expect(normalizeDesignCode("BD–101")).toBe("BD-101")
+    expect(normalizeDesignCode("bd—١٠١")).toBe("BD-101")
+  })
+
+  test("an emoji counts as one character", () => {
+    expect(validateDesignInput({ ...valid, slug: "home", titleEn: "🏠".repeat(61) }, [CATEGORY]).ok).toBe(true)
+    expect(validateDesignInput({ ...valid, slug: "home", titleEn: "🏠".repeat(121) }, [CATEGORY])).toMatchObject({ ok: false, errors: { titleEn: "tooLong" } })
+  })
+
+  test("a phone number with words in it is rejected, not merged into one number", () => {
+    expect(validateSiteInput({ whatsappPhone: "+968 9411 4511 ext 22" })).toEqual({ ok: false, errors: { whatsappPhone: "invalidPhone" } })
+    expect(validateSiteInput({ whatsappPhone: "٩٦٨٩٤١١٤٥١١ تحويلة ٢" })).toEqual({ ok: false, errors: { whatsappPhone: "invalidPhone" } })
   })
 })

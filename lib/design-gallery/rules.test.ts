@@ -84,6 +84,12 @@ describe("pickDesignGalleryAdminOrg", () => {
     })
   })
 
+  test("the same organization is picked whatever order memberships arrive in", () => {
+    const a = { role: "org_admin", organization: { ...external, id: OTHER_ORG } }
+    const b = { role: "org_admin", organization: { id: "00000000-1111-4222-8333-444444444444", name: "First", type: "external" } }
+    expect(pickDesignGalleryAdminOrg([a, b])).toEqual(pickDesignGalleryAdminOrg([b, a]))
+  })
+
   test("members, managers and viewers get nothing", () => {
     expect(
       pickDesignGalleryAdminOrg([

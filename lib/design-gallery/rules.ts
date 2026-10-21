@@ -23,3 +23,13 @@ export function siteSlugCandidates(organizationName: string, organizationId: str
   if (!base) return [fallback]
   return [base, `${base}-2`, `${base}-3`, fallback]
 }
+
+/** The database refused because a published design must keep at least one image (079 triggers). */
+export function isNeedsImageError(error: { message?: string } | null | undefined): boolean {
+  return Boolean(error?.message?.includes("design_needs_image"))
+}
+
+/** replace_design_image_order refused the list (stale or tampered), as opposed to a database failure. */
+export function isImageOrderMismatch(error: { message?: string } | null | undefined): boolean {
+  return Boolean(error?.message?.includes("exactly once"))
+}

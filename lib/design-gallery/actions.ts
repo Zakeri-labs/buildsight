@@ -2,6 +2,7 @@
 
 import { randomUUID } from "node:crypto"
 import { revalidatePath } from "next/cache"
+import { unstable_rethrow } from "next/navigation"
 import { audit, AuthzError } from "@/lib/auth/guards"
 import {
   detectProjectImageMimeType,
@@ -9,15 +10,22 @@ import {
   PROJECT_IMAGE_MAX_SIZE_BYTES,
 } from "@/lib/projects/project-image"
 import { DESIGN_GALLERY_BUCKET, designImageStoragePath, isDesignImagePathFor } from "./images"
-import { canChangeStatus, siteSlugCandidates, uniqueViolationField } from "./rules"
+import { canChangeStatus, isImageOrderMismatch, isNeedsImageError, siteSlugCandidates, uniqueViolationField } from "./rules"
 import { loadCategories, loadDesign, loadSite, requireDesignGalleryAdmin, type DesignGalleryAdminContext } from "./server"
-import { DESIGN_STATUSES, type Design, type DesignInput, type DesignStatus } from "./types"
+import { DESIGN_STATUSES, type Design, type DesignImage, type DesignInput, type DesignStatus } from "./types"
 import { isUuid, validateDesignInput, validateSiteInput, type DesignFieldError } from "./validation"
+
+// All writes to the design gallery go through these actions: the database
+// grants no write access to API users (see 079_design_gallery.sql). Every
+// action authorizes itself with requireDesignGalleryAdmin(), takes the
+// organization from the session (never from the client), and scopes every
+// query to that organization.
 
 export type DesignGalleryActionError =
   | "forbidden"
   | "notFound"
   | "invalid"
+  | "stale"
   | "needsImage"
   | "invalidImage"
   | "uploadFailed"
@@ -27,9 +35,12 @@ export type DesignGalleryActionResult<T = undefined> =
   | { ok: true; data: T }
   | { ok: false; error: DesignGalleryActionError; fieldErrors?: Record<string, DesignFieldError> }
 
+type ImagesResult = DesignGalleryActionResult<{ images: DesignImage[] }>
+
 const ADMIN_PATH = "/design-gallery"
 
 function fail(error: unknown): { ok: false; error: DesignGalleryActionError } {
+  unstable_rethrow(error) // let Next.js redirects (e.g. signed out → login) through
   if (error instanceof AuthzError) return { ok: false, error: "forbidden" }
   console.error("design gallery action failed:", error instanceof Error ? error.message : error)
   return { ok: false, error: "failed" }
@@ -44,6 +55,25 @@ function refresh(designId?: string) {
 async function findDesign(ctx: DesignGalleryAdminContext, designId: unknown): Promise<Design | null> {
   if (!isUuid(designId)) return null
   return loadDesign(ctx.admin, ctx.org.id, designId)
+}
+
+async function currentImages(ctx: DesignGalleryAdminContext, designId: string): Promise<DesignImage[]> {
+  return (await loadDesign(ctx.admin, ctx.org.id, designId))?.images ?? []
+}
+
+/**
+ * Removes files from the bucket. supabase-js reports failures in the result
+ * instead of throwing, so check it; a failure is logged with the paths so the
+ * files can be cleaned up, and never undoes the database change already made.
+ */
+async function removeFiles(ctx: DesignGalleryAdminContext, paths: string[]) {
+  if (!paths.length) return
+  try {
+    const { error } = await ctx.admin.storage.from(DESIGN_GALLERY_BUCKET).remove(paths)
+    if (error) console.error("design gallery: could not remove files", paths, error.message)
+  } catch (error) {
+    console.error("design gallery: could not remove files", paths, error instanceof Error ? error.message : error)
+  }
 }
 
 function toRow(input: DesignInput) {
@@ -136,48 +166,63 @@ export async function saveDesignGallerySite(raw: Record<string, unknown>): Promi
   }
 }
 
-/** Creates (designId null) or updates a design. New designs start as drafts. */
+/**
+ * Creates (designId null) or updates a design. New designs start as drafts.
+ * Updates must send `expectedUpdatedAt` (the version the form was loaded
+ * with); if someone saved in between, nothing is written and "stale" comes back.
+ */
 export async function saveDesign(
   designId: string | null,
   raw: Record<string, unknown>,
-): Promise<DesignGalleryActionResult<{ id: string }>> {
+): Promise<DesignGalleryActionResult<{ id: string; updatedAt: string }>> {
   try {
     const ctx = await requireDesignGalleryAdmin()
     if (designId !== null && !(await findDesign(ctx, designId))) return { ok: false, error: "notFound" }
+    const expectedUpdatedAt = typeof raw.expectedUpdatedAt === "string" ? raw.expectedUpdatedAt : ""
+    if (designId !== null && !expectedUpdatedAt) return { ok: false, error: "stale" }
 
     const categories = await loadCategories(ctx.admin, ctx.org.id)
     const parsed = validateDesignInput(raw, categories.map((c) => c.id))
     if (!parsed.ok) return { ok: false, error: "invalid", fieldErrors: parsed.errors as Record<string, DesignFieldError> }
 
     const row = { ...toRow(parsed.value), updated_by: ctx.userId }
-    const query = designId
-      ? ctx.admin.from("designs").update(row).eq("organization_id", ctx.org.id).eq("id", designId).select("id").single()
-      : ctx.admin
+    const { data, error } = designId
+      ? await ctx.admin
+          .from("designs")
+          .update(row)
+          .eq("organization_id", ctx.org.id)
+          .eq("id", designId)
+          .eq("updated_at", expectedUpdatedAt)
+          .select("id, updated_at")
+      : await ctx.admin
           .from("designs")
           .insert({ ...row, organization_id: ctx.org.id, status: "draft", created_by: ctx.userId })
-          .select("id")
-          .single()
-    const { data, error } = await query
+          .select("id, updated_at")
     const taken = uniqueViolationField(error)
     if (taken) return { ok: false, error: "invalid", fieldErrors: { [taken]: "taken" } }
-    if (error || !data) throw error ?? new Error("Design was not saved.")
+    if (error) throw error
+    const saved = Array.isArray(data) ? data[0] : null
+    if (!saved) return { ok: false, error: designId ? "stale" : "failed" }
 
     await audit({
       actorId: ctx.userId,
       action: designId ? "design_gallery.design_updated" : "design_gallery.design_created",
       entityType: "design",
-      entityId: data.id,
+      entityId: saved.id,
       organizationId: ctx.org.id,
       metadata: { slug: parsed.value.slug, code: parsed.value.code },
     }).catch(() => undefined)
-    refresh(data.id)
-    return { ok: true, data: { id: data.id } }
+    refresh(saved.id)
+    return { ok: true, data: { id: saved.id, updatedAt: saved.updated_at } }
   } catch (error) {
     return fail(error)
   }
 }
 
-export async function setDesignStatus(designId: string, status: DesignStatus): Promise<DesignGalleryActionResult> {
+export async function setDesignStatus(
+  designId: string,
+  status: DesignStatus,
+): Promise<DesignGalleryActionResult<{ updatedAt: string }>> {
   try {
     const ctx = await requireDesignGalleryAdmin()
     if (!DESIGN_STATUSES.includes(status)) return { ok: false, error: "invalid" }
@@ -185,7 +230,7 @@ export async function setDesignStatus(designId: string, status: DesignStatus): P
     if (!design) return { ok: false, error: "notFound" }
     if (canChangeStatus(status, design.images.length) === "needsImage") return { ok: false, error: "needsImage" }
 
-    const { error } = await ctx.admin
+    const { data, error } = await ctx.admin
       .from("designs")
       .update({
         status,
@@ -194,6 +239,9 @@ export async function setDesignStatus(designId: string, status: DesignStatus): P
       })
       .eq("organization_id", ctx.org.id)
       .eq("id", design.id)
+      .select("updated_at")
+    // The database re-checks the image rule under a row lock (an image may have been removed meanwhile).
+    if (isNeedsImageError(error)) return { ok: false, error: "needsImage" }
     if (error) throw error
 
     await audit({
@@ -205,7 +253,8 @@ export async function setDesignStatus(designId: string, status: DesignStatus): P
       metadata: { from: design.status, to: status },
     }).catch(() => undefined)
     refresh(design.id)
-    return { ok: true, data: undefined }
+    const updatedAt = Array.isArray(data) && data[0]?.updated_at ? String(data[0].updated_at) : design.updatedAt
+    return { ok: true, data: { updatedAt } }
   } catch (error) {
     return fail(error)
   }
@@ -220,8 +269,13 @@ export async function deleteDesign(designId: string): Promise<DesignGalleryActio
     const { error } = await ctx.admin.from("designs").delete().eq("organization_id", ctx.org.id).eq("id", design.id)
     if (error) throw error
 
-    const uploaded = design.images.map((i) => i.storagePath).filter((p) => isDesignImagePathFor(p, ctx.org.id, design.id))
-    if (uploaded.length) await ctx.admin.storage.from(DESIGN_GALLERY_BUCKET).remove(uploaded).catch(() => undefined)
+    // Everything in the design's own folder, including uploads that were never finalized.
+    const folder = `${ctx.org.id}/${design.id}`
+    const { data: files } = await ctx.admin.storage.from(DESIGN_GALLERY_BUCKET).list(folder, { limit: 1000 })
+    const paths = (files ?? [])
+      .map((file: { name: string }) => `${folder}/${file.name}`)
+      .filter((path: string) => isDesignImagePathFor(path, ctx.org.id, design.id))
+    await removeFiles(ctx, paths)
 
     await audit({
       actorId: ctx.userId,
@@ -263,10 +317,7 @@ export async function prepareDesignImageUpload(
 }
 
 /** Step 2: checks the uploaded bytes really are an allowed image, then adds it at the end. */
-export async function finalizeDesignImageUpload(
-  designId: string,
-  storagePath: string,
-): Promise<DesignGalleryActionResult> {
+export async function finalizeDesignImageUpload(designId: string, storagePath: string): Promise<ImagesResult> {
   try {
     const ctx = await requireDesignGalleryAdmin()
     const design = await findDesign(ctx, designId)
@@ -274,29 +325,28 @@ export async function finalizeDesignImageUpload(
     if (typeof storagePath !== "string" || !isDesignImagePathFor(storagePath, ctx.org.id, design.id)) {
       return { ok: false, error: "invalidImage" }
     }
-    if (design.images.some((image) => image.storagePath === storagePath)) return { ok: true, data: undefined }
+    if (design.images.some((image) => image.storagePath === storagePath)) {
+      return { ok: true, data: { images: design.images } }
+    }
 
-    const bucket = ctx.admin.storage.from(DESIGN_GALLERY_BUCKET)
-    const { data: file, error: downloadError } = await bucket.download(storagePath)
+    const { data: file, error: downloadError } = await ctx.admin.storage.from(DESIGN_GALLERY_BUCKET).download(storagePath)
     if (downloadError || !file) return { ok: false, error: "uploadFailed" }
 
     const detected = detectProjectImageMimeType(new Uint8Array(await file.slice(0, 16).arrayBuffer()))
     if (!detected || !isAllowedProjectImageType(detected) || file.size <= 0 || file.size > PROJECT_IMAGE_MAX_SIZE_BYTES) {
-      await bucket.remove([storagePath]).catch(() => undefined)
+      await removeFiles(ctx, [storagePath])
       return { ok: false, error: "invalidImage" }
     }
 
-    const nextIndex = design.images.reduce((max, image) => Math.max(max, image.orderIndex + 1), 0)
-    const { error } = await ctx.admin.from("design_images").insert({
-      organization_id: ctx.org.id,
-      design_id: design.id,
-      storage_path: storagePath,
-      order_index: nextIndex,
+    // Appends under a lock on the design row; a repeated path returns the existing image.
+    const { error } = await ctx.admin.rpc("append_design_image", {
+      p_organization_id: ctx.org.id,
+      p_design_id: design.id,
+      p_storage_path: storagePath,
     })
-    // A repeated finalize (double click, retry) hits the unique path index: the image is already there.
-    if (error?.code === "23505") return { ok: true, data: undefined }
     if (error) {
-      await bucket.remove([storagePath]).catch(() => undefined)
+      await removeFiles(ctx, [storagePath])
+      if (error.message?.includes("design not found")) return { ok: false, error: "notFound" }
       throw error
     }
 
@@ -309,13 +359,13 @@ export async function finalizeDesignImageUpload(
       metadata: { storagePath, size: file.size, contentType: detected },
     }).catch(() => undefined)
     refresh(design.id)
-    return { ok: true, data: undefined }
+    return { ok: true, data: { images: await currentImages(ctx, design.id) } }
   } catch (error) {
     return fail(error)
   }
 }
 
-export async function deleteDesignImage(designId: string, imageId: string): Promise<DesignGalleryActionResult> {
+export async function deleteDesignImage(designId: string, imageId: string): Promise<ImagesResult> {
   try {
     const ctx = await requireDesignGalleryAdmin()
     const design = await findDesign(ctx, designId)
@@ -329,10 +379,10 @@ export async function deleteDesignImage(designId: string, imageId: string): Prom
       .eq("organization_id", ctx.org.id)
       .eq("design_id", design.id)
       .eq("id", image.id)
+    // The database re-checks under a row lock, in case another image was removed at the same time.
+    if (isNeedsImageError(error)) return { ok: false, error: "needsImage" }
     if (error) throw error
-    if (isDesignImagePathFor(image.storagePath, ctx.org.id, design.id)) {
-      await ctx.admin.storage.from(DESIGN_GALLERY_BUCKET).remove([image.storagePath]).catch(() => undefined)
-    }
+    if (isDesignImagePathFor(image.storagePath, ctx.org.id, design.id)) await removeFiles(ctx, [image.storagePath])
 
     await audit({
       actorId: ctx.userId,
@@ -343,14 +393,14 @@ export async function deleteDesignImage(designId: string, imageId: string): Prom
       metadata: { storagePath: image.storagePath },
     }).catch(() => undefined)
     refresh(design.id)
-    return { ok: true, data: undefined }
+    return { ok: true, data: { images: await currentImages(ctx, design.id) } }
   } catch (error) {
     return fail(error)
   }
 }
 
 /** Saves a new image order; the first image becomes the cover. */
-export async function reorderDesignImages(designId: string, imageIds: string[]): Promise<DesignGalleryActionResult> {
+export async function reorderDesignImages(designId: string, imageIds: string[]): Promise<ImagesResult> {
   try {
     const ctx = await requireDesignGalleryAdmin()
     const design = await findDesign(ctx, designId)
@@ -361,9 +411,11 @@ export async function reorderDesignImages(designId: string, imageIds: string[]):
       p_design_id: design.id,
       p_image_ids: imageIds,
     })
-    if (error) return { ok: false, error: "invalid" }
+    // A list that no longer matches the images (someone else changed them) is "stale", not a failure.
+    if (isImageOrderMismatch(error)) return { ok: false, error: "stale" }
+    if (error) throw error
     refresh(design.id)
-    return { ok: true, data: undefined }
+    return { ok: true, data: { images: await currentImages(ctx, design.id) } }
   } catch (error) {
     return fail(error)
   }

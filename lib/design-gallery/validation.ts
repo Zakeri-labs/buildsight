@@ -47,6 +47,20 @@ export function toAsciiDigits(value: string): string {
     .replace(/[٬،]/g, ",") // Arabic thousands separator, Arabic comma
 }
 
+// Zero-width characters, direction marks/overrides, BOM and control characters.
+// Arabic keyboards add some of them invisibly; none belong in stored text.
+const INVISIBLE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g
+
+/** Removes invisible characters (keeps line breaks and tabs) and trims. */
+export function cleanText(value: string): string {
+  return value.replace(INVISIBLE, "").trim()
+}
+
+/** Length as people count it: an emoji is one character, not two. */
+function visibleLength(value: string): number {
+  return Array.from(value).length
+}
+
 /** Lower-case, hyphen-separated, ASCII only. Arabic letters are dropped. */
 export function slugify(value: string): string {
   return toAsciiDigits(value)
@@ -60,20 +74,25 @@ export function slugify(value: string): string {
 }
 
 export function normalizeDesignCode(value: string): string {
-  return toAsciiDigits(value)
-    .trim()
+  return cleanText(toAsciiDigits(value))
+    .replace(/[\u2010-\u2015\u2212]/g, "-")
     .toUpperCase()
     .replace(/[\s_]+/g, "-")
     .replace(/-+/g, "-")
 }
 
-/** Digits only; accepts "+968 9411 4511", "00968…", Arabic digits. */
+/**
+ * Digits only; accepts "+968 9411 4511", "00968…", Arabic digits.
+ * Returns "" when the value contains letters ("ext 22", "تحويلة"), so it is rejected.
+ */
 export function normalizeWhatsappPhone(value: string): string {
-  return toAsciiDigits(value).replace(/\D/g, "").replace(/^00/, "")
+  const ascii = toAsciiDigits(cleanText(value))
+  if (/\p{L}/u.test(ascii)) return ""
+  return ascii.replace(/\D/g, "").replace(/^00/, "")
 }
 
 function text(raw: unknown): string {
-  return typeof raw === "string" ? raw.trim() : ""
+  return typeof raw === "string" ? cleanText(raw) : ""
 }
 
 function optionalText(raw: unknown): string | null {
@@ -85,10 +104,15 @@ function bool(raw: unknown): boolean {
   return raw === true || raw === "true" || raw === "on" || raw === "1"
 }
 
+// A unit typed after the number: "520 m²", "520m2", "520 م²", "520 متر".
+const AREA_UNIT = /\s*(m²|m2|sqm|sq\.?\s*m|م²|م2|متر\s*مربع|متر|م)\s*$/i
+
 function parseNumber(raw: unknown): number | null | "invalid" {
   if (typeof raw === "number") return Number.isFinite(raw) ? raw : "invalid"
-  const value = toAsciiDigits(text(raw)).replace(/,/g, "")
+  let value = toAsciiDigits(text(raw)).replace(AREA_UNIT, "").trim()
   if (!value) return null
+  // Commas only as thousands separators ("1,200"); "1,5" is ambiguous and refused.
+  if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(value)) value = value.replace(/,/g, "")
   if (!/^\d+(\.\d+)?$/.test(value)) return "invalid"
   return Number(value)
 }
@@ -102,9 +126,9 @@ export function validateDesignInput(
   const titleAr = text(raw.titleAr)
   const titleEn = text(raw.titleEn)
   if (!titleAr) errors.titleAr = "required"
-  else if (titleAr.length > LIMITS.title) errors.titleAr = "tooLong"
+  else if (visibleLength(titleAr) > LIMITS.title) errors.titleAr = "tooLong"
   if (!titleEn) errors.titleEn = "required"
-  else if (titleEn.length > LIMITS.title) errors.titleEn = "tooLong"
+  else if (visibleLength(titleEn) > LIMITS.title) errors.titleEn = "tooLong"
 
   const categoryId = text(raw.categoryId)
   if (!categoryId) errors.categoryId = "required"
@@ -133,10 +157,12 @@ export function validateDesignInput(
     serviceEn: [optionalText(raw.serviceEn), LIMITS.short],
   } as const
   for (const [field, [value, limit]] of Object.entries(optional) as [keyof typeof optional, readonly [string | null, number]][]) {
-    if (value && value.length > limit) errors[field] = "tooLong"
+    if (value && visibleLength(value) > limit) errors[field] = "tooLong"
   }
 
-  const area = parseNumber(raw.builtAreaSqm)
+  // Stored with 2 decimals, so round first: 0.004 would become 0 in the database.
+  const parsedArea = parseNumber(raw.builtAreaSqm)
+  const area = typeof parsedArea === "number" ? Math.round(parsedArea * 100) / 100 : parsedArea
   if (area === "invalid") errors.builtAreaSqm = "invalidNumber"
   else if (area !== null && (area <= 0 || area > 1_000_000)) errors.builtAreaSqm = "outOfRange"
 
@@ -148,7 +174,7 @@ export function validateDesignInput(
   const sortOrder = parseNumber(raw.sortOrder)
   if (sortOrder === "invalid" || (typeof sortOrder === "number" && !Number.isInteger(sortOrder))) {
     errors.sortOrder = "invalidNumber"
-  } else if (sortOrder !== null && sortOrder > 100_000) errors.sortOrder = "outOfRange"
+  } else if (sortOrder !== null && (sortOrder < 0 || sortOrder > 100_000)) errors.sortOrder = "outOfRange"
 
   if (Object.keys(errors).length > 0) return { ok: false, errors }
 
@@ -180,8 +206,8 @@ export function validateSiteInput(raw: Record<string, unknown>): ValidationResul
   const errors: Partial<Record<keyof DesignSiteInput, DesignFieldError>> = {}
   const displayNameAr = optionalText(raw.displayNameAr)
   const displayNameEn = optionalText(raw.displayNameEn)
-  if (displayNameAr && displayNameAr.length > LIMITS.displayName) errors.displayNameAr = "tooLong"
-  if (displayNameEn && displayNameEn.length > LIMITS.displayName) errors.displayNameEn = "tooLong"
+  if (displayNameAr && visibleLength(displayNameAr) > LIMITS.displayName) errors.displayNameAr = "tooLong"
+  if (displayNameEn && visibleLength(displayNameEn) > LIMITS.displayName) errors.displayNameEn = "tooLong"
 
   const phoneRaw = text(raw.whatsappPhone)
   const whatsappPhone = phoneRaw ? normalizeWhatsappPhone(phoneRaw) : null

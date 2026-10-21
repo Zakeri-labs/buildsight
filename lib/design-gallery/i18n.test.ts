@@ -17,7 +17,7 @@ test("design gallery texts exist in both Arabic and English with the same keys",
 test("every action error and field error code has a translation", () => {
   const codes = [
     "required", "tooLong", "invalidSlug", "invalidCode", "invalidNumber", "outOfRange", "invalidCategory",
-    "invalidPhone", "taken", "forbidden", "notFound", "invalid", "needsImage", "invalidImage", "uploadFailed", "failed",
+    "invalidPhone", "taken", "forbidden", "notFound", "stale", "invalid", "needsImage", "invalidImage", "uploadFailed", "failed",
   ]
   for (const locale of ["en", "ar"] as const) {
     for (const code of codes) {

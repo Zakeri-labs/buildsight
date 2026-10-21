@@ -24,10 +24,14 @@ create table storage.buckets (
 );
 `
 
-const GRANTS = `
+// Supabase grants table and function privileges to anon/authenticated by
+// default, at creation time. Doing the same here (before the migrations run)
+// means a REVOKE inside a migration is tested for real.
+const DEFAULT_PRIVILEGES = `
 grant usage on schema public, auth to anon, authenticated;
-grant all on all tables in schema public to anon, authenticated;
 grant execute on function auth.uid(), auth.jwt() to anon, authenticated;
+alter default privileges in schema public grant all on tables to anon, authenticated;
+alter default privileges in schema public grant execute on functions to anon, authenticated;
 `
 
 export function readMigration(file: string): string {
@@ -38,10 +42,10 @@ export function readMigration(file: string): string {
 export async function createTestDb(migrations: string[]): Promise<PGlite> {
   const db = new PGlite()
   await db.exec(SUPABASE_STUBS)
+  await db.exec(DEFAULT_PRIVILEGES)
   for (const file of migrations) {
     await db.exec(readMigration(file))
   }
-  await db.exec(GRANTS)
   return db
 }
 
@@ -85,11 +89,11 @@ export async function createOrg(
   db: PGlite,
   name: string,
   type: "supervising" | "external" = "supervising",
-  createdAt = new Date().toISOString(),
+  status: "active" | "suspended" | "pending" | "invited" = "active",
 ): Promise<string> {
   const { rows } = await db.query<{ id: string }>(
-    `insert into public.organizations (name, type, created_at) values ($1, $2, $3) returning id`,
-    [name, type, createdAt],
+    `insert into public.organizations (name, type, status) values ($1, $2, $3) returning id`,
+    [name, type, status],
   )
   return rows[0].id
 }

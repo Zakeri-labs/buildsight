@@ -23,7 +23,7 @@ import {
   type DesignGalleryActionResult,
 } from "@/lib/design-gallery/actions"
 import { DESIGN_GALLERY_BUCKET } from "@/lib/design-gallery/images"
-import type { Design, DesignCategory, DesignStatus } from "@/lib/design-gallery/types"
+import type { Design, DesignCategory, DesignImage, DesignStatus } from "@/lib/design-gallery/types"
 import { PROJECT_IMAGE_ACCEPT } from "@/lib/projects/project-image"
 import { cn } from "@/lib/utils"
 
@@ -44,6 +44,8 @@ export function DesignEditor({ design, categories }: { design: Design | null; ca
   const [isBookable, setIsBookable] = useState(design?.isBookable ?? categories[0]?.bookableByDefault ?? true)
   const [bookableTouched, setBookableTouched] = useState(Boolean(design))
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  // The version this form was loaded with; sent on save so a concurrent edit is not overwritten.
+  const [version, setVersion] = useState(design?.updatedAt ?? "")
 
   function report(result: DesignGalleryActionResult<unknown>, okText?: string) {
     if (result.ok) {
@@ -68,7 +70,7 @@ export function DesignEditor({ design, categories }: { design: Design | null; ca
           {copy.back}
         </Link>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="min-w-0 text-2xl font-semibold text-balance">
+          <h1 className="min-w-0 break-words text-2xl font-semibold text-balance">
             {design ? (locale === "ar" ? design.titleAr : design.titleEn) : copy.newDesign}
           </h1>
           {design ? <DesignStatusBadge status={design.status} /> : null}
@@ -81,7 +83,11 @@ export function DesignEditor({ design, categories }: { design: Design | null; ca
           pending={pending}
           onChange={(status) =>
             startTransition(async () => {
-              if (report(await setDesignStatus(design.id, status), copy.saved)) router.refresh()
+              const result = await setDesignStatus(design.id, status)
+              if (report(result, copy.saved) && result.ok) {
+                setVersion(result.data.updatedAt)
+                router.refresh()
+              }
             })
           }
         />
@@ -93,8 +99,9 @@ export function DesignEditor({ design, categories }: { design: Design | null; ca
           event.preventDefault()
           const raw = Object.fromEntries(new FormData(event.currentTarget).entries())
           startTransition(async () => {
-            const result = await saveDesign(design?.id ?? null, { ...raw, isBookable })
+            const result = await saveDesign(design?.id ?? null, { ...raw, isBookable, expectedUpdatedAt: version })
             if (!report(result, copy.saved) || !result.ok) return
+            setVersion(result.data.updatedAt)
             if (!design) router.push(`/design-gallery/${result.data.id}`)
             else router.refresh()
           })
@@ -238,7 +245,7 @@ export function DesignEditor({ design, categories }: { design: Design | null; ca
           </CardContent>
         </Card>
 
-        <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
+        <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={pending}>
             {pending ? copy.saving : copy.save}
           </Button>
@@ -285,7 +292,7 @@ export function DesignEditor({ design, categories }: { design: Design | null; ca
                 {copy.delete}
               </Button>
               <Button variant="ghost" disabled={pending} onClick={() => setConfirmingDelete(false)}>
-                {copy.back}
+                {copy.cancel}
               </Button>
             </>
           )}
@@ -339,41 +346,50 @@ function ImageManager({
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState<"upload" | "change" | null>(null)
-  const images = design.images
+  // Kept from each action's answer, so a quick next click works on the current list.
+  const [images, setImages] = useState<DesignImage[]>(design.images)
+  const [failedFiles, setFailedFiles] = useState<{ name: string; reason: string }[]>([])
   const alt = locale === "ar" ? design.titleAr : design.titleEn
 
   async function upload(files: File[]) {
     if (!files.length || busy) return
     setBusy("upload")
+    setFailedFiles([])
+    const failed: { name: string; reason: string }[] = []
     try {
       const supabase = createClient()
       for (const file of files) {
         const prepared = await prepareDesignImageUpload(design.id, { name: file.name, size: file.size, type: file.type })
         if (!prepared.ok) {
-          onResult(prepared)
+          failed.push({ name: file.name, reason: copy.errors[prepared.error] })
           continue
         }
         const { error } = await supabase.storage
           .from(DESIGN_GALLERY_BUCKET)
           .uploadToSignedUrl(prepared.data.storagePath, prepared.data.token, file, { contentType: file.type })
         if (error) {
-          onResult({ ok: false, error: "uploadFailed" })
+          failed.push({ name: file.name, reason: copy.errors.uploadFailed })
           continue
         }
-        onResult(await finalizeDesignImageUpload(design.id, prepared.data.storagePath))
+        const finalized = await finalizeDesignImageUpload(design.id, prepared.data.storagePath)
+        if (finalized.ok) setImages(finalized.data.images)
+        else failed.push({ name: file.name, reason: copy.errors[finalized.error] })
       }
     } finally {
+      setFailedFiles(failed)
       setBusy(null)
       if (inputRef.current) inputRef.current.value = ""
       router.refresh()
     }
   }
 
-  async function change(action: () => Promise<DesignGalleryActionResult<unknown>>) {
+  async function change(action: () => Promise<DesignGalleryActionResult<{ images: DesignImage[] }>>) {
     if (busy) return
     setBusy("change")
     try {
-      onResult(await action())
+      const result = await action()
+      onResult(result)
+      if (result.ok) setImages(result.data.images)
       router.refresh()
     } finally {
       setBusy(null)
@@ -410,6 +426,19 @@ function ImageManager({
         </Button>
         <p className="text-xs text-muted-foreground">{copy.uploadHint}</p>
       </div>
+
+      {failedFiles.length ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" role="alert">
+          <p className="font-medium">{copy.someUploadsFailed}</p>
+          <ul className="mt-1 list-disc ps-5">
+            {failedFiles.map((file, index) => (
+              <li key={`${file.name}-${index}`} className="break-words">
+                <span dir="auto">{file.name}</span> — {file.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {images.length ? (
         <ul className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 md:grid-cols-3">

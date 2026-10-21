@@ -1,46 +1,59 @@
 -- ============================================================
--- Design gallery demo content for Bonyan.
+-- Design gallery demo content for Bonyan. Requires 079_design_gallery.sql.
 --
--- Targets the supervising organization whose name contains "bonyan"
--- (case-insensitive); falls back to the oldest supervising organization.
--- Safe to run more than once: rows are inserted with ON CONFLICT DO NOTHING,
--- so edits made later in the admin panel are never overwritten.
--- Sample images are static files under /public/design-gallery/samples/bonyan
--- (paths that start with "/" are served as-is by the app).
--- Requires 079_design_gallery.sql (provision_design_gallery).
+-- Target: the one ACTIVE supervising organization whose name contains
+-- "bonyan" (any case) or "بنيان". If none or more than one matches, nothing
+-- is written. There is no fallback to another organization.
+--
+-- Runs only once per organization: if Bonyan already has a gallery (set up
+-- earlier by this seed or in the admin panel), nothing is written, so designs
+-- or categories an admin deleted or changed never come back.
+--
+-- Sample images are static files under /public/design-gallery/samples/bonyan.
 -- ============================================================
 
 do $$
 declare
   org uuid;
+  match_count integer;
 begin
-  select id into org
+  select count(*), min(id::text)::uuid into match_count, org
   from public.organizations
   where type = 'supervising'
-  order by (lower(name) like '%bonyan%') desc, created_at asc
-  limit 1;
+    and status = 'active'
+    and (lower(name) like '%bonyan%' or name like '%بنيان%');
 
-  if org is null then
-    raise notice 'No supervising organization found; design gallery seed skipped.';
+  if match_count <> 1 then
+    raise notice 'Design gallery seed skipped: % active supervising organizations match Bonyan (need exactly 1).', match_count;
+    return;
+  end if;
+
+  if exists (select 1 from public.design_gallery_sites where organization_id = org) then
+    raise notice 'Design gallery seed skipped: Bonyan already has a gallery.';
+    return;
+  end if;
+
+  if exists (select 1 from public.design_gallery_sites where slug = 'bonyan') then
+    raise notice 'Design gallery seed skipped: the slug "bonyan" belongs to another organization.';
     return;
   end if;
 
   perform public.provision_design_gallery(org, 'bonyan', 'بنيان', 'Bonyan');
 
-  -- Turn the demo on only the first time; later admin changes are kept.
   update public.design_gallery_sites
   set is_enabled = true, whatsapp_phone = '96894114511'
-  where organization_id = org and whatsapp_phone is null and not is_enabled
-    and not exists (select 1 from public.designs where organization_id = org);
+  where organization_id = org;
 
+  -- Inserted as drafts; published below once each has its image
+  -- (a published design must have at least one image).
   insert into public.designs (
     organization_id, category_id, slug, code, title_ar, title_en, summary_ar, summary_en,
     description_ar, description_en, floors_ar, floors_en, built_area_sqm, bedrooms,
-    service_ar, service_en, is_bookable, status, sort_order, published_at
+    service_ar, service_en, is_bookable, status, sort_order
   )
   select org, c.id, d.slug, d.code, d.title_ar, d.title_en, d.summary_ar, d.summary_en,
          d.description_ar, d.description_en, d.floors_ar, d.floors_en, d.area, d.bedrooms,
-         d.service_ar, d.service_en, d.bookable, 'published', d.sort_order, now()
+         d.service_ar, d.service_en, d.bookable, 'draft', d.sort_order
   from (values
     ('villas', 'modern-villa-pool', 'BD-101', 'فيلا عصرية بمسبح', 'Modern villa with pool',
      'طابقان + سطح · مسبح', 'Two floors + roof · Pool',
@@ -84,17 +97,14 @@ begin
      null, null, null::numeric, null::integer, 'تصميم + 3D', 'Design + 3D', false, 80)
   ) as d(category_key, slug, code, title_ar, title_en, summary_ar, summary_en, description_ar, description_en,
          floors_ar, floors_en, area, bedrooms, service_ar, service_en, bookable, sort_order)
-  join public.design_categories c on c.organization_id = org and c.key = d.category_key
-  on conflict (organization_id, slug) do nothing;
+  join public.design_categories c on c.organization_id = org and c.key = d.category_key;
 
   insert into public.design_images (organization_id, design_id, storage_path, alt_ar, alt_en, order_index)
   select org, d.id, '/design-gallery/samples/bonyan/' || d.slug || '.webp', d.title_ar, d.title_en, 0
   from public.designs d
-  where d.organization_id = org
-    and d.slug in (
-      'modern-villa-pool', 'simple-lines-villa', 'stone-facade-villa', 'attached-villas-complex',
-      'mixed-use-complex', 'university-office-building', 'al-murtafa-beach-sur', 'saham-public-park'
-    )
-    and not exists (select 1 from public.design_images i where i.design_id = d.id);
+  where d.organization_id = org;
+
+  update public.designs set status = 'published', published_at = now()
+  where organization_id = org;
 end;
 $$;

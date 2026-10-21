@@ -270,7 +270,7 @@ export function DesignGalleryAdmin({
                               <Badge variant="outline">{t.designGallery.referenceOnly}</Badge>
                             ) : null}
                           </div>
-                          <p className="font-medium text-pretty">{title}</p>
+                          <p className="break-words font-medium text-pretty">{title}</p>
                           <p className="mt-auto text-xs text-muted-foreground" dir="ltr">
                             {design.code} · /{design.slug}
                           </p>

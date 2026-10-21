@@ -11,7 +11,10 @@ export type DesignGalleryAdminOrg = { id: string; name: string }
  * (the consultancy that owns the gallery). Never taken from client input.
  */
 export function pickDesignGalleryAdminOrg(memberships: readonly MembershipLike[]): DesignGalleryAdminOrg | null {
-  const adminOf = memberships.filter((m) => m.role === "org_admin" && m.organization?.id)
+  // Sorted so the same user always gets the same organization, whatever order the database returns.
+  const adminOf = memberships
+    .filter((m) => m.role === "org_admin" && m.organization?.id)
+    .sort((a, b) => (a.organization!.id < b.organization!.id ? -1 : 1))
   const preferred = adminOf.find((m) => m.organization?.type === "supervising") ?? adminOf[0]
   return preferred?.organization ? { id: preferred.organization.id, name: preferred.organization.name } : null
 }
