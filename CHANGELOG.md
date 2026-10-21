@@ -1,3 +1,9 @@
+## 2026-10-21 — Design gallery: default gallery stored in the database
+
+- Fix: `/designs` showed "not found" on deployments without `DESIGN_GALLERY_DEFAULT_SITE` (e.g. Vercel previews). The default gallery is now marked in the database (`is_default`, Bonyan); the environment variable is optional and still wins when set.
+- When no gallery matches, the server log says why (host, enabled galleries, environment variable, database default).
+- Database migration required: execute `scripts/sql/082_design_gallery_default_site.sql`.
+
 ## 2026-10-21 — Design gallery (معرض التصاميم), part 2: public pages
 
 - New public pages, no sign-in needed: **`/designs`** (gallery with search and all category filters) and **`/designs/<slug>`** (design page with images, specs and contact buttons). Arabic by default, English with `?lang=en`; the page sets its own language and direction (after the page loads; the first HTML still says `lang="en"`).

@@ -48,10 +48,20 @@ export const loadPublicSite = cache(async (): Promise<PublicSite | null> => {
   if (!client) return null
   const { data, error } = await client.from("design_gallery_sites").select("*").eq("is_enabled", true)
   if (error) throw error
-  const picked = pickPublicSite((data ?? []).map(mapSite), await requestHost(), process.env.DESIGN_GALLERY_DEFAULT_SITE, {
+  const sites = (data ?? []).map(mapSite)
+  const host = await requestHost()
+  const defaultSlug = process.env.DESIGN_GALLERY_DEFAULT_SITE
+  const picked = pickPublicSite(sites, host, defaultSlug, {
     allowSingleSiteFallback: process.env.NODE_ENV !== "production",
   })
-  if (!picked) return null
+  if (!picked) {
+    // Visible in the server logs (e.g. Vercel) when /designs shows "not found".
+    console.warn(
+      `design gallery: no gallery for host "${host}" — ${sites.length} enabled galleries [${sites.map((s) => s.slug).join(", ")}], ` +
+        `DESIGN_GALLERY_DEFAULT_SITE=${defaultSlug ? `"${defaultSlug}"` : "unset"}, default in database: ${sites.find((s) => s.isDefault)?.slug ?? "none"}`,
+    )
+    return null
+  }
   const origin = picked.matchedCustomHost
     ? `https://${normalizeHost(picked.site.customHost)}`
     : await resolveSiteOrigin()

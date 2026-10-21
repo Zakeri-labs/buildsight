@@ -35,6 +35,15 @@ describe("pickPublicSite", () => {
     expect(pick([bonyan, other], "app.bonyanec.com", "missing")).toBeNull()
   })
 
+  test("without the environment variable, the gallery marked as default in the database is used", () => {
+    const marked = { ...bonyan, isDefault: true }
+    expect(pick([other, marked], "app.bonyanec.com", undefined)).toEqual({ site: marked, matchedCustomHost: false })
+    expect(pick([other, marked], "buildsight-abc.vercel.app", "")).toEqual({ site: marked, matchedCustomHost: false })
+    expect(pick([other, marked], "designs.other.com", undefined)).toEqual({ site: other, matchedCustomHost: true })
+    // The environment variable still wins when set.
+    expect(pick([{ ...other, isDefault: false }, marked], "app.bonyanec.com", "other")).toEqual({ site: { ...other, isDefault: false }, matchedCustomHost: false })
+  })
+
   test("without a default, nothing is shown — except a single site during local development", () => {
     expect(pick([bonyan], "app.bonyanec.com", null)).toBeNull()
     expect(pick([bonyan], "localhost:3000", null, { allowSingleSiteFallback: true })).toEqual({ site: bonyan, matchedCustomHost: false })

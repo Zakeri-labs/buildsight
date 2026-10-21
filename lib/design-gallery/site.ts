@@ -1,4 +1,4 @@
-type SiteLike = { slug: string; customHost: string | null }
+type SiteLike = { slug: string; customHost: string | null; isDefault?: boolean }
 
 /** Host without port, trailing dot or case: "Designs.Other.com.:443" → "designs.other.com". */
 export function normalizeHost(host: string | null | undefined): string {
@@ -10,8 +10,9 @@ export type PickedSite<T> = { site: T; matchedCustomHost: boolean }
 /**
  * Which organization's gallery a public request shows:
  * 1. the site whose custom host is the request host (e.g. designs.example.com);
- * 2. otherwise the configured default site slug (DESIGN_GALLERY_DEFAULT_SITE);
- * 3. only during local development without a default: the single enabled site.
+ * 2. otherwise DESIGN_GALLERY_DEFAULT_SITE, when that environment variable is set;
+ * 3. otherwise the site marked as the default in the database (082 migration);
+ * 4. only during local development without any default: the single enabled site.
  * `sites` must already be limited to enabled sites.
  */
 export function pickPublicSite<T extends SiteLike>(
@@ -30,6 +31,8 @@ export function pickPublicSite<T extends SiteLike>(
     const bySlug = sites.find((site) => site.slug === slug)
     return bySlug ? { site: bySlug, matchedCustomHost: false } : null
   }
+  const marked = sites.find((site) => site.isDefault)
+  if (marked) return { site: marked, matchedCustomHost: false }
   if (options.allowSingleSiteFallback && sites.length === 1) return { site: sites[0], matchedCustomHost: false }
   return null
 }

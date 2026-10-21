@@ -437,3 +437,30 @@ describe("081 public pages", () => {
     expect(await count(f.db, `select 1 from design_gallery_events where event_type = 'design_view' and design_id is null`)).toBe(1)
   })
 })
+
+describe("082 default gallery", () => {
+  test("marks Bonyan as the default gallery, once, and allows only one default", async () => {
+    const f = await setup()
+    await f.db.query(`select provision_design_gallery($1, 'other-co')`, [f.other])
+    await f.db.exec(readMigration("082_design_gallery_default_site.sql"))
+    await f.db.exec(readMigration("082_design_gallery_default_site.sql"))
+    const { rows } = await f.db.query(`select slug, is_default from design_gallery_sites order by slug`)
+    expect(rows).toEqual([
+      { slug: "bonyan", is_default: true },
+      { slug: "other-co", is_default: false },
+    ])
+    await expect(f.db.query(`update design_gallery_sites set is_default = true where slug = 'other-co'`)).rejects.toThrow(
+      /design_gallery_sites_one_default/,
+    )
+  })
+
+  test("keeps another default an admin already chose", async () => {
+    const f = await setup()
+    await f.db.query(`select provision_design_gallery($1, 'other-co')`, [f.other])
+    await f.db.exec(`alter table design_gallery_sites add column if not exists is_default boolean not null default false`)
+    await f.db.query(`update design_gallery_sites set is_default = true where slug = 'other-co'`)
+    await f.db.exec(readMigration("082_design_gallery_default_site.sql"))
+    const { rows } = await f.db.query(`select slug from design_gallery_sites where is_default`)
+    expect(rows).toEqual([{ slug: "other-co" }])
+  })
+})

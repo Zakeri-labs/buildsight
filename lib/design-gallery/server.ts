@@ -57,6 +57,7 @@ export function mapSite(row: any): DesignGallerySite {
     whatsappPhone: row.whatsapp_phone ?? null,
     logoUrl: row.logo_url ?? null,
     websiteUrl: row.website_url ?? null,
+    isDefault: Boolean(row.is_default),
   }
 }
 

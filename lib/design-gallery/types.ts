@@ -11,6 +11,8 @@ export type DesignGallerySite = {
   whatsappPhone: string | null
   logoUrl: string | null
   websiteUrl: string | null
+  /** Shown on hosts that are not any gallery's custom host. */
+  isDefault: boolean
 }
 
 export type DesignCategory = {

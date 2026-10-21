@@ -12,6 +12,7 @@ const site: DesignGallerySite = {
   whatsappPhone: "96894114511",
   logoUrl: null,
   websiteUrl: null,
+  isDefault: true,
 }
 const villas: DesignCategory = { id: "c1", key: "villas", nameAr: "فلل سكنية", nameEn: "Villas", sortOrder: 1, bookableByDefault: true }
 const design = (overrides: Partial<Design>): Design => ({
