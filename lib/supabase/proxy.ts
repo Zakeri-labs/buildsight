@@ -4,7 +4,7 @@ import { resolveDefaultLandingDestination } from "@/lib/auth/default-landing"
 import { ALL_PROJECTS_SCOPE_VALUE, SELECTED_PROJECT_COOKIE } from "@/lib/project-scope-constants"
 import { INTERNAL_AUTH_HEADERS, signAuthPayload } from "@/lib/auth/internal-tokens"
 
-const PUBLIC_PATHS = ["/auth", "/invite", "/_next", "/favicon", "/api/health", "/d", "/r", "/api/stage-translations/pdf"]
+const PUBLIC_PATHS = ["/auth", "/invite", "/_next", "/favicon", "/api/health", "/d", "/r", "/api/stage-translations/pdf", "/designs", "/api/designs"]
 
 function preserveResponseCookies(source: NextResponse, target: NextResponse) {
   source.cookies.getAll().forEach((cookie) => target.cookies.set(cookie))

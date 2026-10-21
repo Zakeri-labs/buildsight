@@ -15,6 +15,7 @@ export type DesignFieldError =
   | "invalidCategory"
   | "invalidPhone"
   | "taken"
+  | "invalidUrl"
 
 export type ValidationResult<T> =
   | { ok: true; value: T }
@@ -215,6 +216,20 @@ export function validateSiteInput(raw: Record<string, unknown>): ValidationResul
     errors.whatsappPhone = "invalidPhone"
   }
 
+  const websiteUrl = optionalText(raw.websiteUrl)
+  if (websiteUrl && (websiteUrl.length > 300 || !isWebsiteUrl(websiteUrl))) errors.websiteUrl = "invalidUrl"
+
   if (Object.keys(errors).length > 0) return { ok: false, errors }
-  return { ok: true, value: { isEnabled: bool(raw.isEnabled), displayNameAr, displayNameEn, whatsappPhone } }
+  return { ok: true, value: { isEnabled: bool(raw.isEnabled), displayNameAr, displayNameEn, whatsappPhone, websiteUrl } }
+}
+
+/** An http(s) address with a host, nothing that could break out of an attribute. */
+function isWebsiteUrl(value: string): boolean {
+  if (/[\s"'<>]/.test(value)) return false
+  try {
+    const url = new URL(value)
+    return (url.protocol === "https:" || url.protocol === "http:") && Boolean(url.hostname) && !url.username && !url.password
+  } catch {
+    return false
+  }
 }

@@ -36,6 +36,8 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
+    // Pages with a fixed language (the public design gallery) set lang/dir themselves.
+    if (document.documentElement.hasAttribute("data-locale-locked")) return
     const dir = dictionaries[locale].dir
     document.documentElement.setAttribute("lang", locale)
     document.documentElement.setAttribute("dir", dir)

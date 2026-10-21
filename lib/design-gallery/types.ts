@@ -9,6 +9,8 @@ export type DesignGallerySite = {
   displayNameAr: string | null
   displayNameEn: string | null
   whatsappPhone: string | null
+  logoUrl: string | null
+  websiteUrl: string | null
 }
 
 export type DesignCategory = {
@@ -81,4 +83,5 @@ export type DesignSiteInput = {
   displayNameAr: string | null
   displayNameEn: string | null
   whatsappPhone: string | null
+  websiteUrl: string | null
 }

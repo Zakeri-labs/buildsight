@@ -132,6 +132,22 @@ function SiteSettingsCard({ site }: { site: DesignGallerySite }) {
             />
           </Field>
 
+          <Field
+            id="websiteUrl"
+            label={t.designGallery.websiteUrl}
+            hint={t.designGallery.websiteHint}
+            error={fieldErrors.websiteUrl}
+          >
+            <Input
+              id="websiteUrl"
+              name="websiteUrl"
+              inputMode="url"
+              defaultValue={site.websiteUrl ?? ""}
+              dir="ltr"
+              aria-invalid={Boolean(fieldErrors.websiteUrl)}
+            />
+          </Field>
+
           <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
             <Button type="submit" disabled={pending}>
               {pending ? t.designGallery.saving : t.designGallery.saveSettings}

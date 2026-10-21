@@ -373,3 +373,67 @@ describe("provision_design_gallery", () => {
     )
   })
 })
+
+describe("081 public pages", () => {
+  let f: Fixture
+  beforeAll(async () => {
+    f = await setup()
+    await f.db.exec(readMigration("081_design_gallery_public.sql"))
+    await f.db.query(
+      `insert into design_gallery_events (organization_id, event_type, locale) values ($1, 'gallery_view', 'ar')`,
+      [f.bonyan],
+    )
+  })
+
+  test("sets Bonyan's header logo and website once, and can be run again", async () => {
+    await f.db.exec(readMigration("081_design_gallery_public.sql"))
+    const { rows } = await f.db.query(`select logo_url, website_url from design_gallery_sites`)
+    expect(rows).toEqual([{ logo_url: "/Logow.png", website_url: "https://bonyanec.com" }])
+  })
+
+  test("only safe logo and website addresses are stored", async () => {
+    for (const [column, value] of [
+      ["logo_url", "javascript:alert(1)"],
+      ["logo_url", 'https://x.com/"onerror=1'],
+      ["website_url", "javascript:alert(1)"],
+      ["website_url", "bonyanec.com"],
+    ]) {
+      await expect(f.db.query(`update design_gallery_sites set ${column} = $1`, [value]), `${column}=${value}`).rejects.toThrow(/_format/)
+    }
+  })
+
+  test("events: only the org admin reads them; nobody writes them through the API", async () => {
+    const read = (actor: Parameters<typeof as>[1]) =>
+      as(f.db, actor, async (tx) => (await tx.query(`select 1 from design_gallery_events`)).rows.length)
+    expect(await read({ role: "authenticated", userId: f.admin })).toBe(1)
+    for (const actor of [{ role: "anon" as const }, { role: "authenticated" as const, userId: f.member }, { role: "authenticated" as const, userId: f.otherAdmin }]) {
+      expect(await read(actor)).toBe(0)
+    }
+    for (const actor of [{ role: "anon" as const }, { role: "authenticated" as const, userId: f.admin }]) {
+      await expect(
+        as(f.db, actor, (tx) => tx.query(`insert into design_gallery_events (organization_id, event_type) values ($1, 'gallery_view')`, [f.bonyan])),
+      ).rejects.toThrow(/permission denied/)
+    }
+  })
+
+  test("events accept only known types, intents and short campaign values", async () => {
+    const insert = (type: string, intent: string | null, utm: string | null = null) =>
+      f.db.query(`insert into design_gallery_events (organization_id, event_type, intent, utm_source) values ($1, $2, $3, $4)`, [
+        f.bonyan,
+        type,
+        intent,
+        utm,
+      ])
+    await expect(insert("contact_click", "same")).resolves.toBeDefined()
+    await expect(insert("purchase", null)).rejects.toThrow(/design_gallery_events_type/)
+    await expect(insert("contact_click", "hack")).rejects.toThrow(/design_gallery_events_intent/)
+    await expect(insert("gallery_view", null, "x".repeat(101))).rejects.toThrow(/design_gallery_events_lengths/)
+  })
+
+  test("deleting a design keeps its events for the monthly figures", async () => {
+    const id = await designId(f.db, "modern-villa-pool")
+    await f.db.query(`insert into design_gallery_events (organization_id, design_id, event_type) values ($1, $2, 'design_view')`, [f.bonyan, id])
+    await f.db.query(`delete from designs where id = $1`, [id])
+    expect(await count(f.db, `select 1 from design_gallery_events where event_type = 'design_view' and design_id is null`)).toBe(1)
+  })
+})

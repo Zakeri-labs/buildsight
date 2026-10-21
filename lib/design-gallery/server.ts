@@ -37,7 +37,7 @@ export async function getDesignGalleryAdmin(): Promise<DesignGalleryAdminContext
   }
 }
 
-const DESIGN_COLUMNS =
+export const DESIGN_COLUMNS =
   "id, organization_id, category_id, slug, code, title_ar, title_en, summary_ar, summary_en, description_ar, description_en, floors_ar, floors_en, built_area_sqm, bedrooms, service_ar, service_en, is_bookable, status, sort_order, published_at, updated_at, design_images(id, storage_path, alt_ar, alt_en, order_index, created_at)"
 
 function toNumber(value: unknown): number | null {
@@ -55,6 +55,8 @@ export function mapSite(row: any): DesignGallerySite {
     displayNameAr: row.display_name_ar ?? null,
     displayNameEn: row.display_name_en ?? null,
     whatsappPhone: row.whatsapp_phone ?? null,
+    logoUrl: row.logo_url ?? null,
+    websiteUrl: row.website_url ?? null,
   }
 }
 

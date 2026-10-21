@@ -10,6 +10,7 @@ function shape(value: unknown): unknown {
 
 test("design gallery texts exist in both Arabic and English with the same keys", () => {
   expect(shape(dictionaries.ar.designGallery)).toEqual(shape(dictionaries.en.designGallery))
+  expect(shape(dictionaries.ar.designGalleryPublic)).toEqual(shape(dictionaries.en.designGalleryPublic))
   expect(dictionaries.ar.nav.designGallery).toBe("معرض التصاميم")
   expect(dictionaries.en.nav.designGallery).toBe("Design Gallery")
 })
@@ -17,7 +18,7 @@ test("design gallery texts exist in both Arabic and English with the same keys",
 test("every action error and field error code has a translation", () => {
   const codes = [
     "required", "tooLong", "invalidSlug", "invalidCode", "invalidNumber", "outOfRange", "invalidCategory",
-    "invalidPhone", "taken", "forbidden", "notFound", "stale", "invalid", "needsImage", "invalidImage", "uploadFailed", "failed",
+    "invalidPhone", "invalidUrl", "taken", "forbidden", "notFound", "stale", "invalid", "needsImage", "invalidImage", "uploadFailed", "failed",
   ]
   for (const locale of ["en", "ar"] as const) {
     for (const code of codes) {

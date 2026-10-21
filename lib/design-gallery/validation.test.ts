@@ -145,7 +145,7 @@ describe("validateSiteInput", () => {
   test("normalizes the WhatsApp number", () => {
     expect(validateSiteInput({ isEnabled: "on", whatsappPhone: "+968 9411 4511" })).toEqual({
       ok: true,
-      value: { isEnabled: true, displayNameAr: null, displayNameEn: null, whatsappPhone: "96894114511" },
+      value: { isEnabled: true, displayNameAr: null, displayNameEn: null, whatsappPhone: "96894114511", websiteUrl: null },
     })
   })
 
@@ -210,5 +210,17 @@ describe("input from real keyboards", () => {
   test("a phone number with words in it is rejected, not merged into one number", () => {
     expect(validateSiteInput({ whatsappPhone: "+968 9411 4511 ext 22" })).toEqual({ ok: false, errors: { whatsappPhone: "invalidPhone" } })
     expect(validateSiteInput({ whatsappPhone: "٩٦٨٩٤١١٤٥١١ تحويلة ٢" })).toEqual({ ok: false, errors: { whatsappPhone: "invalidPhone" } })
+  })
+})
+
+describe("website address", () => {
+  test("accepts http(s) addresses", () => {
+    expect(validateSiteInput({ websiteUrl: " https://bonyanec.com/ar " })).toMatchObject({ ok: true, value: { websiteUrl: "https://bonyanec.com/ar" } })
+  })
+
+  test("rejects other schemes, missing hosts, credentials and attribute-breaking characters", () => {
+    for (const websiteUrl of ["javascript:alert(1)", "bonyanec.com", "ftp://x.com", "https://user:pw@x.com", 'https://x.com/"onmouseover=1', "https://x.com/<b>"]) {
+      expect(validateSiteInput({ websiteUrl }), websiteUrl).toEqual({ ok: false, errors: { websiteUrl: "invalidUrl" } })
+    }
   })
 })

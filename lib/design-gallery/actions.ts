@@ -145,6 +145,7 @@ export async function saveDesignGallerySite(raw: Record<string, unknown>): Promi
         display_name_ar: parsed.value.displayNameAr,
         display_name_en: parsed.value.displayNameEn,
         whatsapp_phone: parsed.value.whatsappPhone,
+        website_url: parsed.value.websiteUrl,
       })
       .eq("organization_id", ctx.org.id)
       .select("organization_id")
