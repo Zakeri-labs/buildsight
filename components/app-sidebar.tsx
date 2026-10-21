@@ -19,6 +19,7 @@ import {
   Sparkles,
   MapPinned,
   TrendingUp,
+  LayoutGrid,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Logo } from "@/components/logo"
@@ -247,6 +248,7 @@ export function AppSidebar({
 
   const adminItems = [
     { label: t.nav.team, href: "/users", icon: Users },
+    ...(currentUser?.role === "org_admin" ? [{ label: t.nav.designGallery, href: "/design-gallery", icon: LayoutGrid }] : []),
     { label: t.nav.settings, href: "/settings", icon: Settings },
   ]
 

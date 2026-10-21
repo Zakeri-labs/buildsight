@@ -1,3 +1,11 @@
+## 2026-10-21 — Design gallery (معرض التصاميم), part 1: catalogue and admin
+
+- New admin page **Design Gallery** (`/design-gallery`, sidebar → Administration, `org_admin` only): turn the gallery on, set the public WhatsApp number and names, add/edit designs in Arabic and English, upload and order images (first image is the cover), publish / move to draft / archive / delete.
+- Multi-organization from the start: every table carries `organization_id`; each organization gets its own gallery site, slug and categories through `provision_design_gallery`. Anonymous visitors can read only published designs of an enabled gallery.
+- Demo content for Bonyan: 8 sample designs (villas, residential complex, mixed use, and reference-only public/educational projects) with images in `public/design-gallery/samples/bonyan`.
+- Tests: `npm test` (Vitest). Database policies are tested against the real migrations with PGlite.
+- Database migration required: execute `scripts/sql/079_design_gallery.sql`, then `scripts/sql/080_design_gallery_seed_bonyan.sql`.
+
 ## 2026-08-05
 
 - Fixed organization invitation session isolation so signed-out/private browser requests no longer receive a fallback user identity.
