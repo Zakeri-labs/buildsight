@@ -93,6 +93,7 @@ export default async function ProjectsPage({
     areaDistrict: project.region?.trim() || null,
     projectType: projectTypeLabel(project.projectType),
     projectTypeValue: isProjectTypeValue(project.projectType) ? project.projectType : null,
+    plotNo: project.plotNo?.trim() || null,
     supervisionType: project.supervisionType,
     supervisionTypeOther: project.supervisionTypeOther,
     supervisionStartDate: project.supervisionStartDate,
