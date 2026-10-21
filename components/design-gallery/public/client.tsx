@@ -33,8 +33,41 @@ type EventPayload = { type: GalleryEventType; intent?: ContactIntent; design?: s
 const RECENT_CONTACT_MS = 3000
 const recentContacts = new Map<string, number>()
 
+export type VisitSource = { referrer?: string; utm_source?: string; utm_medium?: string; utm_campaign?: string }
+const SOURCE_KEY = "design-gallery-source"
+
+/**
+ * Where the visitor came from (another site, or utm_* in the address),
+ * remembered for the visit so a booking made a few pages later still knows
+ * its source. The first source of the visit wins.
+ */
+export function rememberVisitSource(): VisitSource {
+  try {
+    const stored = window.sessionStorage.getItem(SOURCE_KEY)
+    if (stored) return JSON.parse(stored) as VisitSource
+    const params = new URLSearchParams(window.location.search)
+    let referrer: string | undefined
+    try {
+      referrer = document.referrer && new URL(document.referrer).host !== window.location.host ? document.referrer : undefined
+    } catch {
+      referrer = undefined
+    }
+    const source: VisitSource = {
+      referrer,
+      utm_source: params.get("utm_source") || undefined,
+      utm_medium: params.get("utm_medium") || undefined,
+      utm_campaign: params.get("utm_campaign") || undefined,
+    }
+    if (Object.values(source).some(Boolean)) window.sessionStorage.setItem(SOURCE_KEY, JSON.stringify(source))
+    return source
+  } catch {
+    return {}
+  }
+}
+
 function sendGalleryEvent(payload: EventPayload) {
   try {
+    if (payload.type !== "contact_click") rememberVisitSource()
     if (payload.type === "contact_click") {
       const key = `${payload.intent}:${payload.design ?? ""}`
       const now = Date.now()

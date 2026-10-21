@@ -51,6 +51,7 @@ vi.mock("@/lib/design-gallery/public", async () => {
   return {
     absoluteUrl: actual.absoluteUrl,
     loadPublicGallery: async () => gallery,
+    loadPublicSite: async () => (gallery ? { site: gallery.site, origin: gallery.origin } : null),
     loadPublicDesign: async (slug: string) => {
       const found = gallery?.designs.find((d: Design) => d.slug === slug)
       return found ? { ...gallery, design: found, category: villas } : null
@@ -61,11 +62,15 @@ vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new Error("NEXT_NOT_FOUND")
   },
+  redirect: (to: string) => {
+    throw new Error(`NEXT_REDIRECT ${to}`)
+  },
 }))
 
 const listPage = await import("./page")
 const detailPage = await import("./[slug]/page")
-const { DesignCard } = await import("@/components/design-gallery/public/design-card")
+const bookPage = await import("./book/page")
+const { DesignCard, IdeaCard } = await import("@/components/design-gallery/public/design-card")
 
 beforeEach(() => {
   gallery = { site, origin: "https://app.bonyanec.com", categories: [villas], designs: [design({})] }
@@ -96,10 +101,13 @@ test("a missing or unpublished design is not found, also for its metadata", asyn
   await expect(detailPage.default(props)).rejects.toThrow("NEXT_NOT_FOUND")
 })
 
-test("design page: bookable designs get the two booking buttons; the illustrative note needs figures", async () => {
+test("design page: bookable designs get the two booking buttons into the wizard; the illustrative note needs figures", async () => {
   const html = renderToStaticMarkup(await detailPage.default({ params: Promise.resolve({ slug: "modern-villa-pool" }), searchParams: Promise.resolve({}) }))
   expect(html).toContain("أريد تصميماً بهذا الطابع")
   expect(html).toContain("أريده مع تعديلات")
+  expect(html).toContain('href="/designs/book?design=modern-villa-pool&amp;path=same"')
+  expect(html).toContain('href="/designs/book?design=modern-villa-pool&amp;path=modified"')
+  expect(html).toContain("wa.me") // the WhatsApp question stays
   expect(html).not.toContain("مشروع مماثل؟")
   expect(html).not.toContain("أرقام افتراضية للتوضيح") // only "service" is set
 })
@@ -116,15 +124,38 @@ test("design page: reference projects get “similar project?” and no booking,
   expect(html).not.toContain("wa.me")
 })
 
-test("cards: booking for bookable designs, “similar project?” for reference ones, both with the design in the message", () => {
-  const card = (d: Design) =>
-    renderToStaticMarkup(<DesignCard design={d} category={villas} locale="ar" whatsappPhone="96894114511" designUrl="https://app.bonyanec.com/designs/x" />)
-  const bookable = card(design({}))
-  expect(bookable).toContain("احجز اجتماعاً")
-  expect(decodeURIComponent(bookable.replace(/&amp;/g, "&"))).toContain("أريد تصميماً بطابع «فيلا عصرية بمسبح» (BD-101).")
+test("cards: booking opens the wizard (also without WhatsApp); reference projects ask on WhatsApp with the design in the message", () => {
+  const card = (d: Design, phone: string | null = "96894114511") =>
+    renderToStaticMarkup(<DesignCard design={d} category={villas} locale="en" whatsappPhone={phone} designUrl="https://app.bonyanec.com/designs/x" />)
+  const bookable = card(design({}), null)
+  expect(bookable).toContain("Book a meeting")
+  expect(bookable).toContain('href="/designs/book?design=modern-villa-pool&amp;path=same&amp;lang=en"')
   const reference = card(design({ isBookable: false }))
-  expect(reference).toContain("مشروع مماثل؟")
-  expect(decodeURIComponent(reference.replace(/&amp;/g, "&"))).toContain("مشروع مماثل لـ«فيلا عصرية بمسبح»")
-  const noPhone = renderToStaticMarkup(<DesignCard design={design({})} category={villas} locale="ar" whatsappPhone={null} designUrl={null} />)
-  expect(noPhone).not.toContain("wa.me")
+  expect(reference).toContain("Similar project?")
+  expect(reference).not.toContain("/designs/book")
+  expect(decodeURIComponent(reference.replace(/&amp;/g, "&"))).toContain("Modern villa with pool")
+  expect(card(design({ isBookable: false }), null)).not.toContain("wa.me")
+  expect(renderToStaticMarkup(<IdeaCard locale="ar" />)).toContain('href="/designs/book"')
+})
+
+const book = (params: Record<string, string>) => bookPage.default({ searchParams: Promise.resolve(params) })
+
+test("booking page: the design and path from the address; idea without a design; never indexed", async () => {
+  let html = renderToStaticMarkup(await book({ design: "modern-villa-pool", path: "modified" }))
+  expect(html).toContain("فيلا عصرية بمسبح")
+  expect(html).toContain("مع تعديلات")
+  expect(html).toContain("الخطوة 1 من 2")
+  expect(html).toContain('href="/designs/book?design=modern-villa-pool&amp;path=modified&amp;lang=en"') // language switch keeps the booking
+  html = renderToStaticMarkup(await book({ lang: "en" }))
+  expect(html).toContain("Your own idea")
+  expect(html).toContain("Describe your idea")
+  expect((await bookPage.generateMetadata({ searchParams: Promise.resolve({}) })).robots).toEqual({ index: false, follow: false })
+})
+
+test("booking page: unknown designs are not found; reference projects go back to their page", async () => {
+  await expect(book({ design: "nope" })).rejects.toThrow("NEXT_NOT_FOUND")
+  gallery.designs = [design({ isBookable: false })]
+  await expect(book({ design: "modern-villa-pool", lang: "en" })).rejects.toThrow("NEXT_REDIRECT /designs/modern-villa-pool?lang=en")
+  gallery = null
+  await expect(book({})).rejects.toThrow("NEXT_NOT_FOUND")
 })

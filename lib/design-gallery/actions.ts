@@ -14,6 +14,7 @@ import { canChangeStatus, isImageOrderMismatch, isNeedsImageError, siteSlugCandi
 import { loadCategories, loadDesign, loadSite, requireDesignGalleryAdmin, type DesignGalleryAdminContext } from "./server"
 import { DESIGN_STATUSES, type Design, type DesignImage, type DesignInput, type DesignStatus } from "./types"
 import { isUuid, validateDesignInput, validateSiteInput, type DesignFieldError } from "./validation"
+import { validateBookingSettings } from "./booking/settings"
 
 // All writes to the design gallery go through these actions: the database
 // grants no write access to API users (see 079_design_gallery.sql). Every
@@ -159,6 +160,46 @@ export async function saveDesignGallerySite(raw: Record<string, unknown>): Promi
       entityId: ctx.org.id,
       organizationId: ctx.org.id,
       metadata: { isEnabled: parsed.value.isEnabled },
+    }).catch(() => undefined)
+    refresh()
+    return { ok: true, data: undefined }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+/** Meeting times and office address used by the public booking wizard. */
+export async function saveBookingSettings(raw: Record<string, unknown>): Promise<DesignGalleryActionResult> {
+  try {
+    const ctx = await requireDesignGalleryAdmin()
+    const parsed = validateBookingSettings(raw && typeof raw === "object" ? raw : {})
+    if (!parsed.ok) return { ok: false, error: "invalid", fieldErrors: parsed.errors as Record<string, DesignFieldError> }
+    const value = parsed.value
+    const { data, error } = await ctx.admin
+      .from("design_gallery_sites")
+      .update({
+        booking_timezone: value.timeZone,
+        booking_work_days: value.workDays,
+        booking_day_start: value.dayStart,
+        booking_day_end: value.dayEnd,
+        booking_slot_minutes: value.slotMinutes,
+        booking_min_notice_hours: value.minNoticeHours,
+        booking_days_ahead: value.daysAhead,
+        office_address_ar: value.officeAddressAr,
+        office_address_en: value.officeAddressEn,
+      })
+      .eq("organization_id", ctx.org.id)
+      .select("organization_id")
+    if (error) throw error
+    if (!data?.length) return { ok: false, error: "notFound" }
+
+    await audit({
+      actorId: ctx.userId,
+      action: "design_gallery.booking_settings_updated",
+      entityType: "design_gallery_site",
+      entityId: ctx.org.id,
+      organizationId: ctx.org.id,
+      metadata: { workDays: value.workDays, dayStart: value.dayStart, dayEnd: value.dayEnd, slotMinutes: value.slotMinutes },
     }).catch(() => undefined)
     refresh()
     return { ok: true, data: undefined }

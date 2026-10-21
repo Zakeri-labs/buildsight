@@ -24,6 +24,11 @@ export function galleryHref(
   return query ? `${path}?${query}` : path
 }
 
+/** The booking wizard: for a design ("same" or "modified"), or for the visitor's own idea. */
+export function bookingHref(locale: PublicLocale, designSlug?: string | null, path: "same" | "modified" = "same"): string {
+  return galleryHref("/designs/book", locale, designSlug ? { design: designSlug, path } : {})
+}
+
 /** Replaces {name} placeholders in a dictionary text. */
 export function fill(template: string, values: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (match, key: string) => (key in values ? String(values[key]) : match))

@@ -151,7 +151,7 @@ export default async function DesignsPage({ searchParams }: { searchParams: Sear
             </li>
           ))}
           <li className="min-w-0">
-            <IdeaCard locale={locale} whatsappPhone={gallery.site.whatsappPhone} />
+            <IdeaCard locale={locale} />
           </li>
         </ul>
       </section>

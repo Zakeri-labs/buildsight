@@ -126,6 +126,7 @@ describe("authorization", () => {
       actions.deleteDesignImage(DESIGN, FILE),
       actions.reorderDesignImages(DESIGN, []),
       actions.saveDesignGallerySite({}),
+      actions.saveBookingSettings({}),
       actions.activateDesignGallery(),
     ])
     expect(results.every((r) => !r.ok && r.error === "forbidden")).toBe(true)
@@ -383,5 +384,49 @@ describe("saveDesignGallerySite", () => {
       payload: { is_enabled: true, whatsapp_phone: "96894114511" },
       filters: [["organization_id", ORG]],
     })
+  })
+})
+
+describe("saveBookingSettings", () => {
+  const form = {
+    timeZone: "Asia/Muscat",
+    workDays: ["0", "1", "2", "3", "4"],
+    dayStart: "09:00",
+    dayEnd: "17:00",
+    slotMinutes: "45",
+    minNoticeHours: "12",
+    daysAhead: "21",
+    officeAddressAr: "المعبيلة الصناعية، مسقط",
+    officeAddressEn: "",
+  }
+
+  test("saves the meeting times of the caller's organization only", async () => {
+    tableResult = { data: [{ organization_id: ORG }], error: null }
+    expect(await actions.saveBookingSettings({ ...form, organizationId: OTHER_ORG })).toEqual({ ok: true, data: undefined })
+    expect(writes()).toHaveLength(1)
+    expect(writes()[0]).toMatchObject({
+      table: "design_gallery_sites",
+      payload: {
+        booking_timezone: "Asia/Muscat",
+        booking_work_days: [0, 1, 2, 3, 4],
+        booking_day_start: "09:00",
+        booking_day_end: "17:00",
+        booking_slot_minutes: 45,
+        booking_min_notice_hours: 12,
+        booking_days_ahead: 21,
+        office_address_ar: "المعبيلة الصناعية، مسقط",
+        office_address_en: null,
+      },
+      filters: [["organization_id", ORG]],
+    })
+  })
+
+  test("invalid times are field errors and nothing is written", async () => {
+    expect(await actions.saveBookingSettings({ ...form, dayEnd: "09:30", workDays: [], timeZone: "Mars/Base" })).toEqual({
+      ok: false,
+      error: "invalid",
+      fieldErrors: { dayEnd: "outOfRange", workDays: "required", timeZone: "invalidTimeZone" },
+    })
+    expect(writes()).toEqual([])
   })
 })

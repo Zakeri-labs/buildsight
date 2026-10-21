@@ -37,6 +37,9 @@ export type BookingConfirmation = {
   officeAddressEn: string | null
 }
 
+/** Uploads allowed into one request's folder: the files sent plus a few replaced ones. */
+export const IDEA_UPLOADS_PER_REQUEST = IDEA_FILE_MAX_COUNT * 2
+
 // Per server instance: slows down floods from one address.
 const submitLimit = createRateLimiter({ limit: 5, windowMs: 10 * 60_000 })
 const uploadLimit = createRateLimiter({ limit: 12, windowMs: 10 * 60_000 })
@@ -119,7 +122,7 @@ export async function prepareIdeaUpload(input: {
     const folder = `${site.site.organizationId}/${key}`
     const bucket = createAdminClient().storage.from(MEETING_FILES_BUCKET)
     const { data: existing } = await bucket.list(folder, { limit: 10 })
-    if ((existing ?? []).length >= IDEA_FILE_MAX_COUNT) {
+    if ((existing ?? []).length >= IDEA_UPLOADS_PER_REQUEST) {
       return { ok: false, error: "invalid", fieldErrors: { attachmentPaths: "tooManyFiles" } }
     }
     const storagePath = `${folder}/${randomUUID()}.${extensionFor(type)}`
@@ -287,12 +290,18 @@ export async function submitMeetingRequest(
   }
 }
 
-/** Keeps only files uploaded into this request's folder whose bytes really are an image or a PDF. */
+/**
+ * Keeps only files uploaded into this request's folder whose bytes really are
+ * an image or a PDF; files the visitor removed from the form (or fakes) are
+ * deleted.
+ */
 async function attachIdeaFiles(organizationId: string, requestId: string, input: MeetingRequestInput) {
-  if (input.path !== "idea" || !input.attachmentPaths.length) return
   const bucket = createAdminClient().storage.from(MEETING_FILES_BUCKET)
-  const prefix = `${organizationId}/${input.requestKey}/`
-  for (const path of input.attachmentPaths) {
+  const folder = `${organizationId}/${input.requestKey}`
+  const prefix = `${folder}/`
+  const attached = new Set<string>()
+  const wanted = input.path === "idea" ? input.attachmentPaths : []
+  for (const path of wanted) {
     try {
       if (!path.startsWith(prefix)) continue
       const { data: file, error } = await bucket.download(path)
@@ -310,8 +319,16 @@ async function attachIdeaFiles(organizationId: string, requestId: string, input:
         size_bytes: file.size,
       })
       if (insertError && insertError.code !== "23505") console.error("design booking: file not attached:", insertError.message)
+      else attached.add(path)
     } catch (error) {
       console.error("design booking: file not attached:", error instanceof Error ? error.message : error)
     }
+  }
+  try {
+    const { data: inFolder } = await bucket.list(folder, { limit: 100 })
+    const leftovers = (inFolder ?? []).map((f: { name: string }) => `${prefix}${f.name.split("/").pop()}`).filter((p) => !attached.has(p))
+    if (leftovers.length) await bucket.remove(leftovers)
+  } catch (error) {
+    console.error("design booking: leftover files not removed:", error instanceof Error ? error.message : error)
   }
 }

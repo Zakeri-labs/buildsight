@@ -2,7 +2,7 @@ import Link from "next/link"
 import { Pencil } from "lucide-react"
 import { dictionaries } from "@/lib/i18n/dictionaries"
 import { contactMessage } from "@/lib/design-gallery/contact"
-import { fill, galleryHref, type PublicLocale } from "@/lib/design-gallery/public-locale"
+import { bookingHref, fill, galleryHref, type PublicLocale } from "@/lib/design-gallery/public-locale"
 import type { Design, DesignCategory } from "@/lib/design-gallery/types"
 import { whatsappUrl } from "@/lib/whatsapp"
 import { cn } from "@/lib/utils"
@@ -51,7 +51,6 @@ export function DesignCard({
   const title = designTitle(design, locale)
   const href = galleryHref(`/designs/${design.slug}`, locale)
   const cover = design.images[0]
-  const intent = design.isBookable ? "same" : "similar"
 
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[var(--gallery-card)] transition-colors hover:border-white/25">
@@ -83,15 +82,19 @@ export function DesignCard({
           <Link href={href} className={buttonClass.outline}>
             {t.view}
           </Link>
-          {whatsappPhone ? (
+          {design.isBookable ? (
+            <Link href={bookingHref(locale, design.slug)} className={buttonClass.primary}>
+              {t.book}
+            </Link>
+          ) : whatsappPhone ? (
             <ContactLink
-              href={whatsappUrl(whatsappPhone, contactMessage(intent, locale, { title, code: design.code, url: designUrl }))}
-              intent={intent}
+              href={whatsappUrl(whatsappPhone, contactMessage("similar", locale, { title, code: design.code, url: designUrl }))}
+              intent="similar"
               design={design.slug}
               locale={locale}
-              className={design.isBookable ? buttonClass.primary : cn(buttonClass.outline, "border-[var(--gallery-accent)]/60 text-[var(--gallery-accent)]")}
+              className={cn(buttonClass.outline, "border-[var(--gallery-accent)]/60 text-[var(--gallery-accent)]")}
             >
-              {design.isBookable ? t.book : t.similar}
+              {t.similar}
             </ContactLink>
           ) : null}
         </div>
@@ -100,7 +103,7 @@ export function DesignCard({
   )
 }
 
-export function IdeaCard({ locale, whatsappPhone }: { locale: PublicLocale; whatsappPhone: string | null }) {
+export function IdeaCard({ locale }: { locale: PublicLocale }) {
   const t = dictionaries[locale].designGalleryPublic
   return (
     <article className="flex h-full min-h-72 flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-[var(--gallery-accent)]/60 p-6 text-center">
@@ -109,16 +112,9 @@ export function IdeaCard({ locale, whatsappPhone }: { locale: PublicLocale; what
       </span>
       <h2 className="text-lg font-semibold">{t.ideaTitle}</h2>
       <p className="text-sm text-white/60">{t.ideaBody}</p>
-      {whatsappPhone ? (
-        <ContactLink
-          href={whatsappUrl(whatsappPhone, contactMessage("idea", locale))}
-          intent="idea"
-          locale={locale}
-          className={buttonClass.primary}
-        >
-          {t.ideaCta}
-        </ContactLink>
-      ) : null}
+      <Link href={bookingHref(locale)} className={buttonClass.primary}>
+        {t.ideaCta}
+      </Link>
     </article>
   )
 }

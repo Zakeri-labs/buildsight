@@ -99,6 +99,12 @@ describe("validateDesignInput", () => {
     expect(result).toEqual({ ok: false, errors: { slug: "invalidSlug" } })
   })
 
+  test("rejects addresses that are pages of their own (/designs/book)", () => {
+    expect(validateDesignInput({ ...valid, slug: "book" }, [CATEGORY])).toEqual({ ok: false, errors: { slug: "taken" } })
+    expect(validateDesignInput({ ...valid, slug: "sitemap-xml" }, [CATEGORY])).toEqual({ ok: false, errors: { slug: "taken" } })
+    expect(validateDesignInput({ ...valid, slug: "book-villa" }, [CATEGORY]).ok).toBe(true)
+  })
+
   test("rejects numbers that are not numbers or out of range", () => {
     expect(validateDesignInput({ ...valid, builtAreaSqm: "about 500" }, [CATEGORY])).toEqual({
       ok: false,

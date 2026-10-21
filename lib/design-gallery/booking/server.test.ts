@@ -58,7 +58,7 @@ const storage = {
   list: vi.fn(async (folder: string) => ({ data: [...files.keys()].filter((p) => p.startsWith(`${folder}/`)).map((p) => ({ name: p })), error: null })),
   createSignedUploadUrl: vi.fn(async () => ({ data: { token: "tok" }, error: null })),
   download: vi.fn(async (path: string) => (files.has(path) ? { data: new Blob([files.get(path)!]), error: null } : { data: null, error: { message: "missing" } })),
-  remove: vi.fn(async (paths: string[]) => (removed.push(...paths), { data: null, error: null })),
+  remove: vi.fn(async (paths: string[]) => (removed.push(...paths), paths.forEach((p) => files.delete(p)), { data: null, error: null })),
 }
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: query, storage: { from: () => storage } }) }))
@@ -257,22 +257,25 @@ describe("abuse and repeats", () => {
 
 describe("idea files", () => {
   const pdf = new TextEncoder().encode("%PDF-1.7 ...")
-  test("files in the request's own folder are attached; others are ignored; fake files are deleted", async () => {
+  test("files in the request's own folder are attached; others are ignored; fake and removed files are deleted", async () => {
     const key = KEY()
     const own = `${ORG}/${key}/11111111-2222-4333-8444-555555555555.pdf`
     const fake = `${ORG}/${key}/11111111-2222-4333-8444-666666666666.pdf`
+    const removedInForm = `${ORG}/${key}/11111111-2222-4333-8444-888888888888.pdf`
     const foreign = `${ORG}/${KEY()}/11111111-2222-4333-8444-777777777777.pdf`
     files.set(own, pdf)
     files.set(fake, new TextEncoder().encode("<html>"))
+    files.set(removedInForm, pdf)
     files.set(foreign, pdf)
     const result = await submit(form({ requestKey: key, path: "idea", designSlug: "", ideaText: "", attachmentPaths: [own, fake, foreign] }))
     expect(result.ok).toBe(true)
     expect(attachments.map((a) => a.storage_path)).toEqual([own])
     expect(attachments[0]).toMatchObject({ content_type: "application/pdf", organization_id: ORG })
-    expect(removed).toEqual([fake])
+    expect(removed).toEqual([fake, removedInForm])
+    expect([...files.keys()].sort()).toEqual([foreign, own].sort())
   })
 
-  test("upload: only images and PDF up to 10 MB, at most 3 per request, into the request's folder", async () => {
+  test("upload: only images and PDF up to 10 MB, a few per request (3 sent + replacements), into the request's folder", async () => {
     const key = KEY()
     address = "10.3.3.3"
     const ok = await prepareIdeaUpload({ requestKey: key, name: "plan.pdf", size: 1000, type: "application/pdf" })
@@ -280,8 +283,10 @@ describe("idea files", () => {
     expect((await prepareIdeaUpload({ requestKey: key, name: "x.exe", size: 10, type: "application/x-msdownload" })).ok).toBe(false)
     expect((await prepareIdeaUpload({ requestKey: key, name: "big.pdf", size: 11 * 1024 * 1024, type: "application/pdf" })).ok).toBe(false)
     expect((await prepareIdeaUpload({ requestKey: "../../x", name: "a.pdf", size: 10, type: "application/pdf" })).ok).toBe(false)
-    for (let i = 0; i < 3; i += 1) files.set(`${ORG}/${key}/f${i}.pdf`, pdf)
-    expect(await prepareIdeaUpload({ requestKey: key, name: "4.pdf", size: 10, type: "application/pdf" })).toEqual({
+    for (let i = 0; i < 5; i += 1) files.set(`${ORG}/${key}/f${i}.pdf`, pdf)
+    expect((await prepareIdeaUpload({ requestKey: key, name: "6.pdf", size: 10, type: "application/pdf" })).ok).toBe(true)
+    files.set(`${ORG}/${key}/f5.pdf`, pdf)
+    expect(await prepareIdeaUpload({ requestKey: key, name: "7.pdf", size: 10, type: "application/pdf" })).toEqual({
       ok: false,
       error: "invalid",
       fieldErrors: { attachmentPaths: "tooManyFiles" },

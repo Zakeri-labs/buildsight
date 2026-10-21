@@ -16,12 +16,16 @@ export type DesignFieldError =
   | "invalidPhone"
   | "taken"
   | "invalidUrl"
+  | "invalidTime"
+  | "invalidTimeZone"
 
 export type ValidationResult<T> =
   | { ok: true; value: T }
   | { ok: false; errors: Partial<Record<keyof T, DesignFieldError>> }
 
 const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/
+/** Addresses under /designs that are pages of their own, not designs. */
+export const RESERVED_DESIGN_SLUGS = ["book", "sitemap-xml"] as const
 const CODE_PATTERN = /^[A-Z0-9]+(-[A-Z0-9]+)*$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -142,6 +146,7 @@ export function validateDesignInput(
   const slug = slugify(slugSource)
   if (!slug) errors.slug = text(raw.slug) ? "invalidSlug" : "required"
   else if (!SLUG_PATTERN.test(slug)) errors.slug = "invalidSlug"
+  else if ((RESERVED_DESIGN_SLUGS as readonly string[]).includes(slug)) errors.slug = "taken"
 
   const code = normalizeDesignCode(text(raw.code))
   if (!code) errors.code = "required"

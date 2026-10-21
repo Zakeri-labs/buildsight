@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { ImageOff, Plus } from "lucide-react"
+import { CalendarClock, ImageOff, Inbox, Plus } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { useI18n } from "@/lib/i18n"
-import { activateDesignGallery, saveDesignGallerySite } from "@/lib/design-gallery/actions"
+import { activateDesignGallery, saveBookingSettings, saveDesignGallerySite } from "@/lib/design-gallery/actions"
 import type { Design, DesignCategory, DesignGallerySite, DesignStatus } from "@/lib/design-gallery/types"
 import { cn } from "@/lib/utils"
 
@@ -164,6 +164,121 @@ function SiteSettingsCard({ site }: { site: DesignGallerySite }) {
   )
 }
 
+function BookingSettingsCard({ site, calendarConnected }: { site: DesignGallerySite; calendarConnected: boolean }) {
+  const { t } = useI18n()
+  const b = t.designGallery.bookingSettings
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null)
+  const booking = site.booking
+  // Shown starting with the week's first working day of the region (Sunday).
+  const dayOrder = [0, 1, 2, 3, 4, 5, 6]
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <CalendarClock className="size-4" />
+          {b.title}
+        </CardTitle>
+        <p className="text-sm text-muted-foreground text-pretty">{b.hint}</p>
+      </CardHeader>
+      <CardContent>
+        <form
+          className="grid gap-4 sm:grid-cols-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            const form = new FormData(event.currentTarget)
+            const raw: Record<string, unknown> = Object.fromEntries(form.entries())
+            raw.workDays = form.getAll("workDays")
+            startTransition(async () => {
+              setMessage(null)
+              const result = await saveBookingSettings(raw)
+              if (result.ok) {
+                setFieldErrors({})
+                setMessage({ kind: "ok", text: t.designGallery.saved })
+                router.refresh()
+              } else {
+                setFieldErrors(
+                  Object.fromEntries(
+                    Object.entries(result.fieldErrors ?? {}).map(([key, code]) => [key, t.designGallery.errors[code]]),
+                  ),
+                )
+                setMessage({ kind: "error", text: t.designGallery.errors[result.error] })
+              }
+            })
+          }}
+        >
+          <p
+            className={cn(
+              "rounded-lg border p-3 text-sm sm:col-span-2",
+              calendarConnected ? "border-emerald-600/30 bg-emerald-600/5" : "border-amber-500/40 bg-amber-500/10",
+            )}
+          >
+            {calendarConnected ? b.calendarConnected : b.calendarNotConnected}
+          </p>
+
+          <fieldset className="grid min-w-0 gap-2 sm:col-span-2">
+            <legend className="mb-1.5 text-sm font-medium">{b.workDays}</legend>
+            <div className="flex flex-wrap gap-2">
+              {dayOrder.map((day) => (
+                <label
+                  key={day}
+                  className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-full border px-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/10 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50"
+                >
+                  <input type="checkbox" name="workDays" value={day} defaultChecked={booking.workDays.includes(day)} className="size-4 accent-primary" />
+                  {b.days[day]}
+                </label>
+              ))}
+            </div>
+            {fieldErrors.workDays ? <p className="text-xs text-destructive">{fieldErrors.workDays}</p> : null}
+          </fieldset>
+
+          <div className="grid grid-cols-2 items-end gap-4 sm:col-span-2 sm:grid-cols-4">
+            <Field id="dayStart" label={b.dayStart} error={fieldErrors.dayStart}>
+              <Input id="dayStart" name="dayStart" type="time" step={300} defaultValue={booking.dayStart} dir="ltr" aria-invalid={Boolean(fieldErrors.dayStart)} />
+            </Field>
+            <Field id="dayEnd" label={b.dayEnd} error={fieldErrors.dayEnd}>
+              <Input id="dayEnd" name="dayEnd" type="time" step={300} defaultValue={booking.dayEnd} dir="ltr" aria-invalid={Boolean(fieldErrors.dayEnd)} />
+            </Field>
+            <Field id="slotMinutes" label={b.slotMinutes} error={fieldErrors.slotMinutes}>
+              <Input id="slotMinutes" name="slotMinutes" inputMode="numeric" defaultValue={booking.slotMinutes} dir="ltr" aria-invalid={Boolean(fieldErrors.slotMinutes)} />
+            </Field>
+            <Field id="minNoticeHours" label={b.minNoticeHours} error={fieldErrors.minNoticeHours}>
+              <Input id="minNoticeHours" name="minNoticeHours" inputMode="numeric" defaultValue={booking.minNoticeHours} dir="ltr" aria-invalid={Boolean(fieldErrors.minNoticeHours)} />
+            </Field>
+            <Field id="daysAhead" label={b.daysAhead} error={fieldErrors.daysAhead}>
+              <Input id="daysAhead" name="daysAhead" inputMode="numeric" defaultValue={booking.daysAhead} dir="ltr" aria-invalid={Boolean(fieldErrors.daysAhead)} />
+            </Field>
+            <Field id="timeZone" label={b.timeZone} error={fieldErrors.timeZone}>
+              <Input id="timeZone" name="timeZone" defaultValue={booking.timeZone} dir="ltr" aria-invalid={Boolean(fieldErrors.timeZone)} />
+            </Field>
+          </div>
+
+          <Field id="officeAddressAr" label={b.officeAddressAr} hint={b.officeHint} error={fieldErrors.officeAddressAr}>
+            <Input id="officeAddressAr" name="officeAddressAr" defaultValue={site.officeAddressAr ?? ""} dir="rtl" maxLength={200} />
+          </Field>
+          <Field id="officeAddressEn" label={b.officeAddressEn} error={fieldErrors.officeAddressEn}>
+            <Input id="officeAddressEn" name="officeAddressEn" defaultValue={site.officeAddressEn ?? ""} dir="ltr" maxLength={200} />
+          </Field>
+
+          <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
+            <Button type="submit" disabled={pending}>
+              {pending ? t.designGallery.saving : b.save}
+            </Button>
+            {message ? (
+              <p className={cn("text-sm", message.kind === "ok" ? "text-emerald-600" : "text-destructive")} role="status">
+                {message.text}
+              </p>
+            ) : null}
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function Field({
   id,
   label,
@@ -198,10 +313,15 @@ export function DesignGalleryAdmin({
   site,
   categories,
   designs,
+  calendarConnected = false,
+  newRequests = 0,
 }: {
   site: DesignGallerySite | null
   categories: DesignCategory[]
   designs: Design[]
+  calendarConnected?: boolean
+  /** Requests still waiting for the team ("new" or "confirmed"). */
+  newRequests?: number
 }) {
   const { t, locale } = useI18n()
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
@@ -219,10 +339,17 @@ export function DesignGalleryAdmin({
           <p className="mt-1 text-sm text-muted-foreground text-pretty">{t.designGallery.subtitle}</p>
         </div>
         {site ? (
-          <Button render={<Link href="/design-gallery/new" />}>
-            <Plus />
-            {t.designGallery.newDesign}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" render={<Link href="/design-gallery/requests" />}>
+              <Inbox />
+              {t.designGallery.bookingSettings.requests}
+              {newRequests > 0 ? <Badge className="ms-1">{newRequests}</Badge> : null}
+            </Button>
+            <Button render={<Link href="/design-gallery/new" />}>
+              <Plus />
+              {t.designGallery.newDesign}
+            </Button>
+          </div>
         ) : null}
       </div>
 
@@ -231,6 +358,7 @@ export function DesignGalleryAdmin({
       ) : (
         <>
           <SiteSettingsCard site={site} />
+          <BookingSettingsCard site={site} calendarConnected={calendarConnected} />
 
           <section className="flex flex-col gap-3">
             <h2 className="text-lg font-semibold">{t.designGallery.designs}</h2>

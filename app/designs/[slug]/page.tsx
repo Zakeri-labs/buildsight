@@ -8,7 +8,7 @@ import { DesignImages } from "@/components/design-gallery/public/design-images"
 import { buttonClass, PublicShell, siteName } from "@/components/design-gallery/public/public-shell"
 import { contactMessage, type ContactIntent } from "@/lib/design-gallery/contact"
 import { absoluteUrl, loadPublicDesign } from "@/lib/design-gallery/public"
-import { fill, galleryHref, parsePublicLocale, type PublicLocale } from "@/lib/design-gallery/public-locale"
+import { bookingHref, fill, galleryHref, parsePublicLocale, type PublicLocale } from "@/lib/design-gallery/public-locale"
 import { dictionaries } from "@/lib/i18n/dictionaries"
 import { whatsappUrl } from "@/lib/whatsapp"
 
@@ -106,30 +106,28 @@ export default async function DesignPage({ params, searchParams }: Props) {
           ) : null}
 
           {!design.isBookable ? <p className="text-sm text-white/65">{t.referenceNote}</p> : null}
-          {site.whatsappPhone ? (
-            <div className="flex flex-col gap-2.5">
-              {design.isBookable ? (
-                <>
-                  <ContactLink href={message("same")} intent="same" design={design.slug} locale={locale} className={buttonClass.primary}>
-                    {t.wantSame}
-                  </ContactLink>
-                  <ContactLink href={message("modified")} intent="modified" design={design.slug} locale={locale} className={buttonClass.outline}>
-                    {t.wantModified}
-                  </ContactLink>
-                </>
-              ) : (
-                <>
-                  <ContactLink href={message("similar")} intent="similar" design={design.slug} locale={locale} className={buttonClass.primary}>
-                    {t.similar}
-                  </ContactLink>
-                </>
-              )}
+          <div className="flex flex-col gap-2.5">
+            {design.isBookable ? (
+              <>
+                <Link href={bookingHref(locale, design.slug, "same")} className={buttonClass.primary}>
+                  {t.wantSame}
+                </Link>
+                <Link href={bookingHref(locale, design.slug, "modified")} className={buttonClass.outline}>
+                  {t.wantModified}
+                </Link>
+              </>
+            ) : site.whatsappPhone ? (
+              <ContactLink href={message("similar")} intent="similar" design={design.slug} locale={locale} className={buttonClass.primary}>
+                {t.similar}
+              </ContactLink>
+            ) : null}
+            {site.whatsappPhone ? (
               <ContactLink href={message("question")} intent="question" design={design.slug} locale={locale} className={buttonClass.whatsapp}>
                 <MessageCircle className="size-4" aria-hidden />
                 {t.askWhatsapp}
               </ContactLink>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
 
         <div className="order-first min-w-0 lg:order-last">
