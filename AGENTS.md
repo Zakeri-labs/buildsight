@@ -18,6 +18,8 @@ Read this before changing code. The agent and skill files in `.claude/` (impleme
 - Plain SQL in `scripts/sql/NNN_description.sql`, numbered after the highest existing file. They are run by hand in the Supabase SQL editor, in order.
 - Write them idempotent (`if not exists`, `drop policy if exists`, `on conflict do nothing`).
 - Every migration is listed in `CHANGELOG.md` with "Database migration required: execute `scripts/sql/NNN_….sql`".
+- `scripts/sql/one-off/` holds setup scripts for one specific live database (e.g. Bonyan's gallery settings). They are not migrations: never number them, never run them for another organization.
+- New computer: `docs/new-computer.md` (clone, `.env.local`, run, test).
 
 ## Tests
 - Vitest: `npm test` (all), `npx vitest run path/to/file.test.ts` (one file). Tests live next to the code as `*.test.ts`.
