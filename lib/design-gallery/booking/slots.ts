@@ -57,6 +57,9 @@ export function availableDays(settings: BookingSettings, now: Date, busy: readon
     const slots: Slot[] = []
     for (let minute = open; minute + settings.slotMinutes <= close; minute += settings.slotMinutes) {
       const start = zonedTimeToUtc(date, hhmm(minute), settings.timeZone)
+      // A wall-clock time skipped by a daylight-saving change does not exist: no slot.
+      const seen = zonedParts(start, settings.timeZone)
+      if (seen.date !== date || seen.time !== hhmm(minute)) continue
       const end = new Date(start.getTime() + settings.slotMinutes * 60_000)
       if (start.getTime() < earliest) continue
       if (busy.some((b) => b.start < end && b.end > start)) continue

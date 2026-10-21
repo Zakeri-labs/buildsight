@@ -42,6 +42,11 @@ create table if not exists public.design_meeting_requests (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   design_id uuid references public.designs(id) on delete set null,
+  -- Copied when the request is made, so the request still says which design
+  -- it was about after the design is renamed or deleted.
+  design_code text,
+  design_title_ar text,
+  design_title_en text,
   request_key uuid not null,
   path text not null,
   client_name text not null,
@@ -69,7 +74,8 @@ create table if not exists public.design_meeting_requests (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint design_meeting_requests_path check (path in ('same', 'modified', 'idea')),
-  constraint design_meeting_requests_design_for_path check ((path = 'idea') or design_id is not null or status = 'cancelled'),
+  -- A design request names its design; the design itself may be deleted later.
+  constraint design_meeting_requests_design_for_path check ((path = 'idea') or design_code is not null),
   constraint design_meeting_requests_name check (length(btrim(client_name)) between 2 and 100),
   constraint design_meeting_requests_phone check (whatsapp_phone ~ '^[0-9]{8,15}$'),
   constraint design_meeting_requests_email check (email is null or (length(email) <= 254 and email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$')),
@@ -93,6 +99,9 @@ create table if not exists public.design_meeting_requests (
     and coalesce(length(utm_source), 0) <= 100
     and coalesce(length(utm_medium), 0) <= 100
     and coalesce(length(utm_campaign), 0) <= 100
+    and coalesce(length(design_code), 0) <= 20
+    and coalesce(length(design_title_ar), 0) <= 120
+    and coalesce(length(design_title_en), 0) <= 120
   ),
   constraint design_meeting_requests_area check (land_area_sqm is null or land_area_sqm > 0),
   constraint design_meeting_requests_locale check (locale is null or locale in ('ar', 'en'))
@@ -139,6 +148,9 @@ create table if not exists public.design_meeting_attachments (
 
 create unique index if not exists design_meeting_attachments_path_unique
   on public.design_meeting_attachments (storage_path);
+
+-- The booking form lives at /designs/book: a design cannot use that address.
+update public.designs set slug = slug || '-design' where slug in ('book', 'sitemap-xml');
 
 -- ---------- RLS: org admins read; nobody writes through the API ----------
 alter table public.design_meeting_requests enable row level security;

@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect } from "react"
 import { useI18n } from "@/lib/i18n"
 import type { ContactIntent } from "@/lib/design-gallery/contact"
@@ -127,5 +128,32 @@ export function ContactLink({
     >
       {children}
     </a>
+  )
+}
+
+/**
+ * A link into the booking form that is also counted as a contact of the
+ * given kind ("same", "modified", "idea") for the monthly figures.
+ */
+export function BookingLink({
+  href,
+  intent,
+  design,
+  locale,
+  className,
+  children,
+}: {
+  href: string
+  intent: ContactIntent
+  design?: string
+  locale: PublicLocale
+  className?: string
+  children: React.ReactNode
+}) {
+  const record = () => sendGalleryEvent({ type: "contact_click", intent, design, locale })
+  return (
+    <Link href={href} className={className} onClick={record} onAuxClick={record}>
+      {children}
+    </Link>
   )
 }

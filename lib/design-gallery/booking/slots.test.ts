@@ -52,6 +52,14 @@ describe("availableDays", () => {
     expect(sunday.slots.map((s) => s.time).slice(0, 3)).toEqual(["11:15", "12:00", "12:45"])
   })
 
+  test("a time skipped by a daylight-saving change is not offered, and no slot appears twice", () => {
+    // New York, Sunday 8 March 2026: 02:00 jumps to 03:00.
+    const ny: BookingSettings = { timeZone: "America/New_York", workDays: [0], dayStart: "00:30", dayEnd: "04:00", slotMinutes: 30, minNoticeHours: 0, daysAhead: 7 }
+    const day = availableDays(ny, new Date("2026-03-07T12:00:00Z"), []).find((d) => d.date === "2026-03-08")!
+    expect(day.slots.map((s) => s.time)).toEqual(["00:30", "01:00", "01:30", "03:00", "03:30"])
+    expect(new Set(day.slots.map((s) => s.start)).size).toBe(day.slots.length)
+  })
+
   test("the window ends after daysAhead days", () => {
     expect(availableDays({ ...muscat, daysAhead: 1 }, now, []).map((d) => d.date)).toEqual(["2026-10-21"])
   })

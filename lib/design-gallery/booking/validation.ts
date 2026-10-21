@@ -47,6 +47,19 @@ export function normalizeBookingPhone(raw: string): string {
 }
 
 /**
+ * A number WhatsApp can open: country code + number, 10–15 digits. A
+ * leading 0 is a local number without its country code ("050 123 4567").
+ */
+export function isBookingPhone(digits: string): boolean {
+  return /^[1-9][0-9]{9,14}$/.test(digits)
+}
+
+/** Letters (any script), not counting the Arabic stretching mark ـ. */
+function letterCount(value: string): number {
+  return (value.replace(/\u0640/g, "").match(/\p{L}/gu) ?? []).length
+}
+
+/**
  * Checks a booking form. Field errors are codes, shown in Arabic or English
  * by the form. Path rules: "same"/"modified" need a design; "idea" needs a
  * description or at least one file. A remote meeting needs an email (for the
@@ -66,13 +79,13 @@ export function validateMeetingRequest(raw: Record<string, unknown>): BookingVal
 
   const clientName = text(raw.clientName)
   if (!clientName) errors.clientName = "required"
-  else if (Array.from(clientName).length < 2) errors.clientName = "tooShort"
+  else if (letterCount(clientName) < 2) errors.clientName = "tooShort"
   else if (Array.from(clientName).length > 100) errors.clientName = "tooLong"
 
   const phoneRaw = text(raw.whatsappPhone)
   const whatsappPhone = phoneRaw ? normalizeBookingPhone(phoneRaw) : ""
   if (!phoneRaw) errors.whatsappPhone = "required"
-  else if (!/^[0-9]{8,15}$/.test(whatsappPhone) || whatsappPhone.length < 10) errors.whatsappPhone = "invalidPhone"
+  else if (!isBookingPhone(whatsappPhone)) errors.whatsappPhone = "invalidPhone"
 
   const meetingMode = choice(raw.meetingMode, MEETING_MODES)
   if (!meetingMode) errors.meetingMode = "invalidChoice"
@@ -145,9 +158,15 @@ export function validateMeetingRequest(raw: Record<string, unknown>): BookingVal
   }
 }
 
-/** Bot checks: the hidden "website" field must stay empty and the form must have been open at least 3 seconds. */
-export function looksAutomated(raw: Record<string, unknown>, now: number): boolean {
+/**
+ * Bot checks: the hidden "website" field must stay empty and the form must
+ * have been filled for at least 3 seconds. The time is measured by the
+ * browser on its own clock (`elapsedMs`), so a visitor whose clock differs
+ * from the server's, or who comes back to the tab the next day, still passes.
+ */
+export const MIN_FILL_MS = 3000
+export function looksAutomated(raw: Record<string, unknown>): boolean {
   if (typeof raw.website === "string" && raw.website.trim()) return true
-  const openedAt = Number(raw.openedAt)
-  return !Number.isFinite(openedAt) || now - openedAt < 3000 || now - openedAt > 24 * 3600_000
+  const elapsed = Number(raw.elapsedMs)
+  return !Number.isFinite(elapsed) || elapsed < MIN_FILL_MS
 }

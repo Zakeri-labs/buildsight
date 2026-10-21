@@ -6,7 +6,7 @@ import { bookingHref, fill, galleryHref, type PublicLocale } from "@/lib/design-
 import type { Design, DesignCategory } from "@/lib/design-gallery/types"
 import { whatsappUrl } from "@/lib/whatsapp"
 import { cn } from "@/lib/utils"
-import { ContactLink } from "./client"
+import { BookingLink, ContactLink } from "./client"
 import { buttonClass } from "./public-shell"
 
 export function designTitle(design: Design, locale: PublicLocale) {
@@ -83,9 +83,9 @@ export function DesignCard({
             {t.view}
           </Link>
           {design.isBookable ? (
-            <Link href={bookingHref(locale, design.slug)} className={buttonClass.primary}>
+            <BookingLink href={bookingHref(locale, design.slug)} intent="same" design={design.slug} locale={locale} className={buttonClass.primary}>
               {t.book}
-            </Link>
+            </BookingLink>
           ) : whatsappPhone ? (
             <ContactLink
               href={whatsappUrl(whatsappPhone, contactMessage("similar", locale, { title, code: design.code, url: designUrl }))}
@@ -112,9 +112,9 @@ export function IdeaCard({ locale }: { locale: PublicLocale }) {
       </span>
       <h2 className="text-lg font-semibold">{t.ideaTitle}</h2>
       <p className="text-sm text-white/60">{t.ideaBody}</p>
-      <Link href={bookingHref(locale)} className={buttonClass.primary}>
+      <BookingLink href={bookingHref(locale)} intent="idea" locale={locale} className={buttonClass.primary}>
         {t.ideaCta}
-      </Link>
+      </BookingLink>
     </article>
   )
 }

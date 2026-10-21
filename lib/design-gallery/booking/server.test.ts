@@ -11,6 +11,7 @@ type Row = Record<string, any>
 let requests: Row[] = []
 let attachments: Row[] = []
 let insertError: { code: string; message: string } | null = null
+let attachmentError: { code: string; message: string } | null = null
 const files = new Map<string, Uint8Array>()
 const removed: string[] = []
 
@@ -22,10 +23,11 @@ function query(table: string) {
   const run = () => {
     if (op === "insert") {
       if (insertError) return { data: null, error: insertError }
+      if (table === "design_meeting_attachments" && attachmentError) return { data: null, error: attachmentError }
       if (table === "design_meeting_requests" && requests.some((r) => r.starts_at && r.starts_at === payload.starts_at && r.status !== "cancelled")) {
         return { data: null, error: { code: "23505", message: "design_meeting_requests_one_per_slot" } }
       }
-      const row = { id: crypto.randomUUID(), meet_link: null, ...payload }
+      const row = { id: crypto.randomUUID(), meet_link: null, created_at: NOW.toISOString(), ...payload }
       rows().push(row)
       return { data: row, error: null }
     }
@@ -43,6 +45,7 @@ function query(table: string) {
     eq: (k: string, v: unknown) => (filters.push((r) => r[k] === v), chain),
     neq: (k: string, v: unknown) => (filters.push((r) => r[k] !== v), chain),
     gte: (k: string, v: string) => (filters.push((r) => r[k] != null && r[k] >= v), chain),
+    limit: () => chain,
     lt: (k: string, v: string) => (filters.push((r) => r[k] != null && r[k] < v), chain),
     single: async () => run(),
     maybeSingle: async () => {
@@ -57,7 +60,9 @@ function query(table: string) {
 const storage = {
   list: vi.fn(async (folder: string) => ({ data: [...files.keys()].filter((p) => p.startsWith(`${folder}/`)).map((p) => ({ name: p })), error: null })),
   createSignedUploadUrl: vi.fn(async () => ({ data: { token: "tok" }, error: null })),
-  download: vi.fn(async (path: string) => (files.has(path) ? { data: new Blob([files.get(path)!]), error: null } : { data: null, error: { message: "missing" } })),
+  download: vi.fn(async (path: string) =>
+    files.has(path) ? { data: new Blob([files.get(path)!]), error: null } : { data: null, error: { message: "Object not found", statusCode: "404" } },
+  ),
   remove: vi.fn(async (paths: string[]) => (removed.push(...paths), paths.forEach((p) => files.delete(p)), { data: null, error: null })),
 }
 
@@ -90,7 +95,7 @@ const { submitMeetingRequest, getAvailability, prepareIdeaUpload } = await impor
 
 const form = (overrides: Row = {}) => ({
   requestKey: KEY(),
-  openedAt: NOW.getTime() - 60_000,
+  elapsedMs: 60_000,
   path: "same",
   designSlug: "modern-villa-pool",
   clientName: "أحمد البلوشي",
@@ -116,6 +121,7 @@ beforeEach(() => {
   requests = []
   attachments = []
   insertError = null
+  attachmentError = null
   files.clear()
   removed.length = 0
   calendar = { connected: false }
@@ -171,6 +177,32 @@ describe("saving a request", () => {
     }
   })
 
+  test("office meeting with the calendar connected: no Meet; the client is told about an invitation only if one was sent", async () => {
+    const createEvent = vi.fn(async (_input: { withMeet: boolean; attendeeEmail: string | null; location: string | null }) => ({ eventId: "evt", meetLink: null }))
+    calendar = { connected: true, busy: async () => [], createEvent }
+    const noEmail = await submit(form())
+    expect(noEmail).toMatchObject({ ok: true, data: { calendarInvite: false, meetLink: null } })
+    expect(createEvent.mock.calls[0][0]).toMatchObject({ withMeet: false, attendeeEmail: null, location: "المعبيلة الصناعية، مسقط" })
+    const withEmail = await submit(form({ slotStart: "2026-10-25T05:45:00.000Z", email: "salem@example.com", clientName: "سالم", whatsappPhone: "92345678" }))
+    expect(withEmail).toMatchObject({ ok: true, data: { calendarInvite: true } })
+    expect(createEvent.mock.calls[1][0]).toMatchObject({ withMeet: false, attendeeEmail: "salem@example.com" })
+  })
+
+  test("the calendar description uses words, not internal codes", async () => {
+    const createEvent = vi.fn(async (_input: { description: string }) => ({ eventId: "evt", meetLink: null }))
+    calendar = { connected: true, busy: async () => [], createEvent }
+    await submit(form())
+    const text = createEvent.mock.calls[0][0].description
+    expect(text).toContain("المشروع: فيلا · صور")
+    expect(text).toContain("الأرض: أملكها والكروكي جاهز · البدء: خلال 3 أشهر")
+    expect(text).not.toMatch(/villa|owned_ready|within_3_months/)
+  })
+
+  test("the request keeps the design's code and title, so it survives the design being deleted", async () => {
+    await submit(form())
+    expect(requests[0]).toMatchObject({ design_id: "d1", design_code: "BD-101", design_title_ar: "فيلا عصرية بمسبح", design_title_en: "Modern villa" })
+  })
+
   test("call me: no time slot, no calendar event, status new", async () => {
     const createEvent = vi.fn()
     calendar = { connected: true, busy: async () => [], createEvent }
@@ -193,6 +225,12 @@ describe("time slots", () => {
     requests.push({ id: "x", organization_id: "another-org", starts_at: SUNDAY_9, status: "confirmed" }) // not visible to the slot check
     const result = await submit(form())
     expect(result).toEqual({ ok: false, error: "slotTaken" })
+  })
+
+  test("a cancelled meeting frees its time", async () => {
+    await submit(form())
+    requests[0].status = "cancelled"
+    expect((await submit(form({ clientName: "سالم", whatsappPhone: "92345678" }))).ok).toBe(true)
   })
 
   test("a time that is not offered (Friday, too soon, off the grid) is refused", async () => {
@@ -233,15 +271,25 @@ describe("abuse and repeats", () => {
     const results = []
     for (let i = 0; i < 6; i += 1) {
       address = "10.2.2.2"
-      results.push(await submitMeetingRequest(form({ meetingMode: "call_me", slotStart: "" }), NOW))
+      results.push(await submitMeetingRequest(form({ meetingMode: "call_me", slotStart: "", whatsappPhone: `9123456${i}` }), NOW))
     }
     expect(results.map((r) => r.ok)).toEqual([true, true, true, true, true, false])
     expect(results[5]).toEqual({ ok: false, error: "tooMany" })
   })
 
+  test("one WhatsApp number: at most 3 requests a day, whatever the address (counted in the database)", async () => {
+    const results = []
+    for (let i = 0; i < 4; i += 1) results.push(await submit(form({ meetingMode: "call_me", slotStart: "" })))
+    expect(results.map((r) => r.ok)).toEqual([true, true, true, false])
+    expect(results[3]).toEqual({ ok: false, error: "tooMany" })
+    requests.forEach((r) => (r.created_at = "2026-10-20T11:00:00.000Z")) // more than a day ago
+    expect((await submit(form({ meetingMode: "call_me", slotStart: "" }))).ok).toBe(true)
+  })
+
   test("bots (hidden field filled, or sent within 3 seconds) are refused without saving", async () => {
     expect(await submit(form({ website: "spam" }))).toEqual({ ok: false, error: "failed" })
-    expect(await submit(form({ openedAt: NOW.getTime() - 500 }))).toEqual({ ok: false, error: "failed" })
+    expect(await submit(form({ elapsedMs: 500 }))).toEqual({ ok: false, error: "failed" })
+    expect(await submit(form({ elapsedMs: undefined }))).toEqual({ ok: false, error: "failed" })
     expect(requests).toHaveLength(0)
   })
 
@@ -257,7 +305,7 @@ describe("abuse and repeats", () => {
 
 describe("idea files", () => {
   const pdf = new TextEncoder().encode("%PDF-1.7 ...")
-  test("files in the request's own folder are attached; others are ignored; fake and removed files are deleted", async () => {
+  test("files in the request's own folder are attached; others are ignored; fakes and files removed from the form are deleted", async () => {
     const key = KEY()
     const own = `${ORG}/${key}/11111111-2222-4333-8444-555555555555.pdf`
     const fake = `${ORG}/${key}/11111111-2222-4333-8444-666666666666.pdf`
@@ -273,6 +321,69 @@ describe("idea files", () => {
     expect(attachments[0]).toMatchObject({ content_type: "application/pdf", organization_id: ORG })
     expect(removed).toEqual([fake, removedInForm])
     expect([...files.keys()].sort()).toEqual([foreign, own].sort())
+  })
+
+  test("a file that cannot be read right now: nothing is saved, the file is kept, sending again works", async () => {
+    const key = KEY()
+    const own = `${ORG}/${key}/11111111-2222-4333-8444-555555555555.pdf`
+    files.set(own, pdf)
+    storage.download.mockResolvedValueOnce({ data: null, error: { message: "fetch failed", statusCode: "500" } } as any)
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
+    try {
+      const raw = form({ requestKey: key, path: "idea", designSlug: "", ideaText: "", attachmentPaths: [own] })
+      expect(await submit(raw)).toEqual({ ok: false, error: "failed" })
+      expect(requests).toHaveLength(0)
+      expect(removed).toEqual([])
+      expect(files.has(own)).toBe(true)
+      expect((await submit(raw)).ok).toBe(true)
+      expect(attachments.map((a) => a.storage_path)).toEqual([own])
+    } finally {
+      log.mockRestore()
+    }
+  })
+
+  test("a file record that cannot be saved keeps the file", async () => {
+    const key = KEY()
+    const own = `${ORG}/${key}/11111111-2222-4333-8444-555555555555.pdf`
+    files.set(own, pdf)
+    attachmentError = { code: "XX000", message: "db down" }
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
+    try {
+      expect((await submit(form({ requestKey: key, path: "idea", designSlug: "", ideaText: "x", attachmentPaths: [own] }))).ok).toBe(true)
+      expect(files.has(own)).toBe(true)
+      expect(removed).toEqual([])
+    } finally {
+      log.mockRestore()
+    }
+  })
+
+  test("an idea with no text needs a real file: paths that are not this request's files do not count", async () => {
+    const elsewhere = `${KEY()}/${KEY()}/${KEY()}.pdf`
+    const missing = `${ORG}/${KEY()}/${KEY()}.pdf`
+    for (const attachmentPaths of [[elsewhere], [missing]]) {
+      expect(await submit(form({ path: "idea", designSlug: "", ideaText: "", attachmentPaths }))).toEqual({
+        ok: false,
+        error: "invalid",
+        fieldErrors: { ideaText: "ideaNeeded" },
+      })
+    }
+    expect(requests).toHaveLength(0)
+  })
+
+  test("no more uploads into a request that is already sent", async () => {
+    const key = KEY()
+    await submit(form({ requestKey: key }))
+    expect(await prepareIdeaUpload({ requestKey: key, name: "late.pdf", size: 10, type: "application/pdf" })).toEqual({ ok: false, error: "invalid" })
+  })
+
+  test("uploads: at most 12 in 10 minutes from one address", async () => {
+    const results = []
+    for (let i = 0; i < 13; i += 1) {
+      address = "10.4.4.4"
+      results.push((await prepareIdeaUpload({ requestKey: KEY(), name: "a.pdf", size: 10, type: "application/pdf" })).ok)
+    }
+    expect(results.filter(Boolean)).toHaveLength(12)
+    expect(results[12]).toBe(false)
   })
 
   test("upload: only images and PDF up to 10 MB, a few per request (3 sent + replacements), into the request's folder", async () => {

@@ -117,7 +117,8 @@ export function BookingWizard({
 
   const payload = (overrides: Record<string, unknown> = {}) => ({
     requestKey,
-    openedAt,
+    // Time spent on the form, measured on the visitor's own clock (bot check).
+    elapsedMs: Date.now() - openedAt,
     website: honeypot,
     path,
     designSlug: design?.slug ?? "",
@@ -792,7 +793,9 @@ function Slots({
         ) : (
           <p className="text-sm text-white/60">{t.noSlotsDay}</p>
         )}
-        <p className="mt-2 text-xs text-white/50">{t.timeZoneNote}</p>
+        <p className="mt-2 text-xs text-white/50">
+          {timeZone === "Asia/Muscat" ? t.timeZoneNote : fill(t.timeZoneNoteOther, { zone: timeZone })}
+        </p>
         {error ? <p className="mt-1 text-sm text-red-300">{error}</p> : null}
       </fieldset>
     </div>

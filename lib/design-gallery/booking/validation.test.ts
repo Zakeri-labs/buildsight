@@ -75,6 +75,11 @@ describe("validateMeetingRequest", () => {
     expect(normalizeBookingPhone("+971 50 123 4567")).toBe("971501234567")
     expect(validateMeetingRequest({ ...base, whatsappPhone: "12345" })).toEqual({ ok: false, errors: { whatsappPhone: "invalidPhone" } })
     expect(validateMeetingRequest({ ...base, whatsappPhone: "call me 91234567" })).toEqual({ ok: false, errors: { whatsappPhone: "invalidPhone" } })
+    // A local number from another country without its code cannot be opened in WhatsApp.
+    for (const local of ["050 123 4567", "٠٥٠١٢٣٤٥٦٧", "0501234567", "123456789", "1234567890123456"]) {
+      expect(validateMeetingRequest({ ...base, whatsappPhone: local })).toEqual({ ok: false, errors: { whatsappPhone: "invalidPhone" } })
+    }
+    for (const ok of ["00971501234567", "(+968) 9123-4567", "۹۱۲۳۴۵۶۷"]) expect(validateMeetingRequest({ ...base, whatsappPhone: ok }).ok).toBe(true)
   })
 
   test("wilayat from the list or 'other:' with a place name", () => {
@@ -96,16 +101,27 @@ describe("validateMeetingRequest", () => {
   })
 })
 
-test("bot checks: filled hidden field, or a form sent in under 3 seconds", () => {
-  const now = 1_000_000
-  expect(looksAutomated({ openedAt: now - 10_000 }, now)).toBe(false)
-  expect(looksAutomated({ openedAt: now - 10_000, website: "http://spam" }, now)).toBe(true)
-  expect(looksAutomated({ openedAt: now - 1000 }, now)).toBe(true)
-  expect(looksAutomated({}, now)).toBe(true)
+test("bot checks: filled hidden field, or a form filled in under 3 seconds (measured by the browser)", () => {
+  expect(looksAutomated({ elapsedMs: 10_000 })).toBe(false)
+  expect(looksAutomated({ elapsedMs: 10_000, website: "http://spam" })).toBe(true)
+  expect(looksAutomated({ elapsedMs: 1000 })).toBe(true)
+  expect(looksAutomated({})).toBe(true)
+  // A tab left open overnight, or a visitor whose clock is off, is still a person.
+  expect(looksAutomated({ elapsedMs: 30 * 3600_000 })).toBe(false)
 })
 
 test("Oman has 61 wilayat in 11 governorates with unique keys", () => {
   expect(OMAN_GOVERNORATES).toHaveLength(11)
   expect(OMAN_WILAYAT).toHaveLength(61)
   expect(new Set(OMAN_WILAYAT.map((w) => w.key)).size).toBe(61)
+})
+
+test("names: at least two letters in any script; Persian half-spaces and emoji joiners are kept", () => {
+  for (const blank of ["⠀⠀", "ـــ", "١٢", "--"]) {
+    expect(validateMeetingRequest({ ...base, clientName: blank })).toEqual({ ok: false, errors: { clientName: "tooShort" } })
+  }
+  const persian = validateMeetingRequest({ ...base, clientName: "محمد\u200cرضا" })
+  expect(persian.ok && persian.value.clientName).toBe("محمد\u200cرضا")
+  expect(validateMeetingRequest({ ...base, clientName: "Li" }).ok).toBe(true)
+  expect(validateMeetingRequest({ ...base, clientName: "عل" }).ok).toBe(true)
 })

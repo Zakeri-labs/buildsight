@@ -153,7 +153,10 @@ export function MeetingRequests({
                         </a>
                       ) : null}
                       {calendarNote ? (
-                        <span className={cn("text-xs", r.calendarStatus === "failed" ? "text-destructive" : "text-muted-foreground")}>{calendarNote}</span>
+                        <span className={cn("text-xs [overflow-wrap:anywhere]", r.calendarStatus === "failed" ? "text-destructive" : "text-muted-foreground")}>
+                          {calendarNote}
+                          {r.calendarStatus === "failed" && r.calendarError ? <span dir="ltr"> ({r.calendarError})</span> : null}
+                        </span>
                       ) : null}
                       <span className="ms-auto text-xs text-muted-foreground">
                         {fill(p.received, { when: meetingWhen(r.createdAt, lang, timeZone) })}

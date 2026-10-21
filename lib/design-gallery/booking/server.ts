@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto"
 import { headers } from "next/headers"
 import { detectProjectImageMimeType } from "@/lib/projects/project-image"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { findPublicDesign, loadPublicSite, type PublicSite } from "../public"
+import { dictionaries } from "@/lib/i18n/dictionaries"
+import { findPublicDesign, loadPublicSite, type PublicDesignRef, type PublicSite } from "../public"
 import { createRateLimiter } from "../rate-limit"
 import { googleCalendarProvider, type CalendarProvider } from "./calendar"
 import { availableDays, findOfferedSlot, type BookingDay, type Interval } from "./slots"
@@ -119,6 +120,15 @@ export async function prepareIdeaUpload(input: {
       return { ok: false, error: "invalid", fieldErrors: { attachmentPaths: "invalidChoice" } }
     }
 
+    // Files belong to a form not yet sent: once the request is saved, its folder is closed.
+    const { data: saved } = await createAdminClient()
+      .from("design_meeting_requests")
+      .select("id")
+      .eq("organization_id", site.site.organizationId)
+      .eq("request_key", key)
+      .maybeSingle()
+    if (saved) return { ok: false, error: "invalid" }
+
     const folder = `${site.site.organizationId}/${key}`
     const bucket = createAdminClient().storage.from(MEETING_FILES_BUCKET)
     const { data: existing } = await bucket.list(folder, { limit: 10 })
@@ -135,15 +145,17 @@ export async function prepareIdeaUpload(input: {
   }
 }
 
-function summaryText(input: MeetingRequestInput, design: { code: string; titleAr: string } | null): { summary: string; description: string } {
+const LABELS = dictionaries.ar.designGalleryPublic.booking
+
+function summaryText(input: MeetingRequestInput, design: PublicDesignRef | null): { summary: string; description: string } {
   const wilayat = input.wilayat?.startsWith("other:") ? input.wilayat.slice(6) : findWilayat(input.wilayat)?.ar ?? ""
   const lines = [
     `العميل: ${input.clientName} · واتساب +${input.whatsappPhone}`,
     input.email ? `البريد: ${input.email}` : null,
     design ? `التصميم: ${design.titleAr} (${design.code})${input.path === "modified" ? " — مع تعديلات" : ""}` : "فكرة جديدة",
     input.ideaText ? `الفكرة: ${input.ideaText}` : null,
-    `المشروع: ${input.projectType}${wilayat ? ` · ${wilayat}` : ""}${input.landAreaSqm ? ` · ${input.landAreaSqm} م²` : ""}`,
-    `الأرض: ${input.landStatus} · البدء: ${input.startTimeline}`,
+    `المشروع: ${LABELS.projectTypes[input.projectType]}${wilayat ? ` · ${wilayat}` : ""}${input.landAreaSqm ? ` · ${input.landAreaSqm} م²` : ""}`,
+    `الأرض: ${LABELS.landStatuses[input.landStatus]} · البدء: ${LABELS.timelines[input.startTimeline]}`,
   ].filter(Boolean)
   return {
     summary: `اجتماع تصميم — ${input.clientName}${design ? ` — ${design.code}` : ""}`,
@@ -151,17 +163,87 @@ function summaryText(input: MeetingRequestInput, design: { code: string; titleAr
   }
 }
 
+type CheckedFile = { path: string; type: string; size: number }
+
+/** Storage answers "not found" for a path that was never uploaded; anything else may be temporary. */
+function isMissingObject(error: unknown): boolean {
+  const e = error as { status?: number; statusCode?: string | number; message?: string } | null
+  return Number(e?.status ?? e?.statusCode) === 404 || /not.?found/i.test(e?.message ?? "")
+}
+
 /**
- * Saves a booking or "call me" request from the public form, then (best
- * effort) attaches the idea files and creates the calendar event. The
- * request itself is never lost because the calendar or a file failed.
+ * Checks the files listed by the form before anything is saved: only files in
+ * this request's own folder whose bytes really are an image or a PDF are
+ * kept; a fake is deleted. If a file cannot be read right now, nothing is
+ * saved and the visitor can send again (the file is kept).
+ */
+async function checkIdeaFiles(organizationId: string, input: MeetingRequestInput): Promise<CheckedFile[] | "retry"> {
+  if (input.path !== "idea" || !input.attachmentPaths.length) return []
+  const bucket = createAdminClient().storage.from(MEETING_FILES_BUCKET)
+  const prefix = `${organizationId}/${input.requestKey}/`
+  const files: CheckedFile[] = []
+  for (const path of input.attachmentPaths) {
+    if (!path.startsWith(prefix)) continue
+    const { data: file, error } = await bucket.download(path)
+    if (error || !file) {
+      if (isMissingObject(error)) continue
+      console.error("design booking: file not readable:", path, (error as { message?: string } | null)?.message)
+      return "retry"
+    }
+    const type = detectFileType(new Uint8Array(await file.slice(0, 16).arrayBuffer()))
+    if (!type || file.size <= 0 || file.size > IDEA_FILE_MAX_BYTES) {
+      const { error: removeError } = await bucket.remove([path])
+      if (removeError) console.error("design booking: rejected file not removed:", path, removeError.message)
+      continue
+    }
+    files.push({ path, type, size: file.size })
+  }
+  return files
+}
+
+/**
+ * Records the checked files on the saved request. A file whose record cannot
+ * be saved is kept in storage (and logged), never deleted. Files uploaded
+ * into the folder but removed from the form by the visitor are deleted.
+ */
+async function attachIdeaFiles(organizationId: string, requestId: string, input: MeetingRequestInput, files: CheckedFile[]) {
+  const admin = createAdminClient()
+  for (const file of files) {
+    const { error } = await admin.from("design_meeting_attachments").insert({
+      organization_id: organizationId,
+      request_id: requestId,
+      storage_path: file.path,
+      content_type: file.type,
+      size_bytes: file.size,
+    })
+    if (error && error.code !== "23505") console.error("design booking: file not attached (kept in storage):", file.path, error.message)
+  }
+  try {
+    const folder = `${organizationId}/${input.requestKey}`
+    const listed = new Set(input.path === "idea" ? input.attachmentPaths : [])
+    const bucket = admin.storage.from(MEETING_FILES_BUCKET)
+    const { data: inFolder } = await bucket.list(folder, { limit: 100 })
+    const removed = (inFolder ?? []).map((f: { name: string }) => `${folder}/${f.name.split("/").pop()}`).filter((p) => !listed.has(p))
+    if (removed.length) await bucket.remove(removed)
+  } catch (error) {
+    console.error("design booking: removed files not deleted:", error instanceof Error ? error.message : error)
+  }
+}
+
+/** At most this many requests per WhatsApp number per day (all server instances: counted in the database). */
+export const REQUESTS_PER_PHONE_PER_DAY = 3
+
+/**
+ * Saves a booking or "call me" request from the public form, then attaches
+ * the idea files and (best effort) creates the calendar event. The request
+ * itself is never lost because the calendar failed.
  */
 export async function submitMeetingRequest(
   raw: Record<string, unknown>,
   now = new Date(),
 ): Promise<BookingResult<BookingConfirmation>> {
   try {
-    if (looksAutomated(raw, now.getTime())) return { ok: false, error: "failed" }
+    if (looksAutomated(raw)) return { ok: false, error: "failed" }
     const parsed = validateMeetingRequest(raw)
     if (!parsed.ok) return { ok: false, error: "invalid", fieldErrors: parsed.errors }
     const input = parsed.value
@@ -170,18 +252,19 @@ export async function submitMeetingRequest(
     if (!site) return { ok: false, error: "unavailable" }
     const org = site.site.organizationId
     const admin = createAdminClient()
-    const confirmation = (row: { meeting_mode: string; starts_at: string | null; meet_link: string | null; calendar_status: string }): BookingConfirmation => ({
+    const confirmation = (row: SavedRow): BookingConfirmation => ({
       mode: row.meeting_mode as BookingConfirmation["mode"],
       startsAt: row.starts_at ? new Date(row.starts_at).toISOString() : null,
       timeZone: site.site.booking.timeZone,
       meetLink: row.meet_link,
-      calendarInvite: row.calendar_status === "created",
+      // Only when the client was really invited (an email was given).
+      calendarInvite: row.calendar_status === "created" && Boolean(row.email),
       officeAddressAr: site.site.officeAddressAr,
       officeAddressEn: site.site.officeAddressEn,
     })
 
     // The same form sent again (double click, retry): answer with what was saved.
-    const columns = "id, meeting_mode, starts_at, meet_link, calendar_status"
+    const columns = "id, meeting_mode, starts_at, meet_link, calendar_status, email"
     const { data: existing } = await admin
       .from("design_meeting_requests")
       .select(columns)
@@ -191,9 +274,24 @@ export async function submitMeetingRequest(
     if (existing) return { ok: true, data: confirmation(existing) }
 
     if (!submitLimit(await clientAddress())) return { ok: false, error: "tooMany" }
+    const { data: samePhone, error: phoneError } = await admin
+      .from("design_meeting_requests")
+      .select("id")
+      .eq("organization_id", org)
+      .eq("whatsapp_phone", input.whatsappPhone)
+      .gte("created_at", new Date(now.getTime() - 86_400_000).toISOString())
+      .limit(REQUESTS_PER_PHONE_PER_DAY)
+    if (phoneError) throw phoneError
+    if ((samePhone ?? []).length >= REQUESTS_PER_PHONE_PER_DAY) return { ok: false, error: "tooMany" }
 
     const design = input.designSlug ? await findPublicDesign(org, input.designSlug) : null
     if (input.path !== "idea" && (!design || !design.isBookable)) return { ok: false, error: "designNotBookable" }
+
+    const files = await checkIdeaFiles(org, input)
+    if (files === "retry") return { ok: false, error: "failed" }
+    if (input.path === "idea" && !input.ideaText && files.length === 0) {
+      return { ok: false, error: "invalid", fieldErrors: { ideaText: "ideaNeeded" } }
+    }
 
     const calendar = googleCalendarProvider()
     let slot: { start: string; end: string } | null = null
@@ -207,6 +305,9 @@ export async function submitMeetingRequest(
       .insert({
         organization_id: org,
         design_id: design?.id ?? null,
+        design_code: design?.code ?? null,
+        design_title_ar: design?.titleAr ?? null,
+        design_title_en: design?.titleEn ?? null,
         request_key: input.requestKey,
         path: input.path,
         client_name: input.clientName,
@@ -235,7 +336,7 @@ export async function submitMeetingRequest(
         utm_medium: typeof raw.utm_medium === "string" ? raw.utm_medium.slice(0, 100) || null : null,
         utm_campaign: typeof raw.utm_campaign === "string" ? raw.utm_campaign.slice(0, 100) || null : null,
       })
-      .select(`${columns}, id`)
+      .select(columns)
       .single()
     if (insertError?.code === "23505") {
       if (insertError.message?.includes("one_per_slot")) return { ok: false, error: "slotTaken" }
@@ -245,9 +346,9 @@ export async function submitMeetingRequest(
     }
     if (insertError || !inserted) throw insertError ?? new Error("request not saved")
 
-    await attachIdeaFiles(org, inserted.id, input)
+    await attachIdeaFiles(org, inserted.id, input, files)
 
-    let saved = inserted
+    let saved: SavedRow = inserted
     if (slot) {
       const update: Record<string, unknown> = {}
       if (!calendar.connected) {
@@ -290,45 +391,4 @@ export async function submitMeetingRequest(
   }
 }
 
-/**
- * Keeps only files uploaded into this request's folder whose bytes really are
- * an image or a PDF; files the visitor removed from the form (or fakes) are
- * deleted.
- */
-async function attachIdeaFiles(organizationId: string, requestId: string, input: MeetingRequestInput) {
-  const bucket = createAdminClient().storage.from(MEETING_FILES_BUCKET)
-  const folder = `${organizationId}/${input.requestKey}`
-  const prefix = `${folder}/`
-  const attached = new Set<string>()
-  const wanted = input.path === "idea" ? input.attachmentPaths : []
-  for (const path of wanted) {
-    try {
-      if (!path.startsWith(prefix)) continue
-      const { data: file, error } = await bucket.download(path)
-      if (error || !file) continue
-      const type = detectFileType(new Uint8Array(await file.slice(0, 16).arrayBuffer()))
-      if (!type || file.size <= 0 || file.size > IDEA_FILE_MAX_BYTES) {
-        await bucket.remove([path])
-        continue
-      }
-      const { error: insertError } = await createAdminClient().from("design_meeting_attachments").insert({
-        organization_id: organizationId,
-        request_id: requestId,
-        storage_path: path,
-        content_type: type,
-        size_bytes: file.size,
-      })
-      if (insertError && insertError.code !== "23505") console.error("design booking: file not attached:", insertError.message)
-      else attached.add(path)
-    } catch (error) {
-      console.error("design booking: file not attached:", error instanceof Error ? error.message : error)
-    }
-  }
-  try {
-    const { data: inFolder } = await bucket.list(folder, { limit: 100 })
-    const leftovers = (inFolder ?? []).map((f: { name: string }) => `${prefix}${f.name.split("/").pop()}`).filter((p) => !attached.has(p))
-    if (leftovers.length) await bucket.remove(leftovers)
-  } catch (error) {
-    console.error("design booking: leftover files not removed:", error instanceof Error ? error.message : error)
-  }
-}
+type SavedRow = { id: string; meeting_mode: string; starts_at: string | null; meet_link: string | null; calendar_status: string; email: string | null }

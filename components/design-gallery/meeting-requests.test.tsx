@@ -22,6 +22,7 @@ const base: MeetingRequestRow = {
   startsAt: "2026-10-27T06:30:00Z",
   status: "confirmed",
   calendarStatus: "failed",
+  calendarError: "token: invalid_grant",
   meetLink: null,
   locale: "ar",
   source: "instagram",
@@ -39,7 +40,7 @@ const render = (rows: MeetingRequestRow[]) =>
 
 test("a request card has what the engineer needs: design, land, start, time in the gallery's zone, WhatsApp", () => {
   const html = render([base])
-  for (const text of ["Modern villa with pool (BD-101) — with changes", "Villa", "Bawshar", "600 m²", "I own it, kroki ready", "Within 3 months", "Tuesday 27 October, 10:30 AM", "Confirmed", "Calendar event failed", "instagram"]) {
+  for (const text of ["Modern villa with pool (BD-101) — with changes", "Villa", "Bawshar", "600 m²", "I own it, kroki ready", "Within 3 months", "Tuesday 27 October, 10:30 AM", "Confirmed", "Calendar event failed", "(token: invalid_grant)", "instagram"]) {
     expect(html).toContain(text)
   }
   expect(html).toContain('href="https://wa.me/96891234567?text="')
@@ -72,4 +73,9 @@ test("an idea with files and a call-back request: no time, file links, highlight
   expect(html).not.toContain("File 2") // a file without a link is not shown
   expect(html).toMatch(/id="request-r2"[^>]*>\s*<div[^>]*ring-2/)
   expect(render([])).toContain("No requests yet.")
+})
+
+test("a request whose design was deleted still names it", () => {
+  const html = render([{ ...base, design: { slug: null, code: "BD-101", titleAr: "فيلا عصرية بمسبح", titleEn: "Modern villa with pool" } }])
+  expect(html).toContain("Modern villa with pool (BD-101)")
 })

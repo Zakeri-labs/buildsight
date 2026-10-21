@@ -3,7 +3,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { ArrowLeft, ArrowRight, MessageCircle } from "lucide-react"
 import { categoryName, designTitle, formatNumber } from "@/components/design-gallery/public/design-card"
-import { ContactLink, PageView } from "@/components/design-gallery/public/client"
+import { BookingLink, ContactLink, PageView } from "@/components/design-gallery/public/client"
 import { DesignImages } from "@/components/design-gallery/public/design-images"
 import { buttonClass, PublicShell, siteName } from "@/components/design-gallery/public/public-shell"
 import { contactMessage, type ContactIntent } from "@/lib/design-gallery/contact"
@@ -109,12 +109,12 @@ export default async function DesignPage({ params, searchParams }: Props) {
           <div className="flex flex-col gap-2.5">
             {design.isBookable ? (
               <>
-                <Link href={bookingHref(locale, design.slug, "same")} className={buttonClass.primary}>
+                <BookingLink href={bookingHref(locale, design.slug, "same")} intent="same" design={design.slug} locale={locale} className={buttonClass.primary}>
                   {t.wantSame}
-                </Link>
-                <Link href={bookingHref(locale, design.slug, "modified")} className={buttonClass.outline}>
+                </BookingLink>
+                <BookingLink href={bookingHref(locale, design.slug, "modified")} intent="modified" design={design.slug} locale={locale} className={buttonClass.outline}>
                   {t.wantModified}
-                </Link>
+                </BookingLink>
               </>
             ) : site.whatsappPhone ? (
               <ContactLink href={message("similar")} intent="similar" design={design.slug} locale={locale} className={buttonClass.primary}>

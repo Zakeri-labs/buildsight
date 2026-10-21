@@ -580,10 +580,25 @@ describe("084 meeting requests", () => {
     await expect(insert({ meeting_mode: "remote", ...at(1) })).rejects.toThrow(/remote_email/)
     await expect(insert({ meeting_mode: "call_me" })).rejects.toThrow(/requests_slot/)
     await expect(insert({ meeting_mode: "call_me", starts_at: null, ends_at: null, status: "new" })).resolves.toBeDefined()
-    await expect(insert({ path: "same", ...at(2) })).rejects.toThrow(/design_for_path/)
+    await expect(insert({ path: "same", ...at(2) })).rejects.toThrow(/design_for_path/) // must name its design
     await expect(insert({ whatsapp_phone: "+968 9123", ...at(3) })).rejects.toThrow(/requests_phone/)
     await expect(insert({ meet_link: "https://evil.example/x", ...at(4) })).rejects.toThrow(/meet_link/)
     await expect(insert({ client_name: " ", ...at(5) })).rejects.toThrow(/requests_name/)
+  })
+
+  test("a design with bookings can still be deleted; its requests keep the design's code and title", async () => {
+    const design = await designId(f.db, "modern-villa-pool")
+    const request = await insert({ path: "same", design_id: design, design_code: "BD-101", design_title_ar: "فيلا عصرية بمسبح", design_title_en: "Modern villa", idea_text: null, starts_at: "2026-11-10T05:00:00Z", ends_at: "2026-11-10T05:45:00Z" })
+    await f.db.query(`delete from designs where id = $1`, [design])
+    const { rows } = await f.db.query(`select design_id, design_code, status from design_meeting_requests where id = $1`, [request.rows[0].id])
+    expect(rows).toEqual([{ design_id: null, design_code: "BD-101", status: "confirmed" }])
+  })
+
+  test("a design using the form's address /designs/book is renamed; running 084 again changes nothing else", async () => {
+    await f.db.query(`update designs set slug = 'book' where slug = 'simple-lines-villa'`)
+    await f.db.exec(readMigration("084_design_meeting_requests.sql"))
+    expect(await count(f.db, `select 1 from designs where slug = 'book-design'`)).toBe(1)
+    expect(await count(f.db, `select 1 from designs where slug = 'book'`)).toBe(0)
   })
 
   test("only the org admin reads requests and files; nobody writes through the API", async () => {

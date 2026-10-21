@@ -3,7 +3,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, test } from "vitest"
 import { I18nProvider } from "@/lib/i18n"
-import { HtmlLocale } from "./client"
+import { BookingLink, HtmlLocale } from "./client"
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -48,4 +48,27 @@ test("leaving the public page gives <html> back to the app language", () => {
   act(() => root.render(page(false)))
   expect([html.lang, html.dir]).toEqual(["ar", "rtl"])
   expect(html.hasAttribute("data-locale-locked")).toBe(false)
+})
+
+test("a booking button is counted as a contact of its kind before opening the form", () => {
+  const beacons: string[] = []
+  Object.defineProperty(navigator, "sendBeacon", {
+    configurable: true,
+    value: (_url: string, blob: Blob) => {
+      beacons.push(blob as unknown as string)
+      return true
+    },
+  })
+  act(() =>
+    root.render(
+      <BookingLink href="/designs/book?design=villa&path=modified" intent="modified" design="villa" locale="ar">
+        book
+      </BookingLink>,
+    ),
+  )
+  const link = container.querySelector("a")!
+  expect(link.getAttribute("href")).toBe("/designs/book?design=villa&path=modified")
+  link.addEventListener("click", (event) => event.preventDefault())
+  act(() => link.click())
+  expect(beacons).toHaveLength(1)
 })

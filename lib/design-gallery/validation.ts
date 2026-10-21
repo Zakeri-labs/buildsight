@@ -54,7 +54,8 @@ export function toAsciiDigits(value: string): string {
 
 // Zero-width characters, direction marks/overrides, BOM and control characters.
 // Arabic keyboards add some of them invisibly; none belong in stored text.
-const INVISIBLE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g
+// Zero-width non-joiner/joiner (U+200C/D) are kept: Persian words (محمد‌رضا) and emoji (👨‍👩‍👧) need them.
+const INVISIBLE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g
 
 /** Removes invisible characters (keeps line breaks and tabs) and trims. */
 export function cleanText(value: string): string {

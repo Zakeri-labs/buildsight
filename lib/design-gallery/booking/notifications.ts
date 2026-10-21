@@ -13,7 +13,7 @@ export type MeetingNotificationRow = {
   starts_at: string | null
   status: string
   created_at: string
-  designs?: { code: string | null } | null
+  design_code?: string | null
 }
 
 const MODE_LABEL: Record<string, string> = { remote: "Online meeting", office: "Office meeting", call_me: "Call back" }
@@ -33,7 +33,7 @@ export function formatMeetingTime(iso: string, timeZone: string): string {
 
 export function designMeetingNotification(row: MeetingNotificationRow, timeZone: string): AppNotificationItem {
   const mode = MODE_LABEL[row.meeting_mode] ?? row.meeting_mode
-  const what = row.path === "idea" ? "Own idea" : `${row.designs?.code ?? "Design"}${row.path === "modified" ? " · with changes" : ""}`
+  const what = row.path === "idea" ? "Own idea" : `${row.design_code ?? "Design"}${row.path === "modified" ? " · with changes" : ""}`
   const when = row.starts_at ? formatMeetingTime(row.starts_at, timeZone) : "Waiting for a call"
   return {
     id: row.id,

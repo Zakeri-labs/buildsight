@@ -1,13 +1,16 @@
 ## 2026-10-21 — Design gallery (معرض التصاميم), part 3: booking a meeting
 
 - New public page **`/designs/book`** (no sign-in, not indexed): a two-step form. Step 1: name, WhatsApp, project type, land status, wilayat (Oman's 61 wilayat, or another place), land area, when to start; for "Have another idea?" also a description and up to 3 images or PDFs (10 MB each). Step 2: online (Google Meet), at the office, or "call me", then a free day and time.
-- "Book a meeting", "I want a design in this style", "I want it with changes" and the "Have another idea?" card now open this form instead of WhatsApp. "Ask on WhatsApp" stays. Reference projects cannot be booked.
+- "Book a meeting", "I want a design in this style", "I want it with changes" and the "Have another idea?" card now open this form instead of WhatsApp (their clicks are still counted for the monthly figures). "Ask on WhatsApp" stays. Reference projects cannot be booked.
+- WhatsApp numbers: an 8-digit Omani number gets 968; other numbers must start with their country code (a local "050…" is refused, since WhatsApp could not open it).
 - Free times follow the gallery's settings (default Sunday–Thursday 09:00–17:00 Asia/Muscat, 45-minute meetings, at least 12 hours ahead, up to 3 weeks). Booked meetings are not offered again; if two people pick the same time at once, the database lets only one through and the other is asked to choose again.
-- An online meeting needs an email: with Google Calendar connected, the meeting is added to the team calendar with a Meet link and the client gets the invitation. If the calendar is not connected or fails, the request is still saved and the admin sees why.
-- Protection: a double click or retry is one request; a hidden field and a minimum time catch bots; at most 5 requests per address in 10 minutes (per server instance); uploaded files must really be images or PDFs, and files the visitor removed are deleted.
+- An online meeting needs an email: with Google Calendar connected, the meeting is added to the team calendar with a Meet link and the client gets the invitation (office meetings: an invitation without Meet, if the client gave an email). If the calendar is not connected or fails, the request is still saved and the requests page shows why.
+- Protection: a double click or retry is one request; a hidden field and a minimum time on the form catch bots; at most 5 requests per address in 10 minutes (per server instance) and 3 per WhatsApp number a day; uploaded files must really be images or PDFs, files the visitor removed are deleted, and a file that cannot be read at that moment is kept and the visitor is asked to send again.
+- A request keeps the design's code and title, so a design with bookings can still be deleted.
 - Admin: new "Meeting times" card on `/design-gallery` (working days, hours, meeting length, notice, how far ahead, time zone, office address) and a **Meeting requests** page (`/design-gallery/requests`) with the design, land details, start, files (links valid for one hour) and a WhatsApp button. Changing statuses comes with part 4.
 - Notifications: each new request appears in the bell of the organization's admins (`org_admin`) only, and opens the request.
-- A design can no longer use the address `book` (it is the form's address).
+- A design can no longer use the address `book` (it is the form's address); an existing one is renamed `book-design` by the migration.
+- Known limits: files uploaded in a form that is never sent stay in the private bucket until a cleanup job exists (part 4); two bookings made at the same moment are kept apart only when they start at the same time (enough while all meetings have the same length).
 - Environment (optional, for Google Calendar): `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`, `GOOGLE_CALENDAR_REFRESH_TOKEN`, `GOOGLE_CALENDAR_ID`. Without them bookings work without calendar events.
 - Database migration required: execute `scripts/sql/084_design_meeting_requests.sql`.
 

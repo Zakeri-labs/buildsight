@@ -3,6 +3,7 @@ import "server-only"
 import type { AppNotificationItem } from "@/lib/notifications/types"
 import { createAdminClient } from "@/lib/supabase/admin"
 import type { DesignGalleryAdminContext } from "../server"
+import { pickDesignGalleryAdminOrg } from "../access"
 import { DEFAULT_BOOKING_SETTINGS } from "./slots"
 import { MEETING_FILES_BUCKET } from "./server"
 import {
@@ -13,9 +14,10 @@ import {
 } from "./notifications"
 
 /**
- * Bell notifications for new meeting requests: only for org_admins of the
- * organization that received them (checked against the database here, not
- * taken from the caller).
+ * Bell notifications for new meeting requests: only for an org_admin (checked
+ * against the database here, not taken from the caller), and only for the
+ * organization whose gallery they manage, so the item opens a request they
+ * can see in /design-gallery/requests.
  */
 export async function getDesignMeetingNotificationFeed({
   userId,
@@ -27,19 +29,23 @@ export async function getDesignMeetingNotificationFeed({
   const admin = createAdminClient()
   const { data: memberships, error } = await admin
     .from("organization_memberships")
-    .select("organization_id")
+    .select("role, organizations(id, name, type)")
     .eq("user_id", userId)
     .eq("role", "org_admin")
     .eq("status", "active")
   if (error) throw error
-  const orgIds = [...new Set((memberships ?? []).map((m: { organization_id: string }) => m.organization_id))]
-  if (orgIds.length === 0) return { canNotify: false, items: [] }
+  // The same organization the admin page and the request list show.
+  const org = pickDesignGalleryAdminOrg(
+    (memberships ?? []).map((m: any) => ({ role: m.role, organization: Array.isArray(m.organizations) ? m.organizations[0] : m.organizations })),
+  )
+  if (!org) return { canNotify: false, items: [] }
+  const orgIds = [org.id]
 
   const since = new Date(now.getTime() - NOTIFY_WINDOW_DAYS * 86_400_000).toISOString()
   const [requests, sites] = await Promise.all([
     admin
       .from("design_meeting_requests")
-      .select("id, organization_id, client_name, path, meeting_mode, starts_at, status, created_at, designs(code)")
+      .select("id, organization_id, client_name, path, meeting_mode, starts_at, status, created_at, design_code")
       .in("organization_id", orgIds)
       .in("status", [...NOTIFY_STATUSES])
       .gte("created_at", since)
@@ -80,11 +86,12 @@ export type MeetingRequestRow = {
   startsAt: string | null
   status: string
   calendarStatus: string
+  calendarError: string | null
   meetLink: string | null
   locale: string | null
   source: string | null
   createdAt: string
-  design: { slug: string; code: string | null; titleAr: string; titleEn: string } | null
+  design: { slug: string | null; code: string | null; titleAr: string; titleEn: string } | null
   attachments: { id: string; name: string; contentType: string; url: string | null }[]
 }
 
@@ -95,7 +102,7 @@ export async function loadMeetingRequests(ctx: DesignGalleryAdminContext, limit 
   const { data, error } = await ctx.admin
     .from("design_meeting_requests")
     .select(
-      "id, path, client_name, whatsapp_phone, email, project_type, land_status, wilayat, land_area_sqm, start_timeline, idea_text, meeting_mode, starts_at, status, calendar_status, meet_link, locale, referrer_host, utm_source, created_at, designs(slug, code, title_ar, title_en), design_meeting_attachments(id, storage_path, content_type, file_name)",
+      "id, path, client_name, whatsapp_phone, email, project_type, land_status, wilayat, land_area_sqm, start_timeline, idea_text, meeting_mode, starts_at, status, calendar_status, calendar_error, meet_link, locale, referrer_host, utm_source, created_at, design_code, design_title_ar, design_title_en, designs(slug, code, title_ar, title_en), design_meeting_attachments(id, storage_path, content_type, file_name)",
     )
     .eq("organization_id", ctx.org.id)
     .order("created_at", { ascending: false })
@@ -127,13 +134,17 @@ export async function loadMeetingRequests(ctx: DesignGalleryAdminContext, limit 
     startsAt: r.starts_at ?? null,
     status: r.status,
     calendarStatus: r.calendar_status,
+    calendarError: r.calendar_error ?? null,
     meetLink: r.meet_link ?? null,
     locale: r.locale ?? null,
     source: r.utm_source ?? r.referrer_host ?? null,
     createdAt: r.created_at,
+    // The design as it is now, or as it was when booked if it has been deleted since.
     design: r.designs
       ? { slug: r.designs.slug, code: r.designs.code ?? null, titleAr: r.designs.title_ar, titleEn: r.designs.title_en }
-      : null,
+      : r.design_code
+        ? { slug: null, code: r.design_code, titleAr: r.design_title_ar ?? r.design_code, titleEn: r.design_title_en ?? r.design_code }
+        : null,
     attachments: (r.design_meeting_attachments ?? []).map((a: any) => ({
       id: a.id,
       name: a.file_name || a.storage_path.split("/").pop(),

@@ -53,7 +53,7 @@ function type(selector: string, value: string) {
 }
 const choose = (label: string) => click(byText(label).querySelector("input") ?? byText(label))
 
-function render(path: "same" | "modified" | "idea" = "modified") {
+function render(path: "same" | "modified" | "idea" = "modified", timeZone = "Asia/Muscat") {
   act(() =>
     root.render(
       <BookingWizard
@@ -61,7 +61,7 @@ function render(path: "same" | "modified" | "idea" = "modified") {
         path={path}
         design={path === "idea" ? null : { slug: "modern-villa-pool", title: "Modern villa", code: "BD-101", coverUrl: null }}
         officeAddress="Mabela Industrial, Muscat"
-        timeZone="Asia/Muscat"
+        timeZone={timeZone}
         galleryHref="/designs?lang=en"
         backHref="/designs/modern-villa-pool?lang=en"
       />,
@@ -122,6 +122,8 @@ test("a full booking: details, online meeting with email, a free time, confirmat
     locale: "en",
   })
   expect(send.mock.calls[0][0].requestKey).toMatch(/^[0-9a-f-]{36}$/)
+  expect(send.mock.calls[0][0].elapsedMs).toBeGreaterThanOrEqual(0) // time on the form, browser clock
+  expect(send.mock.calls[0][0]).not.toHaveProperty("openedAt")
   expect(container.textContent).toContain("Your meeting is booked")
   expect(container.textContent).toContain("Sunday 25 October")
   expect(container.querySelector('a[href="https://meet.google.com/abc-defg-hij"]')).not.toBeNull()
@@ -162,4 +164,14 @@ test("call me: no time to choose; idea path needs a description", async () => {
   await flush()
   expect(send.mock.calls[0][0]).toMatchObject({ path: "idea", designSlug: "", meetingMode: "call_me", slotStart: "", ideaText: "Two floors, a courtyard" })
   expect(container.textContent).toContain("We received your request")
+})
+
+test("a gallery in another time zone says so under the times", async () => {
+  render("same", "Asia/Dubai")
+  fillStepOne()
+  await click(byText("Next: choose the time"))
+  choose("Online")
+  await flush()
+  expect(container.textContent).toContain("Times are in the Asia/Dubai time zone.")
+  expect(container.textContent).not.toContain("Oman time")
 })
