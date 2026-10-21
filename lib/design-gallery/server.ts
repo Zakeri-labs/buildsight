@@ -4,6 +4,7 @@ import { assertOrgAdmin, AuthzError } from "@/lib/auth/guards"
 import { requireOnboarded } from "@/lib/auth/session"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { pickDesignGalleryAdminOrg, type DesignGalleryAdminOrg } from "./access"
+import { DEFAULT_BOOKING_SETTINGS } from "./booking/slots"
 import { designImagePublicUrl } from "./images"
 import type { Design, DesignCategory, DesignGallerySite, DesignImage, DesignStatus } from "./types"
 
@@ -58,6 +59,17 @@ export function mapSite(row: any): DesignGallerySite {
     logoUrl: row.logo_url ?? null,
     websiteUrl: row.website_url ?? null,
     isDefault: Boolean(row.is_default),
+    booking: {
+      timeZone: row.booking_timezone ?? DEFAULT_BOOKING_SETTINGS.timeZone,
+      workDays: Array.isArray(row.booking_work_days) ? row.booking_work_days.map(Number) : DEFAULT_BOOKING_SETTINGS.workDays,
+      dayStart: typeof row.booking_day_start === "string" ? row.booking_day_start.slice(0, 5) : DEFAULT_BOOKING_SETTINGS.dayStart,
+      dayEnd: typeof row.booking_day_end === "string" ? row.booking_day_end.slice(0, 5) : DEFAULT_BOOKING_SETTINGS.dayEnd,
+      slotMinutes: Number(row.booking_slot_minutes ?? DEFAULT_BOOKING_SETTINGS.slotMinutes),
+      minNoticeHours: Number(row.booking_min_notice_hours ?? DEFAULT_BOOKING_SETTINGS.minNoticeHours),
+      daysAhead: Number(row.booking_days_ahead ?? DEFAULT_BOOKING_SETTINGS.daysAhead),
+    },
+    officeAddressAr: row.office_address_ar ?? null,
+    officeAddressEn: row.office_address_en ?? null,
   }
 }
 

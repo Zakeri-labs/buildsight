@@ -1,3 +1,5 @@
+import type { BookingSettings } from "./booking/slots"
+
 export const DESIGN_STATUSES = ["draft", "published", "archived"] as const
 export type DesignStatus = (typeof DESIGN_STATUSES)[number]
 
@@ -13,6 +15,9 @@ export type DesignGallerySite = {
   websiteUrl: string | null
   /** Shown on hosts that are not any gallery's custom host. */
   isDefault: boolean
+  booking: BookingSettings
+  officeAddressAr: string | null
+  officeAddressEn: string | null
 }
 
 export type DesignCategory = {

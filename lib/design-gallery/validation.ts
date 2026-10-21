@@ -108,7 +108,8 @@ function bool(raw: unknown): boolean {
 // A unit typed after the number: "520 m²", "520m2", "520 م²", "520 متر".
 const AREA_UNIT = /\s*(m²|m2|sqm|sq\.?\s*m|م²|م2|متر\s*مربع|متر|م)\s*$/i
 
-function parseNumber(raw: unknown): number | null | "invalid" {
+/** A number typed by a person (Arabic digits, thousands commas, a unit after it); null when empty. */
+export function parseNumber(raw: unknown): number | null | "invalid" {
   if (typeof raw === "number") return Number.isFinite(raw) ? raw : "invalid"
   let value = toAsciiDigits(text(raw)).replace(AREA_UNIT, "").trim()
   if (!value) return null

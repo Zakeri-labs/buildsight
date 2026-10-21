@@ -523,3 +523,95 @@ describe("083 first gallery is the default; demo designs on demand", () => {
     ).rejects.toThrow(/permission denied/)
   })
 })
+
+describe("084 meeting requests", () => {
+  let f: Fixture
+  const KEY = "11111111-2222-4333-8444-555555555555"
+  beforeAll(async () => {
+    f = await setup()
+    await f.db.exec(readMigration("084_design_meeting_requests.sql"))
+  })
+
+  const insert = (overrides: Record<string, unknown> = {}) => {
+    const row: Record<string, unknown> = {
+      organization_id: f.bonyan,
+      request_key: crypto.randomUUID(),
+      path: "idea",
+      client_name: "أحمد",
+      whatsapp_phone: "96891234567",
+      project_type: "villa",
+      land_status: "owned_ready",
+      start_timeline: "within_3_months",
+      idea_text: "فكرة",
+      meeting_mode: "office",
+      starts_at: "2026-10-25T05:00:00Z",
+      ends_at: "2026-10-25T05:45:00Z",
+      status: "confirmed",
+      ...overrides,
+    }
+    const columns = Object.keys(row)
+    return f.db.query<{ id: string }>(
+      `insert into design_meeting_requests (${columns.join(", ")}) values (${columns.map((_, i) => `$${i + 1}`).join(", ")}) returning id`,
+      columns.map((c) => row[c]),
+    )
+  }
+
+  test("default booking settings: Sunday–Thursday 09:00–17:00 Muscat, 45 minutes, 12 hours notice, 3 weeks", async () => {
+    const { rows } = await f.db.query(`select booking_timezone, booking_work_days, booking_day_start, booking_day_end, booking_slot_minutes, booking_min_notice_hours, booking_days_ahead from design_gallery_sites`)
+    expect(rows).toEqual([{ booking_timezone: "Asia/Muscat", booking_work_days: [0, 1, 2, 3, 4], booking_day_start: "09:00:00", booking_day_end: "17:00:00", booking_slot_minutes: 45, booking_min_notice_hours: 12, booking_days_ahead: 21 }])
+    await expect(f.db.query(`update design_gallery_sites set booking_day_end = '08:00'`)).rejects.toThrow(/booking_hours/)
+    await expect(f.db.query(`update design_gallery_sites set booking_work_days = '{7}'`)).rejects.toThrow(/booking_hours/)
+  })
+
+  test("one active meeting per time slot; a cancelled one frees the slot", async () => {
+    const first = await insert({ starts_at: "2026-10-26T05:00:00Z", ends_at: "2026-10-26T05:45:00Z" })
+    await expect(insert({ starts_at: "2026-10-26T05:00:00Z", ends_at: "2026-10-26T05:45:00Z" })).rejects.toThrow(/one_per_slot/)
+    await f.db.query(`update design_meeting_requests set status = 'cancelled' where id = $1`, [first.rows[0].id])
+    await expect(insert({ starts_at: "2026-10-26T05:00:00Z", ends_at: "2026-10-26T05:45:00Z" })).resolves.toBeDefined()
+  })
+
+  test("the same request key is one request", async () => {
+    await insert({ request_key: KEY, starts_at: "2026-10-27T05:00:00Z", ends_at: "2026-10-27T05:45:00Z" })
+    await expect(insert({ request_key: KEY, starts_at: "2026-10-27T06:00:00Z", ends_at: "2026-10-27T06:45:00Z" })).rejects.toThrow(/key_unique/)
+  })
+
+  test("rules kept by the database", async () => {
+    const at = (h: number) => ({ starts_at: `2026-11-0${h}T05:00:00Z`, ends_at: `2026-11-0${h}T05:45:00Z` })
+    await expect(insert({ meeting_mode: "remote", ...at(1) })).rejects.toThrow(/remote_email/)
+    await expect(insert({ meeting_mode: "call_me" })).rejects.toThrow(/requests_slot/)
+    await expect(insert({ meeting_mode: "call_me", starts_at: null, ends_at: null, status: "new" })).resolves.toBeDefined()
+    await expect(insert({ path: "same", ...at(2) })).rejects.toThrow(/design_for_path/)
+    await expect(insert({ whatsapp_phone: "+968 9123", ...at(3) })).rejects.toThrow(/requests_phone/)
+    await expect(insert({ meet_link: "https://evil.example/x", ...at(4) })).rejects.toThrow(/meet_link/)
+    await expect(insert({ client_name: " ", ...at(5) })).rejects.toThrow(/requests_name/)
+  })
+
+  test("only the org admin reads requests and files; nobody writes through the API", async () => {
+    const read = (actor: Parameters<typeof as>[1]) =>
+      as(f.db, actor, async (tx) => (await tx.query(`select 1 from design_meeting_requests`)).rows.length)
+    expect(await read({ role: "authenticated", userId: f.admin })).toBeGreaterThan(0)
+    for (const actor of [{ role: "anon" as const }, { role: "authenticated" as const, userId: f.member }, { role: "authenticated" as const, userId: f.manager }, { role: "authenticated" as const, userId: f.otherAdmin }]) {
+      expect(await read(actor)).toBe(0)
+    }
+    for (const actor of [{ role: "anon" as const }, { role: "authenticated" as const, userId: f.admin }]) {
+      await expect(as(f.db, actor, (tx) => tx.query(`delete from design_meeting_requests`))).rejects.toThrow(/permission denied/)
+      await expect(
+        as(f.db, actor, (tx) => tx.query(`insert into design_meeting_requests (organization_id, request_key, path, client_name, whatsapp_phone, project_type, land_status, start_timeline, meeting_mode) values ($1, gen_random_uuid(), 'idea', 'x', '96891234567', 'villa', 'owned_ready', 'exploring', 'call_me')`, [f.bonyan])),
+      ).rejects.toThrow(/permission denied/)
+    }
+  })
+
+  test("files: private bucket, only the request's own folder, images and PDF up to 10 MB", async () => {
+    const { rows } = await f.db.query(`select public, allowed_mime_types from storage.buckets where id = 'design-meeting-files'`)
+    expect(rows).toEqual([{ public: false, allowed_mime_types: ["image/jpeg", "image/png", "image/webp", "application/pdf"] }])
+    const request = (await insert({ starts_at: "2026-11-09T05:00:00Z", ends_at: "2026-11-09T05:45:00Z" })).rows[0].id as string
+    const attach = (path: string, type = "application/pdf", size = 1000) =>
+      f.db.query(`insert into design_meeting_attachments (organization_id, request_id, storage_path, content_type, size_bytes) values ($1, $2, $3, $4, $5)`, [f.bonyan, request, path, type, size])
+    const ok = `${f.bonyan}/${KEY}/22222222-3333-4444-8555-666666666666.pdf`
+    await expect(attach(ok)).resolves.toBeDefined()
+    await expect(attach(`${f.other}/${KEY}/22222222-3333-4444-8555-777777777777.pdf`)).rejects.toThrow(/attachments_path/)
+    await expect(attach(`${f.bonyan}/${KEY}/22222222-3333-4444-8555-888888888888.exe`)).rejects.toThrow(/attachments_path/)
+    await expect(attach(`${f.bonyan}/${KEY}/22222222-3333-4444-8555-999999999999.pdf`, "text/html")).rejects.toThrow(/attachments_type/)
+    await expect(attach(`${f.bonyan}/${KEY}/22222222-3333-4444-8555-aaaaaaaaaaaa.pdf`, "application/pdf", 10485761)).rejects.toThrow(/attachments_size/)
+  })
+})

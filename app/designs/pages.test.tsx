@@ -13,6 +13,9 @@ const site: DesignGallerySite = {
   logoUrl: null,
   websiteUrl: null,
   isDefault: true,
+  booking: { timeZone: "Asia/Muscat", workDays: [0, 1, 2, 3, 4], dayStart: "09:00", dayEnd: "17:00", slotMinutes: 45, minNoticeHours: 12, daysAhead: 21 },
+  officeAddressAr: null,
+  officeAddressEn: null,
 }
 const villas: DesignCategory = { id: "c1", key: "villas", nameAr: "فلل سكنية", nameEn: "Villas", sortOrder: 1, bookableByDefault: true }
 const design = (overrides: Partial<Design>): Design => ({

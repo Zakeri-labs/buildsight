@@ -108,22 +108,26 @@ export async function loadPublicDesign(slug: string) {
   return { ...gallery, design, category: gallery.categories.find((c) => c.id === design.categoryId) ?? null }
 }
 
-/** One published design of the request's gallery, by slug (light lookup for the events endpoint). */
+export type PublicDesignRef = { id: string; isBookable: boolean; code: string; titleAr: string; titleEn: string }
+
+/** One published design of the request's gallery, by slug (light lookup for events and bookings). */
 export async function findPublicDesign(
   organizationId: string,
   slug: string,
-): Promise<{ id: string; isBookable: boolean } | null> {
+): Promise<PublicDesignRef | null> {
   const client = createPublicClient()
   if (!client) return null
   const { data, error } = await client
     .from("designs")
-    .select("id, is_bookable")
+    .select("id, is_bookable, code, title_ar, title_en")
     .eq("organization_id", organizationId)
     .eq("status", "published")
     .eq("slug", slug)
     .maybeSingle()
   if (error) throw error
-  return data ? { id: data.id, isBookable: Boolean(data.is_bookable) } : null
+  return data
+    ? { id: data.id, isBookable: Boolean(data.is_bookable), code: data.code, titleAr: data.title_ar, titleEn: data.title_en }
+    : null
 }
 
 /** Absolute URL for Open Graph, sitemaps and shared links; null without a trusted origin. */
