@@ -1,3 +1,9 @@
+## 2026-10-21 — Design gallery: first gallery is the default; demo designs on demand
+
+- Fix: a gallery set up from the admin panel was never the default, so `/designs` showed "not found" until someone marked it in the database. Now the first gallery set up becomes the default automatically, and an existing single gallery is repaired by the migration.
+- `add_design_gallery_samples(organization_id)` adds the 8 demo designs (with bundled images, published) to an organization's gallery if it has none yet. The 080 seed only recognized organizations named Bonyan/بنيان; this works for any organization.
+- Database migration required: execute `scripts/sql/083_design_gallery_first_default_and_samples.sql`.
+
 ## 2026-10-21 — Design gallery: default gallery stored in the database
 
 - Fix: `/designs` showed "not found" on deployments without `DESIGN_GALLERY_DEFAULT_SITE` (e.g. Vercel previews). The default gallery is now marked in the database (`is_default`, Bonyan); the environment variable is optional and still wins when set.

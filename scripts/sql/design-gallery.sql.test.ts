@@ -464,3 +464,62 @@ describe("082 default gallery", () => {
     expect(rows).toEqual([{ slug: "other-co" }])
   })
 })
+
+describe("083 first gallery is the default; demo designs on demand", () => {
+  // The situation found on the live database: the organization is not called
+  // Bonyan, so 080 skipped it, and the gallery was set up from the admin panel.
+  async function liveLike() {
+    const db = await createTestDb(BASE)
+    const org = await createOrg(db, "Provision Consultancy", "supervising")
+    const admin = await createUser(db, "admin@provision.test")
+    await addMember(db, org, admin, "org_admin")
+    await db.exec(readMigration(SEED))
+    await db.exec(readMigration("081_design_gallery_public.sql"))
+    await db.query(`select provision_design_gallery($1, 'provision-consultancy', null, 'Provision Consultancy')`, [org])
+    await db.exec(readMigration("082_design_gallery_default_site.sql"))
+    return { db, org, admin }
+  }
+
+  test("repairs a single gallery that is not the default", async () => {
+    const { db } = await liveLike()
+    expect((await db.query(`select is_default from design_gallery_sites`)).rows).toEqual([{ is_default: false }])
+    await db.exec(readMigration("083_design_gallery_first_default_and_samples.sql"))
+    expect((await db.query(`select slug, is_default from design_gallery_sites`)).rows).toEqual([
+      { slug: "provision-consultancy", is_default: true },
+    ])
+  })
+
+  test("demo designs are added once, published with images, and become public when the gallery is enabled", async () => {
+    const { db, org } = await liveLike()
+    await db.exec(readMigration("083_design_gallery_first_default_and_samples.sql"))
+    expect((await db.query<{ n: number }>(`select add_design_gallery_samples($1) as n`, [org])).rows[0].n).toBe(8)
+    expect((await db.query<{ n: number }>(`select add_design_gallery_samples($1) as n`, [org])).rows[0].n).toBe(0)
+    expect(await count(db, `select 1 from designs where status = 'published'`)).toBe(8)
+    expect(await count(db, `select 1 from design_images`)).toBe(8)
+    expect(await as(db, { role: "anon" }, async (tx) => (await tx.query(`select 1 from designs`)).rows.length)).toBe(0)
+    await db.query(`update design_gallery_sites set is_enabled = true`)
+    expect(await as(db, { role: "anon" }, async (tx) => (await tx.query(`select 1 from designs`)).rows.length)).toBe(8)
+  })
+
+  test("after 083, the first gallery set up is the default and later ones are not", async () => {
+    const db = await createTestDb([...BASE, "081_design_gallery_public.sql", "082_design_gallery_default_site.sql", "083_design_gallery_first_default_and_samples.sql"])
+    const first = await createOrg(db, "First Co", "supervising")
+    const second = await createOrg(db, "Second Co", "supervising")
+    await db.query(`select provision_design_gallery($1, 'first-co')`, [first])
+    await db.query(`select provision_design_gallery($1, 'second-co')`, [second])
+    expect((await db.query(`select slug, is_default from design_gallery_sites order by slug`)).rows).toEqual([
+      { slug: "first-co", is_default: true },
+      { slug: "second-co", is_default: false },
+    ])
+  })
+
+  test("demo designs need a gallery and cannot be added through the API", async () => {
+    const { db, org, admin } = await liveLike()
+    await db.exec(readMigration("083_design_gallery_first_default_and_samples.sql"))
+    const stranger = await createOrg(db, "No Gallery", "external")
+    await expect(db.query(`select add_design_gallery_samples($1)`, [stranger])).rejects.toThrow(/set it up first/)
+    await expect(
+      as(db, { role: "authenticated", userId: admin }, (tx) => tx.query(`select add_design_gallery_samples($1)`, [org])),
+    ).rejects.toThrow(/permission denied/)
+  })
+})
