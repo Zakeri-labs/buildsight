@@ -3,8 +3,8 @@ import { NextResponse, type NextRequest } from "next/server"
 import { resolveDefaultLandingDestination } from "@/lib/auth/default-landing"
 import { ALL_PROJECTS_SCOPE_VALUE, SELECTED_PROJECT_COOKIE } from "@/lib/project-scope-constants"
 import { INTERNAL_AUTH_HEADERS, signAuthPayload } from "@/lib/auth/internal-tokens"
+import { isPublicPath } from "@/lib/auth/public-paths"
 
-const PUBLIC_PATHS = ["/auth", "/invite", "/_next", "/favicon", "/api/health", "/d", "/r", "/api/stage-translations/pdf", "/designs", "/api/designs"]
 
 function preserveResponseCookies(source: NextResponse, target: NextResponse) {
   source.cookies.getAll().forEach((cookie) => target.cookies.set(cookie))
@@ -44,7 +44,7 @@ export async function updateSession(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     const { pathname } = request.nextUrl
-    const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p))
+    const isPublic = isPublicPath(pathname)
 
     if (!user && !isPublic) {
       const loginUrl = request.nextUrl.clone()

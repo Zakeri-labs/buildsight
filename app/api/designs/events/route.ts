@@ -1,41 +1,56 @@
 import { NextRequest, NextResponse } from "next/server"
-import { isBotUserAgent, parseGalleryEvent } from "@/lib/design-gallery/events"
-import { loadPublicGallery, requestHost } from "@/lib/design-gallery/public"
+import { isBotUserAgent, isConsistentEvent, isSameSiteBeacon, parseGalleryEvent } from "@/lib/design-gallery/events"
+import { findPublicDesign, loadPublicSite, requestHost } from "@/lib/design-gallery/public"
+import { createRateLimiter } from "@/lib/design-gallery/rate-limit"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 const MAX_BODY_BYTES = 2048
+const allow = createRateLimiter({ limit: 30, windowMs: 60_000 })
 const done = () => new NextResponse(null, { status: 204, headers: { "Cache-Control": "no-store" } })
+
+function clientAddress(request: NextRequest): string {
+  return (request.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || request.headers.get("x-real-ip") || "unknown"
+}
 
 /**
  * Anonymous page views and contact clicks from the public gallery
- * (sent with navigator.sendBeacon). Always answers 204 so the page never
- * waits on it; malformed events, bots and unknown designs are dropped.
+ * (navigator.sendBeacon). Always answers 204 so the page never waits on it.
+ * Dropped: bots and scripts, beacons from other sites, more than 30 events a
+ * minute from one address, bodies over 2 KB, malformed events, designs that
+ * are not published in this request's gallery, and contact intents that do
+ * not fit the design.
  */
 export async function POST(request: NextRequest) {
   try {
     if (isBotUserAgent(request.headers.get("user-agent"))) return done()
-    const text = await request.text()
-    if (text.length > MAX_BODY_BYTES) return done()
+    const host = await requestHost()
+    if (!isSameSiteBeacon(request.headers, host)) return done()
+    if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) return done()
+    if (!allow(clientAddress(request))) return done()
 
+    const bytes = await request.arrayBuffer()
+    if (bytes.byteLength > MAX_BODY_BYTES) return done()
     let body: unknown = null
     try {
-      body = JSON.parse(text)
+      body = JSON.parse(new TextDecoder().decode(bytes))
     } catch {
       return done()
     }
-    const event = parseGalleryEvent(body, await requestHost())
+    const event = parseGalleryEvent(body, host)
     if (!event) return done()
 
-    const gallery = await loadPublicGallery()
-    if (!gallery) return done()
-    const design = event.designSlug ? gallery.designs.find((d) => d.slug === event.designSlug) : null
+    const resolved = await loadPublicSite()
+    if (!resolved) return done()
+    const organizationId = resolved.site.organizationId
+    const design = event.designSlug ? await findPublicDesign(organizationId, event.designSlug) : null
     if (event.designSlug && !design) return done()
+    if (!isConsistentEvent(event, design)) return done()
 
     const { error } = await createAdminClient().from("design_gallery_events").insert({
-      organization_id: gallery.site.organizationId,
+      organization_id: organizationId,
       design_id: design?.id ?? null,
       event_type: event.type,
       intent: event.intent,

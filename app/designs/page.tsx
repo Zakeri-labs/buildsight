@@ -24,24 +24,28 @@ export async function generateMetadata({ searchParams }: { searchParams: SearchP
   if (!gallery) return {}
   const t = dictionaries[locale].designGalleryPublic
   const name = siteName(gallery.site, locale)
-  const url = (l: PublicLocale) => absoluteUrl(gallery.origin, galleryHref("/designs", l))
+  // A category is its own listing page; a search is not.
+  const category = gallery.categories.find((c) => c.key === first(params.category))?.key
+  const url = (l: PublicLocale) => absoluteUrl(gallery.origin, galleryHref("/designs", l, { category }))
   const cover = gallery.designs[0]?.images[0]?.url
+  const coverUrl = cover ? absoluteUrl(gallery.origin, cover) : null
   const title = fill(t.metaTitle, { name })
   const description = fill(t.metaDescription, { name })
   return {
     title,
     description,
-    alternates: { canonical: url(locale), languages: { ar: url("ar"), en: url("en"), "x-default": url("ar") } },
-    // Search results are not separate pages for search engines.
+    alternates: gallery.origin
+      ? { canonical: url(locale), languages: { ar: url("ar")!, en: url("en")!, "x-default": url("ar")! } }
+      : undefined,
     robots: first(params.q) ? { index: false, follow: true } : undefined,
     openGraph: {
       type: "website",
       title,
       description,
-      url: url(locale),
+      url: url(locale) ?? undefined,
       siteName: name,
       locale: locale === "ar" ? "ar_OM" : "en_US",
-      images: cover ? [{ url: absoluteUrl(gallery.origin, cover) }] : undefined,
+      images: coverUrl ? [{ url: coverUrl }] : undefined,
     },
     twitter: { card: "summary_large_image", title, description },
   }
@@ -59,9 +63,7 @@ export default async function DesignsPage({ searchParams }: { searchParams: Sear
   const activeCategory = gallery.categories.find((c) => c.key === categoryKey) ?? null
   const visible = filterDesigns(gallery.designs, gallery.categories, { query, categoryKey: activeCategory?.key ?? null })
   const categoryById = new Map(gallery.categories.map((c) => [c.id, c]))
-  // Only categories that have at least one published design get a filter chip.
-  const usedCategories = gallery.categories.filter((c) => gallery.designs.some((d) => d.categoryId === c.id))
-  const chips = [{ key: "", label: t.all }, ...usedCategories.map((c) => ({ key: c.key, label: locale === "ar" ? c.nameAr : c.nameEn }))]
+  const chips = [{ key: "", label: t.all }, ...gallery.categories.map((c) => ({ key: c.key, label: locale === "ar" ? c.nameAr : c.nameEn }))]
 
   return (
     <PublicShell
@@ -103,7 +105,7 @@ export default async function DesignsPage({ searchParams }: { searchParams: Sear
           </form>
         </div>
 
-        <nav aria-label={t.searchLabel} className="-mx-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
+        <nav aria-label={t.categoriesLabel} className="-mx-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
           <ul className="flex w-max gap-2 sm:w-auto sm:flex-wrap">
             {chips.map((chip) => {
               const active = (activeCategory?.key ?? "") === chip.key
@@ -136,9 +138,9 @@ export default async function DesignsPage({ searchParams }: { searchParams: Sear
           </div>
         ) : null}
 
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {visible.map((design) => (
-            <li key={design.id}>
+            <li key={design.id} className="min-w-0">
               <DesignCard
                 design={design}
                 category={categoryById.get(design.categoryId) ?? null}
@@ -148,7 +150,7 @@ export default async function DesignsPage({ searchParams }: { searchParams: Sear
               />
             </li>
           ))}
-          <li>
+          <li className="min-w-0">
             <IdeaCard locale={locale} whatsappPhone={gallery.site.whatsappPhone} />
           </li>
         </ul>

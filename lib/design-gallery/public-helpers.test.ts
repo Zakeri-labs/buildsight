@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest"
 import { contactMessage } from "./contact"
 import { galleryHref, parsePublicLocale } from "./public-locale"
 import { filterDesigns, normalizeForSearch } from "./search"
-import { pickPublicSite } from "./site"
+import { normalizeHost, pickPublicSite } from "./site"
 
 describe("public locale", () => {
   test("Arabic unless lang=en", () => {
@@ -23,25 +23,32 @@ describe("public locale", () => {
 describe("pickPublicSite", () => {
   const bonyan = { slug: "bonyan", customHost: null }
   const other = { slug: "other", customHost: "Designs.Other.com" }
+  const pick = (...args: Parameters<typeof pickPublicSite>) => pickPublicSite(...args)
 
   test("a custom host wins, ignoring case, port and trailing dot", () => {
-    expect(pickPublicSite([bonyan, other], "designs.other.com:443", "bonyan")).toBe(other)
-    expect(pickPublicSite([bonyan, other], "DESIGNS.OTHER.COM.", "bonyan")).toBe(other)
+    expect(pick([bonyan, other], "designs.other.com:443", "bonyan")).toEqual({ site: other, matchedCustomHost: true })
+    expect(pick([bonyan, other], "DESIGNS.OTHER.COM.", "bonyan")).toEqual({ site: other, matchedCustomHost: true })
   })
 
   test("other hosts use the configured default site", () => {
-    expect(pickPublicSite([bonyan, other], "app.bonyanec.com", "bonyan")).toBe(bonyan)
-    expect(pickPublicSite([bonyan, other], "app.bonyanec.com", "missing")).toBeNull()
+    expect(pick([bonyan, other], "app.bonyanec.com", "bonyan")).toEqual({ site: bonyan, matchedCustomHost: false })
+    expect(pick([bonyan, other], "app.bonyanec.com", "missing")).toBeNull()
   })
 
-  test("without a default, only a single enabled site is used", () => {
-    expect(pickPublicSite([bonyan], "localhost:3000", null)).toBe(bonyan)
-    expect(pickPublicSite([bonyan, other], "localhost:3000", null)).toBeNull()
-    expect(pickPublicSite([], "localhost:3000", "bonyan")).toBeNull()
+  test("without a default, nothing is shown — except a single site during local development", () => {
+    expect(pick([bonyan], "app.bonyanec.com", null)).toBeNull()
+    expect(pick([bonyan], "localhost:3000", null, { allowSingleSiteFallback: true })).toEqual({ site: bonyan, matchedCustomHost: false })
+    expect(pick([bonyan, other], "localhost:3000", null, { allowSingleSiteFallback: true })).toBeNull()
+    expect(pick([], "localhost:3000", "bonyan")).toBeNull()
   })
 
   test("a lookalike host does not match a custom host", () => {
-    expect(pickPublicSite([bonyan, other], "designs.other.com.evil.com", null)).toBeNull()
+    expect(pick([bonyan, other], "designs.other.com.evil.com", "bonyan")).toEqual({ site: bonyan, matchedCustomHost: false })
+  })
+
+  test("normalizeHost", () => {
+    expect(normalizeHost(" Designs.Other.com.:8443, proxy.local")).toBe("designs.other.com")
+    expect(normalizeHost(null)).toBe("")
   })
 })
 
@@ -95,6 +102,30 @@ describe("search", () => {
   test("category names are searchable", () => {
     expect(find("فضاءات")).toEqual(["BD-502"])
     expect(find("villas")).toEqual(["BD-101", "BD-103"])
+  })
+
+  test("Arabic article and attached prepositions, English plurals", () => {
+    expect(find("الفيلا")).toEqual(["BD-101", "BD-103"])
+    expect(find("بالمسبح")).toEqual(["BD-101"])
+    expect(find("pools")).toEqual(["BD-101"])
+    expect(find("villas")).toEqual(["BD-101", "BD-103"])
+  })
+
+  test("codes match exactly, with or without the dash", () => {
+    const withLongCode = [...designs, { ...pool, code: "BD-1010" }]
+    const byCode = (query: string) => filterDesigns(withLongCode, categories, { query }).map((d) => d.code)
+    expect(byCode("BD-101")).toEqual(["BD-101"])
+    expect(byCode("bd101")).toEqual(["BD-101"])
+    expect(byCode("bd 1010")).toEqual(["BD-1010"])
+    expect(byCode("BD-999")).toEqual([])
+  })
+
+  test("words match the start of a word; single letters are ignored", () => {
+    expect(find("on")).toEqual([])
+    expect(find("tern")).toEqual([]) // inside "modern", not at its start
+    expect(find("a")).toEqual(["BD-101", "BD-103", "BD-502"])
+    expect(find("ا")).toEqual(["BD-101", "BD-103", "BD-502"])
+    expect(find("mod")).toEqual(["BD-101"])
   })
 
   test("normalization", () => {

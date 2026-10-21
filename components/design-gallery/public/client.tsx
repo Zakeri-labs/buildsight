@@ -28,8 +28,19 @@ export function HtmlLocale({ locale }: { locale: PublicLocale }) {
 
 type EventPayload = { type: GalleryEventType; intent?: ContactIntent; design?: string; locale: PublicLocale }
 
+// The same contact click within a few seconds (double click, click then
+// middle-click) is one contact, not two.
+const RECENT_CONTACT_MS = 3000
+const recentContacts = new Map<string, number>()
+
 function sendGalleryEvent(payload: EventPayload) {
   try {
+    if (payload.type === "contact_click") {
+      const key = `${payload.intent}:${payload.design ?? ""}`
+      const now = Date.now()
+      if (now - (recentContacts.get(key) ?? 0) < RECENT_CONTACT_MS) return
+      recentContacts.set(key, now)
+    }
     const params = new URLSearchParams(window.location.search)
     const body = JSON.stringify({
       ...payload,
@@ -78,6 +89,8 @@ export function ContactLink({
       rel="noopener noreferrer"
       className={className}
       onClick={() => sendGalleryEvent({ type: "contact_click", intent, design, locale })}
+      // Middle-click and "open in new tab" are contacts too.
+      onAuxClick={() => sendGalleryEvent({ type: "contact_click", intent, design, locale })}
     >
       {children}
     </a>

@@ -38,9 +38,40 @@ export function normalizeForSearch(value: string): string {
     .trim()
 }
 
+// "الفيلا", "بالفيلا", "والمسبح", "للمسبح" → the word itself.
+const ARABIC_ARTICLE = /^(?:وال|بال|فال|كال|لل|ال)(?=\p{L}{2})/u
+
+// One attached letter: "بمسبح", "وملاعب", "لفيلا".
+const ARABIC_ATTACHED = /^[وبفكل](?=\p{L}{3})/u
+
 /**
- * Designs in the given category (by key) whose text contains every word of
- * the query, in either language. An empty query or "all" category keeps all.
+ * Comparable forms of a folded word: the Arabic article (ال، بال، وال…) or
+ * one attached letter (ب، و، ف، ك، ل) removed, and simple English plurals.
+ * Both the query and the design text go through this, so "بالمسبح",
+ * "بمسبح" and "مسبح" meet.
+ */
+export function searchStems(word: string): string[] {
+  if (/^\p{Script=Arabic}+$/u.test(word)) {
+    const withoutArticle = word.replace(ARABIC_ARTICLE, "")
+    return Array.from(new Set([word, withoutArticle, word.replace(ARABIC_ATTACHED, "")]))
+  }
+  if (/^[a-z]+$/.test(word) && word.length > 3 && word.endsWith("s") && !word.endsWith("ss")) return [word.slice(0, -1)]
+  return [word]
+}
+
+/** Letters+digits of a design code, e.g. "BD-101" / "bd 101" / "bd101" → "bd101". */
+function compactCode(value: string): string {
+  return normalizeForSearch(value).replace(/\s+/g, "")
+}
+
+// A code typed in the search box: 1–4 letters then digits, with or without a dash or space.
+const CODE_IN_QUERY = /(?:^|\s)([a-z]{1,4})[\s-]?(\d{1,6})(?=\s|$)/gi
+
+/**
+ * Designs in the given category (by key) that match the query, in either
+ * language. Each word of 2+ characters must start a word of the design's text
+ * (so "on" does not match "complex"); a design code must match exactly
+ * (BD-101 is not BD-1010). An empty query or the "all" category keeps everything.
  */
 export function filterDesigns<T extends SearchableDesign>(
   designs: readonly T[],
@@ -48,16 +79,28 @@ export function filterDesigns<T extends SearchableDesign>(
   options: { query?: string | null; categoryKey?: string | null },
 ): T[] {
   const category = options.categoryKey ? categories.find((c) => c.key === options.categoryKey) : null
-  const inCategory = options.categoryKey && options.categoryKey !== "all"
-    ? designs.filter((design) => category && design.categoryId === category.id)
-    : [...designs]
+  const inCategory =
+    options.categoryKey && options.categoryKey !== "all"
+      ? designs.filter((design) => category && design.categoryId === category.id)
+      : [...designs]
 
-  const words = normalizeForSearch(options.query ?? "").split(" ").filter(Boolean)
-  if (!words.length) return inCategory
+  let query = toAsciiDigits(options.query ?? "")
+  const codes: string[] = []
+  query = query.replace(CODE_IN_QUERY, (_match, letters: string, digits: string) => {
+    codes.push(`${letters}${digits}`.toLowerCase())
+    return " "
+  })
+  const words = normalizeForSearch(query)
+    .split(" ")
+    .filter((word) => Array.from(word).length >= 2)
+    .map(searchStems)
+  if (!words.length && !codes.length) return inCategory
 
   const categoryText = new Map(categories.map((c) => [c.id, `${c.nameAr} ${c.nameEn}`]))
   return inCategory.filter((design) => {
-    const haystack = normalizeForSearch(
+    if (codes.length && !codes.every((code) => compactCode(design.code) === code)) return false
+    if (!words.length) return true
+    const textWords = normalizeForSearch(
       [
         design.code,
         design.titleAr,
@@ -75,6 +118,8 @@ export function filterDesigns<T extends SearchableDesign>(
         .filter(Boolean)
         .join(" "),
     )
-    return words.every((word) => haystack.includes(word))
+      .split(" ")
+      .flatMap(searchStems)
+    return words.every((forms) => forms.some((form) => textWords.some((textWord) => textWord.startsWith(form))))
   })
 }

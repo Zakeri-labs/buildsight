@@ -1,15 +1,18 @@
 ## 2026-10-21 — Design gallery (معرض التصاميم), part 2: public pages
 
-- New public pages, no sign-in needed: **`/designs`** (gallery with search and category filters) and **`/designs/<slug>`** (design page with images, specs and contact buttons). Arabic by default, English with `?lang=en`; the page sets its own language and direction.
-- Search works in Arabic and English and tolerates spelling variants (hamza forms, ة/ه, ى/ي, Persian ی/ک, diacritics, Arabic digits).
+- New public pages, no sign-in needed: **`/designs`** (gallery with search and all category filters) and **`/designs/<slug>`** (design page with images, specs and contact buttons). Arabic by default, English with `?lang=en`; the page sets its own language and direction (after the page loads; the first HTML still says `lang="en"`).
+- Search works in Arabic and English: spelling variants (hamza forms, ة/ه, ى/ي, Persian ی/ک, diacritics, Arabic digits), the Arabic article and attached letters (الفيلا، بالمسبح، وملاعب), simple English plurals, word starts only, and exact design codes (BD-101 or bd101, never BD-1010). Single letters are ignored.
 - Reference-only designs (public, educational) show "Similar project?" instead of booking. A fixed "Have another idea?" card is always last.
 - Contact buttons open WhatsApp with a ready message containing the design name, code and link. Until the booking form exists (part 3), "Book a meeting" also opens WhatsApp.
-- SEO: title, description, canonical, Arabic/English alternates (hreflang), Open Graph images, and `/designs/sitemap.xml`. A missing or unpublished design shows a not-found page marked `noindex` (HTTP 200, because the app's root loading screen starts streaming before the page decides).
-- Which organization's gallery a request shows: the site whose custom host matches the request, else `DESIGN_GALLERY_DEFAULT_SITE` (set it to `bonyan`), else the only enabled gallery.
-- Anonymous page views and contact clicks are recorded for the monthly figures (no personal data; bots ignored).
-- Admin settings: new "Main website" field. Header logo comes from the gallery settings (Bonyan: `/Logow.png`).
-- Shared: `lib/whatsapp.ts` builds WhatsApp links for both the report share and the gallery.
-- Environment: add `DESIGN_GALLERY_DEFAULT_SITE=bonyan`.
+- SEO: title, description, canonical (category pages keep their category; searches are `noindex`), Arabic/English alternates, Open Graph images, and `/designs/sitemap.xml`. A missing or unpublished design answers **404**; a database failure answers **500** with a bilingual error page.
+- To make real 404/500 answers possible, the thin loading bar that sat at the app root now lives in `auth`, `invite`, `onboarding` and `owner` (the signed-in app keeps its own loading screen).
+- Which organization's gallery a request shows: the site whose custom host matches the request, else `DESIGN_GALLERY_DEFAULT_SITE`. Absolute links (canonical, sitemap, shared links) come from the custom host or the configured app URL, never from the request's Host header.
+- Anonymous page views and contact clicks are recorded for the monthly figures: no personal data; bots, scripts and other sites are ignored; at most 30 events a minute per address (per server instance); contact types must fit the design.
+- Fix (shared): signed-out visitors are now sent to the login page for every app page. Public paths match whole segments, so `/d` and `/r` no longer make `/dashboard`, `/documents`, `/reports`, `/report-entry` or `/rfi` public.
+- Public pages allow zooming.
+- Admin settings: new "Main website" field. The header logo is stored in the gallery settings (set for Bonyan by the migration; there is no admin field for it yet).
+- `lib/whatsapp.ts` builds WhatsApp links for the report share and the gallery (other screens still build their own).
+- Environment: add `DESIGN_GALLERY_DEFAULT_SITE=bonyan`. `NEXT_PUBLIC_SITE_URL` must be set for canonical links and the sitemap.
 - Database migration required: execute `scripts/sql/081_design_gallery_public.sql`.
 
 ## 2026-10-21 — Design gallery (معرض التصاميم), part 1: catalogue and admin

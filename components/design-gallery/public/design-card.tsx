@@ -44,8 +44,8 @@ export function DesignCard({
   category: DesignCategory | null
   locale: PublicLocale
   whatsappPhone: string | null
-  /** Absolute link to the design, included in the WhatsApp message. */
-  designUrl: string
+  /** Absolute link to the design, included in the WhatsApp message when known. */
+  designUrl: string | null
 }) {
   const t = dictionaries[locale].designGalleryPublic
   const title = designTitle(design, locale)
@@ -73,12 +73,12 @@ export function DesignCard({
             {categoryName(category, locale)}
           </span>
         ) : null}
-        <h2 className="break-words text-base font-semibold leading-snug">
+        <h2 className="text-base font-semibold leading-snug [overflow-wrap:anywhere]">
           <Link href={href} className="hover:text-[var(--gallery-accent)] focus-visible:outline-none focus-visible:underline">
             {title}
           </Link>
         </h2>
-        <p className="text-sm text-white/60">{specLine(design, locale)}</p>
+        <p className="text-sm text-white/60 [overflow-wrap:anywhere]">{specLine(design, locale)}</p>
         <div className="mt-auto grid grid-cols-2 gap-2 pt-3">
           <Link href={href} className={buttonClass.outline}>
             {t.view}

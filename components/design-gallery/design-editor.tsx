@@ -70,7 +70,7 @@ export function DesignEditor({ design, categories }: { design: Design | null; ca
           {copy.back}
         </Link>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="min-w-0 break-words text-2xl font-semibold text-balance">
+          <h1 className="min-w-0 text-2xl font-semibold text-balance [overflow-wrap:anywhere]">
             {design ? (locale === "ar" ? design.titleAr : design.titleEn) : copy.newDesign}
           </h1>
           {design ? <DesignStatusBadge status={design.status} /> : null}

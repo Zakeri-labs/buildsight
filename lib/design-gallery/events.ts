@@ -1,4 +1,6 @@
 import { CONTACT_INTENTS, type ContactIntent } from "./contact"
+import { normalizeHost } from "./site"
+import { cleanText } from "./validation"
 
 export const GALLERY_EVENT_TYPES = ["gallery_view", "design_view", "contact_click"] as const
 export type GalleryEventType = (typeof GALLERY_EVENT_TYPES)[number]
@@ -17,14 +19,31 @@ export type GalleryEvent = {
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/
 const BOT = /bot|crawl|spider|slurp|preview|facebookexternalhit|whatsapp|telegram|lighthouse|headless/i
 
-/** Crawlers and link previews (WhatsApp, Telegram…) are not visitors. */
+/** Crawlers, link previews (WhatsApp, Telegram…) and scripts (curl…) are not visitors; every browser sends "Mozilla/". */
 export function isBotUserAgent(userAgent: string | null | undefined): boolean {
-  return !userAgent || BOT.test(userAgent)
+  return !userAgent || !userAgent.includes("Mozilla/") || BOT.test(userAgent)
+}
+
+/**
+ * The beacon must come from a page of this site: browsers send
+ * Sec-Fetch-Site and/or Origin on POST. Other sites (or scripts without
+ * these headers) cannot add events.
+ */
+export function isSameSiteBeacon(headers: { get(name: string): string | null }, host: string): boolean {
+  const fetchSite = headers.get("sec-fetch-site")
+  if (fetchSite) return fetchSite === "same-origin"
+  const origin = headers.get("origin")
+  if (!origin) return false
+  try {
+    return normalizeHost(new URL(origin).host) === normalizeHost(host)
+  } catch {
+    return false
+  }
 }
 
 function shortText(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null
-  const cleaned = value.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, max)
+  const cleaned = cleanText(value).replace(/[\n\r\t]/g, " ").slice(0, max)
   return cleaned || null
 }
 
@@ -61,11 +80,35 @@ export function parseGalleryEvent(body: unknown, ownHost: string | null | undefi
   return {
     type,
     intent: type === "contact_click" ? intent : null,
-    designSlug,
+    // A gallery view is never about one design.
+    designSlug: type === "gallery_view" ? null : designSlug,
     locale: raw.locale === "en" ? "en" : raw.locale === "ar" ? "ar" : null,
     referrerHost: referrerHost(raw.referrer, ownHost),
     utmSource: shortText(raw.utm_source, 100),
     utmMedium: shortText(raw.utm_medium, 100),
     utmCampaign: shortText(raw.utm_campaign, 100),
+  }
+}
+
+/**
+ * Whether a contact click makes sense for the design it names: booking
+ * intents only for bookable designs, "similar project" only for reference
+ * ones, design questions only with a design, and idea/general without one.
+ */
+export function isConsistentEvent(event: GalleryEvent, design: { isBookable: boolean } | null): boolean {
+  if (event.type !== "contact_click") return true
+  switch (event.intent) {
+    case "same":
+    case "modified":
+      return Boolean(design?.isBookable)
+    case "similar":
+      return Boolean(design && !design.isBookable)
+    case "question":
+      return Boolean(design)
+    case "idea":
+    case "general":
+      return !design
+    default:
+      return false
   }
 }

@@ -27,18 +27,22 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     (locale === "ar" ? design.descriptionAr || design.summaryAr : design.descriptionEn || design.summaryEn) ??
     fill(dictionaries[locale].designGalleryPublic.metaDescription, { name: siteName(site, locale) })
   const url = (l: PublicLocale) => absoluteUrl(origin, galleryHref(`/designs/${design.slug}`, l))
+  const images = design.images.slice(0, 4).flatMap((image) => {
+    const imageUrl = absoluteUrl(origin, image.url)
+    return imageUrl ? [{ url: imageUrl, alt: designTitle(design, locale) }] : []
+  })
   return {
     title,
     description,
-    alternates: { canonical: url(locale), languages: { ar: url("ar"), en: url("en"), "x-default": url("ar") } },
+    alternates: origin ? { canonical: url(locale), languages: { ar: url("ar")!, en: url("en")!, "x-default": url("ar")! } } : undefined,
     openGraph: {
       type: "article",
       title,
       description,
-      url: url(locale),
+      url: url(locale) ?? undefined,
       siteName: siteName(site, locale),
       locale: locale === "ar" ? "ar_OM" : "en_US",
-      images: design.images.slice(0, 4).map((image) => ({ url: absoluteUrl(origin, image.url), alt: designTitle(design, locale) })),
+      images: images.length ? images : undefined,
     },
     twitter: { card: "summary_large_image", title, description },
   }
@@ -67,6 +71,8 @@ export default async function DesignPage({ params, searchParams }: Props) {
     { label: t.bedrooms, value: design.bedrooms != null ? formatNumber(design.bedrooms) : null },
     { label: t.service, value: locale === "ar" ? design.serviceAr : design.serviceEn },
   ].flatMap((spec) => (spec.value ? [{ label: spec.label, value: spec.value }] : []))
+  // "Illustrative figures" refers to floors, area and bedrooms, not to the service.
+  const hasFigures = Boolean((locale === "ar" ? design.floorsAr : design.floorsEn) || design.builtAreaSqm || design.bedrooms != null)
 
   return (
     <PublicShell site={site} locale={locale} alternateHref={galleryHref(`/designs/${design.slug}`, locale === "ar" ? "en" : "ar")}>
@@ -77,12 +83,12 @@ export default async function DesignPage({ params, searchParams }: Props) {
       </Link>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:items-start">
-        <div className="order-last flex flex-col gap-5 lg:order-first">
+        <div className="order-last flex min-w-0 flex-col gap-5 lg:order-first">
           <span className="w-fit rounded-full bg-[var(--gallery-accent)]/15 px-3 py-1 text-xs font-medium text-[var(--gallery-accent)]">
             <span dir="ltr">{t.badge3d}</span>
             {category ? <> · {categoryName(category, locale)}</> : null}
           </span>
-          <h1 className="break-words text-3xl font-bold leading-tight sm:text-4xl">{title}</h1>
+          <h1 className="text-3xl font-bold leading-tight [overflow-wrap:anywhere] sm:text-4xl">{title}</h1>
           {description ? <p className="whitespace-pre-line leading-relaxed text-white/75">{description}</p> : null}
 
           {specs.length ? (
@@ -95,10 +101,11 @@ export default async function DesignPage({ params, searchParams }: Props) {
                   </div>
                 ))}
               </dl>
-              <p className="mt-2 text-xs text-white/45">{t.illustrative}</p>
+              {hasFigures ? <p className="mt-2 text-xs text-white/45">{t.illustrative}</p> : null}
             </div>
           ) : null}
 
+          {!design.isBookable ? <p className="text-sm text-white/65">{t.referenceNote}</p> : null}
           {site.whatsappPhone ? (
             <div className="flex flex-col gap-2.5">
               {design.isBookable ? (
@@ -112,7 +119,6 @@ export default async function DesignPage({ params, searchParams }: Props) {
                 </>
               ) : (
                 <>
-                  <p className="text-sm text-white/65">{t.referenceNote}</p>
                   <ContactLink href={message("similar")} intent="similar" design={design.slug} locale={locale} className={buttonClass.primary}>
                     {t.similar}
                   </ContactLink>
@@ -126,7 +132,7 @@ export default async function DesignPage({ params, searchParams }: Props) {
           ) : null}
         </div>
 
-        <div className="order-first lg:order-last">
+        <div className="order-first min-w-0 lg:order-last">
           <DesignImages images={design.images} alt={title} imageLabel={t.imageLabel} />
         </div>
       </div>
