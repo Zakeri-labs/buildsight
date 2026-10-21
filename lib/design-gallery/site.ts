@@ -10,7 +10,7 @@ export type PickedSite<T> = { site: T; matchedCustomHost: boolean }
 /**
  * Which organization's gallery a public request shows:
  * 1. the site whose custom host is the request host (e.g. designs.example.com);
- * 2. otherwise DESIGN_GALLERY_DEFAULT_SITE, when that environment variable is set;
+ * 2. otherwise DESIGN_GALLERY_DEFAULT_SITE, when it names an enabled site;
  * 3. otherwise the site marked as the default in the database (082 migration);
  * 4. only during local development without any default: the single enabled site.
  * `sites` must already be limited to enabled sites.
@@ -29,7 +29,9 @@ export function pickPublicSite<T extends SiteLike>(
   const slug = defaultSlug?.trim().toLowerCase()
   if (slug) {
     const bySlug = sites.find((site) => site.slug === slug)
-    return bySlug ? { site: bySlug, matchedCustomHost: false } : null
+    if (bySlug) return { site: bySlug, matchedCustomHost: false }
+    // A variable naming a gallery that does not exist (or is switched off)
+    // must not hide the default gallery; the caller logs the mismatch.
   }
   const marked = sites.find((site) => site.isDefault)
   if (marked) return { site: marked, matchedCustomHost: false }

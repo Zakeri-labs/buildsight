@@ -1,3 +1,7 @@
+## 2026-10-21 — Design gallery: a wrong DESIGN_GALLERY_DEFAULT_SITE no longer hides the gallery
+
+- Fix: with `DESIGN_GALLERY_DEFAULT_SITE=bonyan` but the gallery's slug being `provision-consultancy`, `/designs` answered not found. If the variable names no enabled gallery, the gallery marked as default in the database is shown, and the mismatch is logged. The variable is optional; leave it unset unless a deployment must show a different gallery.
+
 ## 2026-10-21 — Design gallery: first gallery is the default; demo designs on demand
 
 - Fix: a gallery set up from the admin panel was never the default, so `/designs` showed "not found" until someone marked it in the database. Now the first gallery set up becomes the default automatically, and an existing single gallery is repaired by the migration.

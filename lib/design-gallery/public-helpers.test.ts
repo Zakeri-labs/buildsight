@@ -35,6 +35,11 @@ describe("pickPublicSite", () => {
     expect(pick([bonyan, other], "app.bonyanec.com", "missing")).toBeNull()
   })
 
+  test("a variable naming a missing gallery falls back to the database default instead of hiding it", () => {
+    const live = { slug: "provision-consultancy", customHost: null, isDefault: true }
+    expect(pick([live], "buildsight-z7gfibsnv-team-zakeri-s-projects.vercel.app", "bonyan")).toEqual({ site: live, matchedCustomHost: false })
+  })
+
   test("without the environment variable, the gallery marked as default in the database is used", () => {
     const marked = { ...bonyan, isDefault: true }
     expect(pick([other, marked], "app.bonyanec.com", undefined)).toEqual({ site: marked, matchedCustomHost: false })

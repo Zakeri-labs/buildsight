@@ -35,4 +35,4 @@ Read this before changing code. The agent and skill files in `.claude/` (impleme
 - Every UI change must work at 375px width in Arabic (RTL) and English (LTR).
 
 ## Modules
-- Design gallery (معرض التصاميم): `lib/design-gallery/`, admin UI under `app/(app)/design-gallery`, public pages under `app/designs` (no sign-in; read with the anon key so database policies decide what is public). The organization shown is resolved per request (custom host, else `DESIGN_GALLERY_DEFAULT_SITE` if set, else the gallery marked `is_default` in the database). Spec and acceptance criteria: project doc `bonyan-design-gallery-spec.md`.
+- Design gallery (معرض التصاميم): `lib/design-gallery/`, admin UI under `app/(app)/design-gallery`, public pages under `app/designs` (no sign-in; read with the anon key so database policies decide what is public). The organization shown is resolved per request (custom host, else `DESIGN_GALLERY_DEFAULT_SITE` if it names an enabled gallery, else the gallery marked `is_default` in the database). Spec and acceptance criteria: project doc `bonyan-design-gallery-spec.md`.

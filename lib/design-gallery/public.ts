@@ -54,6 +54,12 @@ export const loadPublicSite = cache(async (): Promise<PublicSite | null> => {
   const picked = pickPublicSite(sites, host, defaultSlug, {
     allowSingleSiteFallback: process.env.NODE_ENV !== "production",
   })
+  if (defaultSlug?.trim() && !picked?.matchedCustomHost && picked?.site.slug !== defaultSlug.trim().toLowerCase()) {
+    console.warn(
+      `design gallery: DESIGN_GALLERY_DEFAULT_SITE="${defaultSlug}" matches no enabled gallery [${sites.map((s) => s.slug).join(", ")}]` +
+        (picked ? `; showing the database default "${picked.site.slug}"` : ""),
+    )
+  }
   if (!picked) {
     // Visible in the server logs (e.g. Vercel) when /designs shows "not found".
     console.warn(
