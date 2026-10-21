@@ -1,3 +1,4 @@
+import { test } from "vitest"
 import {
   addCalendarDays,
   buildProjectTimelineRow,
@@ -709,5 +710,6 @@ function runUnitTests() {
   console.log("================================================================================\n")
 }
 
-runUnitTests()
-
+test("supervisor visit compliance engine (legacy suite)", () => {
+  runUnitTests()
+})
