@@ -571,7 +571,7 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
         >
           <div className="flex items-center gap-2">
             <h2 id="member-previous-visits-title" className="text-lg font-semibold tracking-tight">
-              Previous 7 Days
+              Previous 7 Days Visits
             </h2>
             {previousSevenDaysLoaded ? (
               <span className="text-xs tabular-nums text-muted-foreground">
