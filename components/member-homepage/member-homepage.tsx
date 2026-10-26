@@ -4,14 +4,14 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useRef, useState } from "react"
 
-import { AlertTriangle, CalendarPlus, CheckCircle2, Clock3, FilePlus2, FileText, Loader2, MapPinned, MessageSquare } from "lucide-react"
+import { AlertTriangle, CalendarPlus, CheckCircle2, ChevronDown, Clock3, FilePlus2, FileText, Loader2, MapPinned, MessageSquare } from "lucide-react"
 
 import { ClientVisitRequestWorkflow } from "@/components/calendar/client-visit-request-workflow"
 import { MemberVisitCompliance } from "@/components/member-homepage/member-visit-compliance"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { updateSiteVisitStatusAction } from "@/lib/actions/site-visits"
+import { getPreviousSevenDaysVisitsAction, updateSiteVisitStatusAction } from "@/lib/actions/site-visits"
 import { currentCalendarMonthKey } from "@/lib/calendar/date"
 import type { CalendarClientRequestViewModel, CalendarDataViewModel } from "@/lib/calendar/types"
 import type { MemberHomepageData, MemberHomepageRequest, MemberHomepageVisit } from "@/lib/member-homepage/types"
@@ -134,12 +134,15 @@ function RequestRow({
 function VisitRow({
   visit,
   onCompleteRequest,
+  showDate = false,
 }: {
   visit: MemberHomepageVisit
   onCompleteRequest?: (visit: MemberHomepageVisit) => void
+  showDate?: boolean
 }) {
   const scheduledTime = formatTime(visit.scheduledTime)
   const isCompleted = visit.status === "completed"
+  const dateBlock = showDate && visit.scheduledDate ? formatDateBlock(visit.scheduledDate) : null
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const startPosRef = useRef<{ x: number; y: number } | null>(null)
 
@@ -212,6 +215,11 @@ function VisitRow({
             isCompleted && "bg-[#16294a]/80",
           )}
         >
+          {dateBlock ? (
+            <span className="mb-0.5 text-[9px] font-bold uppercase leading-none tracking-tight text-white/80 sm:text-[10px]">
+              {dateBlock.day} {dateBlock.month}
+            </span>
+          ) : null}
           {scheduledTime ? (
             <>
               <span className="text-xs font-bold leading-none tabular-nums sm:text-sm">{scheduledTime.time}</span>
@@ -238,10 +246,22 @@ function VisitRow({
             </h3>
           )}
 
-          {visit.projectCode ? (
-            <p className="truncate font-mono text-[11px] text-muted-foreground">
-              {visit.projectCode}
-            </p>
+          {visit.projectCode || (showDate && dateBlock) ? (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {visit.projectCode ? (
+                <p className="truncate font-mono text-[11px] text-muted-foreground">
+                  {visit.projectCode}
+                </p>
+              ) : null}
+              {showDate && dateBlock && visit.projectCode ? (
+                <span className="text-[10px] text-muted-foreground">•</span>
+              ) : null}
+              {showDate && dateBlock ? (
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  {dateBlock.day} {dateBlock.month}
+                </span>
+              ) : null}
+            </div>
           ) : null}
 
           {visit.stageName ? (
@@ -349,6 +369,41 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
   const [completingVisit, setCompletingVisit] = useState(false)
   const [completeVisitError, setCompleteVisitError] = useState<string | null>(null)
 
+  const [previousSevenDaysExpanded, setPreviousSevenDaysExpanded] = useState(false)
+  const [previousSevenDaysLoading, setPreviousSevenDaysLoading] = useState(false)
+  const [previousSevenDaysLoaded, setPreviousSevenDaysLoaded] = useState(false)
+  const [previousSevenDaysVisits, setPreviousSevenDaysVisits] = useState<MemberHomepageVisit[]>([])
+  const [previousSevenDaysError, setPreviousSevenDaysError] = useState<string | null>(null)
+
+  async function fetchPreviousSevenDaysVisits() {
+    setPreviousSevenDaysLoading(true)
+    setPreviousSevenDaysError(null)
+    try {
+      const result = await getPreviousSevenDaysVisitsAction()
+      if (!result.ok) {
+        setPreviousSevenDaysError(result.error || "Unable to load previous visits.")
+      } else {
+        setPreviousSevenDaysVisits(result.visits ?? [])
+        setPreviousSevenDaysLoaded(true)
+      }
+    } catch {
+      setPreviousSevenDaysError("Unable to load previous visits. Please check your connection and try again.")
+    } finally {
+      setPreviousSevenDaysLoading(false)
+    }
+  }
+
+  function handleTogglePreviousSevenDays() {
+    if (!previousSevenDaysExpanded) {
+      setPreviousSevenDaysExpanded(true)
+      if (!previousSevenDaysLoaded && !previousSevenDaysLoading) {
+        void fetchPreviousSevenDaysVisits()
+      }
+    } else {
+      setPreviousSevenDaysExpanded(false)
+    }
+  }
+
   async function handleConfirmCompleteVisit() {
     if (!completeTargetVisit || completingVisit) return
     setCompletingVisit(true)
@@ -363,6 +418,9 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
         return
       }
       setCompleteTargetVisit(null)
+      setPreviousSevenDaysVisits((prev) =>
+        prev.map((v) => (v.id === completeTargetVisit.id ? { ...v, status: "completed" as const } : v))
+      )
       router.refresh()
     } catch (error) {
       setCompleteVisitError(error instanceof Error ? error.message : "Unable to mark site visit as completed.")
@@ -502,6 +560,71 @@ export function MemberHomepage({ data }: { data: MemberHomepageData }) {
           </div>
         </section>
       ) : null}
+
+      <section className="space-y-3" aria-labelledby="member-previous-visits-title">
+        <button
+          type="button"
+          onClick={handleTogglePreviousSevenDays}
+          aria-expanded={previousSevenDaysExpanded}
+          aria-controls="member-previous-visits-content"
+          className="flex w-full items-center justify-between gap-3 text-left transition-colors hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg py-1"
+        >
+          <div className="flex items-center gap-2">
+            <h2 id="member-previous-visits-title" className="text-lg font-semibold tracking-tight">
+              Previous 7 Days
+            </h2>
+            {previousSevenDaysLoaded ? (
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {previousSevenDaysVisits.length}
+              </span>
+            ) : null}
+          </div>
+          <ChevronDown
+            className={cn(
+              "size-5 text-muted-foreground transition-transform duration-200",
+              previousSevenDaysExpanded && "rotate-180"
+            )}
+            aria-hidden="true"
+          />
+        </button>
+
+        {previousSevenDaysExpanded ? (
+          <div id="member-previous-visits-content" className="space-y-1.5 sm:space-y-2">
+            {previousSevenDaysLoading ? (
+              <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
+                <Loader2 className="size-4 animate-spin text-primary" />
+                <span>Loading previous visits...</span>
+              </div>
+            ) : previousSevenDaysError ? (
+              <div className="flex flex-col items-center justify-center gap-2.5 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-center">
+                <p className="text-xs text-destructive">{previousSevenDaysError}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchPreviousSevenDaysVisits}
+                  className="h-8 text-xs"
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : previousSevenDaysVisits.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 py-8 text-center text-xs text-muted-foreground">
+                No visits in the previous 7 days.
+              </div>
+            ) : (
+              previousSevenDaysVisits.map((visit) => (
+                <VisitRow
+                  key={visit.id}
+                  visit={visit}
+                  onCompleteRequest={setCompleteTargetVisit}
+                  showDate
+                />
+              ))
+            )}
+          </div>
+        ) : null}
+      </section>
 
       <Dialog
         open={Boolean(completeTargetVisit)}
