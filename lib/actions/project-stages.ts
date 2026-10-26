@@ -345,6 +345,7 @@ type SavedReportResponse = {
   visitNumber: number
   visitDate: string | null
   status: string
+  siteVisitRequestId?: string | null
   unchanged?: boolean
   existingPdfsValid?: boolean
 }
@@ -445,31 +446,43 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
 
     const projectStageId = directStage?.id ?? term!.project_stage_id
     const legacyTermId = directStage ? null : input.termId ?? null
+    const rawVisitDate = typeof input.visitDate === "string" && input.visitDate.trim()
+      ? input.visitDate.trim()
+      : null
+    const isAlreadyPublished = existing && ["submitted", "under_review", "approved", "completed"].includes(existing.status)
     const rawSiteVisitRequestId = directStage && typeof input.siteVisitRequestId === "string"
       ? input.siteVisitRequestId.trim()
       : ""
     if (rawSiteVisitRequestId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawSiteVisitRequestId)) {
       return { ok: false, error: "Invalid Site Visit context." }
     }
-    if (existing?.site_visit_request_id && rawSiteVisitRequestId && existing.site_visit_request_id !== rawSiteVisitRequestId) {
-      return { ok: false, error: "This report is already linked to another Site Visit." }
+    const isExplicitlyUnlinked = directStage && "siteVisitRequestId" in input && input.siteVisitRequestId === null
+    let siteVisitRequestId: string | null = null
+    if (rawSiteVisitRequestId) {
+      siteVisitRequestId = rawSiteVisitRequestId
+    } else if (!isExplicitlyUnlinked && directStage && typeof existing?.site_visit_request_id === "string") {
+      siteVisitRequestId = existing.site_visit_request_id
     }
-    const siteVisitRequestId = rawSiteVisitRequestId || (directStage && typeof existing?.site_visit_request_id === "string"
-      ? existing.site_visit_request_id
-      : null)
+
+    if (isAlreadyPublished && existing?.site_visit_request_id && siteVisitRequestId && existing.site_visit_request_id !== siteVisitRequestId) {
+      return { ok: false, error: "This report is already submitted and its Site Visit link cannot be changed." }
+    }
 
     let siteVisitReportVisitNumber: number | null = null
     if (siteVisitRequestId) {
       await assertLinkedSiteVisitCompletionAuthority(actorId, input.projectId)
       const { data: siteVisit, error: siteVisitError } = await admin
         .from("site_visit_requests")
-        .select("id, project_id, status, report_visit_number")
+        .select("id, project_id, status, report_visit_number, scheduled_date")
         .eq("id", siteVisitRequestId)
         .eq("project_id", input.projectId)
         .maybeSingle()
       if (siteVisitError) throw siteVisitError
       if (!siteVisit || !["scheduled", "completed"].includes(siteVisit.status)) {
         return { ok: false, error: "This Site Visit is not available for the selected project." }
+      }
+      if (rawVisitDate && siteVisit.scheduled_date && String(siteVisit.scheduled_date) !== rawVisitDate) {
+        return { ok: false, error: "The selected Site Visit scheduled date does not match the report Visit Date." }
       }
       if (!Number.isInteger(siteVisit.report_visit_number) || siteVisit.report_visit_number <= 0) {
         return { ok: false, error: "This Site Visit does not have a valid Report Visit Number." }
@@ -479,10 +492,11 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         .from("term_responses")
         .select("id, project_id, project_stage_id, visit_number")
         .eq("site_visit_request_id", siteVisitRequestId)
+        .is("deleted_at", null)
         .maybeSingle()
       if (reportForSiteVisitError) throw reportForSiteVisitError
       if (reportForSiteVisit && reportForSiteVisit.id !== input.responseId) {
-        return { ok: false, error: "This Site Visit already has a Stage Report." }
+        return { ok: false, error: "This Site Visit is already linked to another report. Please select another visit or submit as unscheduled." }
       }
       if (!existing && siteVisit.status === "completed") {
         return { ok: false, error: "This Site Visit has already been completed." }
@@ -535,7 +549,6 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       return { ok: false, error: "This report is finalized and cannot be modified." }
     }
 
-    const isAlreadyPublished = existing && ["submitted", "under_review", "approved", "completed"].includes(existing.status)
 
     const nextStatus = input.submit
       ? approvalRequired ? "submitted" : "completed"
@@ -550,9 +563,6 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         : null
     const userVisitNumber = Number.isInteger(parsedUserVisit) && (parsedUserVisit as number) > 0
       ? (parsedUserVisit as number)
-      : null
-    const rawVisitDate = typeof input.visitDate === "string" && input.visitDate.trim()
-      ? input.visitDate.trim()
       : null
 
     const { data: proj } = await admin
@@ -599,14 +609,24 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       if (rawVisitDate) {
         updatePayload.visit_date = rawVisitDate
       }
-      if (directStage && siteVisitRequestId && !existing.site_visit_request_id) {
-        updatePayload.site_visit_request_id = siteVisitRequestId
+      if (directStage) {
+        if (!isAlreadyPublished) {
+          updatePayload.site_visit_request_id = siteVisitRequestId
+        } else if (siteVisitRequestId && !existing.site_visit_request_id) {
+          updatePayload.site_visit_request_id = siteVisitRequestId
+        }
       }
       if (input.submit) updatePayload.submitted_at = now
       else if (existing.status === "rejected") updatePayload.submitted_at = null
       const { error } = await admin.from("term_responses").update(updatePayload).eq("id", existing.id)
       if (error) {
-        if (error.code === "23505") return { ok: false, error: "A report with the same reference already exists." }
+        if (error.code === "23505") {
+          const detail = `${error.message ?? ""} ${error.details ?? ""}`.toLowerCase()
+          if (detail.includes("site_visit_request")) {
+            return { ok: false, error: "This Site Visit has just been linked to another report. Please select another visit or submit as unscheduled." }
+          }
+          return { ok: false, error: "A report with the same reference already exists." }
+        }
         throw error
       }
     } else {
@@ -635,7 +655,13 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         completed_at: input.submit && !approvalRequired ? now : null,
       })
       if (insertError) {
-        if (insertError.code === "23505") return { ok: false, error: "A report with this identifier already exists." }
+        if (insertError.code === "23505") {
+          const detail = `${insertError.message ?? ""} ${insertError.details ?? ""}`.toLowerCase()
+          if (detail.includes("site_visit_request")) {
+            return { ok: false, error: "This Site Visit has just been linked to another report. Please select another visit or submit as unscheduled." }
+          }
+          return { ok: false, error: "A report with this identifier already exists." }
+        }
         throw insertError
       }
     }
@@ -789,6 +815,7 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         visitNumber: assignedVisitNumber,
         visitDate: rawVisitDate,
         status: nextStatus,
+        siteVisitRequestId,
         unchanged: preparedUnchanged,
         existingPdfsValid: preparedUnchanged,
       },
@@ -1481,3 +1508,123 @@ export async function createProjectStageAction(input: {
   }
 }
 
+
+export type MatchingScheduledSiteVisit = {
+  id: string
+  projectId: string
+  scheduledDate: string
+  scheduledTime: string | null
+  visitNumber: number | null
+  status: string
+  notes: string | null
+  assignees: Array<{
+    id: string
+    name: string
+    isCurrentUser: boolean
+  }>
+}
+
+export async function findMatchingScheduledSiteVisitsAction(input: {
+  projectId: string
+  visitDate: string
+  currentReportId?: string | null
+}): Promise<StageActionResult<MatchingScheduledSiteVisit[]>> {
+  try {
+    const actorId = await assertProjectStageReportAccess(input.projectId)
+    const normalizedDate = typeof input.visitDate === "string" ? input.visitDate.trim() : ""
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+      return { ok: true, data: [] }
+    }
+
+    const admin = createAdminClient()
+
+    // 1. Fetch eligible scheduled visits for project on this scheduled_date
+    const { data: visits, error: visitsError } = await admin
+      .from("site_visit_requests")
+      .select("id, project_id, scheduled_date, scheduled_time, report_visit_number, status, notes")
+      .eq("project_id", input.projectId)
+      .eq("scheduled_date", normalizedDate)
+      .eq("status", "scheduled")
+      .order("scheduled_time", { ascending: true })
+
+    if (visitsError) throw visitsError
+    if (!visits || visits.length === 0) {
+      return { ok: true, data: [] }
+    }
+
+    const visitIds = visits.map((v: any) => v.id as string)
+
+    // 2. Exclude visits already linked to another active report
+    const { data: linkedReports, error: linkedReportsError } = await admin
+      .from("term_responses")
+      .select("id, site_visit_request_id")
+      .in("site_visit_request_id", visitIds)
+      .is("deleted_at", null)
+
+    if (linkedReportsError) throw linkedReportsError
+
+    const takenVisitIds = new Set<string>()
+    for (const report of linkedReports ?? []) {
+      if (report.site_visit_request_id && (!input.currentReportId || report.id !== input.currentReportId)) {
+        takenVisitIds.add(report.site_visit_request_id)
+      }
+    }
+
+    const eligibleVisits = visits.filter((v: any) => !takenVisitIds.has(v.id))
+    if (eligibleVisits.length === 0) {
+      return { ok: true, data: [] }
+    }
+
+    const eligibleVisitIds = eligibleVisits.map((v: any) => v.id as string)
+
+    // 3. Batch fetch assignees and profile names
+    const { data: assigneeRows, error: assigneeError } = await admin
+      .from("site_visit_request_assignees")
+      .select("request_id, user_id")
+      .in("request_id", eligibleVisitIds)
+
+    if (assigneeError) throw assigneeError
+
+    const userIds = Array.from(new Set((assigneeRows ?? []).map((r: any) => r.user_id as string).filter(Boolean)))
+    const { data: profiles, error: profilesError } = userIds.length > 0
+      ? await admin.from("profiles").select("id, full_name, email").in("id", userIds)
+      : { data: [] as any[], error: null }
+
+    if (profilesError) throw profilesError
+
+    const profileMap = new Map<string, { id: string; name: string }>()
+    for (const p of profiles ?? []) {
+      profileMap.set(p.id, {
+        id: p.id,
+        name: p.full_name?.trim() || p.email?.trim() || "Supervisor",
+      })
+    }
+
+    const assigneesByVisit = new Map<string, Array<{ id: string; name: string; isCurrentUser: boolean }>>()
+    for (const row of assigneeRows ?? []) {
+      const p = profileMap.get(row.user_id) ?? { id: row.user_id, name: "Supervisor" }
+      const list = assigneesByVisit.get(row.request_id) ?? []
+      list.push({
+        id: p.id,
+        name: p.name,
+        isCurrentUser: p.id === actorId,
+      })
+      assigneesByVisit.set(row.request_id, list)
+    }
+
+    const result: MatchingScheduledSiteVisit[] = eligibleVisits.map((v: any) => ({
+      id: v.id as string,
+      projectId: v.project_id as string,
+      scheduledDate: String(v.scheduled_date),
+      scheduledTime: v.scheduled_time ? String(v.scheduled_time) : null,
+      visitNumber: typeof v.report_visit_number === "number" ? v.report_visit_number : null,
+      status: v.status as string,
+      notes: v.notes ? String(v.notes) : null,
+      assignees: assigneesByVisit.get(v.id) ?? [],
+    }))
+
+    return { ok: true, data: result }
+  } catch (error) {
+    return actionError(error, "Failed to search for matching scheduled visits.")
+  }
+}

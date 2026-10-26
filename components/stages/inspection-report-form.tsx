@@ -5,6 +5,10 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactN
 import { useRouter } from "next/navigation"
 import {
   AlertCircle,
+  CalendarCheck,
+  Clock,
+  Info,
+  Unlink,
   ArrowLeft,
   Bold,
   Building2,
@@ -52,6 +56,8 @@ import {
   registerResponseAttachmentsAction,
   saveStageReportAction,
   saveTermResponseAction,
+  findMatchingScheduledSiteVisitsAction,
+  type MatchingScheduledSiteVisit,
   type AttachmentRegistration,
 } from "@/lib/actions/project-stages"
 import { saveReportCcRecipientsAction } from "@/lib/actions/report-cc"
@@ -232,6 +238,7 @@ type InitialResponse = {
   reportNumber: string
   visitNumber: number
   visitDate?: string | null
+  siteVisitRequestId?: string | null
   reportType: string
   subject: string | null
   reportTitle: string
@@ -579,6 +586,8 @@ export function InspectionReportForm({
   initialCcRecipients,
   stageSubterms,
   siteVisitRequestId = null,
+  initialVisitDate = null,
+  initialSiteVisitContext = null,
   historicalCompletedItemIds = [],
 }: {
   project: { id: string; name: string; code: string | null }
@@ -621,6 +630,13 @@ export function InspectionReportForm({
   initialCcRecipients: ReportCcRecipient[]
   stageSubterms?: Array<{ id: string; reportName: string }>
   siteVisitRequestId?: string | null
+  initialVisitDate?: string | null
+  initialSiteVisitContext?: {
+    id: string
+    scheduledDate: string
+    scheduledTime: string | null
+    visitNumber: number | null
+  } | null
   historicalCompletedItemIds?: string[]
 }) {
   const router = useRouter()
@@ -629,7 +645,104 @@ export function InspectionReportForm({
   const reportDefinition = stageReportConfig ?? legacyTerm
   if (!reportDefinition) throw new Error("Report configuration is missing.")
   const isDirectStageReport = Boolean(stageReportConfig)
-  const [resolvedStageId, setResolvedStageId] = useState(stage.id)
+  const [selectedSiteVisitId, setSelectedSiteVisitId] = useState<string | null>(
+    siteVisitRequestId ?? response?.siteVisitRequestId ?? initialSiteVisitContext?.id ?? null
+  )
+  const [userChoice, setUserChoice] = useState<"linked" | "unscheduled" | null>(() => {
+    if (siteVisitRequestId || response?.siteVisitRequestId || initialSiteVisitContext?.id) return "linked"
+    return null
+  })
+  const [matchingVisits, setMatchingVisits] = useState<MatchingScheduledSiteVisit[]>([])
+  const [isCheckingVisits, setIsCheckingVisits] = useState(false)
+  const [matchingQueryDate, setMatchingQueryDate] = useState<string | null>(null)
+  const [linkedVisitContext, setLinkedVisitContext] = useState<MatchingScheduledSiteVisit | null>(() => {
+    if (initialSiteVisitContext) {
+      return {
+        id: initialSiteVisitContext.id,
+        projectId: project.id,
+        scheduledDate: initialSiteVisitContext.scheduledDate ?? "",
+        scheduledTime: initialSiteVisitContext.scheduledTime ?? null,
+        visitNumber: initialSiteVisitContext.visitNumber ?? null,
+        status: "scheduled",
+        notes: null,
+        assignees: [],
+      }
+    }
+    return null
+  })
+  const querySequenceRef = useRef(0)
+
+  useEffect(() => {
+    if (!isDirectStageReport || !project?.id || !visitDate || !/^\d{4}-\d{2}-\d{2}$/.test(visitDate)) {
+      setMatchingVisits([])
+      setIsCheckingVisits(false)
+      return
+    }
+
+    const currentSeq = ++querySequenceRef.current
+    setIsCheckingVisits(true)
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await findMatchingScheduledSiteVisitsAction({
+          projectId: project.id,
+          visitDate,
+          currentReportId: responseId ?? undefined,
+        })
+        if (querySequenceRef.current !== currentSeq) {
+          return
+        }
+        if (res.ok) {
+          setMatchingVisits(res.data)
+          setMatchingQueryDate(visitDate)
+          if (selectedSiteVisitId) {
+            const match = res.data.find((v) => v.id === selectedSiteVisitId)
+            if (match) setLinkedVisitContext(match)
+          }
+        } else {
+          setMatchingVisits([])
+        }
+      } catch {
+        if (querySequenceRef.current === currentSeq) {
+          setMatchingVisits([])
+        }
+      } finally {
+        if (querySequenceRef.current === currentSeq) {
+          setIsCheckingVisits(false)
+        }
+      }
+    }, 300)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [isDirectStageReport, project?.id, visitDate, responseId, selectedSiteVisitId])
+
+  const handleVisitDateChange = (newDate: string) => {
+    setVisitDate(newDate)
+    if (newDate !== visitDate) {
+      setSelectedSiteVisitId(null)
+      setUserChoice(null)
+      setLinkedVisitContext(null)
+      setMatchingVisits([])
+      setIsCheckingVisits(true)
+    }
+  }
+
+  const formatScheduledTime = (timeStr: string | null | undefined): string => {
+    if (!timeStr) return "—"
+    const clean = timeStr.trim()
+    const parts = clean.split(":")
+    if (parts.length < 2) return clean
+    const hours = parseInt(parts[0]!, 10)
+    const minutes = parts[1]
+    if (isNaN(hours)) return clean
+    const ampm = hours >= 12 ? "PM" : "AM"
+    const displayHours = hours % 12 || 12
+    return `${displayHours}:${minutes} ${ampm}`
+  }
+
+    const [resolvedStageId, setResolvedStageId] = useState(stage.id)
   const reportsHref = `/projects/${project.id}/stages/${resolvedStageId}`
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
 
@@ -653,6 +766,7 @@ export function InspectionReportForm({
   }
   const [visitDate, setVisitDate] = useState<string>(() => {
     if (response?.visitDate) return response.visitDate.slice(0, 10)
+    if (initialVisitDate) return initialVisitDate.slice(0, 10)
     if (response?.createdAt) return response.createdAt.slice(0, 10)
     return todayLocalDate()
   })
@@ -904,7 +1018,7 @@ export function InspectionReportForm({
       activeAttachmentIds: persistedAttachmentsRef.current.map((att) => att.id),
     }
     const result = isDirectStageReport
-      ? await saveStageReportAction({ ...reportInput, stageId: resolvedStageId, siteVisitRequestId })
+      ? await saveStageReportAction({ ...reportInput, stageId: resolvedStageId, siteVisitRequestId: selectedSiteVisitId })
       : await saveTermResponseAction({ ...reportInput, termId: reportDefinition.id })
     if (!result.ok) throw new Error(result.error)
     setResponseId(result.data.responseId)
@@ -1359,7 +1473,7 @@ export function InspectionReportForm({
       }
 
       const result = isDirectStageReport
-        ? await saveStageReportAction({ ...reportInput, stageId: routeStageId, siteVisitRequestId })
+        ? await saveStageReportAction({ ...reportInput, stageId: routeStageId, siteVisitRequestId: selectedSiteVisitId })
         : await saveTermResponseAction({ ...reportInput, termId: reportDefinition.id })
       if (!result.ok) throw new Error(result.error)
 
@@ -2067,7 +2181,7 @@ export function InspectionReportForm({
                 id="visit-date"
                 type="date"
                 value={visitDate}
-                onChange={(event) => setVisitDate(event.target.value)}
+                onChange={(event) => handleVisitDateChange(event.target.value)}
                 disabled={isLocked}
                 className="h-9 px-3 text-xs font-semibold md:text-sm"
               />
@@ -2077,6 +2191,242 @@ export function InspectionReportForm({
               <Input id="report-title" value={reportTitle} onChange={(event) => setReportTitle(event.target.value)} maxLength={250} disabled={isLocked} className="h-9 px-3 text-xs md:text-sm" />
             </div>
           </div>
+
+          {/* Site Visit Matching Section */}
+          {isDirectStageReport ? (
+            <div className="w-full">
+              {isLocked ? (
+                selectedSiteVisitId ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                    <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>
+                      Linked to scheduled site visit {linkedVisitContext?.visitNumber ? `#${String(linkedVisitContext.visitNumber).padStart(3, "0")}` : ""} {linkedVisitContext?.scheduledTime ? `(${formatScheduledTime(linkedVisitContext.scheduledTime)})` : ""}
+                    </span>
+                  </div>
+                ) : null
+              ) : isCheckingVisits ? (
+                <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3.5 py-2.5 text-xs text-muted-foreground animate-pulse">
+                  <Loader2 className="size-3.5 animate-spin text-primary" />
+                  <span>Checking scheduled visits for {formatDate(visitDate, locale)}...</span>
+                </div>
+              ) : selectedSiteVisitId && userChoice === "linked" ? (
+                (() => {
+                  const activeVisit = matchingVisits.find((v) => v.id === selectedSiteVisitId) || linkedVisitContext
+                  return (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3 text-xs dark:border-emerald-900/50 dark:bg-emerald-950/30">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="font-semibold text-emerald-950 dark:text-emerald-100">
+                            Linked to scheduled visit {activeVisit?.visitNumber ? `#${String(activeVisit.visitNumber).padStart(3, "0")}` : ""} {activeVisit?.scheduledTime ? `(${formatScheduledTime(activeVisit.scheduledTime)})` : ""}
+                          </span>
+                          <p className="text-[11px] text-emerald-800/80 dark:text-emerald-300/80">
+                            This scheduled visit will be completed when this report is submitted.
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs text-emerald-800 hover:text-emerald-950 hover:bg-emerald-100/50 dark:text-emerald-300 dark:hover:text-emerald-100 shrink-0 self-start sm:self-center"
+                        onClick={() => {
+                          setSelectedSiteVisitId(null)
+                          setUserChoice("unscheduled")
+                        }}
+                      >
+                        Unlink
+                      </Button>
+                    </div>
+                  )
+                })()
+              ) : matchingVisits.length === 1 ? (
+                (() => {
+                  const v = matchingVisits[0]
+                  if (userChoice === "unscheduled") {
+                    return (
+                      <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/30 p-2.5 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          <Info className="size-4 shrink-0" />
+                          <span>Recording as an unscheduled visit (scheduled visit will remain untouched).</span>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs text-primary font-medium hover:underline shrink-0"
+                          onClick={() => {
+                            setSelectedSiteVisitId(v.id)
+                            setUserChoice("linked")
+                            setLinkedVisitContext(v)
+                            if (v.visitNumber) setVisitNumber(v.visitNumber)
+                          }}
+                        >
+                          Link to visit
+                        </Button>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3.5 dark:border-blue-900/50 dark:bg-blue-950/30">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-950 dark:text-blue-100">
+                          <CalendarCheck className="size-4 text-blue-600 dark:text-blue-400" />
+                          <span>Scheduled Visit Found</span>
+                        </div>
+                        {v.visitNumber ? (
+                          <span className="rounded bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-800 dark:bg-blue-900/60 dark:text-blue-200">
+                            Visit #{String(v.visitNumber).padStart(3, "0")}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-muted-foreground mb-3 bg-background/60 p-2.5 rounded border border-blue-100 dark:border-blue-900/30">
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wider text-muted-foreground/70">Project</span>
+                          <span className="font-medium text-foreground truncate block">{project.name}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wider text-muted-foreground/70">Visit Date</span>
+                          <span className="font-medium text-foreground">{formatDate(v.scheduledDate, locale)}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wider text-muted-foreground/70">Scheduled Time</span>
+                          <span className="font-medium text-foreground">{formatScheduledTime(v.scheduledTime)}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wider text-muted-foreground/70">Supervisor</span>
+                          <span className="font-medium text-foreground truncate block">
+                            {v.assignees.length ? v.assignees.map((a) => a.name + (a.isCurrentUser ? " (You)" : "")).join(", ") : "—"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1 border-t border-blue-100/80 dark:border-blue-900/40">
+                        <span className="text-xs font-medium text-foreground">Is this report for this scheduled visit?</span>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-8 gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                            onClick={() => {
+                              setSelectedSiteVisitId(v.id)
+                              setUserChoice("linked")
+                              setLinkedVisitContext(v)
+                              if (v.visitNumber) setVisitNumber(v.visitNumber)
+                            }}
+                          >
+                            <Link2 className="size-3.5" />
+                            Link to this visit
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 text-xs text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                              setSelectedSiteVisitId(null)
+                              setUserChoice("unscheduled")
+                            }}
+                          >
+                            Keep as unscheduled visit
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()
+              ) : matchingVisits.length > 1 ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3.5 dark:border-amber-900/50 dark:bg-amber-950/20">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-950 dark:text-amber-100 mb-1">
+                    <CalendarCheck className="size-4 text-amber-600 dark:text-amber-400" />
+                    <span>Multiple Scheduled Visits Found</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Select which scheduled visit this report belongs to:
+                  </p>
+                  <div className="space-y-2">
+                    {matchingVisits.map((mv) => {
+                      const isSelected = selectedSiteVisitId === mv.id
+                      const isAssignedToUser = mv.assignees.some((a) => a.isCurrentUser)
+                      return (
+                        <label
+                          key={mv.id}
+                          className={cn(
+                            "flex items-center justify-between gap-3 p-2.5 rounded-md border text-xs cursor-pointer transition-colors",
+                            isSelected
+                              ? "border-primary bg-primary/5 text-foreground font-medium shadow-xs"
+                              : "border-border/70 bg-background hover:bg-muted/40 text-foreground"
+                          )}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <input
+                              type="radio"
+                              name="site-visit-selection"
+                              className="text-primary focus:ring-primary size-3.5"
+                              checked={isSelected}
+                              onChange={() => {
+                                setSelectedSiteVisitId(mv.id)
+                                setUserChoice("linked")
+                                setLinkedVisitContext(mv)
+                                if (mv.visitNumber) setVisitNumber(mv.visitNumber)
+                              }}
+                            />
+                            <div className="flex flex-wrap items-center gap-2 min-w-0">
+                              <span className="font-semibold text-foreground">
+                                {formatScheduledTime(mv.scheduledTime)}
+                              </span>
+                              {mv.visitNumber ? (
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground">
+                                  Visit #{String(mv.visitNumber).padStart(3, "0")}
+                                </span>
+                              ) : null}
+                              <span className="text-muted-foreground truncate">
+                                Supervisor: {mv.assignees.length ? mv.assignees.map((a) => a.name).join(", ") : "Unassigned"}
+                              </span>
+                            </div>
+                          </div>
+                          {isAssignedToUser ? (
+                            <span className="shrink-0 rounded bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-800 dark:bg-blue-900/60 dark:text-blue-200">
+                              Assigned to you
+                            </span>
+                          ) : null}
+                        </label>
+                      )
+                    })}
+
+                    <label
+                      className={cn(
+                        "flex items-center gap-2.5 p-2.5 rounded-md border text-xs cursor-pointer transition-colors",
+                        selectedSiteVisitId === null && userChoice === "unscheduled"
+                          ? "border-primary bg-primary/5 text-foreground font-medium"
+                          : "border-border/70 bg-background hover:bg-muted/40 text-muted-foreground"
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="site-visit-selection"
+                        className="text-primary focus:ring-primary size-3.5"
+                        checked={selectedSiteVisitId === null && userChoice === "unscheduled"}
+                        onChange={() => {
+                          setSelectedSiteVisitId(null)
+                          setUserChoice("unscheduled")
+                        }}
+                      />
+                      <span>None of these — keep as unscheduled visit</span>
+                    </label>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2.5 rounded-lg border border-border/50 bg-muted/20 px-3.5 py-2.5 text-xs text-muted-foreground">
+                  <Info className="size-4 shrink-0 text-muted-foreground/80 mt-0.5" />
+                  <div>
+                    <span>No scheduled visit found for this date. You can still submit this report as an unscheduled site inspection.</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
           <div className="space-y-1.5">
             <Label htmlFor="report-subject" className="text-xs font-semibold text-foreground">{copy.subject}</Label>
             <Input id="report-subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Inspection location, package, activity, or reference" disabled={isLocked} className="h-9 px-3 text-xs md:text-sm" />
