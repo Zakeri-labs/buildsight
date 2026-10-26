@@ -2267,8 +2267,29 @@ const [resolvedStageId, setResolvedStageId] = useState(stage.id)
                     }
                   }
 
-                  const visitNumText = activeVisit?.visitNumber ? `#${String(activeVisit.visitNumber).padStart(3, "0")}` : ""
-                  const timeText = activeVisit?.scheduledTime ? `(${formatScheduledTime(activeVisit.scheduledTime)})` : ""
+                  let scheduledDateText = ""
+                  if (activeVisit?.scheduledDate) {
+                    try {
+                      scheduledDateText = formatDate(activeVisit.scheduledDate, locale)
+                    } catch {
+                      scheduledDateText = String(activeVisit.scheduledDate)
+                    }
+                  }
+                  const rawTimeText = activeVisit?.scheduledTime ? formatScheduledTime(activeVisit.scheduledTime) : ""
+                  const scheduledTimeText = rawTimeText && rawTimeText !== "—" ? rawTimeText : ""
+
+                  let dateTimeText = ""
+                  if (scheduledDateText && scheduledTimeText) {
+                    dateTimeText = `${scheduledDateText}, ${scheduledTimeText}`
+                  } else if (scheduledDateText) {
+                    dateTimeText = scheduledDateText
+                  } else if (scheduledTimeText) {
+                    dateTimeText = scheduledTimeText
+                  }
+
+                  const bannerTitle = dateTimeText
+                    ? `Linked to scheduled visit · ${dateTimeText}`
+                    : "Linked to scheduled visit"
 
                   return (
                     <div
@@ -2292,7 +2313,7 @@ const [resolvedStageId, setResolvedStageId] = useState(stage.id)
                               isWarning ? "text-amber-950 dark:text-amber-100" : "text-emerald-950 dark:text-emerald-100"
                             )}
                           >
-                            Linked to scheduled visit {visitNumText} {timeText}
+                            {bannerTitle}
                           </span>
                           <p
                             className={cn(
