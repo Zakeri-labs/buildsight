@@ -672,77 +672,7 @@ export function InspectionReportForm({
   })
   const querySequenceRef = useRef(0)
 
-  useEffect(() => {
-    if (!isDirectStageReport || !project?.id || !visitDate || !/^\d{4}-\d{2}-\d{2}$/.test(visitDate)) {
-      setMatchingVisits([])
-      setIsCheckingVisits(false)
-      return
-    }
-
-    const currentSeq = ++querySequenceRef.current
-    setIsCheckingVisits(true)
-
-    const timer = setTimeout(async () => {
-      try {
-        const res = await findMatchingScheduledSiteVisitsAction({
-          projectId: project.id,
-          visitDate,
-          currentReportId: responseId ?? undefined,
-        })
-        if (querySequenceRef.current !== currentSeq) {
-          return
-        }
-        if (res.ok) {
-          setMatchingVisits(res.data)
-          setMatchingQueryDate(visitDate)
-          if (selectedSiteVisitId) {
-            const match = res.data.find((v) => v.id === selectedSiteVisitId)
-            if (match) setLinkedVisitContext(match)
-          }
-        } else {
-          setMatchingVisits([])
-        }
-      } catch {
-        if (querySequenceRef.current === currentSeq) {
-          setMatchingVisits([])
-        }
-      } finally {
-        if (querySequenceRef.current === currentSeq) {
-          setIsCheckingVisits(false)
-        }
-      }
-    }, 300)
-
-    return () => {
-      clearTimeout(timer)
-    }
-  }, [isDirectStageReport, project?.id, visitDate, responseId, selectedSiteVisitId])
-
-  const handleVisitDateChange = (newDate: string) => {
-    setVisitDate(newDate)
-    if (newDate !== visitDate) {
-      setSelectedSiteVisitId(null)
-      setUserChoice(null)
-      setLinkedVisitContext(null)
-      setMatchingVisits([])
-      setIsCheckingVisits(true)
-    }
-  }
-
-  const formatScheduledTime = (timeStr: string | null | undefined): string => {
-    if (!timeStr) return "—"
-    const clean = timeStr.trim()
-    const parts = clean.split(":")
-    if (parts.length < 2) return clean
-    const hours = parseInt(parts[0]!, 10)
-    const minutes = parts[1]
-    if (isNaN(hours)) return clean
-    const ampm = hours >= 12 ? "PM" : "AM"
-    const displayHours = hours % 12 || 12
-    return `${displayHours}:${minutes} ${ampm}`
-  }
-
-    const [resolvedStageId, setResolvedStageId] = useState(stage.id)
+const [resolvedStageId, setResolvedStageId] = useState(stage.id)
   const reportsHref = `/projects/${project.id}/stages/${resolvedStageId}`
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
 
@@ -822,6 +752,76 @@ export function InspectionReportForm({
     }
   })
   const [responseId, setResponseId] = useState(response?.id ?? null)
+
+  useEffect(() => {
+    if (!isDirectStageReport || !project?.id || !visitDate || !/^\d{4}-\d{2}-\d{2}$/.test(visitDate)) {
+      setMatchingVisits([])
+      setIsCheckingVisits(false)
+      return
+    }
+
+    const currentSeq = ++querySequenceRef.current
+    setIsCheckingVisits(true)
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await findMatchingScheduledSiteVisitsAction({
+          projectId: project.id,
+          visitDate,
+          currentReportId: responseId ?? undefined,
+        })
+        if (querySequenceRef.current !== currentSeq) {
+          return
+        }
+        if (res.ok) {
+          setMatchingVisits(res.data)
+          setMatchingQueryDate(visitDate)
+          if (selectedSiteVisitId) {
+            const match = res.data.find((v) => v.id === selectedSiteVisitId)
+            if (match) setLinkedVisitContext(match)
+          }
+        } else {
+          setMatchingVisits([])
+        }
+      } catch {
+        if (querySequenceRef.current === currentSeq) {
+          setMatchingVisits([])
+        }
+      } finally {
+        if (querySequenceRef.current === currentSeq) {
+          setIsCheckingVisits(false)
+        }
+      }
+    }, 300)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [isDirectStageReport, project?.id, visitDate, responseId, selectedSiteVisitId])
+
+  const handleVisitDateChange = (newDate: string) => {
+    setVisitDate(newDate)
+    if (newDate !== visitDate) {
+      setSelectedSiteVisitId(null)
+      setUserChoice(null)
+      setLinkedVisitContext(null)
+      setMatchingVisits([])
+      setIsCheckingVisits(true)
+    }
+  }
+
+  const formatScheduledTime = (timeStr: string | null | undefined): string => {
+    if (!timeStr) return "—"
+    const clean = timeStr.trim()
+    const parts = clean.split(":")
+    if (parts.length < 2) return clean
+    const hours = parseInt(parts[0]!, 10)
+    const minutes = parts[1]
+    if (isNaN(hours)) return clean
+    const ampm = hours >= 12 ? "PM" : "AM"
+    const displayHours = hours % 12 || 12
+    return `${displayHours}:${minutes} ${ampm}`
+  }
   const [reportNumber, setReportNumber] = useState(response?.reportNumber ?? "Auto-generated on save")
   const [status, setStatus] = useState<ResponseStatus>(response?.status ?? "draft")
   const [translation, setTranslation] = useState<ProjectStageTranslationSummary | null>(initialTranslation ?? null)
