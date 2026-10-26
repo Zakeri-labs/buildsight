@@ -50,6 +50,13 @@ export type ProjectTermResponse = {
   visitNumber: number
   visitDate: string | null
   siteVisitRequestId?: string | null
+  linkedSiteVisit?: {
+    id: string
+    status: string
+    scheduledDate: string | null
+    scheduledTime: string | null
+    visitNumber: number | null
+  } | null
   reportType: string
   subject: string | null
   reportTitle: string
@@ -310,7 +317,8 @@ export async function loadProjectStageExecution(
   if (responseError) throw responseError
 
   const responseIds = (responses ?? []).map((response: any) => response.id as string)
-  const [{ data: attachments }, { data: approvals }, { data: translations }] = await Promise.all([
+  const siteVisitIds = Array.from(new Set((responses ?? []).map((r: any) => r.site_visit_request_id).filter(Boolean))) as string[]
+  const [{ data: attachments }, { data: approvals }, { data: translations }, { data: siteVisits }] = await Promise.all([
     responseIds.length
       ? admin.from("response_attachments").select("id, response_id, storage_path, original_filename, mime_type, size_bytes, attachment_kind, sort_order, created_at").in("response_id", responseIds).order("sort_order", { ascending: true })
       : Promise.resolve({ data: [] as any[] }),
@@ -320,7 +328,21 @@ export async function loadProjectStageExecution(
     responseIds.length
       ? admin.from("translation_documents").select("id, response_id, translation_status, generated_at, original_pdf_url, arabic_pdf_url, bilingual_pdf_url, translated_content").in("response_id", responseIds)
       : Promise.resolve({ data: [] as any[] }),
+    siteVisitIds.length
+      ? admin.from("site_visit_requests").select("id, status, scheduled_date, scheduled_time, report_visit_number").in("id", siteVisitIds)
+      : Promise.resolve({ data: [] as any[] }),
   ])
+
+  const siteVisitsById = new Map<string, { id: string; status: string; scheduledDate: string | null; scheduledTime: string | null; visitNumber: number | null }>()
+  for (const v of siteVisits ?? []) {
+    siteVisitsById.set(v.id, {
+      id: v.id,
+      status: v.status,
+      scheduledDate: v.scheduled_date ? String(v.scheduled_date) : null,
+      scheduledTime: v.scheduled_time ? String(v.scheduled_time) : null,
+      visitNumber: typeof v.report_visit_number === "number" ? v.report_visit_number : null,
+    })
+  }
 
   const profileIds = Array.from(new Set([
     ...termRows.map((term: any) => term.responsible_user_id).filter(Boolean),
@@ -398,6 +420,7 @@ export async function loadProjectStageExecution(
       visitNumber: Number.isInteger(Number(response.visit_number)) && Number(response.visit_number) > 0 ? Number(response.visit_number) : 1,
       visitDate: response.visit_date ? String(response.visit_date) : response.created_at ? String(response.created_at).slice(0, 10) : null,
       siteVisitRequestId: response.site_visit_request_id ?? null,
+      linkedSiteVisit: response.site_visit_request_id ? siteVisitsById.get(response.site_visit_request_id) ?? null : null,
       reportType: response.report_type,
       subject: response.subject,
       reportTitle: response.report_title,

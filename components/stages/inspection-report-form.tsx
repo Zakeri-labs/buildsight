@@ -239,6 +239,13 @@ type InitialResponse = {
   visitNumber: number
   visitDate?: string | null
   siteVisitRequestId?: string | null
+  linkedSiteVisit?: {
+    id: string
+    status: string
+    scheduledDate: string | null
+    scheduledTime: string | null
+    visitNumber: number | null
+  } | null
   reportType: string
   subject: string | null
   reportTitle: string
@@ -247,6 +254,7 @@ type InitialResponse = {
   createdBy: ProjectStagePerson
   createdAt: string
   updatedAt: string
+  submittedAt?: string | null
   attachments: ProjectStageAttachment[]
   approvals: ProjectStageApproval[]
 } | null
@@ -633,6 +641,7 @@ export function InspectionReportForm({
   initialVisitDate?: string | null
   initialSiteVisitContext?: {
     id: string
+    status?: string | null
     scheduledDate: string
     scheduledTime: string | null
     visitNumber: number | null
@@ -656,6 +665,18 @@ export function InspectionReportForm({
   const [isCheckingVisits, setIsCheckingVisits] = useState(false)
   const [matchingQueryDate, setMatchingQueryDate] = useState<string | null>(null)
   const [linkedVisitContext, setLinkedVisitContext] = useState<MatchingScheduledSiteVisit | null>(() => {
+    if (response?.linkedSiteVisit) {
+      return {
+        id: response.linkedSiteVisit.id,
+        projectId: project.id,
+        scheduledDate: response.linkedSiteVisit.scheduledDate ?? "",
+        scheduledTime: response.linkedSiteVisit.scheduledTime ?? null,
+        visitNumber: response.linkedSiteVisit.visitNumber ?? null,
+        status: response.linkedSiteVisit.status,
+        notes: null,
+        assignees: [],
+      }
+    }
     if (initialSiteVisitContext) {
       return {
         id: initialSiteVisitContext.id,
@@ -663,7 +684,7 @@ export function InspectionReportForm({
         scheduledDate: initialSiteVisitContext.scheduledDate ?? "",
         scheduledTime: initialSiteVisitContext.scheduledTime ?? null,
         visitNumber: initialSiteVisitContext.visitNumber ?? null,
-        status: "scheduled",
+        status: initialSiteVisitContext.status ?? "scheduled",
         notes: null,
         assignees: [],
       }
@@ -1493,6 +1514,9 @@ const [resolvedStageId, setResolvedStageId] = useState(stage.id)
       if (mode === "submit") {
         if (isSubmitMode) { steps = updateStep(steps, stepIdx, "done"); stepIdx++ }
         setSuccess(copy.submitted)
+        if (selectedSiteVisitId) {
+          setLinkedVisitContext((prev) => (prev ? { ...prev, status: "completed" } : null))
+        }
 
         logDiagnosticEvent(id, "TOAST_LIFECYCLE", {
           action: "SHOW_PREPARATION_MESSAGE",
@@ -2195,48 +2219,105 @@ const [resolvedStageId, setResolvedStageId] = useState(stage.id)
           {/* Site Visit Matching Section */}
           {isDirectStageReport ? (
             <div className="w-full">
-              {isLocked ? (
-                selectedSiteVisitId ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                    <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span>
-                      Linked to scheduled site visit {linkedVisitContext?.visitNumber ? `#${String(linkedVisitContext.visitNumber).padStart(3, "0")}` : ""} {linkedVisitContext?.scheduledTime ? `(${formatScheduledTime(linkedVisitContext.scheduledTime)})` : ""}
-                    </span>
-                  </div>
-                ) : null
-              ) : isCheckingVisits ? (
+              {isCheckingVisits ? (
                 <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3.5 py-2.5 text-xs text-muted-foreground animate-pulse">
                   <Loader2 className="size-3.5 animate-spin text-primary" />
                   <span>Checking scheduled visits for {formatDate(visitDate, locale)}...</span>
                 </div>
               ) : selectedSiteVisitId && userChoice === "linked" ? (
                 (() => {
-                  const activeVisit = matchingVisits.find((v) => v.id === selectedSiteVisitId) || linkedVisitContext
+                  const activeVisit = matchingVisits.find((v) => v.id === selectedSiteVisitId) || linkedVisitContext || (response?.linkedSiteVisit ? {
+                    id: response.linkedSiteVisit.id,
+                    projectId: project.id,
+                    scheduledDate: response.linkedSiteVisit.scheduledDate ?? "",
+                    scheduledTime: response.linkedSiteVisit.scheduledTime ?? null,
+                    visitNumber: response.linkedSiteVisit.visitNumber ?? null,
+                    status: response.linkedSiteVisit.status,
+                    notes: null,
+                    assignees: [],
+                  } : null)
+
+                  const visitStatus = (activeVisit?.status || response?.linkedSiteVisit?.status || "scheduled").toLowerCase()
+                  const isSubmittedReport = ["submitted", "under_review", "approved", "completed"].includes(status) || Boolean(response?.submittedAt)
+
+                  let subtitle = ""
+                  let isWarning = false
+
+                  if (!isSubmittedReport) {
+                    // Case A: Draft report linked to scheduled visit
+                    if (visitStatus === "scheduled") {
+                      subtitle = "This scheduled visit will be completed when this report is submitted."
+                    } else if (visitStatus === "completed") {
+                      subtitle = "Report draft. This scheduled visit has already been marked as completed."
+                    } else {
+                      subtitle = `Linked Site Visit status: ${visitStatus}.`
+                    }
+                  } else {
+                    // Report is already submitted
+                    if (visitStatus === "completed") {
+                      // Case B: Submitted report and completed visit
+                      subtitle = "Report submitted. This scheduled visit has been marked as completed."
+                    } else if (visitStatus === "scheduled") {
+                      // Case C: Submitted report but visit still scheduled
+                      subtitle = "This report has been submitted, but the linked Site Visit is still marked as scheduled."
+                      isWarning = true
+                    } else {
+                      // Case D: Other status
+                      subtitle = `Report submitted. Linked Site Visit status is ${visitStatus}.`
+                    }
+                  }
+
+                  const visitNumText = activeVisit?.visitNumber ? `#${String(activeVisit.visitNumber).padStart(3, "0")}` : ""
+                  const timeText = activeVisit?.scheduledTime ? `(${formatScheduledTime(activeVisit.scheduledTime)})` : ""
+
                   return (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3 text-xs dark:border-emerald-900/50 dark:bg-emerald-950/30">
+                    <div
+                      className={cn(
+                        "flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg p-3 text-xs",
+                        isWarning
+                          ? "border border-amber-200 bg-amber-50/70 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100"
+                          : "border border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/30"
+                      )}
+                    >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        {isWarning ? (
+                          <AlertCircle className="size-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                        ) : (
+                          <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        )}
                         <div className="min-w-0">
-                          <span className="font-semibold text-emerald-950 dark:text-emerald-100">
-                            Linked to scheduled visit {activeVisit?.visitNumber ? `#${String(activeVisit.visitNumber).padStart(3, "0")}` : ""} {activeVisit?.scheduledTime ? `(${formatScheduledTime(activeVisit.scheduledTime)})` : ""}
+                          <span
+                            className={cn(
+                              "font-semibold",
+                              isWarning ? "text-amber-950 dark:text-amber-100" : "text-emerald-950 dark:text-emerald-100"
+                            )}
+                          >
+                            Linked to scheduled visit {visitNumText} {timeText}
                           </span>
-                          <p className="text-[11px] text-emerald-800/80 dark:text-emerald-300/80">
-                            This scheduled visit will be completed when this report is submitted.
+                          <p
+                            className={cn(
+                              "text-[11px] mt-0.5",
+                              isWarning ? "text-amber-800 dark:text-amber-300" : "text-emerald-800/80 dark:text-emerald-300/80"
+                            )}
+                          >
+                            {subtitle}
                           </p>
                         </div>
                       </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-xs text-emerald-800 hover:text-emerald-950 hover:bg-emerald-100/50 dark:text-emerald-300 dark:hover:text-emerald-100 shrink-0 self-start sm:self-center"
-                        onClick={() => {
-                          setSelectedSiteVisitId(null)
-                          setUserChoice("unscheduled")
-                        }}
-                      >
-                        Unlink
-                      </Button>
+                      {!isSubmittedReport && !isLocked ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs text-emerald-800 hover:text-emerald-950 hover:bg-emerald-100/50 dark:text-emerald-300 dark:hover:text-emerald-100 shrink-0 self-start sm:self-center"
+                          onClick={() => {
+                            setSelectedSiteVisitId(null)
+                            setUserChoice("unscheduled")
+                          }}
+                        >
+                          Unlink
+                        </Button>
+                      ) : null}
                     </div>
                   )
                 })()
