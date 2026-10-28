@@ -1,5 +1,7 @@
 "use server"
 
+import { getPreviousSevenDaysVisits } from "@/lib/member-homepage/server"
+import type { MemberHomepageVisit } from "@/lib/member-homepage/types"
 import { revalidatePath } from "next/cache"
 import { audit, AuthzError, getUserIdOrThrow } from "@/lib/auth/guards"
 import { sendSiteVisitRequestEmails } from "@/lib/email/site-visit"
@@ -874,5 +876,24 @@ export async function updateSiteVisitStatusAction(input: {
   } catch (error) {
     if (error instanceof AuthzError) return { ok: false, error: error.message }
     return { ok: false, error: error instanceof Error ? error.message : "Unable to update the site visit." }
+  }
+}
+
+export async function getPreviousSevenDaysVisitsAction(): Promise<{
+  ok: boolean
+  visits?: MemberHomepageVisit[]
+  error?: string
+}> {
+  try {
+    const actorId = await getUserIdOrThrow()
+    const visits = await getPreviousSevenDaysVisits(actorId)
+    return { ok: true, visits }
+  } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, error: error.message }
+    console.error("[getPreviousSevenDaysVisitsAction] failed", error)
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Unable to load previous visits.",
+    }
   }
 }

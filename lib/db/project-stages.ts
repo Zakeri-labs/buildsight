@@ -49,6 +49,14 @@ export type ProjectTermResponse = {
   reportNumber: string
   visitNumber: number
   visitDate: string | null
+  siteVisitRequestId?: string | null
+  linkedSiteVisit?: {
+    id: string
+    status: string
+    scheduledDate: string | null
+    scheduledTime: string | null
+    visitNumber: number | null
+  } | null
   reportType: string
   subject: string | null
   reportTitle: string
@@ -301,7 +309,7 @@ export async function loadProjectStageExecution(
   const { data: responses, error: responseError } = stageIds.length
     ? await admin
         .from("term_responses")
-        .select("id, project_stage_id, project_stage_term_id, report_number, visit_number, visit_date, report_type, subject, report_title, response_content, status, responsible_user_id, approval_required, response_type, template_reference, instructions, created_by, created_at, updated_at, submitted_at, completed_at")
+        .select("id, project_stage_id, project_stage_term_id, report_number, visit_number, visit_date, report_type, subject, report_title, response_content, status, responsible_user_id, approval_required, response_type, template_reference, instructions, created_by, created_at, updated_at, submitted_at, completed_at, site_visit_request_id")
         .in("project_stage_id", stageIds)
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
@@ -309,7 +317,8 @@ export async function loadProjectStageExecution(
   if (responseError) throw responseError
 
   const responseIds = (responses ?? []).map((response: any) => response.id as string)
-  const [{ data: attachments }, { data: approvals }, { data: translations }] = await Promise.all([
+  const siteVisitIds = Array.from(new Set((responses ?? []).map((r: any) => r.site_visit_request_id).filter(Boolean))) as string[]
+  const [{ data: attachments }, { data: approvals }, { data: translations }, { data: siteVisits }] = await Promise.all([
     responseIds.length
       ? admin.from("response_attachments").select("id, response_id, storage_path, original_filename, mime_type, size_bytes, attachment_kind, sort_order, created_at").in("response_id", responseIds).order("sort_order", { ascending: true })
       : Promise.resolve({ data: [] as any[] }),
@@ -319,7 +328,21 @@ export async function loadProjectStageExecution(
     responseIds.length
       ? admin.from("translation_documents").select("id, response_id, translation_status, generated_at, original_pdf_url, arabic_pdf_url, bilingual_pdf_url, translated_content").in("response_id", responseIds)
       : Promise.resolve({ data: [] as any[] }),
+    siteVisitIds.length
+      ? admin.from("site_visit_requests").select("id, status, scheduled_date, scheduled_time, report_visit_number").in("id", siteVisitIds)
+      : Promise.resolve({ data: [] as any[] }),
   ])
+
+  const siteVisitsById = new Map<string, { id: string; status: string; scheduledDate: string | null; scheduledTime: string | null; visitNumber: number | null }>()
+  for (const v of siteVisits ?? []) {
+    siteVisitsById.set(v.id, {
+      id: v.id,
+      status: v.status,
+      scheduledDate: v.scheduled_date ? String(v.scheduled_date) : null,
+      scheduledTime: v.scheduled_time ? String(v.scheduled_time) : null,
+      visitNumber: typeof v.report_visit_number === "number" ? v.report_visit_number : null,
+    })
+  }
 
   const profileIds = Array.from(new Set([
     ...termRows.map((term: any) => term.responsible_user_id).filter(Boolean),
@@ -396,6 +419,8 @@ export async function loadProjectStageExecution(
       reportNumber: response.report_number,
       visitNumber: Number.isInteger(Number(response.visit_number)) && Number(response.visit_number) > 0 ? Number(response.visit_number) : 1,
       visitDate: response.visit_date ? String(response.visit_date) : response.created_at ? String(response.created_at).slice(0, 10) : null,
+      siteVisitRequestId: response.site_visit_request_id ?? null,
+      linkedSiteVisit: response.site_visit_request_id ? siteVisitsById.get(response.site_visit_request_id) ?? null : null,
       reportType: response.report_type,
       subject: response.subject,
       reportTitle: response.report_title,
@@ -819,7 +844,7 @@ export async function loadSiteVisitReportContext(projectId: string, siteVisitReq
   const admin = createAdminClient()
   const { data: visit, error: visitError } = await admin
     .from("site_visit_requests")
-    .select("id, project_id, status, report_visit_number")
+    .select("id, project_id, status, report_visit_number, scheduled_date, scheduled_time")
     .eq("id", siteVisitRequestId)
     .eq("project_id", projectId)
     .maybeSingle()
@@ -842,6 +867,8 @@ export async function loadSiteVisitReportContext(projectId: string, siteVisitReq
     projectId: visit.project_id as string,
     status: visit.status as string,
     visitNumber: visit.report_visit_number as number,
+    scheduledDate: visit.scheduled_date ? String(visit.scheduled_date) : null,
+    scheduledTime: visit.scheduled_time ? String(visit.scheduled_time) : null,
     linkedReport: linkedReport
       ? {
           id: linkedReport.id as string,

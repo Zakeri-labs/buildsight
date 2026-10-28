@@ -106,16 +106,17 @@ export type ProjectReportSchedule = {
 }
 
 const PROJECT_TABLE_COLUMN_WIDTHS = [
-  "15%",
+  "14%",
+  "9%",
+  "9%",
+  "9%",
   "9.5%",
-  "9%",
-  "9%",
-  "10.5%",
-  "8.5%",
-  "7%",
-  "7.5%",
-  "12.5%",
   "8%",
+  "6.5%",
+  "7%",
+  "7%",
+  "11.5%",
+  "6%",
   "3.5%",
 ] as const
 
@@ -129,6 +130,7 @@ export interface ProjectRow {
   areaDistrict?: string | null
   projectType: ProjectType | "—"
   projectTypeValue?: ProjectTypeValue | null
+  plotNo?: string | null
   supervisionType?: string | null
   supervisionTypeOther?: string | null
   supervisionStartDate?: string | null
@@ -445,7 +447,8 @@ export function ProjectsList({
         searchQuery &&
         !p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
         !p.code.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !p.address.toLowerCase().includes(searchQuery.toLowerCase())
+        !p.address.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !(p.plotNo && p.plotNo.toLowerCase().includes(searchQuery.toLowerCase()))
       ) {
         return false
       }
@@ -1110,17 +1113,18 @@ export function ProjectsList({
                 <th className="truncate px-2.5 py-3.5 text-start align-middle font-semibold" title="Supervision Type">Supervision Type</th>
                 <th className="truncate px-2.5 py-3.5 text-start align-middle font-semibold">Area / District</th>
                 <th className="truncate px-2.5 py-3.5 text-start align-middle font-semibold">Project Type</th>
+                <th className="truncate px-2 py-3.5 text-start align-middle font-semibold">Plot No</th>
                 <th className="truncate px-2 py-3.5 text-center align-middle font-semibold">Status</th>
                 <th className="truncate px-2 py-3.5 text-center align-middle font-semibold">Start Date</th>
                 <th className="truncate px-2.5 py-3.5 text-start align-middle font-semibold">Report Schedule</th>
-                <th className="truncate px-2.5 py-3.5 text-start align-middle font-semibold">Progress</th>
+                <th className="truncate px-2 py-3.5 text-start align-middle font-semibold">Progress</th>
                 <th className="truncate px-1.5 py-3.5 text-end align-middle font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
               {desktopProjects.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-5 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+                  <td colSpan={12} className="px-5 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
                     {locale === "ar" ? "لا توجد مشاريع مطابقة." : "No matching projects found."}
                   </td>
                 </tr>
@@ -1225,6 +1229,13 @@ export function ProjectsList({
                     <TruncatedText>{row.projectType}</TruncatedText>
                   </td>
 
+                  {/* Plot No */}
+                  <td className="min-w-0 overflow-hidden px-2 py-4 align-middle text-xs font-medium text-slate-700 dark:text-slate-300">
+                    <TruncatedText className={!row.plotNo?.trim() ? "text-slate-400 dark:text-slate-500" : undefined}>
+                      {row.plotNo?.trim() || "—"}
+                    </TruncatedText>
+                  </td>
+
                   {/* Status Badge */}
                   <td className="min-w-0 overflow-hidden px-2 py-4 text-center align-middle">
                     <div className="flex min-w-0 items-center justify-center overflow-hidden">
@@ -1263,11 +1274,11 @@ export function ProjectsList({
                   </td>
 
                   {/* Progress bar */}
-                  <td className="min-w-0 overflow-hidden px-2.5 py-4 align-middle">
+                  <td className="min-w-0 overflow-hidden px-2 py-4 align-middle">
                     {row.progress == null ? (
                       <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">—</span>
                     ) : (
-                      <div className="flex min-w-0 flex-col gap-1.5">
+                      <div className="flex min-w-0 flex-col gap-1">
                         <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                           {row.progress}%
                         </span>
@@ -1423,6 +1434,7 @@ export function ProjectsList({
                     areaDistrict: updated.areaDistrict,
                     projectType: updated.projectTypeLabel as ProjectType | "—",
                     projectTypeValue: updated.projectTypeValue,
+                    plotNo: updated.plotNo?.trim() || null,
                     supervisionType: updated.supervisionType,
                     supervisionTypeOther: updated.supervisionTypeOther,
                     supervisionStartDate: updated.supervisionStartDate,

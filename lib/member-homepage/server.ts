@@ -475,3 +475,172 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
     return emptyData(true, true, true, true)
   }
 }
+
+/**
+ * Lazy-loaded historical Site Visits for the previous 7 calendar days.
+ * Scoped to explicit-Supervisor projects for the given user.
+ * Excludes today's visits.
+ */
+export async function getPreviousSevenDaysVisits(userId: string): Promise<MemberHomepageVisit[]> {
+  if (!isValidUuid(userId)) return []
+
+  const explicitSupervisorProjects = await resolveExplicitSupervisorProjectScope(userId)
+  const visitProjects = explicitSupervisorProjects.filter((project) => isValidUuid(project.id))
+  const visitProjectIds = Array.from(new Set(visitProjects.map((project) => project.id)))
+
+  if (!visitProjectIds.length) return []
+
+  const visitProjectById = new Map(visitProjects.map((project) => [project.id, project]))
+  const admin = createAdminClient()
+
+  // Define previous 7 calendar days range strictly:
+  // e.g. if today is 2026-10-26, startDate is 2026-10-19, endDate is 2026-10-25
+  const today = currentCalendarDateKey()
+  const startDate = addCalendarDays(today, -7)
+  const endDate = addCalendarDays(today, -1)
+
+  // Query site_visit_requests in this date range and project scope
+  const { data: rawVisits, error: visitsError } = await admin
+    .from("site_visit_requests")
+    .select("id, project_id, status, scheduled_date, scheduled_time, report_visit_number")
+    .in("project_id", visitProjectIds)
+    .in("status", ["scheduled", "completed"])
+    .gte("scheduled_date", startDate)
+    .lte("scheduled_date", endDate)
+    .order("scheduled_date", { ascending: false })
+    .order("scheduled_time", { ascending: false, nullsFirst: false })
+    .order("id", { ascending: false })
+
+  if (visitsError) {
+    logLoadError("previous 7 days site visits", userId, visitProjectIds.length, visitsError)
+    throw new Error(visitsError.message || "Failed to load previous visits.")
+  }
+
+  const visitRows = (rawVisits ?? []).filter((row: any) =>
+    isValidUuid(row.id) &&
+    isValidUuid(row.project_id) &&
+    typeof row.scheduled_date === "string" &&
+    (row.status === "scheduled" || row.status === "completed")
+  )
+
+  if (!visitRows.length) return []
+
+  const visitIds = visitRows.map((r: any) => r.id as string)
+  const relevantProjectIds = Array.from(new Set(visitRows.map((r: any) => r.project_id as string)))
+
+  // In parallel, fetch:
+  // 1. Linked term_responses for completed visits
+  // 2. Active stages for projects that have scheduled visits
+  const [reportResult, stageResult] = await Promise.all([
+    admin
+      .from("term_responses")
+      .select("id, project_id, project_stage_id, visit_number, status, site_visit_request_id")
+      .in("site_visit_request_id", visitIds),
+    admin
+      .from("project_stages")
+      .select("id, project_id, name, status, sort_order")
+      .in("project_id", relevantProjectIds)
+      .order("sort_order", { ascending: true }),
+  ])
+
+  const explicitReportByVisitId = new Map<string, any>()
+  if (!reportResult.error && reportResult.data) {
+    const completionStatuses = new Set(["submitted", "under_review", "approved", "completed"])
+    for (const report of reportResult.data) {
+      if (
+        isValidUuid((report as any).id) &&
+        isValidUuid((report as any).site_visit_request_id) &&
+        completionStatuses.has(typeof (report as any).status === "string" ? (report as any).status : "")
+      ) {
+        explicitReportByVisitId.set((report as any).site_visit_request_id, report)
+      }
+    }
+  }
+
+  const unansweredStageByProjectId = new Map<string, { id: string; name: string }>()
+  const stageNameById = new Map<string, string>()
+  if (!stageResult.error && stageResult.data) {
+    for (const stage of stageResult.data) {
+      const projectId = (stage as any).project_id
+      const stageId = (stage as any).id
+      const name = typeof (stage as any).name === "string" ? (stage as any).name.trim() : ""
+      const status = typeof (stage as any).status === "string" ? (stage as any).status : ""
+      if (isValidUuid(stageId) && name) stageNameById.set(stageId, name)
+      if (
+        !isValidUuid(projectId) ||
+        !isValidUuid(stageId) ||
+        !name ||
+        status === "completed" ||
+        status === "disabled" ||
+        unansweredStageByProjectId.has(projectId)
+      ) continue
+      unansweredStageByProjectId.set(projectId, { id: stageId, name })
+    }
+  }
+
+  const visits: MemberHomepageVisit[] = visitRows.flatMap((row: any) => {
+    const project = visitProjectById.get(row.project_id)
+    if (!project) return []
+
+    const isCompleted = row.status === "completed"
+    const linkedReport = isCompleted ? explicitReportByVisitId.get(row.id) ?? null : null
+    const linkedReportMatchesProject = linkedReport?.project_id === row.project_id
+    const linkedStageId = linkedReportMatchesProject && isValidUuid(linkedReport?.project_stage_id)
+      ? (linkedReport.project_stage_id as string)
+      : null
+    const activeStage = isCompleted ? null : unansweredStageByProjectId.get(row.project_id) ?? null
+    const stageId = linkedStageId ?? activeStage?.id ?? null
+    const stageName = linkedStageId ? stageNameById.get(linkedStageId) ?? null : activeStage?.name ?? null
+    const linkedVisitNumber = linkedReportMatchesProject && Number.isInteger(linkedReport?.visit_number) && linkedReport.visit_number > 0
+      ? (linkedReport.visit_number as number)
+      : null
+    const reservedVisitNumber = Number.isInteger(row.report_visit_number) && row.report_visit_number > 0
+      ? (row.report_visit_number as number)
+      : null
+    const visitNumber = isCompleted ? linkedVisitNumber ?? reservedVisitNumber : reservedVisitNumber
+    const hasCoordinates = project.latitude !== null && project.longitude !== null
+    const googleMapsUrl = hasCoordinates
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${project.latitude},${project.longitude}`)}`
+      : null
+
+    return [{
+      id: row.id,
+      projectId: row.project_id,
+      status: isCompleted ? "completed" as const : "scheduled" as const,
+      scheduledDate: row.scheduled_date,
+      scheduledTime: clockTime(row.scheduled_time),
+      projectName: project.name?.trim() || "Project",
+      projectCode: project.code?.trim() || null,
+      stageName,
+      visitNumber,
+      stageResponseHref: !isCompleted
+        ? `/report-entry?siteVisitId=${encodeURIComponent(row.id)}`
+        : null,
+      googleMapsUrl,
+    }]
+  })
+
+  // Sort:
+  // 1. Visit date descending: newest date first.
+  // 2. Scheduled time descending within the same date, when available.
+  // 3. Deterministic tie-breaker when date and time are equal.
+  visits.sort((left, right) => {
+    const dateDiff = right.scheduledDate.localeCompare(left.scheduledDate)
+    if (dateDiff !== 0) return dateDiff
+
+    const leftTime = left.scheduledTime ?? ""
+    const rightTime = right.scheduledTime ?? ""
+    if (leftTime && rightTime) {
+      const timeDiff = rightTime.localeCompare(leftTime)
+      if (timeDiff !== 0) return timeDiff
+    } else if (rightTime && !leftTime) {
+      return 1
+    } else if (leftTime && !rightTime) {
+      return -1
+    }
+
+    return right.id.localeCompare(left.id)
+  })
+
+  return visits
+}
