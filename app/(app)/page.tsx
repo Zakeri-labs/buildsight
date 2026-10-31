@@ -94,9 +94,8 @@ export default async function DashboardPage({
     ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(credits.startAt))
     : null
 
-  const creditsCaption = startDateLabel
-    ? `${credits.totalReportCredits} Total Credits • ${credits.usedReportCredits} Used • Started ${startDateLabel}`
-    : `${credits.totalReportCredits} Total Credits • ${credits.usedReportCredits} Used`
+  const creditsCaption = `${credits.totalReportCredits} Total Credits • ${credits.remainingReportCredits} Remaining`
+  const creditsMetadata = startDateLabel ? `Started ${startDateLabel}` : undefined
 
   const kpis: KpiCardData[] = [
     {
@@ -110,13 +109,14 @@ export default async function DashboardPage({
     },
     {
       key: "credits",
-      label: "Report Credits",
-      value: credits.remainingReportCredits,
+      label: "Used Report Credits",
+      value: credits.usedReportCredits,
       tone: isLowCredit ? "amber" : "blue",
       icon: "credits",
       caption: creditsCaption,
+      metadata: creditsMetadata,
       href: "/reports?creditUsage=true",
-      spark: spark(credits.remainingReportCredits),
+      spark: spark(credits.usedReportCredits),
     },
     {
       key: "wir",

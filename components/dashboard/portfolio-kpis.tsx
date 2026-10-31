@@ -11,6 +11,7 @@ export type KpiCardData = {
   tone: KpiTone
   icon: "projects" | "ncr" | "inspection" | "wir" | "credits"
   caption?: string
+  metadata?: string
   href?: string
   trend?: { direction: "up" | "down"; value: number; good: boolean }
   spark: number[]
@@ -80,7 +81,12 @@ function KpiCard({ kpi }: { kpi: KpiCardData }) {
           <Sparkline data={kpi.spark} className={cn("mb-0.5 w-16 sm:w-20", toneSpark[kpi.tone])} />
         </div>
         <div className="mt-2 text-xs text-muted-foreground">
-          {kpi.caption && <span className="block truncate">{kpi.caption}</span>}
+          {kpi.caption && <span className="block truncate" title={kpi.caption}>{kpi.caption}</span>}
+          {kpi.metadata && (
+            <span className="block truncate text-[11px] text-muted-foreground/80 mt-0.5" title={kpi.metadata}>
+              {kpi.metadata}
+            </span>
+          )}
           {kpi.trend && (
             <span
               className={cn(
