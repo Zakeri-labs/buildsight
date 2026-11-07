@@ -98,7 +98,7 @@ async function termScope(projectId: string, termId: string) {
   const admin = createAdminClient()
   const { data: byId, error: errorId } = await admin
     .from("project_stage_terms")
-    .select("id, report_name, approval_required, response_type, template_reference, instructions, responsible_user_id, project_stage_id, parent_term_id, is_active, project_stages!inner(project_id, name, status)")
+    .select("id, template_term_id, report_name, approval_required, response_type, template_reference, instructions, responsible_user_id, project_stage_id, parent_term_id, is_active, project_stages!inner(project_id, name, status)")
     .eq("id", termId)
     .eq("project_stages.project_id", projectId)
     .maybeSingle()
@@ -107,7 +107,7 @@ async function termScope(projectId: string, termId: string) {
   if (!data) {
     const { data: byTemplateId, error: errorTemplate } = await admin
       .from("project_stage_terms")
-      .select("id, report_name, approval_required, response_type, template_reference, instructions, responsible_user_id, project_stage_id, parent_term_id, is_active, project_stages!inner(project_id, name, status)")
+      .select("id, template_term_id, report_name, approval_required, response_type, template_reference, instructions, responsible_user_id, project_stage_id, parent_term_id, is_active, project_stages!inner(project_id, name, status)")
       .eq("template_term_id", termId)
       .eq("project_stages.project_id", projectId)
       .maybeSingle()
@@ -119,13 +119,45 @@ async function termScope(projectId: string, termId: string) {
   if (data.parent_term_id) {
     const { data: parent, error: parentError } = await admin
       .from("project_stage_terms")
-      .select("is_active")
+      .select("is_active, template_term_id")
       .eq("id", data.parent_term_id)
       .maybeSingle()
     if (parentError) throw parentError
     parentActive = parent?.is_active === true
+    if (parentActive && parent?.template_term_id) {
+      const { data: parentTemplate } = await admin
+        .from("stage_terms")
+        .select("status")
+        .eq("id", parent.template_term_id)
+        .maybeSingle()
+      if (parentTemplate?.status === "disabled") {
+        parentActive = false
+      }
+    }
   }
-  return { ...data, parent_active: parentActive }
+
+  let templateActive = true
+  if (data.template_term_id) {
+    const { data: templateDef, error: templateError } = await admin
+      .from("stage_terms")
+      .select("id, status, parent_term_id")
+      .eq("id", data.template_term_id)
+      .maybeSingle()
+    if (templateError) throw templateError
+    if (templateDef?.status === "disabled") {
+      templateActive = false
+    } else if (templateDef?.parent_term_id) {
+      const { data: parentTemplateDef } = await admin
+        .from("stage_terms")
+        .select("status")
+        .eq("id", templateDef.parent_term_id)
+        .maybeSingle()
+      if (parentTemplateDef?.status === "disabled") {
+        templateActive = false
+      }
+    }
+  }
+  return { ...data, parent_active: parentActive, template_active: templateActive }
 }
 
 async function stageScope(projectId: string, stageId: string) {
@@ -245,7 +277,7 @@ function assertActiveStageScope(stage: { status: string }) {
 
 function assertActiveTermScope(term: any) {
   const stageScope = Array.isArray(term.project_stages) ? term.project_stages[0] : term.project_stages
-  if (!term.is_active || term.parent_active === false || stageScope?.status === "disabled") {
+  if (!term.is_active || term.parent_active === false || term.template_active === false || stageScope?.status === "disabled") {
     throw new Error("This stage or term is inactive and cannot accept new work.")
   }
 }
@@ -425,7 +457,6 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
     const term = !directStage && input.termId ? await termScope(input.projectId, input.termId) : null
     if (!directStage && !term) return { ok: false, error: "Select a valid project stage." }
     if (directStage) assertActiveStageScope(directStage)
-    if (term) assertActiveTermScope(term)
 
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.responseId)) {
       return { ok: false, error: "Invalid report identifier." }
@@ -443,6 +474,7 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
       .eq("project_id", input.projectId)
       .maybeSingle()
     if (existingError) throw existingError
+    if (term && !existing) assertActiveTermScope(term)
 
     const projectStageId = directStage?.id ?? term!.project_stage_id
     const legacyTermId = directStage ? null : input.termId ?? null
@@ -630,6 +662,71 @@ async function saveReportResponse(input: SaveReportResponseInput): Promise<Stage
         throw error
       }
     } else {
+      if (Array.isArray(content.checklist) && content.checklist.length > 0) {
+        const itemIds = content.checklist
+          .map((item: any) => item.id)
+          .filter((id: any) => typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))
+
+        if (itemIds.length > 0) {
+          const { data: matchedTerms } = await admin
+            .from("project_stage_terms")
+            .select("id, template_term_id, parent_term_id, is_active")
+            .in("id", itemIds)
+
+          if (matchedTerms && matchedTerms.length > 0) {
+            const templateIds = matchedTerms.map((t: any) => t.template_term_id).filter(Boolean)
+            const { data: matchedTemplates } = templateIds.length
+              ? await admin.from("stage_terms").select("id, status, parent_term_id").in("id", templateIds)
+              : { data: [] }
+            const templateMap = new Map((matchedTemplates ?? []).map((t: any) => [t.id, t]))
+
+            const parentTemplateIds = (matchedTemplates ?? []).map((t: any) => t.parent_term_id).filter(Boolean)
+            const { data: parentTemplates } = parentTemplateIds.length
+              ? await admin.from("stage_terms").select("id, status").in("id", parentTemplateIds)
+              : { data: [] }
+            const parentTemplateMap = new Map((parentTemplates ?? []).map((t: any) => [t.id, t.status]))
+
+            const parentProjectTermIds = matchedTerms.map((t: any) => t.parent_term_id).filter(Boolean)
+            const { data: parentProjectTerms } = parentProjectTermIds.length
+              ? await admin.from("project_stage_terms").select("id, is_active, template_term_id").in("id", parentProjectTermIds)
+              : { data: [] }
+            const parentProjectMap = new Map((parentProjectTerms ?? []).map((t: any) => [t.id, t]))
+
+            const disabledTermIds = new Set<string>()
+            for (const t of matchedTerms) {
+              if (t.is_active === false) {
+                disabledTermIds.add(t.id)
+                continue
+              }
+              if (t.parent_term_id) {
+                const parentP = parentProjectMap.get(t.parent_term_id)
+                if (parentP && parentP.is_active === false) {
+                  disabledTermIds.add(t.id)
+                  continue
+                }
+              }
+              if (t.template_term_id) {
+                const tDef = templateMap.get(t.template_term_id)
+                if (tDef) {
+                  if (tDef.status === "disabled") {
+                    disabledTermIds.add(t.id)
+                    continue
+                  }
+                  if (tDef.parent_term_id && parentTemplateMap.get(tDef.parent_term_id) === "disabled") {
+                    disabledTermIds.add(t.id)
+                    continue
+                  }
+                }
+              }
+            }
+
+            if (disabledTermIds.size > 0) {
+              content.checklist = content.checklist.filter((item: any) => !disabledTermIds.has(item.id))
+            }
+          }
+        }
+      }
+
       const { error: insertError } = await admin.from("term_responses").insert({
         id: input.responseId,
         project_id: input.projectId,

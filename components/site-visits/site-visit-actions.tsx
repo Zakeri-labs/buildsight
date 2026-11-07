@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { CalendarClock, CheckCircle2, MessageCircle, XCircle } from "lucide-react"
 import { scheduleSiteVisitAction, updateSiteVisitStatusAction } from "@/lib/actions/site-visits"
 import type { SiteVisitListItem } from "@/lib/site-visits/types"
-import { localDateInputValue, preferredVisitLabel } from "@/lib/site-visits/format"
+import { preferredVisitLabel } from "@/lib/site-visits/format"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -81,7 +81,7 @@ export function ScheduleSiteVisitDialog({ request }: { request: SiteVisitListIte
         <DialogHeader><DialogTitle>Schedule Site Visit</DialogTitle><DialogDescription>Set the confirmed visit date, time, participants, and notes.</DialogDescription></DialogHeader>
         <div className="grid gap-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2"><Label htmlFor="scheduled-date">Visit Date</Label><Input id="scheduled-date" type="date" min={localDateInputValue()} value={date} onChange={(event: ChangeEvent<HTMLInputElement>) => setDate(event.target.value)} className="h-10" /></div>
+            <div className="grid gap-2"><Label htmlFor="scheduled-date">Visit Date</Label><Input id="scheduled-date" type="date" value={date} onChange={(event: ChangeEvent<HTMLInputElement>) => setDate(event.target.value)} className="h-10" /></div>
             <div className="grid gap-2"><Label htmlFor="scheduled-time">Visit Time</Label><Input id="scheduled-time" type="time" value={time} onChange={(event: ChangeEvent<HTMLInputElement>) => setTime(event.target.value)} className="h-10" /></div>
           </div>
           <div className="grid gap-2">

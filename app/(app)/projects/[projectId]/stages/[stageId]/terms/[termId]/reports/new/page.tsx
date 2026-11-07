@@ -14,7 +14,7 @@ export default async function NewTermReportPage({ params }: { params: Promise<{ 
   if (roleRes.role === "viewer") redirect(`/projects/${projectId}`)
   const data = await loadProjectStageTerm(projectId, termId, session.userId)
   if (!data || data.stage.id !== stageId) notFound()
-  const workflowActive = data.stage.status !== "disabled"
+  const workflowActive = data.stage.status !== "disabled" && data.term.isActive && (!data.parentTerm || data.parentTerm.isActive)
   if (!workflowActive) notFound()
 
   const creditCheck = await checkReportCreationCreditAvailability(
@@ -31,7 +31,9 @@ export default async function NewTermReportPage({ params }: { params: Promise<{ 
     )
   }
   const [ccCandidates, nextVisitNumber] = await Promise.all([loadProjectParticipantsOnly(projectId), loadNextProjectVisitNumber(projectId)])
-  const stageSubterms = data.stage.terms.flatMap((t) => [t, ...t.subterms])
+  const stageSubterms = data.stage.terms
+    .filter((t) => t.isActive)
+    .flatMap((t) => [t, ...t.subterms.filter((st) => st.isActive)])
   const currentUserPerson = {
     id: session.userId,
     name: session.profile?.full_name || session.email.split("@")[0] || "User",

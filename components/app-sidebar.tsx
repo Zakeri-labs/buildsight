@@ -44,18 +44,23 @@ function NavLink({
   icon: Icon,
   active,
   onNavigate,
+  onClick,
 }: {
   label: string
   href: string
   icon: React.ElementType
   active: boolean
   onNavigate?: () => void
+  onClick?: () => void
 }) {
   return (
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      onClick={onNavigate}
+      onClick={() => {
+        onClick?.()
+        onNavigate?.()
+      }}
       className={cn(
         "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
         active
@@ -127,22 +132,30 @@ export function AppSidebar({
   const storedProject = selectedProjectId !== "all"
     ? projects.find((item) => item.id === selectedProjectId) ?? null
     : null
-  const preservesSelectedProject =
+  const isGlobalOrganizationSection =
     pathname === "/" ||
-    pathname.startsWith("/documents") ||
-    pathname.startsWith("/initial-documents") ||
-    pathname.startsWith("/site-visits") ||
-    pathname.startsWith("/ai-summary") ||
-    pathname.startsWith("/calendar") ||
-    pathname.startsWith("/inspections") ||
-    pathname.startsWith("/ncrs")
-  const routeSelection = routeProjectId
-    ? routeProject?.id ?? "all"
-    : requestedModuleProjectId
-      ? requestedModuleProject?.id ?? "all"
-      : preservesSelectedProject
-        ? storedProject?.id ?? "all"
-        : "all"
+    pathname === "/dashboard" ||
+    pathname === "/memberhomepage" ||
+    pathname === "/supervisor-performance" ||
+    pathname.startsWith("/supervisor-performance/")
+  const preservesSelectedProject =
+    !isGlobalOrganizationSection &&
+    (pathname.startsWith("/documents") ||
+      pathname.startsWith("/initial-documents") ||
+      pathname.startsWith("/site-visits") ||
+      pathname.startsWith("/ai-summary") ||
+      pathname.startsWith("/calendar") ||
+      pathname.startsWith("/inspections") ||
+      pathname.startsWith("/ncrs"))
+  const routeSelection = isGlobalOrganizationSection
+    ? "all"
+    : routeProjectId
+      ? routeProject?.id ?? "all"
+      : requestedModuleProjectId
+        ? requestedModuleProject?.id ?? "all"
+        : preservesSelectedProject
+          ? storedProject?.id ?? "all"
+          : "all"
   const optimisticSelection =
     pendingSelection?.fromPathname === pathname ? pendingSelection.id : null
   const project = optimisticSelection ?? routeSelection
@@ -195,6 +208,19 @@ export function AppSidebar({
 
   const homeLabel = homeHref === "/memberhomepage" ? (locale === "ar" ? "الرئيسية" : "Home") : t.nav.dashboard
 
+  function handleGlobalNavigationClick() {
+    setPendingSelection({ id: "all", fromPathname: pathname })
+    window.dispatchEvent(new Event(NAVIGATION_START_EVENT))
+    startTransition(async () => {
+      try {
+        await selectProject("all")
+        router.refresh()
+      } catch {
+        // Keep the route-derived UI stable even if persisting the cookie fails.
+      }
+    })
+  }
+
   const isMember = homeHref === "/memberhomepage"
   const currentUser = useCurrentUser()
   const isViewer = currentUser?.role === "viewer"
@@ -205,10 +231,11 @@ export function AppSidebar({
     label: locale === "ar" ? "أداء المشرفين" : "Supervisor Performance",
     href: "/supervisor-performance",
     icon: TrendingUp,
+    onClick: handleGlobalNavigationClick,
   }
 
   const moduleItems = [
-    { label: homeLabel, href: homeHref, icon: Home },
+    { label: homeLabel, href: homeHref, icon: Home, onClick: handleGlobalNavigationClick },
     ...(canAccessSupervisorPerformance ? [supervisorPerformanceItem] : []),
     projectNavigationItem,
     ...(stageNavigationItem ? [stageNavigationItem] : []),
@@ -337,7 +364,7 @@ export function AppSidebar({
                       e.stopPropagation()
                     }
                   }}
-                  placeholder={t.projects.searchProjects}
+                  placeholder={(t.projects as any).searchProjects ?? t.projects.searchPlaceholder ?? "Search projects..."}
                   className="h-9 pl-8 text-xs"
                 />
               </div>
@@ -405,6 +432,7 @@ export function AppSidebar({
                     : pathname.startsWith(item.href.split("?", 1)[0])
             }
             onNavigate={onNavigate}
+            onClick={"onClick" in item && typeof item.onClick === "function" ? (item.onClick as () => void) : undefined}
           />
         ))}
 

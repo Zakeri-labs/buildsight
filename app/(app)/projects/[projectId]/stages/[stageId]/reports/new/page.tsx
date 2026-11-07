@@ -59,7 +59,9 @@ export default async function NewStageReportPage({
     email: session.email,
     avatarUrl: session.profile?.avatar_url || null,
   }
-  const stageSubterms = data.stage.terms.flatMap((t) => [t, ...t.subterms])
+  const stageSubterms = data.stage.terms
+    .filter((t) => t.isActive)
+    .flatMap((t) => [t, ...t.subterms.filter((st) => st.isActive)])
   const historicalCompletedItemIds = getHistoricalCompletedChecklistIds(data.stage)
   return <InspectionReportForm project={data.project} stage={{ id: data.stage.id, name: data.stage.name }} reportConfig={{ id: data.stage.id, reportName: `${data.stage.name} Report`, required: false, responsibleUser: null, templateReference: null, responseType: "combined", instructions: null, approvalRequired: true, status: data.stage.status }} response={null} translation={null} canReview={data.canReview} canManage={data.canManage} isMember={data.isMember} currentUserId={data.currentUserId} currentUserPerson={currentUserPerson} workflowActive={true} canEdit={true} suggestedVisitNumber={nextVisitNumber} initialResponseId={crypto.randomUUID()} ccCandidates={ccCandidates} initialCcRecipients={[]} stageSubterms={stageSubterms} siteVisitRequestId={siteVisitRequestId} initialVisitDate={siteVisitContext?.scheduledDate ?? null} initialSiteVisitContext={siteVisitContext ? { id: siteVisitContext.id, status: siteVisitContext.status, scheduledDate: siteVisitContext.scheduledDate ?? "", scheduledTime: siteVisitContext.scheduledTime ?? null, visitNumber: siteVisitContext.visitNumber ?? null } : null} historicalCompletedItemIds={historicalCompletedItemIds} />
 }

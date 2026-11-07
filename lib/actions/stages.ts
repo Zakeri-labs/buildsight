@@ -354,6 +354,8 @@ export async function setStageTermStatus(input: { termId: string; status: StageT
       organizationId: term.organization_id,
     })
     revalidatePath("/stages")
+    revalidatePath("/projects", "layout")
+    revalidatePath("/report-entry")
     return { ok: true }
   } catch (error) {
     return actionError(error, "Could not change the report status.")
@@ -386,6 +388,8 @@ export async function deleteStageTerm(input: { termId: string }): Promise<Action
       metadata: { stageId: term.stage_id, reportName: term.report_name },
     })
     revalidatePath("/stages")
+    revalidatePath("/projects", "layout")
+    revalidatePath("/report-entry")
     return { ok: true }
   } catch (error) {
     return actionError(error, "Could not remove the Term or Sub-term.")

@@ -455,10 +455,31 @@ export async function loadProjectStageExecution(
     items.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
   }
 
+  const libraryTermById = new Map<string, any>(
+    (libraryTerms ?? []).map((t: any) => [t.id, t])
+  )
+
   const termMap = new Map<string, ProjectStageTermExecution>()
   for (const term of termRows) {
     const termResponses = responsesByTerm.get(term.id) ?? []
     const response = termResponses[0] ?? null
+
+    let templateActive = true
+    if (term.template_term_id) {
+      const templateDef = libraryTermById.get(term.template_term_id)
+      if (templateDef) {
+        if (templateDef.status === "disabled") {
+          templateActive = false
+        } else if (templateDef.parent_term_id) {
+          const parentTemplateDef = libraryTermById.get(templateDef.parent_term_id)
+          if (parentTemplateDef && parentTemplateDef.status === "disabled") {
+            templateActive = false
+          }
+        }
+      }
+    }
+    const effectiveIsActive = term.is_active !== false && templateActive
+
     termMap.set(term.id, {
       id: term.id,
       projectStageId: term.project_stage_id,
@@ -476,7 +497,7 @@ export async function loadProjectStageExecution(
       instructions: typeof term.instructions === "string" && term.instructions.trim() ? term.instructions : null,
       status: term.status,
       sortOrder: term.sort_order,
-      isActive: term.is_active !== false,
+      isActive: effectiveIsActive,
       hasLinkedData: termResponses.length > 0,
       response,
       responses: termResponses,
@@ -499,6 +520,13 @@ export async function loadProjectStageExecution(
     if (parent) parent.subterms.push(term)
   }
   for (const term of termMap.values()) {
+    if (!term.parentTermId && !term.isActive) {
+      for (const subterm of term.subterms) {
+        subterm.isActive = false
+      }
+    }
+  }
+  for (const term of termMap.values()) {
     term.subterms.sort((a, b) => a.sortOrder - b.sortOrder || a.reportName.localeCompare(b.reportName))
     if (term.subterms.some((child) => child.isActive)) term.status = derivedParentStatus(term.subterms)
   }
@@ -508,7 +536,7 @@ export async function loadProjectStageExecution(
   if (stageRows.length === 0) {
     const libTermsByStage = new Map<string, ProjectStageTermExecution[]>()
     for (const termDef of libraryTerms ?? []) {
-      if (termDef.parent_term_id) continue
+      if (termDef.parent_term_id || termDef.status === "disabled") continue
       const items = libTermsByStage.get(termDef.stage_id) ?? []
       items.push({
         id: termDef.id,
@@ -559,7 +587,7 @@ export async function loadProjectStageExecution(
 
     const libTermsByStage = new Map<string, ProjectStageTermExecution[]>()
     for (const termDef of libraryTerms ?? []) {
-      if (termDef.parent_term_id) continue
+      if (termDef.parent_term_id || termDef.status === "disabled") continue
       const items = libTermsByStage.get(termDef.stage_id) ?? []
       items.push({
         id: termDef.id,

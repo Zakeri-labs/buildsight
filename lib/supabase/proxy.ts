@@ -73,26 +73,32 @@ export async function updateSession(request: NextRequest) {
     // Apply the role-based rule only to the default application root. Explicit
     // invitation, confirmation, and protected deep-link destinations never pass
     // through this branch, so their trusted `next` path remains authoritative.
-    if (user && pathname === "/") {
-      const landing = await resolveDefaultLandingDestination(user.id)
+    const isOrganizationWideRoute =
+      pathname === "/" ||
+      pathname === "/dashboard" ||
+      pathname === "/supervisor-performance" ||
+      pathname.startsWith("/supervisor-performance/")
 
-      if (landing.mode === "member") {
-        const memberHomeUrl = request.nextUrl.clone()
-        memberHomeUrl.pathname = landing.destination
-        memberHomeUrl.search = ""
-        return preserveResponseCookies(supabaseResponse, NextResponse.redirect(memberHomeUrl))
+    if (user && isOrganizationWideRoute) {
+      if (pathname === "/") {
+        const landing = await resolveDefaultLandingDestination(user.id)
+
+        if (landing.mode === "member") {
+          const memberHomeUrl = request.nextUrl.clone()
+          memberHomeUrl.pathname = landing.destination
+          memberHomeUrl.search = ""
+          return preserveResponseCookies(supabaseResponse, NextResponse.redirect(memberHomeUrl))
+        }
       }
 
-      if (landing.mode === "admin") {
-        request.cookies.set(SELECTED_PROJECT_COOKIE, ALL_PROJECTS_SCOPE_VALUE)
-        const response = NextResponse.next({ request: { headers: requestHeaders } })
-        response.cookies.set(SELECTED_PROJECT_COOKIE, ALL_PROJECTS_SCOPE_VALUE, {
-          path: "/",
-          maxAge: 60 * 60 * 24 * 365,
-          sameSite: "lax",
-        })
-        return preserveResponseCookies(supabaseResponse, response)
-      }
+      request.cookies.set(SELECTED_PROJECT_COOKIE, ALL_PROJECTS_SCOPE_VALUE)
+      const response = NextResponse.next({ request: { headers: requestHeaders } })
+      response.cookies.set(SELECTED_PROJECT_COOKIE, ALL_PROJECTS_SCOPE_VALUE, {
+        path: "/",
+        maxAge: 60 * 60 * 24 * 365,
+        sameSite: "lax",
+      })
+      return preserveResponseCookies(supabaseResponse, response)
     }
 
     const response = NextResponse.next({ request: { headers: requestHeaders } })

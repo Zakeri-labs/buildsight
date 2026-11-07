@@ -51,6 +51,7 @@ export function AppTopbar({
 
   const titleMap: Record<string, { title: string; subtitle: string }> = {
     "/": { title: t.nav.dashboard, subtitle: t.dashboard.overallProgress },
+    "/dashboard": { title: t.nav.dashboard, subtitle: t.dashboard.overallProgress },
     "/ncrs": { title: t.ncrs.title, subtitle: t.ncrs.subtitle },
     "/inspections": { title: t.inspections.title, subtitle: t.inspections.subtitle },
     "/rfi": { title: "RFI", subtitle: t.documents.typeRfi },
@@ -70,12 +71,6 @@ export function AppTopbar({
   }
 
   function resolveTitle(p: string) {
-    if (p === "/" && activeProjectName) {
-      return {
-        title: activeProjectName,
-        subtitle: "Project dashboard, progress, and activity",
-      }
-    }
     if (activeProjectName && /^\/projects\/[^/]+$/.test(p)) {
       return {
         title: activeProjectName,

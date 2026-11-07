@@ -26,7 +26,6 @@ import type {
   CalendarEventViewModel,
   CalendarSchedulingProjectViewModel,
 } from "@/lib/calendar/types"
-import { localDateInputValue } from "@/lib/site-visits/format"
 import { cn } from "@/lib/utils"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -233,10 +232,6 @@ export function ScheduleSiteVisitDialog({
     }
     if (!DATE_PATTERN.test(date) || !TIME_PATTERN.test(time)) {
       setError("Select a valid visit date and time.")
-      return
-    }
-    if (date < localDateInputValue()) {
-      setError("Visit date cannot be in the past.")
       return
     }
 
@@ -454,7 +449,6 @@ export function ScheduleSiteVisitDialog({
                 type="date"
                 dir="ltr"
                 lang="en-US"
-                min={localDateInputValue()}
                 value={date}
                 onChange={(event: ChangeEvent<HTMLInputElement>) => setDate(event.target.value)}
                 disabled={pending}
