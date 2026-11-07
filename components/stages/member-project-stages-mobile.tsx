@@ -46,16 +46,21 @@ export function MemberProjectStagesMobile({ data }: { data: ProjectStageExecutio
   const totalProjectReports = useMemo(() => stages.reduce((acc, { stage }) => acc + (stage.reports?.length ?? 0), 0), [stages])
   const totalProjectItems = useMemo(() => {
     return stages.reduce((acc, { stage }) => {
-      return acc + ((stage.terms ?? []).reduce((tAcc, t) => tAcc + 1 + (t.subterms?.length || 0), 0) || 10)
+      const activeTerms = (stage.terms ?? []).filter((t) => t.isActive !== false)
+      return acc + (activeTerms.reduce((tAcc, t) => {
+        const activeSubterms = (t.subterms ?? []).filter((st) => st.isActive !== false)
+        return tAcc + 1 + activeSubterms.length
+      }, 0) || 10)
     }, 0)
   }, [stages])
   const completedProjectItems = useMemo(() => {
     return stages.reduce((acc, { stage }) => {
-      return acc + (stage.terms ?? []).reduce((tAcc, t) => {
+      const activeTerms = (stage.terms ?? []).filter((t) => t.isActive !== false)
+      return acc + activeTerms.reduce((tAcc, t) => {
         let count = t.response || t.status === "completed" ? 1 : 0
         if (t.subterms) {
           for (const st of t.subterms) {
-            if (st.response || st.status === "completed") count++
+            if (st.isActive !== false && (st.response || st.status === "completed")) count++
           }
         }
         return tAcc + count
@@ -140,12 +145,16 @@ export function MemberProjectStagesMobile({ data }: { data: ProjectStageExecutio
               <div className="divide-y divide-border/70">
                 {visibleStages.map(({ stage, index, hasReports }) => {
                   const reportsCount = stage.reports?.length ?? 0
-                  const totalItems = (stage.terms ?? []).reduce((acc, t) => acc + 1 + (t.subterms?.length || 0), 0) || 10
-                  const completedItems = (stage.terms ?? []).reduce((acc, t) => {
+                  const activeTerms = (stage.terms ?? []).filter((t) => t.isActive !== false)
+                  const totalItems = activeTerms.reduce((acc, t) => {
+                    const activeSubterms = (t.subterms ?? []).filter((st) => st.isActive !== false)
+                    return acc + 1 + activeSubterms.length
+                  }, 0) || 10
+                  const completedItems = activeTerms.reduce((acc, t) => {
                     let count = t.response || t.status === "completed" ? 1 : 0
                     if (t.subterms) {
                       for (const st of t.subterms) {
-                        if (st.response || st.status === "completed") count++
+                        if (st.isActive !== false && (st.response || st.status === "completed")) count++
                       }
                     }
                     return acc + count
