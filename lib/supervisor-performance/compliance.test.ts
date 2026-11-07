@@ -1,3 +1,4 @@
+import { test } from "vitest"
 import {
   calculateSupervisorPerformance,
   getEffectiveVisitDate,
@@ -274,4 +275,6 @@ function runTests() {
   console.log("\nALL PHASE 1.2 MULTI-SUPERVISOR UNIT TESTS PASSED SUCCESSFULLY! 🎉\n")
 }
 
-runTests()
+test("supervisor performance compliance (legacy suite)", () => {
+  runTests()
+})

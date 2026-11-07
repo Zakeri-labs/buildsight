@@ -1,3 +1,5 @@
+import { whatsappUrl } from "@/lib/whatsapp"
+
 function formatVisitDate(dateStr?: string | null): string | null {
   if (!dateStr || !dateStr.trim()) return null
   const trimmed = dateStr.trim()
@@ -57,16 +59,10 @@ export function buildShareMessage(options: {
   ]
 
   const text = messageLines.join("\n")
-  const targetPhone = options.phone ? options.phone.replace(/[^0-9]/g, "") : ""
-
-  const whatsappUrl = targetPhone
-    ? `https://wa.me/${targetPhone}?text=${encodeURIComponent(text)}`
-    : `https://wa.me/?text=${encodeURIComponent(text)}`
-
   return {
     text,
     shortUrl,
-    whatsappUrl,
+    whatsappUrl: whatsappUrl(options.phone, text),
   }
 }
 

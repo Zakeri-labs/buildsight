@@ -19,6 +19,11 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // "sitemap.xml" is a reserved metadata file name in the app router, so the
+  // gallery sitemap route lives at /designs/sitemap-xml and is served here.
+  async rewrites() {
+    return [{ source: "/designs/sitemap.xml", destination: "/designs/sitemap-xml" }]
+  },
 }
 
 export default nextConfig

@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Bell, BellRing, Check, ClipboardCheck, ExternalLink, Mail, MapPinned } from "lucide-react"
+import { Bell, BellRing, CalendarClock, Check, ClipboardCheck, ExternalLink, Mail, MapPinned } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -257,7 +257,8 @@ export function ReviewNotificationCenter({
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">No pending notifications.</div>
         ) : (
           feed.items.slice(0, 12).map((item) => {
-            const Icon = item.kind === "site_visit" ? MapPinned : item.kind === "report_cc" ? Mail : ClipboardCheck
+            const Icon =
+              item.kind === "site_visit" ? MapPinned : item.kind === "report_cc" ? Mail : item.kind === "design_meeting" ? CalendarClock : ClipboardCheck
             return (
               <DropdownMenuItem
                 key={item.notificationKey}

@@ -1,4 +1,4 @@
-export type AppNotificationKind = "review" | "site_visit" | "report_cc"
+export type AppNotificationKind = "review" | "site_visit" | "report_cc" | "design_meeting"
 
 export type AppNotificationItem = {
   id: string

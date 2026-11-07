@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { getReviewSubmissionFeed } from "@/lib/review-submissions/server"
 import { getSiteVisitTaskFeed } from "@/lib/site-visits/server"
 import { getReportCcNotificationFeed } from "@/lib/report-cc/server"
+import { getDesignMeetingNotificationFeed } from "@/lib/design-gallery/booking/admin"
 import type { AppNotificationFeed, AppNotificationItem } from "@/lib/notifications/types"
 
 export async function markNotificationAsRead({
@@ -44,17 +45,19 @@ export async function getAppNotificationFeed({
   userRole?: string | null
 }): Promise<AppNotificationFeed> {
   const admin = createAdminClient()
-  const [reviewResult, siteVisitResult, reportCcResult, readResult] = await Promise.allSettled([
+  const [reviewResult, siteVisitResult, reportCcResult, readResult, designMeetingResult] = await Promise.allSettled([
     organizationId
       ? getReviewSubmissionFeed({ userId, organizationId, projectId, userRole })
       : Promise.resolve({ canReview: false, items: [] }),
     getSiteVisitTaskFeed({ userId, projectId, userRole }),
     getReportCcNotificationFeed({ userId, projectId }),
     admin.from("user_read_notifications").select("notification_key").eq("user_id", userId),
+    getDesignMeetingNotificationFeed({ userId }),
   ])
   const reviewFeed = reviewResult.status === "fulfilled" ? reviewResult.value : { canReview: false, items: [] }
   const siteVisitFeed = siteVisitResult.status === "fulfilled" ? siteVisitResult.value : { canManage: false, items: [] }
   const reportCcFeed = reportCcResult.status === "fulfilled" ? reportCcResult.value : { canNotify: false, items: [] }
+  const designMeetingFeed = designMeetingResult.status === "fulfilled" ? designMeetingResult.value : { canNotify: false, items: [] }
 
   const readKeys = new Set<string>()
   if (readResult.status === "fulfilled" && !readResult.value.error && readResult.value.data) {
@@ -118,11 +121,14 @@ export async function getAppNotificationFeed({
     notifyActor: false,
   }))
 
-  const items = [...reportCcItems, ...reviewItems, ...siteVisitItems]
+  const items = [...designMeetingFeed.items, ...reportCcItems, ...reviewItems, ...siteVisitItems]
     .filter((item) => !readKeys.has(item.notificationKey))
     .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
     .slice(0, 50)
 
-  return { canNotify: reportCcFeed.canNotify || reviewFeed.canReview || siteVisitFeed.canManage, items }
+  return {
+    canNotify: reportCcFeed.canNotify || reviewFeed.canReview || siteVisitFeed.canManage || designMeetingFeed.canNotify,
+    items,
+  }
 }
 
