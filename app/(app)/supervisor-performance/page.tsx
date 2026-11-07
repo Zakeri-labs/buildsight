@@ -1,4 +1,7 @@
 import { requireOnboarded } from "@/lib/auth/session"
+import { cookies } from "next/headers"
+import { getSelectedProjectId } from "@/lib/project-scope"
+import { ALL_PROJECTS_SCOPE_VALUE, SELECTED_PROJECT_COOKIE } from "@/lib/project-scope-constants"
 import {
   loadSupervisorPerformanceData,
   loadSupervisorVisitComplianceData,
@@ -21,6 +24,16 @@ export default async function SupervisorPerformancePage({
   const params = await searchParams
   const session = await requireOnboarded()
   const supervisingOrg = session.supervisingOrg
+
+  const storedProjectId = await getSelectedProjectId()
+  if (storedProjectId) {
+    const store = await cookies()
+    store.set(SELECTED_PROJECT_COOKIE, ALL_PROJECTS_SCOPE_VALUE, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+    })
+  }
 
   const isManagerOrAdmin =
     supervisingOrg != null &&

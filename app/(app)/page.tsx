@@ -12,6 +12,8 @@ import { requireOnboarded } from "@/lib/auth/session"
 import { resolveUserEffectiveRole } from "@/lib/auth/effective-role"
 import { canAdministerOrganization } from "@/lib/auth/guards"
 import { getSelectedProjectId } from "@/lib/project-scope"
+import { ALL_PROJECTS_SCOPE_VALUE, SELECTED_PROJECT_COOKIE } from "@/lib/project-scope-constants"
+import { cookies } from "next/headers"
 import { getDashboardData, type DashboardData } from "@/lib/db/domain"
 import { dashboardActivityDateFilter, resolveDashboardDateRange } from "@/lib/dashboard/date-range"
 import { getProjectSupervisorCandidates } from "@/lib/projects/supervisor-candidates-server"
@@ -60,7 +62,16 @@ export default async function DashboardPage({
   }
   const hasAdminRole = roleResolution.role === "admin"
 
-  const projectId = await getSelectedProjectId()
+  const storedProjectId = await getSelectedProjectId()
+  if (storedProjectId) {
+    const store = await cookies()
+    store.set(SELECTED_PROJECT_COOKIE, ALL_PROJECTS_SCOPE_VALUE, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+    })
+  }
+  const projectId = null
   const orgId = session.supervisingOrg?.id ?? session.memberships[0]?.organization?.id ?? null
   const data = orgId
     ? await getDashboardData(orgId, projectId, session.userId, activityDateFilter, hasAdminRole, true)
