@@ -211,9 +211,6 @@ export async function scheduleSiteVisitAction(input: {
   if (!DATE_PATTERN.test(input.scheduledDate) || !TIME_PATTERN.test(input.scheduledTime)) {
     return { ok: false, error: "Select a valid visit date and time." }
   }
-  if (input.scheduledDate < currentCalendarDateKey()) {
-    return { ok: false, error: "Visit date cannot be in the past." }
-  }
   const assignedUserIds = Array.from(new Set(input.assignedUserIds ?? []))
   if (assignedUserIds.some((id) => !UUID_PATTERN.test(id))) {
     return { ok: false, error: "One or more assigned participants are invalid." }
@@ -393,9 +390,6 @@ export async function updateScheduledSiteVisitAction(input: {
   if (!DATE_PATTERN.test(input.scheduledDate) || !TIME_PATTERN.test(input.scheduledTime)) {
     return { ok: false, error: "Select a valid visit date and time." }
   }
-  if (input.scheduledDate < currentCalendarDateKey()) {
-    return { ok: false, error: "Visit date cannot be in the past." }
-  }
   const assignedUserIds = Array.from(new Set(input.assignedUserIds ?? []))
   if (assignedUserIds.some((id) => !UUID_PATTERN.test(id))) {
     return { ok: false, error: "One or more assigned participants are invalid." }
@@ -413,9 +407,6 @@ export async function updateScheduledSiteVisitAction(input: {
     if (!request) return { ok: false, error: "Site visit request not found." }
     if (request.status !== "scheduled") {
       return { ok: false, error: "Only scheduled site visits can be edited." }
-    }
-    if (request.scheduled_date && request.scheduled_date < currentCalendarDateKey()) {
-      return { ok: false, error: "Past visits cannot be modified." }
     }
 
     const { allowed, isAdmin } = await checkEditOrCancelPermission(actorId, request)
@@ -484,9 +475,6 @@ export async function createDirectSiteVisitAction(input: {
   if (!UUID_PATTERN.test(input.projectId)) return { ok: false, error: "Select a valid project." }
   if (!DATE_PATTERN.test(input.scheduledDate) || !TIME_PATTERN.test(input.scheduledTime)) {
     return { ok: false, error: "Select a valid visit date and time." }
-  }
-  if (input.scheduledDate < currentCalendarDateKey()) {
-    return { ok: false, error: "Visit date cannot be in the past." }
   }
 
   const assignedUserIds = Array.from(new Set(input.assignedUserIds ?? []))
@@ -674,9 +662,6 @@ export async function approveCalendarClientVisitRequestAction(input: {
   if (!UUID_PATTERN.test(input.requestId)) return { ok: false, error: "Invalid Client Visit Request." }
   if (!DATE_PATTERN.test(input.scheduledDate) || !TIME_PATTERN.test(input.scheduledTime)) {
     return { ok: false, error: "Select a valid confirmed visit date and time." }
-  }
-  if (input.scheduledDate < currentCalendarDateKey()) {
-    return { ok: false, error: "Visit date cannot be in the past." }
   }
 
   const assignedUserIds = Array.from(new Set(input.assignedUserIds ?? []))
