@@ -2,7 +2,7 @@ import Link from "next/link"
 import { Home, Images, LayoutGrid, MessageCircle, Palette } from "lucide-react"
 import { galleryHref, type PublicLocale } from "@/lib/design-gallery/public-locale"
 import type { DesignGallerySite } from "@/lib/design-gallery/types"
-import { BONYAN_CONTACT, mainSiteUrl } from "./bonyan-header"
+import { BONYAN_CONTACT, mainSiteUrl } from "./bonyan-shared"
 
 export function BonyanMobileNav({
   site,

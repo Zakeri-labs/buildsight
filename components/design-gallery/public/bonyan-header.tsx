@@ -2,45 +2,13 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Mail, MapPin, Menu, Phone } from "lucide-react"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Mail, MapPin, Menu, Phone, X } from "lucide-react"
 import { galleryHref, type PublicLocale } from "@/lib/design-gallery/public-locale"
 import type { DesignGallerySite } from "@/lib/design-gallery/types"
 import { cn } from "@/lib/utils"
-
-export const BONYAN_CONTACT = {
-  phone: "+968 9411 4511",
-  phoneRaw: "+96894114511",
-  phoneHref: "tel:+96894114511",
-  whatsapp: "+968 9411 4511",
-  whatsappHref: "https://wa.me/96894114511",
-  email: "info@bonyanec.com",
-  mapHref: "https://maps.app.goo.gl/QH2wMhHbD71WDPY58",
-  locationAr: "سلطنة عُمان - مسقط",
-  locationEn: "Muscat, Oman",
-  addressAr: "المعبيلة (صناعية)، مسقط، سلطنة عُمان",
-  addressEn: "Mabela, Sanaya, Muscat",
-  social: [
-    { label: "Bonyan Construction", href: "https://instagram.com/bonyan_ec" },
-    { label: "Interior Design", href: "https://instagram.com/bonyan_ec" },
-    { label: "Construction Consultancy", href: "https://instagram.com/bonyan_ec" },
-  ],
-} as const
-
-export function mainSiteUrl(path: string, locale: PublicLocale, baseUrl: string): string {
-  const root = baseUrl.replace(/\/$/, "")
-  const p = path.startsWith("/") ? path : `/${path}`
-  if (locale === "ar") {
-    return `${root}${p}`
-  }
-  if (p === "/" || p.startsWith("/#")) {
-    return `${root}/en${p === "/" ? "" : p}`
-  }
-  return `${root}/en${p}`
-}
+import { BONYAN_CONTACT, mainSiteUrl } from "./bonyan-shared"
 
 export function BonyanBrand({
-  site,
   locale,
   baseUrl,
 }: {
@@ -131,6 +99,18 @@ export function BonyanHeader({
     window.addEventListener("scroll", onScroll, { passive: true })
     return () => window.removeEventListener("scroll", onScroll)
   }, [])
+
+  // Lock body scroll when mobile drawer is open
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden"
+    } else {
+      document.body.style.overflow = ""
+    }
+    return () => {
+      document.body.style.overflow = ""
+    }
+  }, [open])
 
   const navItems = [
     { label: isAr ? "الرئيسية" : "Home", href: mainSiteUrl("/", locale, baseUrl), isActive: false },
@@ -279,128 +259,144 @@ export function BonyanHeader({
         </div>
 
         {/* Mobile menu drawer */}
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetContent
-            side={isAr ? "right" : "right"}
-            className="flex w-[86%] max-w-sm flex-col overflow-y-auto border-s border-white/15 bg-[#101826] px-6 py-6 text-white"
-          >
-            <SheetHeader className="sr-only">
-              <SheetTitle>{isAr ? "القائمة" : "Menu"}</SheetTitle>
-            </SheetHeader>
+        {open && (
+          <div className="fixed inset-0 z-50 lg:hidden">
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+              onClick={() => setOpen(false)}
+              aria-hidden="true"
+            />
 
-            <div className="flex items-center justify-between pe-10">
-              <BonyanBrand site={site} locale={locale} baseUrl={baseUrl} compact />
-            </div>
-
-            <nav className="mt-8 flex flex-col" aria-label={isAr ? "القائمة" : "Menu"}>
-              {navItems.map((item) =>
-                item.isLocal ? (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className={cn(
-                      "border-b border-white/10 py-4 text-base font-semibold transition-colors",
-                      item.isActive
-                        ? "text-[var(--gallery-accent,#cfa043)]"
-                        : "text-white/90 hover:text-[var(--gallery-accent,#cfa043)]"
-                    )}
-                  >
-                    {item.label}
-                  </Link>
-                ) : (
-                  <a
-                    key={item.label}
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className={cn(
-                      "border-b border-white/10 py-4 text-base font-semibold transition-colors",
-                      item.isActive
-                        ? "text-[var(--gallery-accent,#cfa043)]"
-                        : "text-white/90 hover:text-[var(--gallery-accent,#cfa043)]"
-                    )}
-                  >
-                    {item.label}
-                  </a>
-                )
+            {/* Slide-over panel */}
+            <div
+              className={cn(
+                "fixed inset-y-0 z-50 flex w-[86%] max-w-sm flex-col overflow-y-auto border-white/15 bg-[#101826] px-6 py-6 text-white shadow-2xl transition-transform duration-300",
+                isAr ? "right-0 border-s" : "right-0 border-s"
               )}
-            </nav>
+            >
+              <div className="flex items-center justify-between">
+                <BonyanBrand site={site} locale={locale} baseUrl={baseUrl} compact />
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label={isAr ? "إغلاق القائمة" : "Close menu"}
+                  className="flex size-9 items-center justify-center rounded-xs border border-white/15 text-white/80 hover:text-white hover:border-white/40 transition-colors"
+                >
+                  <X aria-hidden="true" className="size-5" />
+                </button>
+              </div>
 
-            <ul className="mt-6 space-y-1 border-t border-white/10 pt-5">
-              <li>
-                <a
-                  href={`mailto:${BONYAN_CONTACT.email}`}
-                  className="group flex min-h-12 items-center gap-3 rounded-xs px-2 transition-colors hover:bg-white/5"
-                >
-                  <Mail aria-hidden="true" className="size-4 shrink-0 text-[var(--gallery-accent,#cfa043)]" />
-                  <span className="min-w-0">
-                    <span className="block text-[0.625rem] uppercase tracking-widest text-white/50">
-                      {isAr ? "البريد الإلكتروني" : "Email"}
-                    </span>
-                    <span dir="ltr" className="block text-start text-sm font-medium text-sky-400 underline">
-                      {BONYAN_CONTACT.email}
-                    </span>
-                  </span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href={BONYAN_CONTACT.phoneHref}
-                  className="group flex min-h-12 items-center gap-3 rounded-xs px-2 transition-colors hover:bg-white/5"
-                >
-                  <Phone aria-hidden="true" className="size-4 shrink-0 text-[var(--gallery-accent,#cfa043)]" />
-                  <span className="min-w-0">
-                    <span className="block text-[0.625rem] uppercase tracking-widest text-white/50">
-                      {isAr ? "الهاتف" : "Phone"}
-                    </span>
-                    <span dir="ltr" className="block text-start text-sm font-medium text-white">
-                      {BONYAN_CONTACT.phone}
-                    </span>
-                  </span>
-                </a>
-              </li>
-              <li>
-                <a
-                  href={BONYAN_CONTACT.mapHref}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="group flex min-h-12 items-center gap-3 rounded-xs px-2 transition-colors hover:bg-white/5"
-                >
-                  <MapPin aria-hidden="true" className="size-4 shrink-0 text-[var(--gallery-accent,#cfa043)]" />
-                  <span className="min-w-0">
-                    <span className="block text-[0.625rem] uppercase tracking-widest text-white/50">
-                      {isAr ? "الموقع" : "Location"}
-                    </span>
-                    <span className="block text-sm font-medium text-white">
-                      {isAr ? BONYAN_CONTACT.locationAr : BONYAN_CONTACT.locationEn}
-                    </span>
-                  </span>
-                </a>
-              </li>
-            </ul>
+              <nav className="mt-8 flex flex-col" aria-label={isAr ? "القائمة" : "Menu"}>
+                {navItems.map((item) =>
+                  item.isLocal ? (
+                    <Link
+                      key={item.label}
+                      href={item.href}
+                      onClick={() => setOpen(false)}
+                      className={cn(
+                        "border-b border-white/10 py-4 text-base font-semibold transition-colors",
+                        item.isActive
+                          ? "text-[var(--gallery-accent,#cfa043)]"
+                          : "text-white/90 hover:text-[var(--gallery-accent,#cfa043)]"
+                      )}
+                    >
+                      {item.label}
+                    </Link>
+                  ) : (
+                    <a
+                      key={item.label}
+                      href={item.href}
+                      onClick={() => setOpen(false)}
+                      className={cn(
+                        "border-b border-white/10 py-4 text-base font-semibold transition-colors",
+                        item.isActive
+                          ? "text-[var(--gallery-accent,#cfa043)]"
+                          : "text-white/90 hover:text-[var(--gallery-accent,#cfa043)]"
+                      )}
+                    >
+                      {item.label}
+                    </a>
+                  )
+                )}
+              </nav>
 
-            <div className="mt-5 flex items-center gap-2 border-t border-white/10 pt-5 text-xs font-semibold text-[var(--gallery-accent,#cfa043)]">
-              <span className="relative flex size-2 shrink-0">
-                <span className="bonyan-status-ping text-[var(--gallery-accent,#cfa043)]" />
-                <span className="relative inline-flex size-2 rounded-full bg-[var(--gallery-accent,#cfa043)]" />
-              </span>
-              <span className="font-bold uppercase tracking-wider">
-                {isAr ? "استشارات نَشِطة" : "Active Consultancy"}
-              </span>
+              <ul className="mt-6 space-y-1 border-t border-white/10 pt-5">
+                <li>
+                  <a
+                    href={`mailto:${BONYAN_CONTACT.email}`}
+                    className="group flex min-h-12 items-center gap-3 rounded-xs px-2 transition-colors hover:bg-white/5"
+                  >
+                    <Mail aria-hidden="true" className="size-4 shrink-0 text-[var(--gallery-accent,#cfa043)]" />
+                    <span className="min-w-0">
+                      <span className="block text-[0.625rem] uppercase tracking-widest text-white/50">
+                        {isAr ? "البريد الإلكتروني" : "Email"}
+                      </span>
+                      <span dir="ltr" className="block text-start text-sm font-medium text-sky-400 underline">
+                        {BONYAN_CONTACT.email}
+                      </span>
+                    </span>
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href={BONYAN_CONTACT.phoneHref}
+                    className="group flex min-h-12 items-center gap-3 rounded-xs px-2 transition-colors hover:bg-white/5"
+                  >
+                    <Phone aria-hidden="true" className="size-4 shrink-0 text-[var(--gallery-accent,#cfa043)]" />
+                    <span className="min-w-0">
+                      <span className="block text-[0.625rem] uppercase tracking-widest text-white/50">
+                        {isAr ? "الهاتف" : "Phone"}
+                      </span>
+                      <span dir="ltr" className="block text-start text-sm font-medium text-white">
+                        {BONYAN_CONTACT.phone}
+                      </span>
+                    </span>
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href={BONYAN_CONTACT.mapHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="group flex min-h-12 items-center gap-3 rounded-xs px-2 transition-colors hover:bg-white/5"
+                  >
+                    <MapPin aria-hidden="true" className="size-4 shrink-0 text-[var(--gallery-accent,#cfa043)]" />
+                    <span className="min-w-0">
+                      <span className="block text-[0.625rem] uppercase tracking-widest text-white/50">
+                        {isAr ? "الموقع" : "Location"}
+                      </span>
+                      <span className="block text-sm font-medium text-white">
+                        {isAr ? BONYAN_CONTACT.locationAr : BONYAN_CONTACT.locationEn}
+                      </span>
+                    </span>
+                  </a>
+                </li>
+              </ul>
+
+              <div className="mt-5 flex items-center gap-2 border-t border-white/10 pt-5 text-xs font-semibold text-[var(--gallery-accent,#cfa043)]">
+                <span className="relative flex size-2 shrink-0">
+                  <span className="bonyan-status-ping text-[var(--gallery-accent,#cfa043)]" />
+                  <span className="relative inline-flex size-2 rounded-full bg-[var(--gallery-accent,#cfa043)]" />
+                </span>
+                <span className="font-bold uppercase tracking-wider">
+                  {isAr ? "استشارات نَشِطة" : "Active Consultancy"}
+                </span>
+              </div>
+
+              <div className="mt-auto space-y-4 pt-8">
+                <BonyanLanguageSwitcher className="w-fit" alternateHref={alternateHref} locale={locale} />
+                <Link
+                  href={galleryHref("/designs/book", locale)}
+                  onClick={() => setOpen(false)}
+                  className="flex w-full min-h-11 items-center justify-center rounded-xs bg-[var(--gallery-accent,#cfa043)] px-4 py-2 text-sm font-semibold text-[#121b2a] transition-all hover:brightness-110"
+                >
+                  {isAr ? "احجز استشارة" : "Book Consultation"}
+                </Link>
+              </div>
             </div>
-
-            <div className="mt-auto space-y-4 pt-8">
-              <BonyanLanguageSwitcher className="w-fit" alternateHref={alternateHref} locale={locale} />
-              <Link
-                href={galleryHref("/designs/book", locale)}
-                onClick={() => setOpen(false)}
-                className="flex w-full min-h-11 items-center justify-center rounded-xs bg-[var(--gallery-accent,#cfa043)] px-4 py-2 text-sm font-semibold text-[#121b2a] transition-all hover:brightness-110"
-              >
-                {isAr ? "احجز استشارة" : "Book Consultation"}
-              </Link>
-            </div>
-          </SheetContent>
-        </Sheet>
+          </div>
+        )}
       </header>
     </>
   )

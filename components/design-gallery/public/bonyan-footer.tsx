@@ -2,7 +2,8 @@ import Link from "next/link"
 import { ArrowRight, Mail, MapPin, Phone } from "lucide-react"
 import { galleryHref, type PublicLocale } from "@/lib/design-gallery/public-locale"
 import type { DesignGallerySite } from "@/lib/design-gallery/types"
-import { BONYAN_CONTACT, BonyanBrand, BonyanLanguageSwitcher, mainSiteUrl } from "./bonyan-header"
+import { BONYAN_CONTACT, mainSiteUrl } from "./bonyan-shared"
+import { BonyanBrand, BonyanLanguageSwitcher } from "./bonyan-header"
 
 function InstagramIcon({ className }: { className?: string }) {
   return (
