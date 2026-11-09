@@ -153,16 +153,16 @@ export function BonyanFooter({
             </li>
           </ul>
 
-          <Link
-            href={galleryHref("/designs/book", locale)}
+          <a
+            href={mainSiteUrl("/contact", locale, baseUrl)}
             className="group mt-6 flex w-full min-h-11 items-center justify-center gap-2 rounded-xs bg-[var(--gallery-accent,#cfa043)] px-4 py-2.5 text-sm font-semibold text-[#121b2a] shadow-[0_8px_24px_-14px_rgba(207,160,67,0.6)] transition-all hover:brightness-110 hover:-translate-y-0.5"
           >
-            <span>{isAr ? "احجز استشارة" : "Book Consultation"}</span>
+            <span>{isAr ? "تواصل معنا" : "Contact Us"}</span>
             <ArrowRight
               aria-hidden="true"
               className="size-4 shrink-0 transition-transform duration-300 group-hover:translate-x-1 rtl:rotate-180 rtl:group-hover:-translate-x-1"
             />
-          </Link>
+          </a>
 
           <a
             href={BONYAN_CONTACT.whatsappHref}

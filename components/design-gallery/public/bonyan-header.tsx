@@ -240,12 +240,12 @@ export function BonyanHeader({
           <div className="flex items-center gap-3">
             <BonyanLanguageSwitcher className="hidden sm:flex" alternateHref={alternateHref} locale={locale} />
 
-            <Link
-              href={galleryHref("/designs/book", locale)}
+            <a
+              href={mainSiteUrl("/contact", locale, baseUrl)}
               className="hidden min-h-10 items-center justify-center rounded-xs bg-[var(--gallery-accent,#cfa043)] px-5 py-2 text-xs font-semibold text-[#121b2a] shadow-[0_8px_24px_-14px_rgba(207,160,67,0.6)] transition-all duration-300 hover:brightness-110 hover:-translate-y-0.5 lg:inline-flex"
             >
-              {isAr ? "احجز استشارة" : "Book Consultation"}
-            </Link>
+              {isAr ? "تواصل معنا" : "Contact Us"}
+            </a>
 
             <button
               type="button"
@@ -386,13 +386,13 @@ export function BonyanHeader({
 
               <div className="mt-auto space-y-4 pt-8">
                 <BonyanLanguageSwitcher className="w-fit" alternateHref={alternateHref} locale={locale} />
-                <Link
-                  href={galleryHref("/designs/book", locale)}
+                <a
+                  href={mainSiteUrl("/contact", locale, baseUrl)}
                   onClick={() => setOpen(false)}
                   className="flex w-full min-h-11 items-center justify-center rounded-xs bg-[var(--gallery-accent,#cfa043)] px-4 py-2 text-sm font-semibold text-[#121b2a] transition-all hover:brightness-110"
                 >
-                  {isAr ? "احجز استشارة" : "Book Consultation"}
-                </Link>
+                  {isAr ? "تواصل معنا" : "Contact Us"}
+                </a>
               </div>
             </div>
           </div>
