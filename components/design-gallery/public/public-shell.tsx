@@ -43,7 +43,7 @@ export function PublicShell({
 
         .bonyan-designs-page,
         .bonyan-designs-page * {
-          font-family: "Manrope", "IBM Plex Sans Arabic", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          font-family: "Manrope", "IBM Plex Sans Arabic", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
         }
 
         .bonyan-designs-page[lang="ar"],
@@ -52,14 +52,18 @@ export function PublicShell({
         .bonyan-designs-page[dir="rtl"] *,
         [dir="rtl"] .bonyan-designs-page,
         [dir="rtl"] .bonyan-designs-page * {
-          font-family: "IBM Plex Sans Arabic", "Manrope", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          font-family: "IBM Plex Sans Arabic", "Manrope", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        }
+
+        .bonyan-designs-page .rounded-xs {
+          border-radius: 2px !important;
         }
 
         .bonyan-designs-page h1,
         .bonyan-designs-page h2,
         .bonyan-designs-page h3,
         .bonyan-designs-page h4 {
-          font-family: "Manrope", "IBM Plex Sans Arabic", system-ui, -apple-system, sans-serif;
+          font-family: "Manrope", "IBM Plex Sans Arabic", system-ui, -apple-system, sans-serif !important;
           letter-spacing: -0.02em;
         }
 
@@ -75,9 +79,9 @@ export function PublicShell({
         [dir="rtl"] .bonyan-designs-page h2,
         [dir="rtl"] .bonyan-designs-page h3,
         [dir="rtl"] .bonyan-designs-page h4 {
-          font-family: "IBM Plex Sans Arabic", "Manrope", system-ui, -apple-system, sans-serif;
-          letter-spacing: 0;
-          line-height: 1.35;
+          font-family: "IBM Plex Sans Arabic", "Manrope", system-ui, -apple-system, sans-serif !important;
+          letter-spacing: 0 !important;
+          line-height: 1.35 !important;
         }
 
         .bonyan-designs-page[lang="ar"] p,
@@ -86,7 +90,7 @@ export function PublicShell({
         .bonyan-designs-page[dir="rtl"] li,
         [dir="rtl"] .bonyan-designs-page p,
         [dir="rtl"] .bonyan-designs-page li {
-          line-height: 1.85;
+          line-height: 1.9 !important;
         }
       `}</style>
 

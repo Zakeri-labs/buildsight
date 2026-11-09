@@ -57,7 +57,9 @@ export function BonyanLanguageSwitcher({
         aria-current={isCurrent ? "true" : undefined}
         className={cn(
           "min-h-9 px-2.5 py-1.5 text-xs font-bold tracking-widest transition-colors",
-          isCurrent ? "text-[var(--gallery-accent,#cfa043)]" : "text-white/60 hover:text-white"
+          isCurrent
+            ? "text-[oklch(0.762_0.135_79)]"
+            : "text-[oklch(0.78_0.012_250)] hover:text-[oklch(0.965_0.006_90)]"
         )}
       >
         {label}
@@ -67,12 +69,12 @@ export function BonyanLanguageSwitcher({
 
   return (
     <div
-      className={cn("flex items-center rounded-xs border border-white/15 bg-white/5", className)}
+      className={cn("flex items-center rounded-xs border border-[oklch(1_0_0/12%)]", className)}
       role="group"
       aria-label={locale === "ar" ? "اللغة" : "Language"}
     >
       {item("en", "EN")}
-      <span aria-hidden="true" className="h-4 w-px bg-white/15" />
+      <span aria-hidden="true" className="h-4 w-px bg-[oklch(1_0_0/12%)]" />
       {item("ar", "AR")}
     </div>
   )
@@ -242,7 +244,7 @@ export function BonyanHeader({
 
             <a
               href={mainSiteUrl("/contact", locale, baseUrl)}
-              className="hidden min-h-10 items-center justify-center rounded-xs bg-[var(--gallery-accent,#cfa043)] px-5 py-2 text-xs font-semibold text-[#121b2a] shadow-[0_8px_24px_-14px_rgba(207,160,67,0.6)] transition-all duration-300 hover:brightness-110 hover:-translate-y-0.5 lg:inline-flex"
+              className="group hidden min-h-11 items-center justify-center gap-2 rounded-xs bg-[oklch(0.762_0.135_79)] px-6 py-3 text-sm font-semibold tracking-wide text-[oklch(0.19_0.035_258)] shadow-[0_8px_24px_-14px_oklch(0.762_0.135_79)] transition-all duration-300 hover:brightness-110 hover:-translate-y-0.5 lg:inline-flex"
             >
               {isAr ? "تواصل معنا" : "Contact Us"}
             </a>
