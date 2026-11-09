@@ -1,12 +1,9 @@
-import Link from "next/link"
-import { MessageCircle } from "lucide-react"
-import { dictionaries } from "@/lib/i18n/dictionaries"
-import { contactMessage } from "@/lib/design-gallery/contact"
-import { galleryHref, type PublicLocale } from "@/lib/design-gallery/public-locale"
+import type { PublicLocale } from "@/lib/design-gallery/public-locale"
 import type { DesignGallerySite } from "@/lib/design-gallery/types"
-import { whatsappUrl } from "@/lib/whatsapp"
-import { cn } from "@/lib/utils"
-import { ContactLink, HtmlLocale } from "./client"
+import { HtmlLocale } from "./client"
+import { BonyanHeader } from "./bonyan-header"
+import { BonyanFooter } from "./bonyan-footer"
+import { BonyanMobileNav } from "./bonyan-mobile-nav"
 
 export function siteName(site: DesignGallerySite, locale: PublicLocale): string {
   return (locale === "ar" ? site.displayNameAr || site.displayNameEn : site.displayNameEn || site.displayNameAr) ?? ""
@@ -15,17 +12,17 @@ export function siteName(site: DesignGallerySite, locale: PublicLocale): string 
 /** Gold call-to-action and outline button styles shared by the public pages. */
 export const buttonClass = {
   primary:
-    "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[var(--gallery-accent)] px-4 py-2 text-sm font-semibold text-[var(--gallery-accent-foreground)] transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80",
+    "inline-flex min-h-10 items-center justify-center gap-2 rounded-xs bg-[var(--gallery-accent)] px-4 py-2 text-sm font-semibold text-[var(--gallery-accent-foreground)] transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80",
   outline:
-    "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-white/25 px-4 py-2 text-sm font-medium text-white transition-colors hover:border-white/50 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gallery-accent)]",
+    "inline-flex min-h-10 items-center justify-center gap-2 rounded-xs border border-white/25 px-4 py-2 text-sm font-medium text-white transition-colors hover:border-white/50 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gallery-accent)]",
   whatsapp:
-    "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-emerald-400/70 px-4 py-2 text-sm font-medium text-emerald-300 transition-colors hover:bg-emerald-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300",
+    "inline-flex min-h-10 items-center justify-center gap-2 rounded-xs border border-emerald-400/70 px-4 py-2 text-sm font-medium text-emerald-300 transition-colors hover:bg-emerald-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300",
 }
 
 /**
- * Frame of every public gallery page: fixed language and direction, the
- * organization's logo/name, a link to its main website, the language switch
- * and a WhatsApp contact button.
+ * Public frame for Bonyan Design Gallery:
+ * Replicates the header, footer, brand, and mobile navigation of the
+ * main bonyan website, while keeping app.bonyanec.com's app shell untouched.
  */
 export function PublicShell({
   site,
@@ -39,63 +36,24 @@ export function PublicShell({
   alternateHref: string
   children: React.ReactNode
 }) {
-  const t = dictionaries[locale].designGalleryPublic
-  const name = siteName(site, locale)
   return (
     <div
       lang={locale}
       dir={locale === "ar" ? "rtl" : "ltr"}
-      className="min-h-dvh bg-[var(--gallery-bg)] text-white [--gallery-accent-foreground:#1a1405] [--gallery-accent:#e0ad3a] [--gallery-bg:#0e1b30] [--gallery-card:#15263f]"
+      className="min-h-dvh flex flex-col bg-[#101826] text-white [--gallery-accent-foreground:#121b2a] [--gallery-accent:#cfa043] [--gallery-bg:#101826] [--gallery-card:#162237] selection:bg-[#cfa043]/30"
     >
       <HtmlLocale locale={locale} />
-      <header className="sticky top-0 z-20 border-b border-white/10 bg-[var(--gallery-bg)]/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6">
-          <Link href={galleryHref("/designs", locale)} className="flex min-w-0 items-center gap-2">
-            {site.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={site.logoUrl} alt={name} className="h-8 w-auto max-w-[140px] object-contain sm:h-9" />
-            ) : (
-              <span className="truncate text-lg font-semibold">{name}</span>
-            )}
-          </Link>
-          <nav className="ms-auto flex items-center gap-2 sm:gap-3" aria-label={t.title}>
-            {site.websiteUrl ? (
-              <a href={site.websiteUrl} className="hidden text-sm text-white/70 hover:text-white sm:inline">
-                {t.website}
-              </a>
-            ) : null}
-            <Link
-              href={alternateHref}
-              hrefLang={locale === "ar" ? "en" : "ar"}
-              className="rounded-full border border-white/20 px-3 py-1 text-xs font-medium text-white/80 hover:border-white/50 hover:text-white"
-            >
-              {t.switchLanguage}
-            </Link>
-            {site.whatsappPhone ? (
-              <ContactLink
-                href={whatsappUrl(site.whatsappPhone, contactMessage("general", locale))}
-                intent="general"
-                locale={locale}
-                className={cn(buttonClass.primary, "min-h-9 px-3")}
-              >
-                <MessageCircle className="size-4" aria-hidden />
-                <span>{t.contact}</span>
-              </ContactLink>
-            ) : null}
-          </nav>
-        </div>
-      </header>
-      <main className="mx-auto max-w-7xl px-4 pb-16 pt-6 sm:px-6 sm:pt-10">{children}</main>
-      <footer className="border-t border-white/10">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-6 text-xs text-white/50 sm:px-6">
-          <span>{name}</span>
-          {site.websiteUrl ? (
-            <a href={site.websiteUrl} className="hover:text-white" dir="ltr">
-              {site.websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-            </a>
-          ) : null}
-        </div>
-      </footer>
+      <BonyanHeader site={site} locale={locale} alternateHref={alternateHref} />
+      <main className="flex-1 mx-auto w-full max-w-7xl px-4 pb-16 pt-6 sm:px-6 sm:pt-10">
+        {children}
+      </main>
+      <BonyanFooter site={site} locale={locale} alternateHref={alternateHref} />
+      {/* keeps content clear of the fixed mobile bar */}
+      <div
+        aria-hidden="true"
+        className="h-[calc(3.5rem+env(safe-area-inset-bottom))] shrink-0 lg:hidden"
+      />
+      <BonyanMobileNav site={site} locale={locale} />
     </div>
   )
 }
