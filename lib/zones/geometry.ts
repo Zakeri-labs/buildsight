@@ -1,4 +1,9 @@
-import type { GeoPoint } from "./types"
+import type {
+  CircleZoneGeometry,
+  GeoPoint,
+  PolygonZoneGeometry,
+  ZoneGeometry,
+} from "./types"
 
 /** Earth mean radius in meters according to WGS84 */
 export const EARTH_RADIUS_METERS = 6_371_000
@@ -342,4 +347,126 @@ export function calculatePolygonAreaSquareMeters(coordinates: GeoPoint[]): numbe
   }
 
   return Math.abs(area) / 2
+}
+
+/**
+ * Helper: checks if a circle intersects a line segment between points A and B.
+ */
+function doesCircleIntersectSegment(
+  center: GeoPoint,
+  radiusMeters: number,
+  a: GeoPoint,
+  b: GeoPoint,
+): boolean {
+  if (haversineDistanceMeters(a, center) <= radiusMeters) return true
+  if (haversineDistanceMeters(b, center) <= radiusMeters) return true
+
+  const latRad = (center.lat * Math.PI) / 180
+  const metersPerDegLat = 111_139
+  const metersPerDegLng = metersPerDegLat * Math.cos(latRad)
+
+  const ux = (b.lng - a.lng) * metersPerDegLng
+  const uy = (b.lat - a.lat) * metersPerDegLat
+  const vx = (center.lng - a.lng) * metersPerDegLng
+  const vy = (center.lat - a.lat) * metersPerDegLat
+
+  const uLenSq = ux * ux + uy * uy
+  if (uLenSq === 0) return haversineDistanceMeters(a, center) <= radiusMeters
+
+  const t = Math.max(0, Math.min(1, (vx * ux + vy * uy) / uLenSq))
+  const closest: GeoPoint = {
+    lat: a.lat + t * (b.lat - a.lat),
+    lng: a.lng + t * (b.lng - a.lng),
+  }
+
+  return haversineDistanceMeters(closest, center) <= radiusMeters
+}
+
+function checkCirclePolygonOverlap(
+  circle: CircleZoneGeometry,
+  polygon: PolygonZoneGeometry,
+): boolean {
+  const coords = polygon.coordinates
+  if (!coords.length) return false
+
+  // 1. Center of circle is inside polygon
+  if (isPointInPolygonZone(circle.center, coords)) return true
+
+  // 2. Any vertex of polygon is inside circle
+  for (const pt of coords) {
+    if (haversineDistanceMeters(pt, circle.center) <= circle.radiusMeters) {
+      return true
+    }
+  }
+
+  // 3. Any polygon edge intersects circle
+  const n = coords.length
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n
+    if (doesCircleIntersectSegment(circle.center, circle.radiusMeters, coords[i], coords[j])) {
+      return true
+    }
+  }
+
+  return false
+}
+
+/**
+ * Checks whether two geographic zone geometries overlap.
+ * Supports:
+ * - Circle vs Circle
+ * - Polygon vs Polygon
+ * - Circle vs Polygon (and Polygon vs Circle)
+ *
+ * Used for non-blocking overlap advisory notifications during zone creation and editing.
+ */
+export function checkZonesOverlap(geomA: ZoneGeometry, geomB: ZoneGeometry): boolean {
+  if (!geomA || !geomB) return false
+
+  // Case 1: Circle vs Circle
+  if (geomA.type === "circle" && geomB.type === "circle") {
+    const dist = haversineDistanceMeters(geomA.center, geomB.center)
+    return dist <= geomA.radiusMeters + geomB.radiusMeters
+  }
+
+  // Case 2: Circle vs Polygon
+  if (geomA.type === "circle" && geomB.type === "polygon") {
+    return checkCirclePolygonOverlap(geomA, geomB)
+  }
+  if (geomA.type === "polygon" && geomB.type === "circle") {
+    return checkCirclePolygonOverlap(geomB, geomA)
+  }
+
+  // Case 3: Polygon vs Polygon
+  if (geomA.type === "polygon" && geomB.type === "polygon") {
+    const coordsA = geomA.coordinates
+    const coordsB = geomB.coordinates
+    if (!coordsA.length || !coordsB.length) return false
+
+    // Check if any vertex of A is inside B
+    for (const pt of coordsA) {
+      if (isPointInPolygonZone(pt, coordsB)) return true
+    }
+
+    // Check if any vertex of B is inside A
+    for (const pt of coordsB) {
+      if (isPointInPolygonZone(pt, coordsA)) return true
+    }
+
+    // Check if any edge of A intersects any edge of B
+    const nA = coordsA.length
+    const nB = coordsB.length
+    for (let i = 0; i < nA; i++) {
+      const iNext = (i + 1) % nA
+      for (let j = 0; j < nB; j++) {
+        const jNext = (j + 1) % nB
+        if (doSegmentsIntersect(coordsA[i], coordsA[iNext], coordsB[j], coordsB[jNext])) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
+  return false
 }

@@ -2,11 +2,39 @@
 
 import dynamic from "next/dynamic"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { LocateFixed, Map, MapPin, SlidersHorizontal, Loader2 } from "lucide-react"
-import { getOrganizationZonesAction } from "@/lib/actions/zones"
-import type { ProjectZone } from "@/lib/zones/types"
-import type { MapProjectItem } from "./types"
+import {
+  Circle as CircleIcon,
+  LocateFixed,
+  Map,
+  Pentagon,
+  Plus,
+  SlidersHorizontal,
+  Loader2,
+} from "lucide-react"
+import {
+  createProjectZoneAction,
+  deleteProjectZoneAction,
+  getOrganizationZonesAction,
+  updateProjectZoneAction,
+} from "@/lib/actions/zones"
+import { useCurrentUser } from "@/components/current-user-provider"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import type {
+  CreateZoneInput,
+  ProjectZone,
+  ProjectZoneType,
+  UpdateZoneInput,
+  ZoneGeometry,
+} from "@/lib/zones/types"
+import type { DrawingMode, MapProjectItem } from "./types"
 import type { ProjectRow } from "@/components/projects/projects-list"
+import { ZoneDialog } from "./zone-dialog"
+import { ZoneDeleteDialog } from "./zone-delete-dialog"
 
 // Dynamically import Leaflet canvas with SSR disabled
 const DynamicProjectMapCanvas = dynamic(
@@ -28,7 +56,9 @@ function MapLoadingSkeleton() {
   )
 }
 
-function hasValidCoordinates(project: ProjectRow): project is ProjectRow & { latitude: number; longitude: number } {
+function hasValidCoordinates(
+  project: ProjectRow,
+): project is ProjectRow & { latitude: number; longitude: number } {
   return (
     typeof project.latitude === "number" &&
     typeof project.longitude === "number" &&
@@ -58,6 +88,16 @@ function toMapItem(project: ProjectRow & { latitude: number; longitude: number }
   }
 }
 
+type DialogState = {
+  open: boolean
+  mode: "create" | "edit"
+  zoneType: ProjectZoneType
+  geometry: ZoneGeometry | null
+  initialName: string
+  initialColor: string
+  currentZoneId?: string
+}
+
 export function ProjectMapSection({
   allProjects,
   filteredProjects,
@@ -73,6 +113,42 @@ export function ProjectMapSection({
   const [syncWithFilters, setSyncWithFilters] = useState(true)
   const [fitBoundsTrigger, setFitBoundsTrigger] = useState(0)
   const [zones, setZones] = useState<ProjectZone[]>([])
+
+  // Authorization check
+  let canManageZones = false
+  let isArchitectAdmin = false
+  try {
+    const currentUser = useCurrentUser()
+    canManageZones = currentUser.role === "org_admin" || currentUser.role === "org_manager"
+    isArchitectAdmin = currentUser.role === "architect_administrator"
+  } catch {
+    // Current user context not available (e.g. tests)
+  }
+
+  // Zone management interaction state machine
+  const [drawingMode, setDrawingMode] = useState<DrawingMode>("idle")
+  const [activeEditingZone, setActiveEditingZone] = useState<ProjectZone | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const [dialogState, setDialogState] = useState<DialogState>({
+    open: false,
+    mode: "create",
+    zoneType: "circle",
+    geometry: null,
+    initialName: "",
+    initialColor: "#2563eb",
+  })
+
+  const [deleteZoneState, setDeleteZoneState] = useState<{
+    open: boolean
+    zone: ProjectZone | null
+    isDeleting: boolean
+  }>({
+    open: false,
+    zone: null,
+    isDeleting: false,
+  })
 
   // IntersectionObserver to defer mounting until scrolled near map
   useEffect(() => {
@@ -131,6 +207,193 @@ export function ProjectMapSection({
       mappedCount: mapped.length,
     }
   }, [activeDataset])
+
+  // Do not render Project Map or Zone Management for Architect Administrator
+  if (isArchitectAdmin) {
+    return null
+  }
+
+  // Handler: when user finishes drawing a new geometry on map
+  const handleDrawingComplete = (geometry: ZoneGeometry) => {
+    setDialogState({
+      open: true,
+      mode: "create",
+      zoneType: geometry.type,
+      geometry,
+      initialName: "",
+      initialColor: "#2563eb",
+    })
+  }
+
+  // Handler: cancel current drawing/editing mode
+  const handleDrawingCancel = () => {
+    setDrawingMode("idle")
+    setActiveEditingZone(null)
+    setActionError(null)
+  }
+
+  // Handler: when user starts editing a zone from popup
+  const handleStartEditZone = (zone: ProjectZone) => {
+    setActiveEditingZone(zone)
+    if (zone.type === "circle") {
+      setDrawingMode("editing_circle")
+    } else {
+      setDrawingMode("editing_polygon")
+    }
+  }
+
+  // Handler: when user updates zone geometry via handles and clicks Save Shape
+  const handleSaveEditedGeometry = async (geometry: ZoneGeometry) => {
+    if (!activeEditingZone) return
+    setIsSubmitting(true)
+    setActionError(null)
+
+    try {
+      let input: UpdateZoneInput
+      if (geometry.type === "circle") {
+        input = {
+          id: activeEditingZone.id,
+          type: "circle",
+          geometry: {
+            center: geometry.center,
+            radiusMeters: geometry.radiusMeters,
+          },
+        }
+      } else {
+        input = {
+          id: activeEditingZone.id,
+          type: "polygon",
+          geometry: {
+            coordinates: geometry.coordinates,
+          },
+        }
+      }
+
+      const res = await updateProjectZoneAction(input)
+      if (!res.ok) {
+        setActionError(res.error)
+        return
+      }
+      setZones((prev) => prev.map((z) => (z.id === res.data.id ? res.data : z)))
+      setDrawingMode("idle")
+      setActiveEditingZone(null)
+    } catch {
+      setActionError("An unexpected error occurred while saving zone shape.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // Handler: when user clicks "Edit Details" (Name & Color)
+  const handleRequestEditDetails = (zone: ProjectZone) => {
+    setDialogState({
+      open: true,
+      mode: "edit",
+      zoneType: zone.type,
+      geometry: zone.geometry,
+      initialName: zone.name,
+      initialColor: zone.color,
+      currentZoneId: zone.id,
+    })
+  }
+
+  // Handler: when user clicks "Delete Zone"
+  const handleRequestDeleteZone = (zone: ProjectZone) => {
+    setDeleteZoneState({
+      open: true,
+      zone,
+      isDeleting: false,
+    })
+  }
+
+  // Handler: submit ZoneDialog (Create or Update Name/Color)
+  const handleDialogSave = async (name: string, color: string) => {
+    setIsSubmitting(true)
+    setActionError(null)
+
+    try {
+      if (dialogState.mode === "create") {
+        if (!dialogState.geometry) return
+
+        let input: CreateZoneInput
+        if (dialogState.geometry.type === "circle") {
+          input = {
+            name,
+            color,
+            type: "circle",
+            geometry: {
+              center: dialogState.geometry.center,
+              radiusMeters: dialogState.geometry.radiusMeters,
+            },
+          }
+        } else {
+          input = {
+            name,
+            color,
+            type: "polygon",
+            geometry: {
+              coordinates: dialogState.geometry.coordinates,
+            },
+          }
+        }
+
+        const res = await createProjectZoneAction(input)
+        if (!res.ok) {
+          alert(res.error)
+          return
+        }
+        setZones((prev) => [res.data, ...prev])
+        setDialogState((prev) => ({ ...prev, open: false }))
+        setDrawingMode("idle")
+        setActiveEditingZone(null)
+      } else if (dialogState.mode === "edit" && dialogState.currentZoneId) {
+        const input: UpdateZoneInput = {
+          id: dialogState.currentZoneId,
+          name,
+          color,
+          type: dialogState.zoneType,
+        }
+
+        const res = await updateProjectZoneAction(input)
+        if (!res.ok) {
+          alert(res.error)
+          return
+        }
+        setZones((prev) => prev.map((z) => (z.id === res.data.id ? res.data : z)))
+        setDialogState((prev) => ({ ...prev, open: false }))
+        setDrawingMode("idle")
+        setActiveEditingZone(null)
+      }
+    } catch {
+      alert("An unexpected error occurred while saving zone.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // Handler: confirm Delete action
+  const handleDeleteConfirm = async () => {
+    if (!deleteZoneState.zone) return
+    setDeleteZoneState((prev) => ({ ...prev, isDeleting: true }))
+
+    try {
+      const res = await deleteProjectZoneAction(deleteZoneState.zone.id)
+      if (!res.ok) {
+        alert(res.error)
+        setDeleteZoneState((prev) => ({ ...prev, isDeleting: false }))
+        return
+      }
+      setZones((prev) => prev.filter((z) => z.id !== deleteZoneState.zone?.id))
+      setDeleteZoneState({ open: false, zone: null, isDeleting: false })
+      if (activeEditingZone?.id === deleteZoneState.zone.id) {
+        setDrawingMode("idle")
+        setActiveEditingZone(null)
+      }
+    } catch {
+      alert("An unexpected error occurred while deleting zone.")
+      setDeleteZoneState((prev) => ({ ...prev, isDeleting: false }))
+    }
+  }
 
   return (
     <section
@@ -197,6 +460,35 @@ export function ProjectMapSection({
             <LocateFixed className="size-3.5 text-slate-500" />
             <span>{isArabic ? "احتواء الكل" : "Fit All Projects"}</span>
           </button>
+
+          {/* Authorized + Create Zone Workflow */}
+          {canManageZones ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-blue-700 focus:outline-hidden disabled:opacity-50"
+                disabled={drawingMode !== "idle"}
+              >
+                <Plus className="size-3.5" />
+                <span>{isArabic ? "إنشاء منطقة" : "Create Zone"}</span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44 text-xs font-medium">
+                <DropdownMenuItem
+                  onClick={() => setDrawingMode("drawing_circle")}
+                  className="gap-2 cursor-pointer"
+                >
+                  <CircleIcon className="size-3.5 text-blue-600" />
+                  <span>{isArabic ? "منطقة دائرية" : "Circle Zone"}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setDrawingMode("drawing_polygon")}
+                  className="gap-2 cursor-pointer"
+                >
+                  <Pentagon className="size-3.5 text-emerald-600" />
+                  <span>{isArabic ? "منطقة مضلعة" : "Polygon Zone"}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
         </div>
       </div>
 
@@ -208,11 +500,52 @@ export function ProjectMapSection({
             zones={zones}
             fitBoundsTrigger={fitBoundsTrigger}
             locale={locale}
+            canManageZones={canManageZones}
+            drawingMode={drawingMode}
+            activeEditingZone={activeEditingZone}
+            onDrawingComplete={handleDrawingComplete}
+            onDrawingCancel={handleDrawingCancel}
+            onStartEditZone={handleStartEditZone}
+            onSaveEditedGeometry={handleSaveEditedGeometry}
+            onRequestEditDetails={handleRequestEditDetails}
+            onRequestDeleteZone={handleRequestDeleteZone}
           />
         ) : (
           <MapLoadingSkeleton />
         )}
       </div>
+
+      {/* Zone Details Modal (Creation & Editing) */}
+      <ZoneDialog
+        open={dialogState.open}
+        mode={dialogState.mode}
+        zoneType={dialogState.zoneType}
+        geometry={dialogState.geometry}
+        initialName={dialogState.initialName}
+        initialColor={dialogState.initialColor}
+        existingZones={zones}
+        currentZoneId={dialogState.currentZoneId}
+        locale={locale}
+        isSubmitting={isSubmitting}
+        onSave={handleDialogSave}
+        onCancel={() => {
+          setDialogState((prev) => ({ ...prev, open: false }))
+          if (dialogState.mode === "create") {
+            setDrawingMode("idle")
+            setActiveEditingZone(null)
+          }
+        }}
+      />
+
+      {/* Zone Delete Confirmation Modal */}
+      <ZoneDeleteDialog
+        open={deleteZoneState.open}
+        zone={deleteZoneState.zone}
+        locale={locale}
+        isDeleting={deleteZoneState.isDeleting}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteZoneState({ open: false, zone: null, isDeleting: false })}
+      />
     </section>
   )
 }

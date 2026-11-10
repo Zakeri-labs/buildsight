@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 import {
   calculatePolygonAreaSquareMeters,
+  checkZonesOverlap,
   haversineDistanceMeters,
   isPointInCircleZone,
   isPointInPolygonZone,
@@ -344,5 +345,75 @@ describe("Performance & Scale Benchmark (Deterministic)", () => {
     expect(matchCount).toBeGreaterThan(0)
     // Must complete comfortably under 100ms in JavaScript (typically ~2-5ms)
     expect(elapsedMs).toBeLessThan(100)
+  })
+})
+
+describe("Zone Overlap Detection (checkZonesOverlap)", () => {
+  const circleA = {
+    type: "circle" as const,
+    center: { lat: 23.588, lng: 58.3829 },
+    radiusMeters: 2000,
+  }
+
+  const circleB_overlapping = {
+    type: "circle" as const,
+    center: { lat: 23.595, lng: 58.39 },
+    radiusMeters: 1500,
+  }
+
+  const circleC_distant = {
+    type: "circle" as const,
+    center: { lat: 23.85, lng: 58.85 },
+    radiusMeters: 500,
+  }
+
+  const polygonA = {
+    type: "polygon" as const,
+    coordinates: [
+      { lat: 23.58, lng: 58.37 },
+      { lat: 23.61, lng: 58.37 },
+      { lat: 23.61, lng: 58.41 },
+      { lat: 23.58, lng: 58.41 },
+    ],
+  }
+
+  const polygonB_overlapping = {
+    type: "polygon" as const,
+    coordinates: [
+      { lat: 23.60, lng: 58.40 },
+      { lat: 23.63, lng: 58.40 },
+      { lat: 23.63, lng: 58.44 },
+      { lat: 23.60, lng: 58.44 },
+    ],
+  }
+
+  const polygonC_distant = {
+    type: "polygon" as const,
+    coordinates: [
+      { lat: 24.10, lng: 58.90 },
+      { lat: 24.15, lng: 58.90 },
+      { lat: 24.15, lng: 58.95 },
+      { lat: 24.10, lng: 58.95 },
+    ],
+  }
+
+  test("detects overlapping and disjoint circles", () => {
+    expect(checkZonesOverlap(circleA, circleB_overlapping)).toBe(true)
+    expect(checkZonesOverlap(circleA, circleC_distant)).toBe(false)
+  })
+
+  test("detects overlapping and disjoint polygons", () => {
+    expect(checkZonesOverlap(polygonA, polygonB_overlapping)).toBe(true)
+    expect(checkZonesOverlap(polygonA, polygonC_distant)).toBe(false)
+  })
+
+  test("detects circle and polygon overlap both ways", () => {
+    // Circle A center is inside polygon A
+    expect(checkZonesOverlap(circleA, polygonA)).toBe(true)
+    expect(checkZonesOverlap(polygonA, circleA)).toBe(true)
+
+    // Circle C is far away from polygon A
+    expect(checkZonesOverlap(circleC_distant, polygonA)).toBe(false)
+    expect(checkZonesOverlap(polygonA, circleC_distant)).toBe(false)
   })
 })
