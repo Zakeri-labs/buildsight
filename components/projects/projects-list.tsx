@@ -32,6 +32,7 @@ import { cn, capitalizeWords } from "@/lib/utils"
 import { ProjectImageDisplay } from "@/components/projects/project-image-display"
 import { ProjectLocationPreviewDialog } from "@/components/projects/project-location-preview-dialog"
 import { ProjectEditDialog } from "@/components/projects/project-edit-dialog"
+import { ProjectMapSection } from "@/components/projects/map/project-map-section"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -1403,6 +1404,13 @@ export function ProjectsList({
           </div>
         </div>
       </div>
+
+      {/* Project Map Section */}
+      <ProjectMapSection
+        allProjects={projectRows}
+        filteredProjects={desktopProjects}
+        locale={locale}
+      />
 
       </div>
 

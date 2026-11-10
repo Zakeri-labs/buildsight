@@ -1,3 +1,14 @@
+## 2026-11-10 — Interactive project map and project pins (Phase 2)
+
+- Interactive Project Map added below the Projects table and pagination on `/projects`.
+- Displays project pins for all accessible organization projects across all table pages.
+- Native zero-dependency marker clustering with dynamic cluster badges and click-to-zoom bounds.
+- Table filter and search synchronization toggle with automatic pin updates.
+- "Fit All Projects" viewport framing action.
+- Interactive project popups displaying project code, status badges, client/owner, supervisor, address, and link to project details.
+- Read-only rendering of saved Circle and Polygon organization zones with custom colors and popups.
+- Deferred lazy loading using `IntersectionObserver` and dynamic imports to preserve initial page load performance.
+
 ## 2026-11-10 — Project map and geographic zone data model (Phase 1)
 
 - New organization-scoped `public.project_zones` table supporting Circle and Polygon geometries.
