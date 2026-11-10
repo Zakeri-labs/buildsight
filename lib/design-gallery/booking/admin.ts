@@ -31,7 +31,7 @@ export async function getDesignMeetingNotificationFeed({
     .from("organization_memberships")
     .select("role, organizations(id, name, type)")
     .eq("user_id", userId)
-    .eq("role", "org_admin")
+    .in("role", ["org_admin", "architect_administrator"])
     .eq("status", "active")
   if (error) throw error
   // The same organization the admin page and the request list show.

@@ -54,6 +54,9 @@ export default async function DashboardPage({
   const activityDateFilter = dashboardActivityDateFilter(dateRange)
 
   const roleResolution = await resolveUserEffectiveRole(session.userId, session.email)
+  if (roleResolution.role === "architect_administrator") {
+    redirect("/design-gallery")
+  }
   if (roleResolution.role === "member") {
     redirect("/memberhomepage")
   }

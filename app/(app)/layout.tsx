@@ -51,7 +51,9 @@ export default async function AppGroupLayout({
         ? "org_member"
         : effectiveRes.role === "viewer"
           ? "viewer"
-          : primary?.role ?? null
+          : effectiveRes.role === "architect_administrator"
+            ? "architect_administrator"
+            : primary?.role ?? null
 
   const user: CurrentUser = {
     id: session.userId,

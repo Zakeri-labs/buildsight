@@ -80,12 +80,18 @@ describe("feed", () => {
     expect(feed.items).toHaveLength(1)
     expect(queries[0].filters).toEqual([
       ["eq", "user_id", "u1"],
-      ["eq", "role", "org_admin"],
+      ["in", "role", ["org_admin", "architect_administrator"]],
       ["eq", "status", "active"],
     ])
     const requests = queries.find((q) => q.table === "design_meeting_requests")!
     expect(requests.filters).toContainEqual(["in", "organization_id", ["org-a"]])
     expect(requests.filters).toContainEqual(["in", "status", ["new", "confirmed"]])
+  })
+
+  test("architect administrators get meeting notifications for their gallery", async () => {
+    memberships = [{ role: "architect_administrator", organizations: { id: "org-a", name: "org-a", type: "supervising" } }]
+    const feed = await getDesignMeetingNotificationFeed({ userId: "u1", now: new Date("2026-10-21T13:00:00Z") })
+    expect(feed.items).toHaveLength(1)
   })
 
   test("an admin of two organizations gets the requests of the gallery they manage (the one the list shows)", async () => {

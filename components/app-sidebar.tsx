@@ -224,6 +224,7 @@ export function AppSidebar({
 
   const isMember = homeHref === "/memberhomepage"
   const currentUser = useCurrentUser()
+  const isArchitectAdmin = currentUser?.role === "architect_administrator"
   const isViewer = currentUser?.role === "viewer"
   const canAccessSupervisorPerformance =
     !isMember && (currentUser.role === "org_admin" || currentUser.role === "org_manager")
@@ -317,142 +318,156 @@ export function AppSidebar({
         <Logo />
       </div>
 
-      <div className="px-4 pb-2">
-        <SectionLabel>{t.projects.title ?? "Projects"}</SectionLabel>
-        <DropdownMenu
-          open={projectMenuOpen}
-          onOpenChange={(open) => {
-            setProjectMenuOpen(open)
-            if (!open) setProjectSearch("")
-          }}
-        >
-          <DropdownMenuTrigger
-            disabled={projects.length === 0}
-            className="flex w-full items-center justify-between gap-2 rounded-xl border border-sidebar-border bg-sidebar-accent/50 px-3 py-2.5 text-left text-sm font-semibold transition-colors hover:bg-sidebar-accent disabled:opacity-50"
+      {!isArchitectAdmin && (
+        <div className="px-4 pb-2">
+          <SectionLabel>{t.projects.title ?? "Projects"}</SectionLabel>
+          <DropdownMenu
+            open={projectMenuOpen}
+            onOpenChange={(open) => {
+              setProjectMenuOpen(open)
+              if (!open) setProjectSearch("")
+            }}
           >
-            <span className="flex items-center gap-2.5 min-w-0">
-              <Building2 className="size-4 shrink-0 text-sidebar-primary" />
-              <span className="truncate">
-                {optimisticSelection === "all"
-                  ? "All Projects"
-                  : contextProjectId
-                    ? (projects.find((item) => item.id === contextProjectId)?.name ?? "Select project")
-                    : "All Projects"}
+            <DropdownMenuTrigger
+              disabled={projects.length === 0}
+              className="flex w-full items-center justify-between gap-2 rounded-xl border border-sidebar-border bg-sidebar-accent/50 px-3 py-2.5 text-left text-sm font-semibold transition-colors hover:bg-sidebar-accent disabled:opacity-50"
+            >
+              <span className="flex items-center gap-2.5 min-w-0">
+                <Building2 className="size-4 shrink-0 text-sidebar-primary" />
+                <span className="truncate">
+                  {optimisticSelection === "all"
+                    ? "All Projects"
+                    : contextProjectId
+                      ? (projects.find((item) => item.id === contextProjectId)?.name ?? "Select project")
+                      : "All Projects"}
+                </span>
               </span>
-            </span>
-            <ChevronDown className="size-4 shrink-0 text-sidebar-foreground/50" />
-          </DropdownMenuTrigger>
+              <ChevronDown className="size-4 shrink-0 text-sidebar-foreground/50" />
+            </DropdownMenuTrigger>
 
-          <DropdownMenuContent align="start" className="w-[224px] p-0" sideOffset={6}>
-            <div className="p-2 border-b">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                <Input
-                  type="text"
-                  value={projectSearch}
-                  onChange={(e) => setProjectSearch(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Escape" && e.key !== "ArrowDown") {
-                      e.stopPropagation()
-                    }
-                  }}
-                  onKeyDownCapture={(e) => {
-                    if (e.key !== "Escape" && e.key !== "ArrowDown") {
-                      e.stopPropagation()
-                    }
-                  }}
-                  onKeyUp={(e) => {
-                    if (e.key !== "Escape" && e.key !== "ArrowDown") {
-                      e.stopPropagation()
-                    }
-                  }}
-                  placeholder={(t.projects as any).searchProjects ?? t.projects.searchPlaceholder ?? "Search projects..."}
-                  className="h-9 pl-8 text-xs"
-                />
+            <DropdownMenuContent align="start" className="w-[224px] p-0" sideOffset={6}>
+              <div className="p-2 border-b">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    value={projectSearch}
+                    onChange={(e) => setProjectSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Escape" && e.key !== "ArrowDown") {
+                        e.stopPropagation()
+                      }
+                    }}
+                    onKeyDownCapture={(e) => {
+                      if (e.key !== "Escape" && e.key !== "ArrowDown") {
+                        e.stopPropagation()
+                      }
+                    }}
+                    onKeyUp={(e) => {
+                      if (e.key !== "Escape" && e.key !== "ArrowDown") {
+                        e.stopPropagation()
+                      }
+                    }}
+                    placeholder={(t.projects as any).searchProjects ?? t.projects.searchPlaceholder ?? "Search projects..."}
+                    className="h-9 pl-8 text-xs"
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="max-h-60 overflow-y-auto p-1">
-              <DropdownMenuRadioGroup value={project} onValueChange={handleSelectProject}>
-                <DropdownMenuRadioItem
-                  value="all"
-                  className={cn(
-                    "min-h-10 gap-2 px-2.5 py-2 pe-8",
-                    project === "all" && "bg-accent text-accent-foreground",
+              <div className="max-h-60 overflow-y-auto p-1">
+                <DropdownMenuRadioGroup value={project} onValueChange={handleSelectProject}>
+                  <DropdownMenuRadioItem
+                    value="all"
+                    className={cn(
+                      "min-h-10 gap-2 px-2.5 py-2 pe-8",
+                      project === "all" && "bg-accent text-accent-foreground",
+                    )}
+                  >
+                    <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                      <FolderKanban className="size-4" />
+                    </span>
+                    <span className="truncate">All Projects</span>
+                  </DropdownMenuRadioItem>
+
+                  {filteredProjects.length > 0 ? (
+                    filteredProjects.map((item) => (
+                      <DropdownMenuRadioItem
+                        key={item.id}
+                        value={item.id}
+                        className={cn(
+                          "min-h-10 gap-2 px-2.5 py-2 pe-8",
+                          project === item.id && "bg-accent text-accent-foreground",
+                        )}
+                      >
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                          <HardHat className="size-4" />
+                        </span>
+                        <span className="truncate">{item.name}</span>
+                      </DropdownMenuRadioItem>
+                    ))
+                  ) : (
+                    <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                      {t.projects.noProjectsFound}
+                    </p>
                   )}
-                >
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                    <FolderKanban className="size-4" />
-                  </span>
-                  <span className="truncate">All Projects</span>
-                </DropdownMenuRadioItem>
-
-                {filteredProjects.length > 0 ? (
-                  filteredProjects.map((item) => (
-                    <DropdownMenuRadioItem
-                      key={item.id}
-                      value={item.id}
-                      className={cn(
-                        "min-h-10 gap-2 px-2.5 py-2 pe-8",
-                        project === item.id && "bg-accent text-accent-foreground",
-                      )}
-                    >
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                        <HardHat className="size-4" />
-                      </span>
-                      <span className="truncate">{item.name}</span>
-                    </DropdownMenuRadioItem>
-                  ))
-                ) : (
-                  <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-                    {t.projects.noProjectsFound}
-                  </p>
-                )}
-              </DropdownMenuRadioGroup>
-            </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+                </DropdownMenuRadioGroup>
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
 
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-4 py-3" aria-label="Main navigation">
-        <SectionLabel>{t.nav.modules}</SectionLabel>
-        {moduleItems.map((item) => (
+        {isArchitectAdmin ? (
           <NavLink
-            key={item.href}
-            label={item.label}
-            href={item.href}
-            icon={item.icon}
-            active={
-              item.href === homeHref
-                ? homeHref === "/memberhomepage"
-                  ? pathname === "/memberhomepage" || pathname === "/"
-                  : pathname === "/"
-                : item.href.split("?", 1)[0] === "/projects"
-                  ? pathname === "/projects" || pathname === "/projects/new"
-                  : contextProjectId && item.href.split("?", 1)[0] === `/projects/${contextProjectId}`
-                    ? pathname === `/projects/${contextProjectId}` || pathname.startsWith(`/projects/${contextProjectId}/gallery`)
-                    : pathname.startsWith(item.href.split("?", 1)[0])
-            }
+            label={t.nav.designGallery}
+            href="/design-gallery"
+            icon={LayoutGrid}
+            active={pathname.startsWith("/design-gallery")}
             onNavigate={onNavigate}
-            onClick={"onClick" in item && typeof item.onClick === "function" ? (item.onClick as () => void) : undefined}
           />
-        ))}
-
-        {!hideAdministration ? (
-          <div className="pt-4">
-            <SectionLabel>{t.nav.administration}</SectionLabel>
-            {adminItems.map((item) => (
+        ) : (
+          <>
+            <SectionLabel>{t.nav.modules}</SectionLabel>
+            {moduleItems.map((item) => (
               <NavLink
                 key={item.href}
                 label={item.label}
                 href={item.href}
                 icon={item.icon}
-                active={pathname.startsWith(item.href)}
+                active={
+                  item.href === homeHref
+                    ? homeHref === "/memberhomepage"
+                      ? pathname === "/memberhomepage" || pathname === "/"
+                      : pathname === "/"
+                    : item.href.split("?", 1)[0] === "/projects"
+                      ? pathname === "/projects" || pathname === "/projects/new"
+                      : contextProjectId && item.href.split("?", 1)[0] === `/projects/${contextProjectId}`
+                        ? pathname === `/projects/${contextProjectId}` || pathname.startsWith(`/projects/${contextProjectId}/gallery`)
+                        : pathname.startsWith(item.href.split("?", 1)[0])
+                }
                 onNavigate={onNavigate}
+                onClick={"onClick" in item && typeof item.onClick === "function" ? (item.onClick as () => void) : undefined}
               />
             ))}
-          </div>
-        ) : null}
+
+            {!hideAdministration ? (
+              <div className="pt-4">
+                <SectionLabel>{t.nav.administration}</SectionLabel>
+                {adminItems.map((item) => (
+                  <NavLink
+                    key={item.href}
+                    label={item.label}
+                    href={item.href}
+                    icon={item.icon}
+                    active={pathname.startsWith(item.href)}
+                    onNavigate={onNavigate}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </>
+        )}
       </nav>
 
       <div className="border-t border-sidebar-border p-4">
@@ -470,4 +485,3 @@ export function AppSidebar({
     </aside>
   )
 }
-

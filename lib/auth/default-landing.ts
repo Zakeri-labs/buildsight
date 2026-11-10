@@ -4,8 +4,8 @@ import { resolveUserEffectiveRole } from "@/lib/auth/effective-role"
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 
 export type DefaultLandingResolution = {
-  destination: "/" | "/memberhomepage"
-  mode: "admin" | "member" | "fallback"
+  destination: "/" | "/memberhomepage" | "/design-gallery"
+  mode: "admin" | "member" | "architect_administrator" | "fallback"
 }
 
 type SupabaseErrorFields = {
@@ -62,6 +62,7 @@ export async function resolveDefaultLandingDestination(userId: string): Promise<
   if (!UUID_PATTERN.test(normalizedUserId)) return { destination: "/", mode: "fallback" }
 
   const effective = await resolveUserEffectiveRole(normalizedUserId)
+  if (effective.role === "architect_administrator") return { destination: "/design-gallery", mode: "architect_administrator" }
   if (effective.role === "admin") return { destination: "/", mode: "admin" }
   if (effective.role === "member") return { destination: "/memberhomepage", mode: "member" }
   return { destination: "/", mode: "fallback" }

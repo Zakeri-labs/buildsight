@@ -43,6 +43,7 @@ export const dictionaries = {
     },
     roles: {
       admin: "Consultancy Admin",
+      architectAdmin: "Architect Administrator",
       projectManager: "Project Manager",
       residentEngineer: "Resident Engineer",
       inspector: "Site Inspector",
@@ -416,7 +417,7 @@ export const dictionaries = {
     designGallery: {
       title: "Design Gallery",
       subtitle: "3D designs shown on the public gallery page, where visitors pick a design and book a meeting.",
-      adminOnly: "Only organization admins can manage the design gallery.",
+      adminOnly: "Only organization admins and architect administrators can manage the design gallery.",
       activateTitle: "The design gallery is not set up yet",
       activateBody: "Turn it on to create the public gallery page and the default categories. It stays hidden until you enable it.",
       activate: "Set up the gallery",
@@ -591,6 +592,7 @@ export const dictionaries = {
     },
     roles: {
       admin: "مدير الاستشارية",
+      architectAdmin: "مدير المعرض المعماري",
       projectManager: "مدير المشروع",
       residentEngineer: "المهندس المقيم",
       inspector: "مفتش الموقع",
@@ -964,7 +966,7 @@ export const dictionaries = {
     designGallery: {
       title: "معرض التصاميم",
       subtitle: "التصاميم ثلاثية الأبعاد المعروضة في صفحة المعرض العامة، حيث يختار الزائر تصميماً ويحجز اجتماعاً.",
-      adminOnly: "إدارة معرض التصاميم متاحة لمسؤولي المؤسسة فقط.",
+      adminOnly: "إدارة معرض التصاميم متاحة لمسؤولي المؤسسة ومسؤولي التصاميم فقط.",
       activateTitle: "معرض التصاميم غير مُعدّ بعد",
       activateBody: "فعّله لإنشاء صفحة المعرض العامة والتصنيفات الافتراضية. يبقى مخفياً حتى تجعله عاماً.",
       activate: "إعداد المعرض",

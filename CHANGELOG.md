@@ -1,3 +1,16 @@
+## 2026-11-10 — Add Architect Administrator role for dedicated Design Gallery management
+
+- New organization role `architect_administrator` ("Architect Administrator" / "مدير المعرض المعماري") with full administrative access to Design Gallery while restricting standard BuildSight application navigation and access.
+- Role can manage designs, categories, gallery settings, branding, booking slots, and meeting requests/attachments.
+- Dedicated Design Gallery authorization guard `assertDesignGalleryAdmin` authorizes both `org_admin` and `architect_administrator`.
+- Design meeting notification feed (`getDesignMeetingNotificationFeed`) updated to deliver meeting alerts to Architect Administrators.
+- Login redirection and route guard: Architect Administrators land directly on `/design-gallery`, and normal application routes (`/`, `/dashboard`, `/projects`, etc.) redirect to `/design-gallery`.
+- Navigation restriction: Sidebar and topbar show only Design Gallery and Logout for Architect Administrators; project selector, modules, and admin sections are hidden.
+- Lightweight data restrictions applied to prevent Architect Administrators from viewing subscriptions, report credit usage, organization audit logs, and managing stage templates.
+- Organization Admins can invite or reassign members to and from `architect_administrator` via the Team page.
+- Database migration required: execute `scripts/sql/085_add_architect_administrator_role_enum.sql`.
+- Database migration required: execute `scripts/sql/086_architect_administrator_access.sql`.
+
 ## 2026-10-21 — Design gallery (معرض التصاميم), part 3: booking a meeting
 
 - New public page **`/designs/book`** (no sign-in, not indexed): a two-step form. Step 1: name, WhatsApp, project type, land status, wilayat (Oman's 61 wilayat, or another place), land area, when to start; for "Have another idea?" also a description and up to 3 images or PDFs (10 MB each). Step 2: online (Google Meet), at the office, or "call me", then a free day and time.
@@ -92,4 +105,3 @@
 ## Contractor profile prefill
 - Prefill Add Project contractor snapshot fields from the selected registered contractor organization.
 - Keep all prefilled values editable without modifying the global contractor profile.
-

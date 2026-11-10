@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { pickDesignGalleryAdminOrg } from "./access"
+import { isDesignGalleryAdminRole, pickDesignGalleryAdminOrg } from "./access"
 import { designImagePublicUrl, designImageStoragePath, isDesignImagePathFor } from "./images"
 import { canChangeStatus, siteSlugCandidates, uniqueViolationField } from "./rules"
 
@@ -88,6 +88,24 @@ describe("pickDesignGalleryAdminOrg", () => {
     const a = { role: "org_admin", organization: { ...external, id: OTHER_ORG } }
     const b = { role: "org_admin", organization: { id: "00000000-1111-4222-8333-444444444444", name: "First", type: "external" } }
     expect(pickDesignGalleryAdminOrg([a, b])).toEqual(pickDesignGalleryAdminOrg([b, a]))
+  })
+
+  test("architect_administrator gets gallery admin org", () => {
+    expect(
+      pickDesignGalleryAdminOrg([
+        { role: "architect_administrator", organization: supervising },
+      ]),
+    ).toEqual({ id: ORG, name: "Bonyan" })
+  })
+
+  test("isDesignGalleryAdminRole identifies authorized gallery roles", () => {
+    expect(isDesignGalleryAdminRole("org_admin")).toBe(true)
+    expect(isDesignGalleryAdminRole("architect_administrator")).toBe(true)
+    expect(isDesignGalleryAdminRole("org_manager")).toBe(false)
+    expect(isDesignGalleryAdminRole("org_member")).toBe(false)
+    expect(isDesignGalleryAdminRole("viewer")).toBe(false)
+    expect(isDesignGalleryAdminRole(null)).toBe(false)
+    expect(isDesignGalleryAdminRole(undefined)).toBe(false)
   })
 
   test("members, managers and viewers get nothing", () => {
