@@ -1,3 +1,15 @@
+## 2026-11-10 — Project map and geographic zone data model (Phase 1)
+
+- New organization-scoped `public.project_zones` table supporting Circle and Polygon geometries.
+- Geometric exclusivity constraints, vertex limits, name checks, and automatic `updated_at` trigger.
+- Organization Row Level Security (RLS) policies allowing `org_admin`, `org_manager`, `org_member`, and `viewer` to read zones while restricting zone mutations exclusively to `org_admin` and `org_manager`.
+- Explicitly excluded `architect_administrator` from project zone access.
+- Strongly-typed TypeScript domain models in `lib/zones/types.ts`.
+- Pure TypeScript geometry utilities and validators in `lib/zones/geometry.ts` (Haversine distance, circle matching, ray-casting point-in-polygon with boundary inclusion, bowtie self-intersection detection, collinearity checks, and Shoelace area calculation).
+- Comprehensive Vitest unit test suite with 34 tests in `lib/zones/geometry.test.ts`.
+- Secure Server Actions in `lib/actions/zones.ts` for listing, creating, updating, and deleting geographic zones.
+- Database migration required: execute `scripts/sql/087_project_zones.sql`.
+
 ## 2026-11-10 — Add Architect Administrator role for dedicated Design Gallery management
 
 - New organization role `architect_administrator` ("Architect Administrator" / "مدير المعرض المعماري") with full administrative access to Design Gallery while restricting standard BuildSight application navigation and access.
