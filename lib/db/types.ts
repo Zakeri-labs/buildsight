@@ -1,7 +1,7 @@
 export type OrgType = "supervising" | "external"
 export type OrganizationCategory = "contractor" | "client" | "supplier" | "consultant" | "other"
 export type OrganizationStatus = "pending" | "invited" | "active" | "suspended"
-export type OrganizationRole = "org_admin" | "org_manager" | "org_member" | "viewer"
+export type OrganizationRole = "org_admin" | "org_manager" | "org_member" | "viewer" | "architect_administrator"
 export type ProjectOrgRole =
   | "consultant"
   | "client"
@@ -85,7 +85,13 @@ export function organizationCategoryLabel(category: OrganizationCategory | null 
   return category ? ORGANIZATION_CATEGORY_LABELS[category] : "Other"
 }
 
-export const ORGANIZATION_ROLES: OrganizationRole[] = ["org_admin", "org_manager", "org_member", "viewer"]
+export const ORGANIZATION_ROLES: OrganizationRole[] = [
+  "org_admin",
+  "org_manager",
+  "org_member",
+  "viewer",
+  "architect_administrator",
+]
 export const PROJECT_ORG_ROLES: ProjectOrgRole[] = [
   "consultant",
   "client",
@@ -107,6 +113,7 @@ export const PROJECT_ACCESS_ROLES: ProjectAccessRole[] = [
 
 export const ROLE_LABELS: Record<string, string> = {
   org_admin: "Admin",
+  architect_administrator: "Architect Administrator",
   org_manager: "Manager",
   org_member: "Member",
   viewer: "Viewer",

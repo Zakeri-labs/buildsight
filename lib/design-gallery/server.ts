@@ -1,6 +1,6 @@
 import "server-only"
 
-import { assertOrgAdmin, AuthzError } from "@/lib/auth/guards"
+import { AuthzError, getUserIdOrThrow } from "@/lib/auth/guards"
 import { requireOnboarded } from "@/lib/auth/session"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { pickDesignGalleryAdminOrg, type DesignGalleryAdminOrg } from "./access"
@@ -20,11 +20,32 @@ export type DesignGalleryAdminContext = {
  * Resolves the organization the caller administers and re-checks org_admin
  * against the database. Throws AuthzError when the caller is not an admin.
  */
+/**
+ * Dedicated authorization guard for Design Gallery.
+ * Authorizes 'org_admin' and 'architect_administrator' active memberships.
+ * Throws AuthzError when unauthorized.
+ */
+export async function assertDesignGalleryAdmin(organizationId: string): Promise<string> {
+  const userId = await getUserIdOrThrow()
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("organization_memberships")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId)
+    .in("role", ["org_admin", "architect_administrator"])
+    .eq("status", "active")
+    .maybeSingle()
+  if (error) throw error
+  if (!data) throw new AuthzError("Only organization admins and architect administrators can manage the design gallery.")
+  return userId
+}
+
 export async function requireDesignGalleryAdmin(): Promise<DesignGalleryAdminContext> {
   const session = await requireOnboarded()
   const org = pickDesignGalleryAdminOrg(session.memberships)
-  if (!org) throw new AuthzError("Only organization admins can manage the design gallery.")
-  const userId = await assertOrgAdmin(org.id)
+  if (!org) throw new AuthzError("Only organization admins and architect administrators can manage the design gallery.")
+  const userId = await assertDesignGalleryAdmin(org.id)
   return { userId, org, admin: createAdminClient() }
 }
 

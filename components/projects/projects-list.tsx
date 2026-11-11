@@ -32,6 +32,10 @@ import { cn, capitalizeWords } from "@/lib/utils"
 import { ProjectImageDisplay } from "@/components/projects/project-image-display"
 import { ProjectLocationPreviewDialog } from "@/components/projects/project-location-preview-dialog"
 import { ProjectEditDialog } from "@/components/projects/project-edit-dialog"
+import { ProjectMapSection } from "@/components/projects/map/project-map-section"
+import { filterProjectByZone } from "@/lib/zones/filter"
+import { getOrganizationZonesAction } from "@/lib/actions/zones"
+import type { ProjectZone } from "@/lib/zones/types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -418,6 +422,21 @@ export function ProjectsList({
   const [selectedSupervisor, setSelectedSupervisor] = useState("all")
   const [selectedAreaDistrict, setSelectedAreaDistrict] = useState("all")
   const [selectedProjectYear, setSelectedProjectYear] = useState("all")
+  const [selectedZone, setSelectedZone] = useState("all")
+  const [zones, setZones] = useState<ProjectZone[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    void getOrganizationZonesAction().then((res) => {
+      if (cancelled) return
+      if (res.ok && res.data) {
+        setZones(res.data)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
   const [sortBy, setSortBy] = useState("default")
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -474,9 +493,15 @@ export function ProjectsList({
         const year = extractProjectCodeYear(project.code)
         if (year !== selectedProjectYear) return false
       }
+
+      // Geographic Zone filter
+      if (!filterProjectByZone(project, selectedZone, zones)) {
+        return false
+      }
+
       return true
     })
-  }, [filteredProjects, selectedSupervisor, selectedAreaDistrict, selectedProjectYear])
+  }, [filteredProjects, selectedSupervisor, selectedAreaDistrict, selectedProjectYear, selectedZone, zones])
 
   const desktopProjects = useMemo(() => {
     const rows = [...desktopFilteredProjects]
@@ -551,7 +576,7 @@ export function ProjectsList({
   ).sort((left, right) => left.localeCompare(right))
   const hasUnassignedSupervisor = projectRows.some((project) => !project.assignedSupervisorId)
   const hasUnspecifiedArea = projectRows.some((project) => !project.areaDistrict?.trim())
-  const activeFilterCount = [selectedStatus, selectedType, selectedSupervisionType, selectedSupervisor, selectedAreaDistrict, selectedProjectYear].filter((value) => value !== "all").length
+  const activeFilterCount = [selectedStatus, selectedType, selectedSupervisionType, selectedSupervisor, selectedAreaDistrict, selectedProjectYear, selectedZone].filter((value) => value !== "all").length
   const desktopActiveFilterCount = activeFilterCount
   const hasSearchOrFilters = Boolean(searchQuery.trim()) || activeFilterCount > 0 || sortBy !== "default"
   const desktopPageCount = Math.max(1, Math.ceil(desktopProjects.length / pageSize))
@@ -572,6 +597,19 @@ export function ProjectsList({
   const [draftSupervisor, setDraftSupervisor] = useState(selectedSupervisor)
   const [draftAreaDistrict, setDraftAreaDistrict] = useState(selectedAreaDistrict)
   const [draftProjectYear, setDraftProjectYear] = useState(selectedProjectYear)
+  const [draftZone, setDraftZone] = useState(selectedZone)
+
+  const zoneOptions = useMemo(() => {
+    return [
+      { label: locale === "ar" ? "كل المناطق" : "All Zones", value: "all" },
+      ...zones.map((z) => ({
+        label: z.name,
+        value: z.id,
+        color: z.color,
+      })),
+      { label: locale === "ar" ? "خارج المناطق" : "Outside Zones", value: "__unassigned__" },
+    ]
+  }, [zones, locale])
   const [draftSortBy, setDraftSortBy] = useState(sortBy)
 
   useEffect(() => {
@@ -582,9 +620,10 @@ export function ProjectsList({
       setDraftSupervisor(selectedSupervisor)
       setDraftAreaDistrict(selectedAreaDistrict)
       setDraftProjectYear(selectedProjectYear)
+      setDraftZone(selectedZone)
       setDraftSortBy(sortBy)
     }
-  }, [filtersOpen, selectedStatus, selectedType, selectedSupervisionType, selectedSupervisor, selectedAreaDistrict, selectedProjectYear, sortBy])
+  }, [filtersOpen, selectedStatus, selectedType, selectedSupervisionType, selectedSupervisor, selectedAreaDistrict, selectedProjectYear, selectedZone, sortBy])
 
   function handleMobileClear() {
     setDraftStatus("all")
@@ -593,6 +632,7 @@ export function ProjectsList({
     setDraftSupervisor("all")
     setDraftAreaDistrict("all")
     setDraftProjectYear("all")
+    setDraftZone("all")
     setDraftSortBy("default")
     clearAllProjectListFilters()
   }
@@ -604,6 +644,7 @@ export function ProjectsList({
     setSelectedSupervisor(draftSupervisor)
     setSelectedAreaDistrict(draftAreaDistrict)
     setSelectedProjectYear(draftProjectYear)
+    setSelectedZone(draftZone)
     setSortBy(draftSortBy)
     setCurrentPage(1)
     setFiltersOpen(false)
@@ -625,7 +666,7 @@ export function ProjectsList({
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchQuery, selectedStatus, selectedType, selectedSupervisionType, selectedSupervisor, selectedAreaDistrict, selectedProjectYear, sortBy, pageSize])
+  }, [searchQuery, selectedStatus, selectedType, selectedSupervisionType, selectedSupervisor, selectedAreaDistrict, selectedProjectYear, selectedZone, sortBy, pageSize])
 
   function clearAllProjectListFilters() {
     setSearchQuery("")
@@ -635,6 +676,7 @@ export function ProjectsList({
     setSelectedSupervisor("all")
     setSelectedAreaDistrict("all")
     setSelectedProjectYear("all")
+    setSelectedZone("all")
     setSortBy("default")
     setCurrentPage(1)
   }
@@ -873,6 +915,15 @@ export function ProjectsList({
                     ]}
                   />
                 </MobileFilterField>
+                <MobileFilterField label={locale === "ar" ? "المناطق" : "Zones"}>
+                  <DropdownFilter
+                    label={locale === "ar" ? "كل المناطق" : "All Zones"}
+                    value={draftZone}
+                    onChange={setDraftZone}
+                    className="w-full"
+                    options={zoneOptions}
+                  />
+                </MobileFilterField>
                 <MobileFilterField label={locale === "ar" ? "سنة المشروع" : "Project Year"}>
                   <DropdownFilter
                     label={locale === "ar" ? "جميع السنوات" : "All Years"}
@@ -1064,6 +1115,14 @@ export function ProjectsList({
             ...areaDistrictOptions.map((area) => ({ label: area, value: area })),
             ...(hasUnspecifiedArea ? [{ label: "Unspecified", value: "__unspecified__" }] : []),
           ]}
+        />
+
+        {/* Dropdown: Zones (Geographic) */}
+        <DropdownFilter
+          label={locale === "ar" ? "المناطق" : "Zones"}
+          value={selectedZone}
+          onChange={setSelectedZone}
+          options={zoneOptions}
         />
 
         {/* Dropdown 5: Project Year */}
@@ -1404,6 +1463,15 @@ export function ProjectsList({
         </div>
       </div>
 
+      {/* Project Map Section */}
+      <ProjectMapSection
+        allProjects={projectRows}
+        filteredProjects={desktopProjects}
+        locale={locale}
+        zones={zones}
+        onZonesChange={setZones}
+      />
+
       </div>
 
       {locationTarget ? (
@@ -1674,7 +1742,7 @@ function DropdownFilter({
   label: string
   value: string
   onChange: (val: string) => void
-  options: { label: string; value: string }[]
+  options: { label: string; value: string; color?: string }[]
   className?: string
 }) {
   const selectedObj = options.find((o) => o.value === value)
@@ -1688,15 +1756,23 @@ function DropdownFilter({
             type="button"
             className={cn("inline-flex h-10 items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300", className)}
           >
-            <span className="min-w-0 truncate">{displayLabel}</span>
+            <span className="flex items-center gap-1.5 min-w-0 truncate">
+              {selectedObj?.color ? (
+                <span className="size-2 rounded-full shrink-0 shadow-2xs ring-1 ring-slate-200 dark:ring-slate-700" style={{ backgroundColor: selectedObj.color }} />
+              ) : null}
+              <span className="truncate">{displayLabel}</span>
+            </span>
             <ChevronDown className="size-3.5 shrink-0 text-slate-400" />
           </button>
         }
       />
-      <DropdownMenuContent align="start" className="w-44">
+      <DropdownMenuContent align="start" className="w-48 max-h-64 overflow-y-auto">
         {options.map((opt) => (
-          <DropdownMenuItem key={opt.value} onClick={() => onChange(opt.value)}>
-            {opt.label}
+          <DropdownMenuItem key={opt.value} onClick={() => onChange(opt.value)} className="gap-2 cursor-pointer">
+            {opt.color ? (
+              <span className="size-2.5 rounded-full shrink-0 shadow-2xs" style={{ backgroundColor: opt.color }} />
+            ) : null}
+            <span className="truncate">{opt.label}</span>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

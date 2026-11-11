@@ -1,7 +1,7 @@
 import "server-only"
 import { createAdminClient } from "@/lib/supabase/admin"
 
-export type UserEffectiveRole = "admin" | "member" | "viewer" | "unonboarded_creator"
+export type UserEffectiveRole = "admin" | "member" | "viewer" | "unonboarded_creator" | "architect_administrator"
 
 export type EffectiveRoleResolution = {
   role: UserEffectiveRole
@@ -162,6 +162,10 @@ export async function resolveUserEffectiveRole(
 
   if (memberships && memberships.length > 0) {
     const roles = new Set(memberships.map((m) => m.role))
+    if (roles.has("architect_administrator")) {
+      const orgId = memberships.find((m) => m.role === "architect_administrator")?.organization_id ?? null
+      return { role: "architect_administrator", destination: "/design-gallery", organizationId: orgId }
+    }
     if (roles.has("org_admin") || roles.has("org_manager")) {
       const orgId = memberships.find((m) => m.role === "org_admin" || m.role === "org_manager")?.organization_id ?? null
       return { role: "admin", destination: "/", organizationId: orgId }
@@ -200,6 +204,10 @@ export async function resolveUserEffectiveRole(
 
       if (freshMemberships && freshMemberships.length > 0) {
         const roles = new Set(freshMemberships.map((m) => m.role))
+        if (roles.has("architect_administrator")) {
+          const orgId = freshMemberships.find((m) => m.role === "architect_administrator")?.organization_id ?? null
+          return { role: "architect_administrator", destination: "/design-gallery", organizationId: orgId }
+        }
         if (roles.has("org_admin") || roles.has("org_manager")) {
           const orgId = freshMemberships.find((m) => m.role === "org_admin" || m.role === "org_manager")?.organization_id ?? null
           return { role: "admin", destination: "/", organizationId: orgId }
@@ -257,6 +265,9 @@ export async function resolveUserEffectiveRole(
 
   if (invitesRes.data && invitesRes.data.length > 0) {
     const invite = invitesRes.data[0]
+    if (invite.organization_role === "architect_administrator") {
+      return { role: "architect_administrator", destination: "/design-gallery", organizationId: invite.organization_id }
+    }
     if (invite.organization_role === "org_admin" || invite.organization_role === "org_manager") {
       return { role: "admin", destination: "/", organizationId: invite.organization_id }
     }

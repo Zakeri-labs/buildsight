@@ -72,7 +72,7 @@ export async function loadSupervisorPerformanceData(
   const { data: projectsData, error: projectsErr } = await admin
     .from("projects")
     .select(
-      "id, name, code, status, supervision_type, assigned_supervisor_id, supervising_organization_id, start_date, supervision_start_date",
+      "id, name, code, status, supervision_type, assigned_supervisor_id, supervising_organization_id, start_date, supervision_start_date, latitude, longitude",
     )
     .eq("supervising_organization_id", organizationId)
     .is("deleted_at", null)
@@ -223,7 +223,7 @@ export async function loadSupervisorVisitComplianceData(
   const { data: projectsData, error: projectsErr } = await admin
     .from("projects")
     .select(
-      "id, name, code, status, supervision_type, assigned_supervisor_id, supervising_organization_id, start_date, supervision_start_date",
+      "id, name, code, status, supervision_type, assigned_supervisor_id, supervising_organization_id, start_date, supervision_start_date, latitude, longitude",
     )
     .eq("supervising_organization_id", organizationId)
     .is("deleted_at", null)

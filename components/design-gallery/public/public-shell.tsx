@@ -101,7 +101,7 @@ export function PublicShell({
       >
         <HtmlLocale locale={locale} />
         <BonyanHeader site={site} locale={locale} alternateHref={alternateHref} />
-        <main className="flex-1 mx-auto w-full max-w-7xl px-4 pb-16 pt-6 sm:px-6 sm:pt-10">
+        <main className="flex-1 mx-auto w-full max-w-7xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
           {children}
         </main>
         <BonyanFooter site={site} locale={locale} alternateHref={alternateHref} />

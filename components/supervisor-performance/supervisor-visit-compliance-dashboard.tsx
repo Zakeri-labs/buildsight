@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import {
   CalendarDays,
   Calendar,
@@ -38,6 +38,9 @@ import {
   getSaturdayForDateKey,
 } from "@/lib/supervisor-performance/compliance-engine"
 import type { SupervisorVisitComplianceDashboardData } from "@/lib/supervisor-performance/types"
+import { filterProjectByZone } from "@/lib/zones/filter"
+import { getOrganizationZonesAction } from "@/lib/actions/zones"
+import type { ProjectZone } from "@/lib/zones/types"
 import { ComplianceFilterToolbar, type ComplianceFilterState } from "./compliance-filter-toolbar"
 import { ComplianceMatrix } from "./compliance-matrix"
 import {
@@ -47,6 +50,7 @@ import {
 
 export type SupervisorVisitComplianceDashboardProps = {
   data: SupervisorVisitComplianceDashboardData
+  initialZones?: ProjectZone[]
   className?: string
 }
 
@@ -57,6 +61,7 @@ const initialFilters: ComplianceFilterState = {
   selectedSupervisor: "all",
   selectedFrequency: "all",
   selectedStatus: "active",
+  selectedZone: "all",
   showIssuesOnly: false,
 }
 
@@ -98,10 +103,27 @@ function formatWeekOptionLabel(week: { startDate: string; endDate: string }): st
 
 export function SupervisorVisitComplianceDashboard({
   data,
+  initialZones,
   className,
 }: SupervisorVisitComplianceDashboardProps) {
   const { projects, supervisors, referenceDate } = data
   const [filters, setFilters] = useState<ComplianceFilterState>(initialFilters)
+  const [zones, setZones] = useState<ProjectZone[]>(initialZones ?? [])
+
+  useEffect(() => {
+    if (initialZones && initialZones.length > 0) return
+    let cancelled = false
+    void getOrganizationZonesAction().then((res) => {
+      if (cancelled) return
+      if (res.ok && res.data) {
+        setZones(res.data)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [initialZones])
+
   const [selectedSort, setSelectedSort] = useState<ComplianceSortOption>("project_code_desc")
 
   // Default Anchor Week: Saturday of the current reference date week
@@ -179,6 +201,7 @@ export function SupervisorVisitComplianceDashboard({
       selectedSupervisor,
       selectedFrequency,
       selectedStatus,
+      selectedZone,
       showIssuesOnly,
     } = filters
 
@@ -230,6 +253,11 @@ export function SupervisorVisitComplianceDashboard({
         if (!hasIssues) return false
       }
 
+      // 6. Geographic Zone filter
+      if (!filterProjectByZone(project, selectedZone, zones)) {
+        return false
+      }
+
       return true
     })
 
@@ -240,7 +268,7 @@ export function SupervisorVisitComplianceDashboard({
       seenIds.add(project.projectId)
       return true
     })
-  }, [projects, filters])
+  }, [projects, filters, zones])
 
   // Sort filtered projects client-side
   const sortedProjects = useMemo(() => {
@@ -252,6 +280,7 @@ export function SupervisorVisitComplianceDashboard({
     filters.selectedSupervisor !== "all" ||
     filters.selectedFrequency !== "all" ||
     filters.selectedStatus !== "all" ||
+    filters.selectedZone !== "all" ||
     filters.showIssuesOnly ||
     selectedSort !== "project_code_desc"
 
@@ -290,6 +319,9 @@ export function SupervisorVisitComplianceDashboard({
       }
       if (filters.selectedStatus !== "all") {
         params.set("selectedStatus", filters.selectedStatus)
+      }
+      if (filters.selectedZone && filters.selectedZone !== "all") {
+        params.set("selectedZone", filters.selectedZone)
       }
       if (filters.showIssuesOnly) {
         params.set("showIssuesOnly", "true")
@@ -374,6 +406,7 @@ export function SupervisorVisitComplianceDashboard({
         <ComplianceFilterToolbar
           projects={projects}
           supervisors={supervisors}
+          zones={zones}
           filters={filters}
           onFilterChange={handleFilterChange}
           onResetFilters={handleResetFilters}

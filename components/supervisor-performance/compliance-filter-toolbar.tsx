@@ -15,6 +15,7 @@ import {
   FileSpreadsheet,
   Loader2,
   ArrowUpDown,
+  MapPin,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -34,6 +35,7 @@ import type {
   ProjectComplianceTimelineRow,
   SupervisionComplianceType,
 } from "@/lib/supervisor-performance/types"
+import type { ProjectZone } from "@/lib/zones/types"
 import {
   COMPLIANCE_SORT_OPTIONS,
   type ComplianceSortOption,
@@ -45,6 +47,7 @@ export type ComplianceFilterState = {
   selectedSupervisor: string
   selectedFrequency: string
   selectedStatus: string
+  selectedZone: string
   showIssuesOnly: boolean
 }
 
@@ -55,6 +58,7 @@ export type ComplianceFilterToolbarProps = {
     name: string
     assignedProjectsCount?: number
   }>
+  zones?: ProjectZone[]
   filters: ComplianceFilterState
   onFilterChange: <K extends keyof ComplianceFilterState>(
     key: K,
@@ -86,6 +90,7 @@ function formatStartWeekLabel(saturdayDateKey: string): string {
 export function ComplianceFilterToolbar({
   projects,
   supervisors,
+  zones = [],
   filters,
   onFilterChange,
   onResetFilters,
@@ -109,6 +114,7 @@ export function ComplianceFilterToolbar({
     selectedSupervisor,
     selectedFrequency,
     selectedStatus,
+    selectedZone = "all",
     showIssuesOnly,
   } = filters
 
@@ -137,6 +143,7 @@ export function ComplianceFilterToolbar({
     if (selectedSupervisor !== "all") count += 1
     if (selectedFrequency !== "all") count += 1
     if (selectedStatus !== "all") count += 1
+    if (selectedZone !== "all") count += 1
     if (showIssuesOnly) count += 1
     return count
   }, [
@@ -144,6 +151,7 @@ export function ComplianceFilterToolbar({
     selectedSupervisor,
     selectedFrequency,
     selectedStatus,
+    selectedZone,
     showIssuesOnly,
   ])
 
@@ -295,6 +303,55 @@ export function ComplianceFilterToolbar({
             </Select>
           </div>
         )}
+
+        {/* Zone Filter (Geographic) */}
+        <div className="w-[155px] sm:w-[170px]">
+          <Select
+            value={selectedZone}
+            onValueChange={(val) => onFilterChange("selectedZone", val as string)}
+          >
+            <SelectTrigger size="sm" className="h-8 text-xs">
+              <div className="flex items-center gap-1.5 truncate">
+                <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <SelectValue placeholder="All Zones">
+                  {(value) => {
+                    if (!value || value === "all") return "All Zones"
+                    if (value === "__unassigned__") return "Outside Zones"
+                    const zone = zones.find((z) => z.id === value)
+                    return zone ? (
+                      <span className="flex items-center gap-1.5 truncate">
+                        <span
+                          className="size-2 rounded-full shrink-0 shadow-2xs ring-1 ring-slate-200 dark:ring-slate-700"
+                          style={{ backgroundColor: zone.color }}
+                        />
+                        <span className="truncate">{zone.name}</span>
+                      </span>
+                    ) : (
+                      "All Zones"
+                    )
+                  }}
+                </SelectValue>
+              </div>
+            </SelectTrigger>
+            <SelectContent className="max-h-64">
+              <SelectGroup>
+                <SelectItem value="all">All Zones</SelectItem>
+                {zones.map((zone) => (
+                  <SelectItem key={zone.id} value={zone.id}>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="size-2.5 rounded-full shrink-0 shadow-2xs"
+                        style={{ backgroundColor: zone.color }}
+                      />
+                      <span className="truncate">{zone.name}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+                <SelectItem value="__unassigned__">Outside Zones</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
 
         {/* 6. Quick Action: Show Issues Only */}
         <Button

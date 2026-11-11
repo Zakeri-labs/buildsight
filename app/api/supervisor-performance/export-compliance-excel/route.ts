@@ -8,6 +8,8 @@ import {
   getFridayForDateKey,
   getSaturdayForDateKey,
 } from "@/lib/supervisor-performance/compliance-engine"
+import { filterProjectByZone } from "@/lib/zones/filter"
+import { getOrganizationZonesAction } from "@/lib/actions/zones"
 import { PROJECT_STATUS_OPTIONS } from "@/lib/projects/project-status"
 import type {
   ComplianceCalendarWeek,
@@ -92,6 +94,7 @@ export async function GET(request: NextRequest) {
     const selectedSupervisor = (searchParams.get("selectedSupervisor") || "all").trim()
     const selectedFrequency = (searchParams.get("selectedFrequency") || "all").trim()
     const selectedStatus = (searchParams.get("selectedStatus") || "active").trim()
+    const selectedZone = (searchParams.get("selectedZone") || "all").trim()
     const showIssuesOnly = searchParams.get("showIssuesOnly") === "true"
     const rawAnchorSaturday = searchParams.get("anchorSaturday")?.trim() || ""
     const rawStartWeekSaturday = searchParams.get("startWeekSaturday")?.trim() || ""
@@ -166,6 +169,14 @@ export async function GET(request: NextRequest) {
         ? formatVisibleTimelineRange(visibleWeeks[0].startDate, visibleWeeks[visibleWeeks.length - 1].endDate)
         : "Timeline"
 
+    let zones: import("@/lib/zones/types").ProjectZone[] = []
+    if (selectedZone !== "all") {
+      const zonesRes = await getOrganizationZonesAction()
+      if (zonesRes.ok && zonesRes.data) {
+        zones = zonesRes.data
+      }
+    }
+
     // 3. Filter projects matching the exact UI criteria (without pagination limit)
     const filtered = projects.filter((project) => {
       // 1. Search Query (Project Name, Code, or Supervisor Name)
@@ -219,6 +230,11 @@ export async function GET(request: NextRequest) {
           (cell) => cell.status === "missing" || cell.status === "extra",
         )
         if (!hasIssues) return false
+      }
+
+      // 6. Geographic Zone Filter
+      if (!filterProjectByZone(project, selectedZone, zones)) {
+        return false
       }
 
       return true

@@ -45,6 +45,7 @@ export function AppTopbar({
 }) {
   const pathname = usePathname()
   const currentUser = useCurrentUser()
+  const isArchitectAdmin = currentUser.role === "architect_administrator"
   const userRoleLabel = currentUser.role ? roleLabel(currentUser.role) : ""
   const { t } = useI18n()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -68,6 +69,7 @@ export function AppTopbar({
     "/settings": { title: t.settings.title, subtitle: t.settings.subtitle },
     "/projects": { title: t.projects.title, subtitle: t.projects.subtitle },
     "/team": { title: t.team.title, subtitle: t.team.subtitle },
+    "/design-gallery": { title: t.nav.designGallery, subtitle: t.designGallery.subtitle },
   }
 
   function resolveTitle(p: string) {
@@ -177,17 +179,21 @@ export function AppTopbar({
                 </DropdownMenuLabel>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem render={<Link href="/settings">{t.settings.title}</Link>} />
-              <DropdownMenuItem render={<Link href="/users">{t.settings.tabAccess}</Link>} />
-              <DropdownMenuItem
-                render={
-                  <Link href="/owner">
-                    <Lock className="size-4" data-icon="inline-start" />
-                    {t.owner.openPortal}
-                  </Link>
-                }
-              />
-              <DropdownMenuSeparator />
+              {!isArchitectAdmin && (
+                <>
+                  <DropdownMenuItem render={<Link href="/settings">{t.settings.title}</Link>} />
+                  <DropdownMenuItem render={<Link href="/users">{t.settings.tabAccess}</Link>} />
+                  <DropdownMenuItem
+                    render={
+                      <Link href="/owner">
+                        <Lock className="size-4" data-icon="inline-start" />
+                        {t.owner.openPortal}
+                      </Link>
+                    }
+                  />
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <DropdownMenuItem
                 onClick={() => {
                   void signOut()

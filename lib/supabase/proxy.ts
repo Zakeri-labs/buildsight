@@ -5,6 +5,17 @@ import { ALL_PROJECTS_SCOPE_VALUE, SELECTED_PROJECT_COOKIE } from "@/lib/project
 import { INTERNAL_AUTH_HEADERS, signAuthPayload } from "@/lib/auth/internal-tokens"
 import { isPublicPath } from "@/lib/auth/public-paths"
 
+function isAllowedForArchitectAdmin(pathname: string): boolean {
+  return (
+    pathname === "/design-gallery" ||
+    pathname.startsWith("/design-gallery/") ||
+    pathname === "/designs" ||
+    pathname.startsWith("/designs/") ||
+    pathname.startsWith("/api/designs") ||
+    pathname.startsWith("/api/health") ||
+    isPublicPath(pathname)
+  )
+}
 
 function preserveResponseCookies(source: NextResponse, target: NextResponse) {
   source.cookies.getAll().forEach((cookie) => target.cookies.set(cookie))
@@ -70,20 +81,17 @@ export async function updateSession(request: NextRequest) {
       requestHeaders.set(INTERNAL_AUTH_HEADERS.SIG, sig)
     }
 
-    // Apply the role-based rule only to the default application root. Explicit
-    // invitation, confirmation, and protected deep-link destinations never pass
-    // through this branch, so their trusted `next` path remains authoritative.
-    const isOrganizationWideRoute =
-      pathname === "/" ||
-      pathname === "/dashboard" ||
-      pathname === "/supervisor-performance" ||
-      pathname.startsWith("/supervisor-performance/")
-
-    if (user && isOrganizationWideRoute) {
-      if (pathname === "/") {
+    if (user) {
+      if (!isAllowedForArchitectAdmin(pathname)) {
         const landing = await resolveDefaultLandingDestination(user.id)
+        if (landing.mode === "architect_administrator") {
+          const galleryUrl = request.nextUrl.clone()
+          galleryUrl.pathname = "/design-gallery"
+          galleryUrl.search = ""
+          return preserveResponseCookies(supabaseResponse, NextResponse.redirect(galleryUrl))
+        }
 
-        if (landing.mode === "member") {
+        if (pathname === "/" && landing.mode === "member") {
           const memberHomeUrl = request.nextUrl.clone()
           memberHomeUrl.pathname = landing.destination
           memberHomeUrl.search = ""
@@ -91,14 +99,25 @@ export async function updateSession(request: NextRequest) {
         }
       }
 
-      request.cookies.set(SELECTED_PROJECT_COOKIE, ALL_PROJECTS_SCOPE_VALUE)
-      const response = NextResponse.next({ request: { headers: requestHeaders } })
-      response.cookies.set(SELECTED_PROJECT_COOKIE, ALL_PROJECTS_SCOPE_VALUE, {
-        path: "/",
-        maxAge: 60 * 60 * 24 * 365,
-        sameSite: "lax",
-      })
-      return preserveResponseCookies(supabaseResponse, response)
+      // Apply the role-based rule only to the default application root. Explicit
+      // invitation, confirmation, and protected deep-link destinations never pass
+      // through this branch, so their trusted `next` path remains authoritative.
+      const isOrganizationWideRoute =
+        pathname === "/" ||
+        pathname === "/dashboard" ||
+        pathname === "/supervisor-performance" ||
+        pathname.startsWith("/supervisor-performance/")
+
+      if (isOrganizationWideRoute) {
+        request.cookies.set(SELECTED_PROJECT_COOKIE, ALL_PROJECTS_SCOPE_VALUE)
+        const response = NextResponse.next({ request: { headers: requestHeaders } })
+        response.cookies.set(SELECTED_PROJECT_COOKIE, ALL_PROJECTS_SCOPE_VALUE, {
+          path: "/",
+          maxAge: 60 * 60 * 24 * 365,
+          sameSite: "lax",
+        })
+        return preserveResponseCookies(supabaseResponse, response)
+      }
     }
 
     const response = NextResponse.next({ request: { headers: requestHeaders } })

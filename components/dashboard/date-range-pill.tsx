@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { Calendar, Check, ChevronDown } from "lucide-react"
+import { Calendar, Check, ChevronDown, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -20,6 +20,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { cn } from "@/lib/utils"
+import type { DashboardDateRangePreset } from "@/lib/dashboard/date-range"
+
 export type DateRangePresetOption = {
   value: string
   label: string
@@ -34,6 +37,9 @@ type DateRangePillProps = {
   dialogDescription?: string
   showAllTime?: boolean
   options?: DateRangePresetOption[]
+  isLoading?: boolean
+  onNavigate?: (nextPreset: string, optionLabel: string) => void
+  onCustomNavigate?: (from: string, to: string, customLabel: string) => void
 }
 
 const DEFAULT_PRESET_OPTIONS: { value: Exclude<DashboardDateRangePreset, "custom">; label: string }[] = [
@@ -53,6 +59,9 @@ export function DateRangePill({
   dialogDescription = "Choose inclusive calendar dates for Dashboard activity.",
   showAllTime = true,
   options,
+  isLoading = false,
+  onNavigate,
+  onCustomNavigate,
 }: DateRangePillProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -76,6 +85,14 @@ export function DateRangePill({
   }, [preset, startDate, endDate])
 
   function navigateToRange(nextPreset: string) {
+    const option = presetOptions.find((o) => o.value === nextPreset)
+    const optLabel = option?.label ?? nextPreset
+
+    if (onNavigate) {
+      onNavigate(nextPreset, optLabel)
+      return
+    }
+
     const params = new URLSearchParams(searchParams.toString())
     params.set("range", nextPreset)
     params.delete("from")
@@ -102,28 +119,44 @@ export function DateRangePill({
       return
     }
 
+    setCustomOpen(false)
+    const customLabel = from === to ? from : `${from} – ${to}`
+
+    if (onCustomNavigate) {
+      onCustomNavigate(from, to, customLabel)
+      return
+    }
+
     const params = new URLSearchParams(searchParams.toString())
     params.set("range", "custom")
     params.set("from", from)
     params.set("to", to)
     params.delete("page")
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-    setCustomOpen(false)
   }
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
+          disabled={isLoading}
           render={
             <button
               type="button"
               aria-label={ariaLabel}
-              className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              disabled={isLoading}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted",
+                isLoading && "opacity-80 cursor-wait",
+              )}
             >
-              <Calendar className="size-4 text-muted-foreground" />
-              <span>{label}</span>
-              <ChevronDown className="size-4 text-muted-foreground" />
+              {isLoading ? (
+                <Loader2 className="size-4 animate-spin text-primary shrink-0" />
+              ) : (
+                <Calendar className="size-4 text-muted-foreground shrink-0" />
+              )}
+              <span className="truncate">{label}</span>
+              <ChevronDown className="size-4 text-muted-foreground shrink-0" />
             </button>
           }
         />
@@ -131,6 +164,7 @@ export function DateRangePill({
           {presetOptions.map((option) => (
             <DropdownMenuItem
               key={option.value}
+              disabled={isLoading}
               onClick={() => navigateToRange(option.value)}
               className="justify-between"
             >

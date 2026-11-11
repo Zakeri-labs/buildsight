@@ -1,3 +1,45 @@
+## 2026-11-11 — Allow Public Design Meeting Booking via Supabase RPC
+
+- Added `public.submit_design_meeting_booking(payload jsonb)` RPC function with `SECURITY DEFINER` allowing external and client applications (such as Bonyan Blueprint) to submit meeting requests directly with input sanitization, organization resolution, design matching, and duplicate submit protection.
+- Granted `anon` and `authenticated` execute permissions on the RPC function and insert permissions on `public.design_meeting_requests` guarded by RLS.
+- Database migration required: execute `scripts/sql/088_allow_public_design_meeting_booking.sql`.
+
+## 2026-11-10 — Interactive project map and project pins (Phase 2)
+
+- Interactive Project Map added below the Projects table and pagination on `/projects`.
+- Displays project pins for all accessible organization projects across all table pages.
+- Native zero-dependency marker clustering with dynamic cluster badges and click-to-zoom bounds.
+- Table filter and search synchronization toggle with automatic pin updates.
+- "Fit All Projects" viewport framing action.
+- Interactive project popups displaying project code, status badges, client/owner, supervisor, address, and link to project details.
+- Read-only rendering of saved Circle and Polygon organization zones with custom colors and popups.
+- Deferred lazy loading using `IntersectionObserver` and dynamic imports to preserve initial page load performance.
+
+## 2026-11-10 — Project map and geographic zone data model (Phase 1)
+
+- New organization-scoped `public.project_zones` table supporting Circle and Polygon geometries.
+- Geometric exclusivity constraints, vertex limits, name checks, and automatic `updated_at` trigger.
+- Organization Row Level Security (RLS) policies allowing `org_admin`, `org_manager`, `org_member`, and `viewer` to read zones while restricting zone mutations exclusively to `org_admin` and `org_manager`.
+- Explicitly excluded `architect_administrator` from project zone access.
+- Strongly-typed TypeScript domain models in `lib/zones/types.ts`.
+- Pure TypeScript geometry utilities and validators in `lib/zones/geometry.ts` (Haversine distance, circle matching, ray-casting point-in-polygon with boundary inclusion, bowtie self-intersection detection, collinearity checks, and Shoelace area calculation).
+- Comprehensive Vitest unit test suite with 34 tests in `lib/zones/geometry.test.ts`.
+- Secure Server Actions in `lib/actions/zones.ts` for listing, creating, updating, and deleting geographic zones.
+- Database migration required: execute `scripts/sql/087_project_zones.sql`.
+
+## 2026-11-10 — Add Architect Administrator role for dedicated Design Gallery management
+
+- New organization role `architect_administrator` ("Architect Administrator" / "مدير المعرض المعماري") with full administrative access to Design Gallery while restricting standard BuildSight application navigation and access.
+- Role can manage designs, categories, gallery settings, branding, booking slots, and meeting requests/attachments.
+- Dedicated Design Gallery authorization guard `assertDesignGalleryAdmin` authorizes both `org_admin` and `architect_administrator`.
+- Design meeting notification feed (`getDesignMeetingNotificationFeed`) updated to deliver meeting alerts to Architect Administrators.
+- Login redirection and route guard: Architect Administrators land directly on `/design-gallery`, and normal application routes (`/`, `/dashboard`, `/projects`, etc.) redirect to `/design-gallery`.
+- Navigation restriction: Sidebar and topbar show only Design Gallery and Logout for Architect Administrators; project selector, modules, and admin sections are hidden.
+- Lightweight data restrictions applied to prevent Architect Administrators from viewing subscriptions, report credit usage, organization audit logs, and managing stage templates.
+- Organization Admins can invite or reassign members to and from `architect_administrator` via the Team page.
+- Database migration required: execute `scripts/sql/085_add_architect_administrator_role_enum.sql`.
+- Database migration required: execute `scripts/sql/086_architect_administrator_access.sql`.
+
 ## 2026-10-21 — Design gallery (معرض التصاميم), part 3: booking a meeting
 
 - New public page **`/designs/book`** (no sign-in, not indexed): a two-step form. Step 1: name, WhatsApp, project type, land status, wilayat (Oman's 61 wilayat, or another place), land area, when to start; for "Have another idea?" also a description and up to 3 images or PDFs (10 MB each). Step 2: online (Google Meet), at the office, or "call me", then a free day and time.
@@ -92,4 +134,3 @@
 ## Contractor profile prefill
 - Prefill Add Project contractor snapshot fields from the selected registered contractor organization.
 - Keep all prefilled values editable without modifying the global contractor profile.
-
