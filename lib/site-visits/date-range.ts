@@ -7,6 +7,9 @@ import {
 
 export type SiteVisitDateRangePreset =
   | "today"
+  | "yesterday"
+  | "last3"
+  | "last7"
   | "tomorrow"
   | "next7"
   | "next30"
@@ -30,6 +33,9 @@ export type SiteVisitDateRangeSearchParams = {
 
 const PRESETS = new Set<SiteVisitDateRangePreset>([
   "today",
+  "yesterday",
+  "last3",
+  "last7",
   "tomorrow",
   "next7",
   "next30",
@@ -39,6 +45,9 @@ const PRESETS = new Set<SiteVisitDateRangePreset>([
 
 export const SITE_VISIT_PRESET_OPTIONS: { value: Exclude<SiteVisitDateRangePreset, "custom">; label: string }[] = [
   { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "last3", label: "Last 3 Days" },
+  { value: "last7", label: "Last 7 Days" },
   { value: "tomorrow", label: "Tomorrow" },
   { value: "next7", label: "Next 7 Days" },
   { value: "next30", label: "Next 30 Days" },
@@ -133,12 +142,32 @@ export function resolveSiteVisitDateRange(
   now = new Date(),
 ): SiteVisitDateRange {
   const requested = firstValue(params.range)
-  const preset = requested && PRESETS.has(requested as SiteVisitDateRangePreset)
-    ? (requested as SiteVisitDateRangePreset)
+  const normalized =
+    requested === "last3days" || requested === "last3Days"
+      ? "last3"
+      : requested === "last7days" || requested === "last7Days"
+        ? "last7"
+        : requested
+
+  const preset = normalized && PRESETS.has(normalized as SiteVisitDateRangePreset)
+    ? (normalized as SiteVisitDateRangePreset)
     : "today"
   const today = currentCalendarDateKey(now)
 
   if (preset === "today") return buildRange("today", today, today, "Today")
+
+  if (preset === "yesterday") {
+    const yesterday = addCalendarDays(today, -1)
+    return buildRange("yesterday", yesterday, yesterday, "Yesterday")
+  }
+
+  if (preset === "last3") {
+    return buildRange("last3", addCalendarDays(today, -3), today, "Last 3 Days")
+  }
+
+  if (preset === "last7") {
+    return buildRange("last7", addCalendarDays(today, -7), today, "Last 7 Days")
+  }
 
   if (preset === "tomorrow") {
     const tomorrow = addCalendarDays(today, 1)
