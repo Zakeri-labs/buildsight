@@ -246,6 +246,9 @@ begin
     'endsAt', v_ends_at
   );
 exception when others then
+  if SQLERRM like '%design_meeting_requests_one_per_slot%' then
+    return jsonb_build_object('ok', false, 'error', 'slot_taken');
+  end if;
   return jsonb_build_object('ok', false, 'error', SQLERRM);
 end;
 $$;
@@ -264,3 +267,18 @@ create policy design_meeting_requests_public_insert on public.design_meeting_req
         and s.is_enabled = true
     )
   );
+
+-- 4. Provides anonymous-safe public function to query busy slots without customer data
+create or replace function public.get_design_meeting_busy_slots()
+returns table (starts_at timestamptz, ends_at timestamptz)
+language sql
+security definer
+set search_path = public
+as $$
+  select r.starts_at, r.ends_at
+  from public.design_meeting_requests r
+  where r.status <> 'cancelled'
+    and r.starts_at >= now() - interval '1 day'
+$$;
+
+grant execute on function public.get_design_meeting_busy_slots() to anon, authenticated;
