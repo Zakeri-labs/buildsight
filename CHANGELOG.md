@@ -1,3 +1,9 @@
+## 2026-11-11 — Allow Public Design Meeting Booking via Supabase RPC
+
+- Added `public.submit_design_meeting_booking(payload jsonb)` RPC function with `SECURITY DEFINER` allowing external and client applications (such as Bonyan Blueprint) to submit meeting requests directly with input sanitization, organization resolution, design matching, and duplicate submit protection.
+- Granted `anon` and `authenticated` execute permissions on the RPC function and insert permissions on `public.design_meeting_requests` guarded by RLS.
+- Database migration required: execute `scripts/sql/088_allow_public_design_meeting_booking.sql`.
+
 ## 2026-11-10 — Interactive project map and project pins (Phase 2)
 
 - Interactive Project Map added below the Projects table and pagination on `/projects`.
