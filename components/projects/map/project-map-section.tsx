@@ -102,17 +102,29 @@ export function ProjectMapSection({
   allProjects,
   filteredProjects,
   locale = "en",
+  zones: externalZones,
+  onZonesChange,
 }: {
   allProjects: ProjectRow[]
   filteredProjects: ProjectRow[]
   locale?: string
+  zones?: ProjectZone[]
+  onZonesChange?: (zones: ProjectZone[]) => void
 }) {
   const isArabic = locale === "ar"
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [isInView, setIsInView] = useState(false)
   const [syncWithFilters, setSyncWithFilters] = useState(true)
   const [fitBoundsTrigger, setFitBoundsTrigger] = useState(0)
-  const [zones, setZones] = useState<ProjectZone[]>([])
+  const [localZones, setLocalZones] = useState<ProjectZone[]>(externalZones ?? [])
+
+  const zones = externalZones ?? localZones
+
+  const updateZones = (updater: (prev: ProjectZone[]) => ProjectZone[]) => {
+    const next = updater(zones)
+    setLocalZones(next)
+    onZonesChange?.(next)
+  }
 
   // Authorization check
   let canManageZones = false
@@ -169,22 +181,30 @@ export function ProjectMapSection({
     return () => observer.disconnect()
   }, [isInView])
 
-  // Retrieve organization zones once when map is activated
+  // Sync external zones if provided
   useEffect(() => {
-    if (!isInView) return
+    if (externalZones) {
+      setLocalZones(externalZones)
+    }
+  }, [externalZones])
+
+  // Retrieve organization zones once when map is activated (if external zones not passed)
+  useEffect(() => {
+    if (!isInView || externalZones) return
 
     let cancelled = false
     void getOrganizationZonesAction().then((result) => {
       if (cancelled) return
       if (result.ok && result.data) {
-        setZones(result.data)
+        setLocalZones(result.data)
+        onZonesChange?.(result.data)
       }
     })
 
     return () => {
       cancelled = true
     }
-  }, [isInView])
+  }, [isInView, externalZones, onZonesChange])
 
   // Compute active dataset based on sync toggle
   const activeDataset = syncWithFilters ? filteredProjects : allProjects
@@ -274,7 +294,7 @@ export function ProjectMapSection({
         setActionError(res.error)
         return
       }
-      setZones((prev) => prev.map((z) => (z.id === res.data.id ? res.data : z)))
+      updateZones((prev) => prev.map((z) => (z.id === res.data.id ? res.data : z)))
       setDrawingMode("idle")
       setActiveEditingZone(null)
     } catch {
@@ -342,7 +362,7 @@ export function ProjectMapSection({
           alert(res.error)
           return
         }
-        setZones((prev) => [res.data, ...prev])
+        updateZones((prev) => [res.data, ...prev])
         setDialogState((prev) => ({ ...prev, open: false }))
         setDrawingMode("idle")
         setActiveEditingZone(null)
@@ -359,7 +379,7 @@ export function ProjectMapSection({
           alert(res.error)
           return
         }
-        setZones((prev) => prev.map((z) => (z.id === res.data.id ? res.data : z)))
+        updateZones((prev) => prev.map((z) => (z.id === res.data.id ? res.data : z)))
         setDialogState((prev) => ({ ...prev, open: false }))
         setDrawingMode("idle")
         setActiveEditingZone(null)
@@ -383,7 +403,7 @@ export function ProjectMapSection({
         setDeleteZoneState((prev) => ({ ...prev, isDeleting: false }))
         return
       }
-      setZones((prev) => prev.filter((z) => z.id !== deleteZoneState.zone?.id))
+      updateZones((prev) => prev.filter((z) => z.id !== deleteZoneState.zone?.id))
       setDeleteZoneState({ open: false, zone: null, isDeleting: false })
       if (activeEditingZone?.id === deleteZoneState.zone.id) {
         setDrawingMode("idle")
