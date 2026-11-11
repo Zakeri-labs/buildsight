@@ -49,6 +49,7 @@ export type ProjectMapCanvasProps = {
   locale: string
   canManageZones?: boolean
   drawingMode?: DrawingMode
+  isDialogOpen?: boolean
   activeEditingZone?: ProjectZone | null
   activeDraftGeometry?: ZoneGeometry | null
   onDrawingComplete?: (geometry: ZoneGeometry) => void

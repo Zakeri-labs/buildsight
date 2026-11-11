@@ -493,7 +493,7 @@ export function ProjectMapSection({
       </div>
 
       {/* Map Canvas Container */}
-      <div className="relative h-[420px] w-full md:h-[560px]">
+      <div className="relative z-0 isolate h-[420px] w-full overflow-hidden md:h-[560px]">
         {isInView ? (
           <DynamicProjectMapCanvas
             projects={mappedProjects}
@@ -502,6 +502,7 @@ export function ProjectMapSection({
             locale={locale}
             canManageZones={canManageZones}
             drawingMode={drawingMode}
+            isDialogOpen={dialogState.open || deleteZoneState.open}
             activeEditingZone={activeEditingZone}
             onDrawingComplete={handleDrawingComplete}
             onDrawingCancel={handleDrawingCancel}

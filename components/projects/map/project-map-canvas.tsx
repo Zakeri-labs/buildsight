@@ -339,6 +339,7 @@ export function ProjectMapCanvas({
   locale,
   canManageZones = false,
   drawingMode = "idle",
+  isDialogOpen = false,
   activeEditingZone = null,
   onDrawingComplete,
   onDrawingCancel,
@@ -444,7 +445,7 @@ export function ProjectMapCanvas({
   return (
     <div className="relative h-full w-full overflow-hidden">
       {/* Floating Drawing / Editing Action Toolbar */}
-      {isDrawingActive ? (
+      {isDrawingActive && !isDialogOpen ? (
         <div
           className="absolute top-3 left-1/2 z-[1000] flex w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 flex-col gap-2 rounded-2xl border border-slate-200/90 bg-white/95 p-2.5 shadow-lg backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95"
           dir={isArabic ? "rtl" : "ltr"}
