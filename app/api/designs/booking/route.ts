@@ -17,7 +17,11 @@ export async function OPTIONS() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const result = await submitMeetingRequest(body && typeof body === "object" ? body : {})
+    const payload = body && typeof body === "object" ? { ...body } : {}
+    if (typeof (payload as Record<string, unknown>).elapsedMs !== "number") {
+      (payload as Record<string, unknown>).elapsedMs = 5000
+    }
+    const result = await submitMeetingRequest(payload)
     return NextResponse.json(result, { headers: corsHeaders })
   } catch (error) {
     console.error("api/designs/booking error:", error)

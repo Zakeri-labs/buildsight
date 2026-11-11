@@ -8,6 +8,7 @@ import { dictionaries } from "@/lib/i18n/dictionaries"
 import { findPublicDesign, loadPublicSite, type PublicDesignRef, type PublicSite } from "../public"
 import { createRateLimiter } from "../rate-limit"
 import { googleCalendarProvider, type CalendarProvider } from "./calendar"
+import { resolveZohoEmailConfig, sendBookingNotifications, type BookingEmailDetails } from "./zoho-email"
 import { availableDays, findOfferedSlot, type BookingDay, type Interval } from "./slots"
 import { IDEA_FILE_MAX_BYTES, IDEA_FILE_MAX_COUNT, IDEA_FILE_TYPES, type MeetingRequestInput } from "./types"
 import { looksAutomated, validateMeetingRequest, type BookingFieldError } from "./validation"
@@ -349,11 +350,34 @@ export async function submitMeetingRequest(
     await attachIdeaFiles(org, inserted.id, input, files)
 
     let saved: SavedRow = inserted
+    const zohoConfig = resolveZohoEmailConfig()
+    const bookingDetails: BookingEmailDetails = {
+      requestId: inserted.id,
+      clientName: input.clientName,
+      whatsappPhone: input.whatsappPhone,
+      clientEmail: input.email,
+      meetingMode: input.meetingMode,
+      startsAt: slot?.start ?? null,
+      endsAt: slot?.end ?? null,
+      timeZone: site.site.booking.timeZone,
+      designCode: design?.code ?? null,
+      designTitleAr: design?.titleAr ?? null,
+      designTitleEn: design?.titleEn ?? null,
+      path: input.path,
+      projectType: input.projectType,
+      landStatus: input.landStatus,
+      wilayat: input.wilayat,
+      landAreaSqm: input.landAreaSqm,
+      startTimeline: input.startTimeline,
+      ideaText: input.ideaText,
+      officeAddressAr: site.site.officeAddressAr,
+      officeAddressEn: site.site.officeAddressEn,
+      locale: input.locale,
+    }
+
     if (slot) {
       const update: Record<string, unknown> = {}
-      if (!calendar.connected) {
-        update.calendar_status = "not_configured"
-      } else {
+      if (calendar.connected) {
         try {
           const text = summaryText(input, design)
           const event = await calendar.createEvent({
@@ -369,19 +393,51 @@ export async function submitMeetingRequest(
           Object.assign(update, { calendar_status: "created", calendar_event_id: event.eventId, meet_link: event.meetLink })
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
-          console.error("design booking: calendar event not created:", message)
+          console.error("design booking: Google calendar event not created:", message)
           Object.assign(update, { calendar_status: "failed", calendar_error: message.slice(0, 500) })
         }
       }
-      const { data: updated, error: updateError } = await admin
-        .from("design_meeting_requests")
-        .update(update)
-        .eq("organization_id", org)
-        .eq("id", inserted.id)
-        .select(columns)
-        .single()
-      if (updateError) console.error("design booking: calendar result not saved:", updateError.message)
-      else if (updated) saved = updated
+
+      // Zoho Calendar & Confirmation Emails (Mrs. Al Hajri & Client)
+      if (zohoConfig) {
+        try {
+          const zohoResult = await sendBookingNotifications(bookingDetails, zohoConfig)
+          if (zohoResult.ok || zohoResult.sentToAttendee) {
+            update.calendar_status = "created"
+            if (!update.calendar_event_id) {
+              update.calendar_event_id = zohoResult.attendeeMessageId || `zoho-meeting-${inserted.id}`
+            }
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          console.error("design booking: Zoho email/calendar invite failed:", message)
+          if (!update.calendar_status) {
+            update.calendar_status = "failed"
+            update.calendar_error = message.slice(0, 500)
+          }
+        }
+      } else if (!calendar.connected) {
+        update.calendar_status = "not_configured"
+      }
+
+      if (Object.keys(update).length > 0) {
+        const { data: updated, error: updateError } = await admin
+          .from("design_meeting_requests")
+          .update(update)
+          .eq("organization_id", org)
+          .eq("id", inserted.id)
+          .select(columns)
+          .single()
+        if (updateError) console.error("design booking: calendar result not saved:", updateError.message)
+        else if (updated) saved = updated
+      }
+    } else if (zohoConfig) {
+      // Call back request (no slot) - notify Mrs. Al Hajri and confirm to client
+      try {
+        await sendBookingNotifications(bookingDetails, zohoConfig)
+      } catch (error) {
+        console.error("design booking: Zoho call_me notification failed:", error)
+      }
     }
 
     return { ok: true, data: confirmation(saved) }
