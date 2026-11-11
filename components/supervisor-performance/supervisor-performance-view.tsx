@@ -61,6 +61,7 @@ import type {
   SupervisorVisitComplianceDashboardData,
   PerformancePeriod,
 } from "@/lib/supervisor-performance/types"
+import type { ProjectZone } from "@/lib/zones/types"
 import {
   formatMonthLabel,
   getAdjacentMonth,
@@ -80,10 +81,12 @@ export function SupervisorPerformanceView({
   data,
   complianceData,
   selectedMonth,
+  initialZones,
 }: {
   data: SupervisorPerformanceData
   complianceData?: SupervisorVisitComplianceDashboardData
   selectedMonth?: string
+  initialZones?: ProjectZone[]
 }) {
   const router = useRouter()
   const { organizationSummary, supervisors } = data
@@ -733,7 +736,10 @@ export function SupervisorPerformanceView({
 
       {/* Section B: Supervisor Visit Compliance Matrix Dashboard */}
       {complianceData && (
-        <SupervisorVisitComplianceDashboard data={complianceData} />
+        <SupervisorVisitComplianceDashboard
+          data={complianceData}
+          initialZones={initialZones}
+        />
       )}
     </div>
   )

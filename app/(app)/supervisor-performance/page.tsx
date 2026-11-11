@@ -6,6 +6,7 @@ import {
   loadSupervisorPerformanceData,
   loadSupervisorVisitComplianceData,
 } from "@/lib/supervisor-performance/server"
+import { getOrganizationZonesAction } from "@/lib/actions/zones"
 import { SupervisorPerformanceView } from "@/components/supervisor-performance/supervisor-performance-view"
 import { Card, CardContent } from "@/components/ui/card"
 import { AlertCircle } from "lucide-react"
@@ -80,19 +81,23 @@ export default async function SupervisorPerformancePage({
     periodOptions = { month: selectedMonth }
   }
 
-  const [data, complianceData] = await Promise.all([
+  const [data, complianceData, zonesResult] = await Promise.all([
     loadSupervisorPerformanceData(supervisingOrg.id, periodOptions),
     loadSupervisorVisitComplianceData({
       organizationId: supervisingOrg.id,
       pastWeeks: 12,
       futureWeeks: 16,
     }),
+    getOrganizationZonesAction(),
   ])
+
+  const initialZones = zonesResult.ok && zonesResult.data ? zonesResult.data : []
 
   return (
     <SupervisorPerformanceView
       data={data}
       complianceData={complianceData}
+      initialZones={initialZones}
     />
   )
 }

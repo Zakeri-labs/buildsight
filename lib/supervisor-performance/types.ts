@@ -88,6 +88,8 @@ export type RawProjectRecord = {
   startDate?: string | null
   supervision_start_date?: string | null
   supervisionStartDate?: string | null
+  latitude?: number | null
+  longitude?: number | null
 }
 
 export type RawParticipantRecord = {
@@ -208,6 +210,8 @@ export type ProjectComplianceTimelineRow = {
   }>
   periods: CompliancePeriod[]
   weeklyCells: Record<string, ProjectWeeklyCell>
+  latitude?: number | null
+  longitude?: number | null
 }
 
 export type SupervisorVisitComplianceDashboardData = {

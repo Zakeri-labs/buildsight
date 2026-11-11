@@ -99,4 +99,25 @@ describe("filterProjectByZone", () => {
   it("returns false if a non-existent zone ID is passed", () => {
     expect(filterProjectByZone({ latitude: 23.588, longitude: 58.3829 }, "non-existent-zone", zones)).toBe(false)
   })
+
+  it("filters compliance matrix timeline rows with geographic coordinates", () => {
+    const complianceRowInside = {
+      projectId: "proj-1",
+      projectName: "Villa Al Mawaleh",
+      projectCode: "Bonyan/sup/2026/101",
+      latitude: 23.588,
+      longitude: 58.3829,
+    }
+    const complianceRowOutside = {
+      projectId: "proj-2",
+      projectName: "Sohar Mall",
+      projectCode: "Bonyan/sup/2026/102",
+      latitude: 24.36,
+      longitude: 56.74,
+    }
+
+    expect(filterProjectByZone(complianceRowInside, mockCircleZone.id, zones)).toBe(true)
+    expect(filterProjectByZone(complianceRowOutside, mockCircleZone.id, zones)).toBe(false)
+    expect(filterProjectByZone(complianceRowOutside, "__unassigned__", zones)).toBe(true)
+  })
 })

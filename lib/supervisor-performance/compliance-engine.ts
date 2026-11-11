@@ -631,6 +631,8 @@ export function buildProjectTimelineRow(input: {
     supervisors,
     periods,
     weeklyCells,
+    latitude: typeof project.latitude === "number" ? project.latitude : null,
+    longitude: typeof project.longitude === "number" ? project.longitude : null,
   }
 }
 
