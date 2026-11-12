@@ -8,6 +8,7 @@ import {
   resolveExplicitSupervisorProjectScope,
 } from "@/lib/calendar/server"
 import { addCalendarDays, currentCalendarDateKey } from "@/lib/calendar/date"
+import { calculateTodayReportsProgress } from "@/lib/member-homepage/reports-progress"
 import type {
   MemberHomepageData,
   MemberHomepageRequest,
@@ -89,7 +90,9 @@ function clockTime(value: unknown): string | null {
  * with the same explicit-Supervisor scope and date/status semantics.
  *
  * Today's Reports derives its denominator from the same Today Site Visit rows and
- * matches completion only through the explicit Site Visit -> Stage Report relationship.
+ * counts completion when a visit has been completed manually (status = "completed")
+ * or through an explicit Site Visit -> Stage Report relationship, deduplicated so each
+ * visit obligation counts at most once.
  */
 export async function getMemberHomepageData(userId: string): Promise<MemberHomepageData> {
   if (!isValidUuid(userId)) return emptyData()
@@ -348,10 +351,27 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
       const reportObligations = visitRows.map((row: any) => ({
         siteVisitRequestId: row.id as string,
         projectId: row.project_id as string,
+        status: row.status as string,
       }))
 
       const explicitReportByVisitId = new Map<string, any>()
       const obligationVisitIds = reportObligations.map((item) => item.siteVisitRequestId)
+
+      const calculateProgress = (completedRows: any[] = []) => {
+        return calculateTodayReportsProgress({
+          visitRows: reportObligations.map((obligation) => ({
+            id: obligation.siteVisitRequestId,
+            projectId: obligation.projectId,
+            status: obligation.status,
+          })),
+          linkedReportRows: completedRows.map((report: any) => ({
+            id: report.id,
+            projectId: report.project_id,
+            siteVisitRequestId: report.site_visit_request_id,
+            status: report.status,
+          })),
+        }).completedReportsToday
+      }
 
       if (obligationVisitIds.length) {
         try {
@@ -364,6 +384,7 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
           if (reportError) {
             todaysReportsHasError = true
             logLoadError("today Stage Report obligations", userId, visitProjects.length, reportError)
+            completedReportsToday = calculateProgress([])
           } else {
             const completionStatuses = new Set(["submitted", "under_review", "approved", "completed"])
             const completedRows = (reportRows ?? []).filter((report: any) =>
@@ -378,15 +399,12 @@ export async function getMemberHomepageData(userId: string): Promise<MemberHomep
               explicitReportByVisitId.set((report as any).site_visit_request_id, report)
             }
 
-            completedReportsToday = reportObligations.reduce((count, obligation) => {
-              const explicit = explicitReportByVisitId.get(obligation.siteVisitRequestId)
-              return explicit?.project_id === obligation.projectId ? count + 1 : count
-            }, 0)
-            completedReportsToday = Math.min(completedReportsToday, requiredReportsToday)
+            completedReportsToday = calculateProgress(completedRows)
           }
         } catch (error) {
           todaysReportsHasError = true
           logLoadError("today Stage Report obligations", userId, visitProjects.length, error)
+          completedReportsToday = calculateProgress([])
         }
       }
 
