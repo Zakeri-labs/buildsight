@@ -97,6 +97,11 @@ export const dictionaries = {
       client: "Client",
       startDate: "Start Date",
       contractValue: "Contract Value",
+      exportExcel: "Export",
+      exportingExcel: "Exporting...",
+      exportSuccess: "Successfully exported {count} projects.",
+      exportEmpty: "No projects match the current filters.",
+      exportError: "Failed to export projects. Please try again.",
     },
     projectStatus: {
       underConstruction: "Under Construction",
@@ -669,6 +674,11 @@ export const dictionaries = {
       client: "العميل",
       startDate: "تاريخ البدء",
       contractValue: "قيمة العقد",
+      exportExcel: "تصدير",
+      exportingExcel: "جارٍ التصدير...",
+      exportSuccess: "تم تصدير {count} مشروعاً بنجاح.",
+      exportEmpty: "لا توجد مشاريع مطابقة للفلاتر الحالية.",
+      exportError: "فشل تصدير المشاريع. يرجى المحاولة مرة أخرى.",
     },
     projectStatus: {
       underConstruction: "قيد الإنشاء",

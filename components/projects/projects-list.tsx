@@ -7,6 +7,7 @@ import {
   Search,
   Plus,
   Upload,
+  Download,
   MoreVertical,
   Folder,
   PieChart,
@@ -410,7 +411,7 @@ export function ProjectsList({
   canCreateProjects?: boolean
   supervisorOptions?: ProjectSupervisorCandidate[]
 }) {
-  const { locale } = useI18n()
+  const { locale, t } = useI18n()
   const currentUser = useCurrentUser()
   const isMember = currentUser.role === "org_member"
   const router = useRouter()
@@ -449,6 +450,7 @@ export function ProjectsList({
   const [notice, setNotice] = useState<string | null>(null)
   const [impactPending, startImpactTransition] = useTransition()
   const [deletePending, startDeleteTransition] = useTransition()
+  const [isExporting, setIsExporting] = useState(false)
 
   useEffect(() => {
     setProjectRows(projects)
@@ -694,6 +696,72 @@ export function ProjectsList({
       setDeletionImpact(result.data ?? null)
     })
   }
+
+  const handleExport = useCallback(async () => {
+    if (isExporting) return
+
+    if (desktopProjects.length === 0) {
+      setNotice(
+        t.projects.exportEmpty ||
+          (locale === "ar"
+            ? "لا توجد مشاريع مطابقة للفلاتر الحالية."
+            : "No projects match the current filters."),
+      )
+      return
+    }
+
+    setIsExporting(true)
+    try {
+      const { exportProjectsToExcel } = await import("@/lib/projects/export-projects-excel")
+      const result = await exportProjectsToExcel({
+        projects: desktopProjects,
+        activeFilters: {
+          searchQuery: searchQuery.trim() || undefined,
+          status: selectedStatus !== "all" ? selectedStatus : undefined,
+          projectType: selectedType !== "all" ? selectedType : undefined,
+          supervisionType: selectedSupervisionType !== "all" ? selectedSupervisionType : undefined,
+          supervisor: selectedSupervisor !== "all" ? selectedSupervisor : undefined,
+          areaDistrict: selectedAreaDistrict !== "all" ? selectedAreaDistrict : undefined,
+          projectYear: selectedProjectYear !== "all" ? selectedProjectYear : undefined,
+          zone: selectedZone !== "all" ? (zones.find((z) => z.id === selectedZone)?.name ?? selectedZone) : undefined,
+        },
+        locale,
+      })
+
+      if (result.success) {
+        const msg = t.projects.exportSuccess
+          ? t.projects.exportSuccess.replace("{count}", String(result.rowCount))
+          : locale === "ar"
+            ? `تم تصدير ${result.rowCount} مشروعاً بنجاح.`
+            : `Successfully exported ${result.rowCount} projects.`
+        setNotice(msg)
+      }
+    } catch (error) {
+      console.error("[ProjectsList] Failed to export projects to Excel:", error)
+      setNotice(
+        t.projects.exportError ||
+          (locale === "ar"
+            ? "فشل تصدير المشاريع. يرجى المحاولة مرة أخرى."
+            : "Failed to export projects. Please try again."),
+      )
+    } finally {
+      setIsExporting(false)
+    }
+  }, [
+    isExporting,
+    desktopProjects,
+    searchQuery,
+    selectedStatus,
+    selectedType,
+    selectedSupervisionType,
+    selectedSupervisor,
+    selectedAreaDistrict,
+    selectedProjectYear,
+    selectedZone,
+    zones,
+    locale,
+    t,
+  ])
 
   function confirmDelete() {
     if (!deleteTarget) return
@@ -1024,10 +1092,21 @@ export function ProjectsList({
         <div className="flex items-center gap-3">
           <button
             type="button"
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+            disabled={isExporting}
+            onClick={handleExport}
+            aria-label={t.projects.exportExcel || (locale === "ar" ? "تصدير المشاريع إلى Excel" : "Export projects to Excel")}
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            <Upload className="size-4 text-slate-500" />
-            <span>{locale === "ar" ? "تصدير" : "Export"}</span>
+            {isExporting ? (
+              <Loader2 className="size-4 animate-spin text-slate-500" />
+            ) : (
+              <Download className="size-4 text-slate-500" />
+            )}
+            <span>
+              {isExporting
+                ? t.projects.exportingExcel || (locale === "ar" ? "جارٍ التصدير..." : "Exporting...")
+                : t.projects.exportExcel || (locale === "ar" ? "تصدير" : "Export")}
+            </span>
           </button>
 
           {canCreateProjects ? (
@@ -1781,7 +1860,7 @@ function DropdownFilter({
 }
 
 function ProjectStatusBadge({ status }: { status: ProjectStatus }) {
-  const { locale } = useI18n()
+  const { locale, t } = useI18n()
 
   return (
     <Badge
