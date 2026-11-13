@@ -1115,7 +1115,7 @@ export function ProjectsList({
               className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-950 px-4 text-xs font-semibold text-white shadow-xs hover:bg-blue-900 active:bg-blue-950 dark:bg-blue-600 dark:hover:bg-blue-700"
             >
               <Plus className="size-4" />
-              <span>{locale === "ar" ? "+ مشروع جديد" : "+ New Project"}</span>
+              <span>{t.projects.newProject || (locale === "ar" ? "مشروع جديد" : "New Project")}</span>
             </Link>
           ) : null}
         </div>
