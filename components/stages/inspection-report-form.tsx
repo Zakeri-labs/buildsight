@@ -584,6 +584,7 @@ export function InspectionReportForm({
   canReview,
   canManage,
   isMember = false,
+  isOrgAdmin = false,
   currentUserId,
   currentUserPerson,
   workflowActive,
@@ -628,6 +629,7 @@ export function InspectionReportForm({
   canReview: boolean
   canManage?: boolean
   isMember?: boolean
+  isOrgAdmin?: boolean
   currentUserId?: string
   currentUserPerson?: ProjectStagePerson | null
   workflowActive: boolean
@@ -1448,7 +1450,15 @@ const [resolvedStageId, setResolvedStageId] = useState(stage.id)
       }
 
       // Step 3: Save CC recipients if applicable
-      if (ccSelection.internalUserIds.length || ccSelection.externalRecipients.length || initialCcRecipients.length) {
+      // Only Organization Admin may modify Report to and CC recipients.
+      // For non-admins (Supervisors/Members), preserve the authoritative recipient configuration
+      // and only save initial defaults on brand-new reports.
+      const isNewReport = response === null
+      const shouldSaveCc = isOrgAdmin
+        ? (ccSelection.internalUserIds.length || ccSelection.externalRecipients.length || initialCcRecipients.length)
+        : (isNewReport && (ccSelection.internalUserIds.length || ccSelection.externalRecipients.length))
+
+      if (shouldSaveCc) {
         const ccResult = await saveReportCcRecipientsAction({
           projectId: project.id,
           responseId: id,
@@ -2540,7 +2550,8 @@ const [resolvedStageId, setResolvedStageId] = useState(stage.id)
         candidates={ccCandidates}
         value={ccSelection}
         onChange={setCcSelection}
-        disabled={isLocked || busy !== null}
+        disabled={!isOrgAdmin || isLocked || busy !== null}
+        isOrgAdmin={isOrgAdmin}
       />
 
       {reportDefinition.templateReference ? <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"><FileText className="mt-0.5 size-4 shrink-0" /><div><p className="font-semibold">{copy.template}</p><p className="mt-0.5 text-xs opacity-80">{reportDefinition.templateReference}</p></div></div> : null}

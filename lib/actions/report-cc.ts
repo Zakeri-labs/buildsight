@@ -66,7 +66,7 @@ async function reportScope(projectId: string, responseId: string) {
           .eq("project_id", projectId)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
-    supabase.from("projects").select("id, name").eq("id", projectId).maybeSingle(),
+    supabase.from("projects").select("id, name, supervising_organization_id").eq("id", projectId).maybeSingle(),
   ])
   if (termError) throw termError
   if (stageError) throw stageError
@@ -97,6 +97,40 @@ async function assertCanManage(projectId: string, responseId: string, context: R
 function appHref(path: string) {
   const base = process.env.NEXT_PUBLIC_APP_URL?.trim() || process.env.APP_URL?.trim()
   return base ? `${base.replace(/\/$/, "")}${path}` : path
+}
+
+async function isUserOrgAdmin(userId: string, supervisingOrgId: string): Promise<boolean> {
+  if (!UUID_PATTERN.test(userId) || !UUID_PATTERN.test(supervisingOrgId)) return false
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from("organization_memberships")
+    .select("id")
+    .eq("organization_id", supervisingOrgId)
+    .eq("user_id", userId)
+    .eq("role", "org_admin")
+    .eq("status", "active")
+    .maybeSingle()
+  if (error) return false
+  return Boolean(data)
+}
+
+function normalizedRecipientRole(candidate: ProjectCcCandidate) {
+  return (candidate.roleKey?.trim() || candidate.role.trim())
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s*\/\s*/g, " / ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function preferredRecipientCandidate(
+  candidates: ProjectCcCandidate[],
+  matches: (candidate: ProjectCcCandidate) => boolean,
+  excludedIds = new Set<string>(),
+) {
+  return candidates
+    .filter((candidate) => !excludedIds.has(candidate.id) && matches(candidate))
+    .sort((left, right) => (left.defaultPriority ?? Number.MAX_SAFE_INTEGER) - (right.defaultPriority ?? Number.MAX_SAFE_INTEGER))[0] ?? null
 }
 
 export async function saveReportCcRecipientsAction(input: {
@@ -180,6 +214,70 @@ export async function saveReportCcRecipientsAction(input: {
     const removeIds = (existing ?? [])
       .filter((row: any) => row.recipient_type === "internal" ? !keepInternal.has(row.user_id) : !keepExternal.has(String(row.external_email).toLowerCase()))
       .map((row: any) => row.id as string)
+
+    const supervisingOrgId = response.projects?.supervising_organization_id
+    const isOrgAdminUser = supervisingOrgId ? await isUserOrgAdmin(actorId, supervisingOrgId) : false
+
+    if (!isOrgAdminUser && input.context === "report") {
+      const hasExistingRecipients = (existing ?? []).length > 0
+
+      if (hasExistingRecipients) {
+        const hasInternalGroupChange = validInternalUserIds.some((id) => {
+          const current = existingInternal.get(id)
+          if (!current) return false
+          const targetGroup = reportToIdSet.has(id) ? "reportTo" : ccToIdSet.has(id) ? "ccTo" : "reportTo"
+          return current.recipient_group !== targetGroup
+        })
+        const hasExternalChange = externalRows.some((row) => {
+          const current = existingExternal.get(row.email)
+          if (!current) return false
+          const targetGroup = row.group ?? (reportToIdSet.has(row.clientId) ? "reportTo" : ccToIdSet.has(row.clientId) ? "ccTo" : "reportTo")
+          return (
+            current.recipient_group !== targetGroup ||
+            current.external_name !== row.name ||
+            (current.external_company || null) !== (row.company || null) ||
+            (current.external_role || null) !== (row.role || null)
+          )
+        })
+        const hasNewInternal = validInternalUserIds.some((id) => !existingInternal.has(id))
+        const hasNewExternal = externalRows.some((row) => !existingExternal.has(row.email))
+        const hasRemove = removeIds.length > 0
+
+        if (hasRemove || hasNewInternal || hasNewExternal || hasInternalGroupChange || hasExternalChange) {
+          return { ok: false, error: "Only an Organization Admin can edit report recipients." }
+        }
+
+        const currentRecipients = await loadReportCcRecipients(input.projectId, input.responseId, input.context)
+        return { ok: true, recipients: currentRecipients, emailFailures: 0 }
+      } else {
+        // Brand new report with no existing recipients: only default authoritative project recipients may be initialized.
+        const defaultContractor = preferredRecipientCandidate(participantCandidates, (c) => {
+          const role = normalizedRecipientRole(c)
+          return role === "contractor" || role.startsWith("contractor (")
+        })
+        const defaultOwner = preferredRecipientCandidate(participantCandidates, (c) => {
+          const role = normalizedRecipientRole(c)
+          return role === "client / owner" || role === "owner / client" || role === "client" || role === "owner"
+        }, new Set(defaultContractor ? [defaultContractor.id] : []))
+
+        const expectedReportToIds = defaultContractor ? [defaultContractor.id] : []
+        const expectedCcToIds = defaultOwner ? [defaultOwner.id] : []
+        const expectedAllIds = new Set([...expectedReportToIds, ...expectedCcToIds])
+
+        const submittedAllIds = new Set([
+          ...input.internalUserIds,
+          ...(input.reportToUserIds ?? []),
+          ...(input.ccToUserIds ?? []),
+        ])
+        const hasUnauthorizedInternal = Array.from(submittedAllIds).some((id) => !expectedAllIds.has(id))
+        const hasUnauthorizedExternal = input.externalRecipients.some((ext) => !expectedAllIds.has(ext.clientId))
+        const hasMissingDefault = Array.from(expectedAllIds).some((id) => !submittedAllIds.has(id))
+
+        if (hasUnauthorizedInternal || hasUnauthorizedExternal || hasMissingDefault) {
+          return { ok: false, error: "Only an Organization Admin can edit report recipients." }
+        }
+      }
+    }
     if (removeIds.length) {
       const { error } = await admin.from("report_cc_recipients").delete().in("id", removeIds)
       if (error) throw error

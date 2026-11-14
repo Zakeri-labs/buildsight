@@ -211,6 +211,7 @@ export const dictionaries = {
       totalReports: "Reports Filed",
       avgManpower: "Avg. Manpower",
       openIssues: "Open Issues",
+      onlyAdminCanEditRecipients: "Only an Admin can edit report recipients.",
     },
     documents: {
       title: "Letters",
@@ -788,6 +789,7 @@ export const dictionaries = {
       totalReports: "التقارير المقدمة",
       avgManpower: "متوسط القوى العاملة",
       openIssues: "مشكلات مفتوحة",
+      onlyAdminCanEditRecipients: "يمكن لمسؤول المؤسسة فقط تعديل مستلمي التقرير.",
     },
     documents: {
       title: "المراسلات",

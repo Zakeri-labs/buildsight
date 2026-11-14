@@ -1,7 +1,7 @@
 "use client"
 
 import { useId, useMemo, useState } from "react"
-import { Building2, Check, ChevronDown, Mail, Plus, Search, UserCheck, UserPlus, X } from "lucide-react"
+import { Building2, Check, ChevronDown, Lock, Mail, Plus, Search, UserCheck, UserPlus, X } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -127,15 +127,18 @@ export function CcRecipientsField({
   onChange,
   disabled = false,
   compact = false,
+  isOrgAdmin = true,
 }: {
   candidates: ProjectCcCandidate[]
   value: ReportCcSelection
   onChange: (value: ReportCcSelection) => void
   disabled?: boolean
   compact?: boolean
+  isOrgAdmin?: boolean
 }) {
-  const { locale } = useI18n()
+  const { t, locale } = useI18n()
   const isAr = locale === "ar"
+  const effectiveDisabled = disabled || !isOrgAdmin
   const [isRecipientsExpanded, setIsRecipientsExpanded] = useState(false)
   const recipientsContentId = useId()
 
@@ -207,7 +210,7 @@ export function CcRecipientsField({
 
   // Toggle candidate selection
   function toggleCandidate(candidateId: string, group: "reportTo" | "ccTo") {
-    if (disabled) return
+    if (effectiveDisabled) return
     const candidate = candidateMap.get(candidateId)
     const isRealUser = UUID_PATTERN.test(candidateId)
 
@@ -257,7 +260,7 @@ export function CcRecipientsField({
 
   // Remove external candidate
   function removeExternal(clientId: string) {
-    if (disabled) return
+    if (effectiveDisabled) return
     const nextMap = new Map(externalMap)
     nextMap.delete(clientId)
     setExternalMap(nextMap)
@@ -266,7 +269,7 @@ export function CcRecipientsField({
 
   // Open Add External Dialog
   function openAddExternal(group: "reportTo" | "ccTo") {
-    if (disabled) return
+    if (effectiveDisabled) return
     setDialogGroup(group)
     setExtName("")
     setExtEmail("")
@@ -278,6 +281,7 @@ export function CcRecipientsField({
 
   // Handle Add External Submission
   function handleSaveExternal() {
+    if (effectiveDisabled) return
     if (!extName.trim()) {
       setDialogError(isAr ? "الاسم مطلوب." : "Full name is required.")
       return
@@ -368,16 +372,24 @@ export function CcRecipientsField({
             />
           </button>
 
-          <div>
-            <CardTitle className="flex items-center gap-1.5 text-sm font-semibold text-blue-950 dark:text-blue-100 md:gap-2 md:text-base">
-              <Mail className="size-4 text-primary" />
-              {isAr ? "مستلمو التقرير والنسخ" : "Report Recipients & Copies"}
-            </CardTitle>
-            <p className="mt-0.5 hidden text-xs text-muted-foreground md:block">
-              {isAr
-                ? "حدد الأشخاص المعنيين بالمستند من المشاركين في المشروع أو أضف جهات خارجية."
-                : "Specify primary report recipients and notification copies from project participants."}
-            </p>
+          <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-1.5 text-sm font-semibold text-blue-950 dark:text-blue-100 md:gap-2 md:text-base">
+                <Mail className="size-4 text-primary" />
+                {isAr ? "مستلمو التقرير والنسخ" : "Report Recipients & Copies"}
+              </CardTitle>
+              <p className="mt-0.5 hidden text-xs text-muted-foreground md:block">
+                {isAr
+                  ? "حدد الأشخاص المعنيين بالمستند من المشاركين في المشروع أو أضف جهات خارجية."
+                  : "Specify primary report recipients and notification copies from project participants."}
+              </p>
+            </div>
+            {!isOrgAdmin ? (
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-muted-foreground/20 bg-background/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground shadow-2xs backdrop-blur-xs w-fit">
+                <Lock className="size-3 shrink-0 text-muted-foreground" />
+                {t.reports.onlyAdminCanEditRecipients}
+              </span>
+            ) : null}
           </div>
         </CardHeader>
 
@@ -387,9 +399,21 @@ export function CcRecipientsField({
           aria-hidden={!isRecipientsExpanded}
           className="p-3 md:p-6"
         >
+          {!isOrgAdmin ? (
+            <div className="mb-4 flex items-center gap-2 rounded-lg border border-muted bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              <Lock className="size-3.5 shrink-0 text-muted-foreground" />
+              <span>{t.reports.onlyAdminCanEditRecipients}</span>
+            </div>
+          ) : null}
+
           <div className="grid gap-6 md:grid-cols-2">
             {/* Column 1: Report To */}
-            <div className="flex flex-col gap-3 rounded-xl border bg-muted/10 p-4">
+            <div
+              className={cn(
+                "flex flex-col gap-3 rounded-xl border bg-muted/10 p-4 transition-colors",
+                effectiveDisabled && "bg-muted/20 border-border/70"
+              )}
+            >
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
@@ -406,12 +430,14 @@ export function CcRecipientsField({
               </div>
 
               {/* Minimal Dropdown Menu */}
-              <DropdownMenu>
+              <DropdownMenu open={effectiveDisabled ? false : undefined}>
                 <DropdownMenuTrigger
-                  disabled={disabled}
+                  disabled={effectiveDisabled}
+                  aria-disabled={effectiveDisabled}
                   className={cn(
                     buttonVariants({ variant: "outline", size: "sm" }),
-                    "w-full justify-between bg-background text-xs font-normal"
+                    "w-full justify-between bg-background text-xs font-normal",
+                    effectiveDisabled && "cursor-not-allowed opacity-60 bg-muted/40 hover:bg-muted/40 border-muted text-muted-foreground"
                   )}
                 >
                   <span className="truncate">
@@ -502,7 +528,10 @@ export function CcRecipientsField({
                   return (
                     <div
                       key={candidate.id}
-                      className="flex items-center justify-between gap-3 rounded-lg border bg-background px-3 py-2 text-xs shadow-2xs"
+                      className={cn(
+                        "flex items-center justify-between gap-3 rounded-lg border bg-background px-3 py-2 text-xs shadow-2xs",
+                        effectiveDisabled && "border-border/60 bg-background/85"
+                      )}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <Avatar className="size-8 shrink-0">
@@ -511,7 +540,7 @@ export function CcRecipientsField({
                         </Avatar>
                         <CandidateIdentity candidate={candidate} selectedCard />
                       </div>
-                      {!disabled ? (
+                      {!effectiveDisabled ? (
                         <button
                           type="button"
                           onClick={() => toggleCandidate(candidate.id, "reportTo")}
@@ -539,7 +568,10 @@ export function CcRecipientsField({
                   return (
                     <div
                       key={ext.clientId}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs shadow-2xs"
+                      className={cn(
+                        "flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs shadow-2xs",
+                        effectiveDisabled && "border-border/60 bg-primary/[0.03]"
+                      )}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 font-semibold text-primary">
@@ -556,7 +588,7 @@ export function CcRecipientsField({
                           {details ? <p className="truncate text-[11px] text-muted-foreground">{details}</p> : null}
                         </div>
                       </div>
-                      {!disabled ? (
+                      {!effectiveDisabled ? (
                         <button
                           type="button"
                           onClick={() => removeExternal(ext.clientId)}
@@ -579,7 +611,12 @@ export function CcRecipientsField({
             </div>
 
             {/* Column 2: CC To */}
-            <div className="flex flex-col gap-3 rounded-xl border bg-muted/10 p-4">
+            <div
+              className={cn(
+                "flex flex-col gap-3 rounded-xl border bg-muted/10 p-4 transition-colors",
+                effectiveDisabled && "bg-muted/20 border-border/70"
+              )}
+            >
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
@@ -596,12 +633,14 @@ export function CcRecipientsField({
               </div>
 
               {/* Minimal Dropdown Menu */}
-              <DropdownMenu>
+              <DropdownMenu open={effectiveDisabled ? false : undefined}>
                 <DropdownMenuTrigger
-                  disabled={disabled}
+                  disabled={effectiveDisabled}
+                  aria-disabled={effectiveDisabled}
                   className={cn(
                     buttonVariants({ variant: "outline", size: "sm" }),
-                    "w-full justify-between bg-background text-xs font-normal"
+                    "w-full justify-between bg-background text-xs font-normal",
+                    effectiveDisabled && "cursor-not-allowed opacity-60 bg-muted/40 hover:bg-muted/40 border-muted text-muted-foreground"
                   )}
                 >
                   <span className="truncate">
@@ -692,7 +731,10 @@ export function CcRecipientsField({
                   return (
                     <div
                       key={candidate.id}
-                      className="flex items-center justify-between gap-3 rounded-lg border bg-background px-3 py-2 text-xs shadow-2xs"
+                      className={cn(
+                        "flex items-center justify-between gap-3 rounded-lg border bg-background px-3 py-2 text-xs shadow-2xs",
+                        effectiveDisabled && "border-border/60 bg-background/85"
+                      )}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <Avatar className="size-8 shrink-0">
@@ -706,7 +748,7 @@ export function CcRecipientsField({
                           </p>
                         </div>
                       </div>
-                      {!disabled ? (
+                      {!effectiveDisabled ? (
                         <button
                           type="button"
                           onClick={() => toggleCandidate(candidate.id, "ccTo")}
@@ -723,7 +765,10 @@ export function CcRecipientsField({
                 {externalCcTo.map((ext) => (
                   <div
                     key={ext.clientId}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs shadow-2xs"
+                    className={cn(
+                      "flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs shadow-2xs",
+                      effectiveDisabled && "border-border/60 bg-primary/[0.03]"
+                    )}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 font-semibold text-primary">
@@ -741,7 +786,7 @@ export function CcRecipientsField({
                         </p>
                       </div>
                     </div>
-                    {!disabled ? (
+                    {!effectiveDisabled ? (
                       <button
                         type="button"
                         onClick={() => removeExternal(ext.clientId)}
@@ -766,7 +811,7 @@ export function CcRecipientsField({
       </Card>
 
       {/* Add External Contact Dialog Box */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={effectiveDisabled ? false : dialogOpen} onOpenChange={effectiveDisabled ? undefined : setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">

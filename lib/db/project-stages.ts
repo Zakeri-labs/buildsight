@@ -162,6 +162,7 @@ export type ProjectStageExecutionData = {
   canReview: boolean
   canManage: boolean
   isMember: boolean
+  isOrgAdmin: boolean
   currentUserId: string
 }
 
@@ -221,7 +222,9 @@ async function projectAccess(projectId: string, userId: string) {
       access.projectAccessRole === "approver" ||
       access.supervisingOrganizationRole === "org_manager")
 
-  return { project: access.project, canReview, canManage, isMember }
+  const isOrgAdmin = access.supervisingOrganizationRole === "org_admin"
+
+  return { project: access.project, canReview, canManage, isMember, isOrgAdmin }
 }
 
 function derivedParentStatus(children: ProjectStageTermExecution[]): ProjectStageTermStatus {
@@ -811,6 +814,7 @@ export async function loadProjectStageExecution(
     canReview: access.canReview,
     canManage: access.canManage,
     isMember: access.isMember,
+    isOrgAdmin: access.isOrgAdmin,
     currentUserId: userId,
   }
 }

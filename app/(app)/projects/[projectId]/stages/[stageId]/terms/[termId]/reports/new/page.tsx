@@ -61,6 +61,8 @@ export default async function NewTermReportPage({ params }: { params: Promise<{ 
       translation={null}
       canReview={data.canReview}
       canManage={data.canManage}
+      isMember={data.isMember}
+      isOrgAdmin={data.isOrgAdmin}
       currentUserId={data.currentUserId}
       currentUserPerson={currentUserPerson}
       workflowActive={workflowActive}
